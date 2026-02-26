@@ -177,7 +177,8 @@ final class SplitViewController: NSSplitViewController {
         let window = NSWindow(contentViewController: settingsVC)
         window.title = "Settings"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.setContentSize(NSSize(width: 760, height: 520))
+        window.setContentSize(NSSize(width: 900, height: 640))
+        window.minSize = NSSize(width: 700, height: 500)
         window.center()
         window.delegate = self
 

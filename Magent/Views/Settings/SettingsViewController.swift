@@ -3,13 +3,12 @@ import Cocoa
 // MARK: - Settings Category
 
 enum SettingsCategory: Int, CaseIterable {
-    case general, projects, appearance
+    case general, projects
 
     var title: String {
         switch self {
         case .general: return "General"
         case .projects: return "Projects"
-        case .appearance: return "Appearance"
         }
     }
 
@@ -17,7 +16,6 @@ enum SettingsCategory: Int, CaseIterable {
         switch self {
         case .general: return "gearshape"
         case .projects: return "folder"
-        case .appearance: return "paintpalette"
         }
     }
 }
@@ -31,12 +29,12 @@ final class SettingsSplitViewController: NSSplitViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        preferredContentSize = NSSize(width: 760, height: 520)
+        preferredContentSize = NSSize(width: 900, height: 640)
 
         sidebarVC.delegate = self
 
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarVC)
-        sidebarItem.minimumThickness = 180
+        sidebarItem.minimumThickness = 160
         sidebarItem.maximumThickness = 200
         sidebarItem.canCollapse = false
         addSplitViewItem(sidebarItem)
@@ -60,7 +58,6 @@ final class SettingsSplitViewController: NSSplitViewController {
         switch category {
         case .general: return SettingsGeneralViewController()
         case .projects: return SettingsProjectsViewController()
-        case .appearance: return SettingsAppearanceViewController()
         }
     }
 
@@ -107,7 +104,7 @@ final class SettingsSidebarViewController: NSViewController {
     private var tableView: NSTableView!
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 180, height: 520))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 160, height: 640))
     }
 
     override func viewDidLoad() {
@@ -150,7 +147,6 @@ final class SettingsSidebarViewController: NSViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
-        // Select first row by default
         if tableView.selectedRow < 0 {
             tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
         }
@@ -209,7 +205,7 @@ extension SettingsSidebarViewController: NSTableViewDelegate {
 
 // MARK: - SettingsGeneralViewController
 
-final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate {
+final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate, NSTableViewDataSource, NSTableViewDelegate {
 
     private let persistence = PersistenceService.shared
     private var settings: AppSettings!
@@ -218,12 +214,21 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
     private var customCheckbox: NSButton!
     private var defaultAgentSection: NSStackView!
     private var defaultAgentPopup: NSPopUpButton!
+    private var customAgentSection: NSStackView!
     private var customAgentCommandTextView: NSTextView!
     private var terminalInjectionTextView: NSTextView!
     private var agentContextTextView: NSTextView!
 
+    // Thread sections
+    private var sectionsTableView: NSTableView!
+    private var currentEditingSectionId: UUID?
+
+    private var sortedSections: [ThreadSection] {
+        settings.threadSections.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 520))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
     }
 
     override func viewDidLoad() {
@@ -243,6 +248,19 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
+        // Defaults note
+        let defaultsNote = NSTextField(
+            wrappingLabelWithString: "These are the default settings for all projects. Individual projects can override them in the Projects tab."
+        )
+        defaultsNote.font = .systemFont(ofSize: 11)
+        defaultsNote.textColor = NSColor(resource: .textSecondary)
+        defaultsNote.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(defaultsNote)
+        NSLayoutConstraint.activate([
+            defaultsNote.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        // Active Agents
         let agentsSection = NSStackView()
         agentsSection.orientation = .vertical
         agentsSection.alignment = .leading
@@ -278,6 +296,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
             agentsSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
 
+        // Default Agent
         defaultAgentSection = NSStackView()
         defaultAgentSection.orientation = .vertical
         defaultAgentSection.alignment = .leading
@@ -304,14 +323,25 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
         ])
         refreshDefaultAgentSection()
 
-        // Custom Agent Command
+        // Custom Agent Command (only shown when Custom is active)
+        customAgentSection = NSStackView()
+        customAgentSection.orientation = .vertical
+        customAgentSection.alignment = .leading
+        customAgentSection.spacing = 4
+        customAgentSection.translatesAutoresizingMaskIntoConstraints = false
+
         customAgentCommandTextView = createSection(
-            in: stackView,
+            in: customAgentSection,
             title: "Custom Agent Command",
             description: "Command used when the active agent is set to Custom.",
             value: settings.customAgentCommand,
             font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
+        stackView.addArrangedSubview(customAgentSection)
+        NSLayoutConstraint.activate([
+            customAgentSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+        customAgentSection.isHidden = !active.contains(.custom)
 
         // Terminal Injection Command
         terminalInjectionTextView = createSection(
@@ -374,6 +404,58 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
 
         stackView.addArrangedSubview(envStack)
 
+        // Separator before Thread Sections
+        let separator = NSBox()
+        separator.boxType = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(separator)
+        NSLayoutConstraint.activate([
+            separator.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        // Thread Sections
+        let sectionsHeader = NSTextField(labelWithString: "Thread Sections")
+        sectionsHeader.font = .systemFont(ofSize: 13, weight: .semibold)
+        sectionsHeader.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(sectionsHeader)
+
+        let sectionsDesc = NSTextField(wrappingLabelWithString: "Organize threads into sections in the sidebar. Click a color dot to change it. Drag to reorder.")
+        sectionsDesc.font = .systemFont(ofSize: 11)
+        sectionsDesc.textColor = NSColor(resource: .textSecondary)
+        sectionsDesc.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(sectionsDesc)
+
+        sectionsTableView = NSTableView()
+        sectionsTableView.headerView = nil
+        sectionsTableView.style = .inset
+        sectionsTableView.rowSizeStyle = .default
+        sectionsTableView.selectionHighlightStyle = .none
+        sectionsTableView.registerForDraggedTypes([.string])
+        sectionsTableView.setDraggingSourceOperationMask(.move, forLocal: true)
+
+        let sectionsColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("SectionColumn"))
+        sectionsTableView.addTableColumn(sectionsColumn)
+        sectionsTableView.dataSource = self
+        sectionsTableView.delegate = self
+
+        let sectionsScrollView = NSScrollView()
+        sectionsScrollView.documentView = sectionsTableView
+        sectionsScrollView.hasVerticalScroller = true
+        sectionsScrollView.autohidesScrollers = true
+        sectionsScrollView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(sectionsScrollView)
+
+        let addSectionButton = NSButton(title: "Add Section...", target: self, action: #selector(addSectionTapped))
+        addSectionButton.bezelStyle = .rounded
+        addSectionButton.controlSize = .small
+        stackView.addArrangedSubview(addSectionButton)
+
+        NSLayoutConstraint.activate([
+            sectionsScrollView.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            sectionsScrollView.heightAnchor.constraint(equalToConstant: 140),
+        ])
+
+        // Document view wrapper
         let documentView = NSView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(stackView)
@@ -436,7 +518,6 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
         textScrollView.borderType = .bezelBorder
         textScrollView.translatesAutoresizingMaskIntoConstraints = false
 
-        // 3-line height
         let lineHeight = font.ascender + abs(font.descender) + font.leading
         let height = max(lineHeight * 3 + 12, 56)
 
@@ -448,7 +529,6 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
         sectionStack.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(sectionStack)
 
-        // Make text scroll view fill width
         NSLayoutConstraint.activate([
             textScrollView.widthAnchor.constraint(equalTo: sectionStack.widthAnchor),
             sectionStack.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
@@ -459,6 +539,8 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
 
         return textView
     }
+
+    // MARK: - Agent Actions
 
     @objc private func activeAgentsChanged() {
         var active: [AgentType] = []
@@ -476,6 +558,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
         }
 
         refreshDefaultAgentSection()
+        customAgentSection.isHidden = !active.contains(.custom)
         try? persistence.saveSettings(settings)
     }
 
@@ -504,6 +587,128 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
         }
     }
 
+    // MARK: - Thread Section Actions
+
+    @objc private func addSectionTapped() {
+        let alert = NSAlert()
+        alert.messageText = "New Section"
+        alert.informativeText = "Enter section name"
+        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: "Cancel")
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+        textField.placeholderString = "Section name"
+        alert.accessoryView = textField
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        let name = textField.stringValue
+        guard !name.isEmpty else { return }
+
+        let maxOrder = settings.threadSections.map(\.sortOrder).max() ?? -1
+        let section = ThreadSection(
+            name: name,
+            colorHex: "#8E8E93",
+            sortOrder: maxOrder + 1
+        )
+        settings.threadSections.append(section)
+        try? persistence.saveSettings(settings)
+        sectionsTableView.reloadData()
+
+        showColorPicker(for: section)
+    }
+
+    @objc private func visibilityToggled(_ sender: NSButton) {
+        let point = sender.convert(NSPoint.zero, to: sectionsTableView)
+        let row = sectionsTableView.row(at: point)
+        guard row >= 0 else { return }
+
+        let section = sortedSections[row]
+        guard let index = settings.threadSections.firstIndex(where: { $0.id == section.id }) else { return }
+
+        if section.isVisible {
+            let knownSectionIds = Set(settings.threadSections.map(\.id))
+            let defaultSectionId = settings.defaultSection?.id
+            let threadsInSection = ThreadManager.shared.threads.filter { thread in
+                guard !thread.isMain else { return false }
+                let effectiveSectionId: UUID?
+                if let sid = thread.sectionId, knownSectionIds.contains(sid) {
+                    effectiveSectionId = sid
+                } else {
+                    effectiveSectionId = defaultSectionId
+                }
+                return effectiveSectionId == section.id
+            }
+            if !threadsInSection.isEmpty {
+                let alert = NSAlert()
+                alert.messageText = "Cannot Hide Section"
+                alert.informativeText = "Move all threads out of \"\(section.name)\" before hiding it."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+                return
+            }
+        }
+
+        settings.threadSections[index].isVisible.toggle()
+        try? persistence.saveSettings(settings)
+        sectionsTableView.reloadData()
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+    }
+
+    @objc private func deleteSectionTapped(_ sender: NSButton) {
+        let point = sender.convert(NSPoint.zero, to: sectionsTableView)
+        let row = sectionsTableView.row(at: point)
+        guard row >= 0 else { return }
+
+        let section = sortedSections[row]
+        guard !section.isDefault else { return }
+
+        if let defaultSection = settings.defaultSection {
+            ThreadManager.shared.reassignThreads(fromSection: section.id, toSection: defaultSection.id)
+        }
+
+        settings.threadSections.removeAll { $0.id == section.id }
+        try? persistence.saveSettings(settings)
+        sectionsTableView.reloadData()
+    }
+
+    @objc private func colorDotClicked(_ sender: NSButton) {
+        let point = sender.convert(NSPoint.zero, to: sectionsTableView)
+        let row = sectionsTableView.row(at: point)
+        guard row >= 0 else { return }
+        showColorPicker(for: sortedSections[row])
+    }
+
+    private func showColorPicker(for section: ThreadSection) {
+        let panel = NSColorPanel.shared
+        panel.color = section.color
+        panel.showsAlpha = false
+        panel.setTarget(self)
+        panel.setAction(#selector(colorChanged(_:)))
+        currentEditingSectionId = section.id
+        panel.orderFront(nil)
+    }
+
+    @objc private func colorChanged(_ sender: NSColorPanel) {
+        guard let sectionId = currentEditingSectionId,
+              let index = settings.threadSections.firstIndex(where: { $0.id == sectionId }) else { return }
+
+        settings.threadSections[index].colorHex = sender.color.hexString
+        try? persistence.saveSettings(settings)
+        sectionsTableView.reloadData()
+    }
+
+    static func colorDotImage(color: NSColor, size: CGFloat) -> NSImage {
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            color.setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            return true
+        }
+        return image
+    }
+
     // MARK: - NSTextViewDelegate
 
     func textDidChange(_ notification: Notification) {
@@ -519,6 +724,118 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
 
         try? persistence.saveSettings(settings)
     }
+
+    // MARK: - Thread Sections Table
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        sortedSections.count
+    }
+
+    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> (any NSPasteboardWriting)? {
+        let item = NSPasteboardItem()
+        item.setString(String(row), forType: .string)
+        return item
+    }
+
+    func tableView(_ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
+        if dropOperation == .above {
+            return .move
+        }
+        return []
+    }
+
+    func tableView(_ tableView: NSTableView, acceptDrop info: any NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+        guard let item = info.draggingPasteboard.pasteboardItems?.first,
+              let rowStr = item.string(forType: .string),
+              let sourceRow = Int(rowStr) else { return false }
+
+        var sections = sortedSections
+        let moved = sections.remove(at: sourceRow)
+        let dest = sourceRow < row ? row - 1 : row
+        sections.insert(moved, at: dest)
+
+        for (i, section) in sections.enumerated() {
+            if let idx = settings.threadSections.firstIndex(where: { $0.id == section.id }) {
+                settings.threadSections[idx].sortOrder = i
+            }
+        }
+        try? persistence.saveSettings(settings)
+        sectionsTableView.reloadData()
+        return true
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let section = sortedSections[row]
+        let identifier = NSUserInterfaceItemIdentifier("AppearanceSectionCell")
+        let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView ?? {
+            let c = NSTableCellView()
+            c.identifier = identifier
+
+            let colorBtn = NSButton()
+            colorBtn.bezelStyle = .inline
+            colorBtn.isBordered = false
+            colorBtn.tag = 100
+            colorBtn.translatesAutoresizingMaskIntoConstraints = false
+            c.addSubview(colorBtn)
+
+            let tf = NSTextField(labelWithString: "")
+            tf.translatesAutoresizingMaskIntoConstraints = false
+            c.addSubview(tf)
+            c.textField = tf
+
+            let visBtn = NSButton(image: NSImage(systemSymbolName: "eye", accessibilityDescription: nil)!, target: nil, action: nil)
+            visBtn.bezelStyle = .inline
+            visBtn.isBordered = false
+            visBtn.tag = 101
+            visBtn.translatesAutoresizingMaskIntoConstraints = false
+            c.addSubview(visBtn)
+
+            let delBtn = NSButton(image: NSImage(systemSymbolName: "trash", accessibilityDescription: "Delete")!, target: nil, action: nil)
+            delBtn.bezelStyle = .inline
+            delBtn.isBordered = false
+            delBtn.tag = 102
+            delBtn.translatesAutoresizingMaskIntoConstraints = false
+            c.addSubview(delBtn)
+
+            NSLayoutConstraint.activate([
+                colorBtn.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 4),
+                colorBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                colorBtn.widthAnchor.constraint(equalToConstant: 16),
+                colorBtn.heightAnchor.constraint(equalToConstant: 16),
+                tf.leadingAnchor.constraint(equalTo: colorBtn.trailingAnchor, constant: 8),
+                tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                delBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
+                delBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                visBtn.trailingAnchor.constraint(equalTo: delBtn.leadingAnchor, constant: -4),
+                visBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+            ])
+            return c
+        }()
+
+        cell.textField?.stringValue = section.name
+
+        if let colorBtn = cell.viewWithTag(100) as? NSButton {
+            colorBtn.image = Self.colorDotImage(color: section.color, size: 12)
+            colorBtn.target = self
+            colorBtn.action = #selector(colorDotClicked(_:))
+        }
+
+        if let visBtn = cell.viewWithTag(101) as? NSButton {
+            let symbolName = section.isVisible ? "eye" : "eye.slash"
+            visBtn.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+            visBtn.contentTintColor = section.isVisible ? NSColor(resource: .textPrimary) : NSColor(resource: .textSecondary)
+            visBtn.target = self
+            visBtn.action = #selector(visibilityToggled(_:))
+        }
+
+        if let delBtn = cell.viewWithTag(102) as? NSButton {
+            delBtn.isHidden = section.isDefault
+            delBtn.target = self
+            delBtn.action = #selector(deleteSectionTapped(_:))
+        }
+
+        return cell
+    }
 }
 
 // MARK: - SettingsProjectsViewController
@@ -529,7 +846,7 @@ final class SettingsProjectsViewController: NSViewController {
     private var settings: AppSettings!
 
     private var projectTableView: NSTableView!
-    private var detailContainer: NSView!
+    private var detailScrollView: NSScrollView!
     private var emptyLabel: NSTextField!
 
     // Detail fields
@@ -552,7 +869,7 @@ final class SettingsProjectsViewController: NSViewController {
     }
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 520))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
     }
 
     override func viewDidLoad() {
@@ -578,8 +895,11 @@ final class SettingsProjectsViewController: NSViewController {
     }
 
     private func setupDetailPane() {
-        detailContainer = NSView()
-        detailContainer.translatesAutoresizingMaskIntoConstraints = false
+        detailScrollView = NSScrollView()
+        detailScrollView.hasVerticalScroller = true
+        detailScrollView.autohidesScrollers = true
+        detailScrollView.drawsBackground = false
+        detailScrollView.translatesAutoresizingMaskIntoConstraints = false
 
         emptyLabel = NSTextField(labelWithString: "Select a project")
         emptyLabel.font = .systemFont(ofSize: 14)
@@ -623,17 +943,17 @@ final class SettingsProjectsViewController: NSViewController {
             buttonBar.bottomAnchor.constraint(equalTo: leftPane.bottomAnchor, constant: -4),
         ])
 
-        // Right: detail or empty state
+        // Right: scrollable detail or empty state
         let rightPane = NSView()
         rightPane.translatesAutoresizingMaskIntoConstraints = false
-        rightPane.addSubview(detailContainer)
+        rightPane.addSubview(detailScrollView)
         rightPane.addSubview(emptyLabel)
 
         NSLayoutConstraint.activate([
-            detailContainer.topAnchor.constraint(equalTo: rightPane.topAnchor),
-            detailContainer.leadingAnchor.constraint(equalTo: rightPane.leadingAnchor),
-            detailContainer.trailingAnchor.constraint(equalTo: rightPane.trailingAnchor),
-            detailContainer.bottomAnchor.constraint(equalTo: rightPane.bottomAnchor),
+            detailScrollView.topAnchor.constraint(equalTo: rightPane.topAnchor),
+            detailScrollView.leadingAnchor.constraint(equalTo: rightPane.leadingAnchor),
+            detailScrollView.trailingAnchor.constraint(equalTo: rightPane.trailingAnchor),
+            detailScrollView.bottomAnchor.constraint(equalTo: rightPane.bottomAnchor),
             emptyLabel.centerXAnchor.constraint(equalTo: rightPane.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: rightPane.centerYAnchor),
         ])
@@ -657,14 +977,12 @@ final class SettingsProjectsViewController: NSViewController {
     }
 
     private func showEmptyState() {
-        detailContainer.isHidden = true
+        detailScrollView.isHidden = true
         emptyLabel.isHidden = false
     }
 
     private func showDetailForProject(_ project: Project) {
-        // Remove old detail subviews
-        detailContainer.subviews.forEach { $0.removeFromSuperview() }
-        detailContainer.isHidden = false
+        detailScrollView.isHidden = false
         emptyLabel.isHidden = true
 
         let stack = NSStackView()
@@ -672,6 +990,7 @@ final class SettingsProjectsViewController: NSViewController {
         stack.alignment = .leading
         stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 20, right: 0)
 
         // Name
         let nameHeader = NSTextField(labelWithString: "Name")
@@ -705,7 +1024,7 @@ final class SettingsProjectsViewController: NSViewController {
         stack.addArrangedSubview(repoRow)
 
         if !project.isValid {
-            let warningLabel = NSTextField(labelWithString: "⚠ Path does not exist. Update the repository path.")
+            let warningLabel = NSTextField(labelWithString: "Path does not exist. Update the repository path.")
             warningLabel.font = .systemFont(ofSize: 11)
             warningLabel.textColor = .systemRed
             stack.addArrangedSubview(warningLabel)
@@ -730,7 +1049,6 @@ final class SettingsProjectsViewController: NSViewController {
         wtRow.addArrangedSubview(browseWtBtn)
         stack.addArrangedSubview(wtRow)
 
-        // Resolved path preview (shows what template variables expand to)
         let resolved = project.resolvedWorktreesBasePath()
         if resolved != project.worktreesBasePath {
             let resolvedLabel = NSTextField(labelWithString: "Resolves to: \(resolved)")
@@ -758,74 +1076,93 @@ final class SettingsProjectsViewController: NSViewController {
         defaultBranchField.action = #selector(defaultBranchFieldChanged)
         stack.addArrangedSubview(defaultBranchField)
 
-        let activeAgents = settings.availableActiveAgents
-        if activeAgents.count > 1 {
-            // Project Default Agent Override
-            let agentTypeHeader = NSTextField(labelWithString: "Default Agent for This Project")
-            agentTypeHeader.font = .systemFont(ofSize: 12, weight: .semibold)
-            stack.addArrangedSubview(agentTypeHeader)
+        // Separator: Project Overrides
+        let overrideSep = NSBox()
+        overrideSep.boxType = .separator
+        overrideSep.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(overrideSep)
 
-            let agentTypeDesc = NSTextField(labelWithString: "Use app default or pick a specific default for this project")
-            agentTypeDesc.font = .systemFont(ofSize: 11)
-            agentTypeDesc.textColor = NSColor(resource: .textSecondary)
-            stack.addArrangedSubview(agentTypeDesc)
+        let overrideHeader = NSTextField(labelWithString: "Project Overrides")
+        overrideHeader.font = .systemFont(ofSize: 13, weight: .semibold)
+        stack.addArrangedSubview(overrideHeader)
 
-            agentTypePopup = NSPopUpButton(frame: .zero, pullsDown: false)
-            agentTypePopup.addItem(withTitle: "Use App Default")
-            for agentType in activeAgents {
-                agentTypePopup.addItem(withTitle: agentType.displayName)
-            }
+        let overrideDesc = NSTextField(
+            wrappingLabelWithString: "Override global defaults for this project. \"Use Default\" inherits the value from General settings."
+        )
+        overrideDesc.font = .systemFont(ofSize: 11)
+        overrideDesc.textColor = NSColor(resource: .textSecondary)
+        stack.addArrangedSubview(overrideDesc)
 
-            if let projectAgentType = project.agentType, let idx = activeAgents.firstIndex(of: projectAgentType) {
-                agentTypePopup.selectItem(at: idx + 1)
-            } else {
-                agentTypePopup.selectItem(at: 0)
-            }
-            agentTypePopup.target = self
-            agentTypePopup.action = #selector(agentTypeOverrideChanged)
-            stack.addArrangedSubview(agentTypePopup)
-        } else {
-            agentTypePopup = nil
+        // Agent type override
+        let agentTypeHeader = NSTextField(labelWithString: "Default Agent")
+        agentTypeHeader.font = .systemFont(ofSize: 12, weight: .semibold)
+        stack.addArrangedSubview(agentTypeHeader)
+
+        agentTypePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        let globalDefault = settings.effectiveGlobalDefaultAgentType
+        let globalDefaultName = globalDefault?.displayName ?? "None"
+        agentTypePopup.addItem(withTitle: "Use Default (\(globalDefaultName))")
+        for agentType in settings.availableActiveAgents {
+            agentTypePopup.addItem(withTitle: agentType.displayName)
         }
 
-        // Separator
-        let separator = NSBox()
-        separator.boxType = .separator
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(separator)
+        if let projectAgentType = project.agentType,
+           let idx = settings.availableActiveAgents.firstIndex(of: projectAgentType) {
+            agentTypePopup.selectItem(at: idx + 1)
+        } else {
+            agentTypePopup.selectItem(at: 0)
+        }
+        agentTypePopup.target = self
+        agentTypePopup.action = #selector(agentTypeOverrideChanged)
+        stack.addArrangedSubview(agentTypePopup)
 
         // Terminal Injection Override
+        let globalTerminal = settings.terminalInjectionCommand
+        let terminalDesc = globalTerminal.isEmpty
+            ? "No global default set"
+            : "Global default: \(globalTerminal.prefix(60))\(globalTerminal.count > 60 ? "..." : "")"
         terminalInjectionTextView = createOverrideSection(
             in: stack,
-            title: "Terminal Injection Override",
-            description: "Empty = use global setting",
+            title: "Terminal Injection",
+            description: "Empty = use global default. \(terminalDesc)",
             value: project.terminalInjectionCommand ?? "",
-            font: .monospacedSystemFont(ofSize: 13, weight: .regular),
-            tag: 200
+            font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
 
         // Agent Context Override
+        let globalContext = settings.agentContextInjection
+        let contextDesc = globalContext.isEmpty
+            ? "No global default set"
+            : "Global default: \(globalContext.prefix(60))\(globalContext.count > 60 ? "..." : "")"
         agentContextTextView = createOverrideSection(
             in: stack,
-            title: "Agent Context Override",
-            description: "Empty = use global setting",
+            title: "Agent Context",
+            description: "Empty = use global default. \(contextDesc)",
             value: project.agentContextInjection ?? "",
-            font: .systemFont(ofSize: 13),
-            tag: 201
+            font: .systemFont(ofSize: 13)
         )
 
-        detailContainer.addSubview(stack)
+        // Set up the document view for scrolling
+        let documentView = NSView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        documentView.addSubview(stack)
+
+        detailScrollView.documentView = documentView
 
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: detailContainer.topAnchor),
-            stack.leadingAnchor.constraint(equalTo: detailContainer.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: detailContainer.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: documentView.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
+
+            documentView.widthAnchor.constraint(equalTo: detailScrollView.widthAnchor),
 
             nameField.widthAnchor.constraint(equalTo: stack.widthAnchor),
             repoRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             wtRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             defaultBranchField.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            separator.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            overrideSep.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            overrideDesc.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
     }
 
@@ -834,14 +1171,13 @@ final class SettingsProjectsViewController: NSViewController {
         title: String,
         description: String,
         value: String,
-        font: NSFont,
-        tag: Int
+        font: NSFont
     ) -> NSTextView {
         let titleLabel = NSTextField(labelWithString: title)
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         stackView.addArrangedSubview(titleLabel)
 
-        let descLabel = NSTextField(labelWithString: description)
+        let descLabel = NSTextField(wrappingLabelWithString: description)
         descLabel.font = .systemFont(ofSize: 11)
         descLabel.textColor = NSColor(resource: .textSecondary)
         stackView.addArrangedSubview(descLabel)
@@ -1082,330 +1418,5 @@ extension SettingsProjectsViewController: NSTextViewDelegate {
         }
 
         try? persistence.saveSettings(settings)
-    }
-}
-
-// MARK: - SettingsAppearanceViewController
-
-final class SettingsAppearanceViewController: NSViewController {
-
-    private let persistence = PersistenceService.shared
-    private var settings: AppSettings!
-    private var tableView: NSTableView!
-    private var currentEditingSectionId: UUID?
-
-    private var sortedSections: [ThreadSection] {
-        settings.threadSections.sorted { $0.sortOrder < $1.sortOrder }
-    }
-
-    override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 520))
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        settings = persistence.loadSettings()
-
-        let titleLabel = NSTextField(labelWithString: "Thread Sections")
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(titleLabel)
-
-        let descLabel = NSTextField(wrappingLabelWithString: "Organize threads into sections in the sidebar. Click a color dot to change it.")
-        descLabel.font = .systemFont(ofSize: 11)
-        descLabel.textColor = NSColor(resource: .textSecondary)
-        descLabel.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(descLabel)
-
-        tableView = NSTableView()
-        tableView.headerView = nil
-        tableView.style = .inset
-        tableView.rowSizeStyle = .default
-        tableView.selectionHighlightStyle = .none
-
-        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("SectionColumn"))
-        tableView.addTableColumn(column)
-        tableView.dataSource = self
-        tableView.delegate = self
-
-        // Drag and drop
-        tableView.registerForDraggedTypes([.string])
-        tableView.setDraggingSourceOperationMask(.move, forLocal: true)
-
-        let scrollView = NSScrollView()
-        scrollView.documentView = tableView
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(scrollView)
-
-        let addButton = NSButton(image: NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Section")!, target: self, action: #selector(addSectionTapped))
-        addButton.bezelStyle = .smallSquare
-        addButton.isBordered = false
-        addButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(addButton)
-
-        NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
-            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-
-            descLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
-            descLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            descLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-
-            scrollView.topAnchor.constraint(equalTo: descLabel.bottomAnchor, constant: 12),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            scrollView.bottomAnchor.constraint(equalTo: addButton.topAnchor, constant: -8),
-
-            addButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            addButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
-        ])
-    }
-
-    // MARK: - Actions
-
-    @objc private func addSectionTapped() {
-        let alert = NSAlert()
-        alert.messageText = "New Section"
-        alert.informativeText = "Enter section name"
-        alert.addButton(withTitle: "Add")
-        alert.addButton(withTitle: "Cancel")
-
-        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-        textField.placeholderString = "Section name"
-        alert.accessoryView = textField
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        let name = textField.stringValue
-        guard !name.isEmpty else { return }
-
-        let maxOrder = settings.threadSections.map(\.sortOrder).max() ?? -1
-        let section = ThreadSection(
-            name: name,
-            colorHex: "#8E8E93",
-            sortOrder: maxOrder + 1
-        )
-        settings.threadSections.append(section)
-        try? persistence.saveSettings(settings)
-        tableView.reloadData()
-
-        showColorPicker(for: section)
-    }
-
-    @objc private func visibilityToggled(_ sender: NSButton) {
-        let point = sender.convert(NSPoint.zero, to: tableView)
-        let row = tableView.row(at: point)
-        guard row >= 0 else { return }
-
-        let section = sortedSections[row]
-        guard let index = settings.threadSections.firstIndex(where: { $0.id == section.id }) else { return }
-
-        // When hiding a section, check if it has any open threads
-        if section.isVisible {
-            let knownSectionIds = Set(settings.threadSections.map(\.id))
-            let defaultSectionId = settings.defaultSection?.id
-            let threadsInSection = ThreadManager.shared.threads.filter { thread in
-                guard !thread.isMain else { return false }
-                let effectiveSectionId: UUID?
-                if let sid = thread.sectionId, knownSectionIds.contains(sid) {
-                    effectiveSectionId = sid
-                } else {
-                    effectiveSectionId = defaultSectionId
-                }
-                return effectiveSectionId == section.id
-            }
-            if !threadsInSection.isEmpty {
-                let alert = NSAlert()
-                alert.messageText = "Cannot Hide Section"
-                alert.informativeText = "Move all threads out of \"\(section.name)\" before hiding it."
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: "OK")
-                alert.runModal()
-                return
-            }
-        }
-
-        settings.threadSections[index].isVisible.toggle()
-        try? persistence.saveSettings(settings)
-        tableView.reloadData()
-        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
-    }
-
-    @objc private func deleteSectionTapped(_ sender: NSButton) {
-        let point = sender.convert(NSPoint.zero, to: tableView)
-        let row = tableView.row(at: point)
-        guard row >= 0 else { return }
-
-        let section = sortedSections[row]
-        guard !section.isDefault else { return }
-
-        if let defaultSection = settings.defaultSection {
-            ThreadManager.shared.reassignThreads(fromSection: section.id, toSection: defaultSection.id)
-        }
-
-        settings.threadSections.removeAll { $0.id == section.id }
-        try? persistence.saveSettings(settings)
-        tableView.reloadData()
-    }
-
-    @objc private func colorDotClicked(_ sender: NSButton) {
-        let point = sender.convert(NSPoint.zero, to: tableView)
-        let row = tableView.row(at: point)
-        guard row >= 0 else { return }
-        showColorPicker(for: sortedSections[row])
-    }
-
-    private func showColorPicker(for section: ThreadSection) {
-        let panel = NSColorPanel.shared
-        panel.color = section.color
-        panel.showsAlpha = false
-        panel.setTarget(self)
-        panel.setAction(#selector(colorChanged(_:)))
-        currentEditingSectionId = section.id
-        panel.orderFront(nil)
-    }
-
-    @objc private func colorChanged(_ sender: NSColorPanel) {
-        guard let sectionId = currentEditingSectionId,
-              let index = settings.threadSections.firstIndex(where: { $0.id == sectionId }) else { return }
-
-        settings.threadSections[index].colorHex = sender.color.hexString
-        try? persistence.saveSettings(settings)
-        tableView.reloadData()
-    }
-
-    static func colorDotImage(color: NSColor, size: CGFloat) -> NSImage {
-        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-            color.setFill()
-            NSBezierPath(ovalIn: rect).fill()
-            return true
-        }
-        return image
-    }
-}
-
-// MARK: - Appearance Table Data Source & Delegate
-
-extension SettingsAppearanceViewController: NSTableViewDataSource {
-    func numberOfRows(in tableView: NSTableView) -> Int {
-        sortedSections.count
-    }
-
-    // Drag & drop
-    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> (any NSPasteboardWriting)? {
-        let item = NSPasteboardItem()
-        item.setString(String(row), forType: .string)
-        return item
-    }
-
-    func tableView(_ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
-        if dropOperation == .above {
-            return .move
-        }
-        return []
-    }
-
-    func tableView(_ tableView: NSTableView, acceptDrop info: any NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
-        guard let item = info.draggingPasteboard.pasteboardItems?.first,
-              let rowStr = item.string(forType: .string),
-              let sourceRow = Int(rowStr) else { return false }
-
-        var sections = sortedSections
-        let moved = sections.remove(at: sourceRow)
-        let dest = sourceRow < row ? row - 1 : row
-        sections.insert(moved, at: dest)
-
-        // Update sort orders
-        for (i, section) in sections.enumerated() {
-            if let idx = settings.threadSections.firstIndex(where: { $0.id == section.id }) {
-                settings.threadSections[idx].sortOrder = i
-            }
-        }
-        try? persistence.saveSettings(settings)
-        tableView.reloadData()
-        return true
-    }
-}
-
-extension SettingsAppearanceViewController: NSTableViewDelegate {
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let section = sortedSections[row]
-        let identifier = NSUserInterfaceItemIdentifier("AppearanceSectionCell")
-        let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView ?? {
-            let c = NSTableCellView()
-            c.identifier = identifier
-
-            // Color dot button
-            let colorBtn = NSButton()
-            colorBtn.bezelStyle = .inline
-            colorBtn.isBordered = false
-            colorBtn.tag = 100
-            colorBtn.translatesAutoresizingMaskIntoConstraints = false
-            c.addSubview(colorBtn)
-
-            // Name label
-            let tf = NSTextField(labelWithString: "")
-            tf.translatesAutoresizingMaskIntoConstraints = false
-            c.addSubview(tf)
-            c.textField = tf
-
-            // Visibility button
-            let visBtn = NSButton(image: NSImage(systemSymbolName: "eye", accessibilityDescription: nil)!, target: nil, action: nil)
-            visBtn.bezelStyle = .inline
-            visBtn.isBordered = false
-            visBtn.tag = 101
-            visBtn.translatesAutoresizingMaskIntoConstraints = false
-            c.addSubview(visBtn)
-
-            // Delete button
-            let delBtn = NSButton(image: NSImage(systemSymbolName: "trash", accessibilityDescription: "Delete")!, target: nil, action: nil)
-            delBtn.bezelStyle = .inline
-            delBtn.isBordered = false
-            delBtn.tag = 102
-            delBtn.translatesAutoresizingMaskIntoConstraints = false
-            c.addSubview(delBtn)
-
-            NSLayoutConstraint.activate([
-                colorBtn.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 4),
-                colorBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                colorBtn.widthAnchor.constraint(equalToConstant: 16),
-                colorBtn.heightAnchor.constraint(equalToConstant: 16),
-                tf.leadingAnchor.constraint(equalTo: colorBtn.trailingAnchor, constant: 8),
-                tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                delBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
-                delBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                visBtn.trailingAnchor.constraint(equalTo: delBtn.leadingAnchor, constant: -4),
-                visBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-            ])
-            return c
-        }()
-
-        cell.textField?.stringValue = section.name
-
-        if let colorBtn = cell.viewWithTag(100) as? NSButton {
-            colorBtn.image = Self.colorDotImage(color: section.color, size: 12)
-            colorBtn.target = self
-            colorBtn.action = #selector(colorDotClicked(_:))
-        }
-
-        if let visBtn = cell.viewWithTag(101) as? NSButton {
-            let symbolName = section.isVisible ? "eye" : "eye.slash"
-            visBtn.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-            visBtn.contentTintColor = section.isVisible ? NSColor(resource: .textPrimary) : NSColor(resource: .textSecondary)
-            visBtn.target = self
-            visBtn.action = #selector(visibilityToggled(_:))
-        }
-
-        if let delBtn = cell.viewWithTag(102) as? NSButton {
-            delBtn.isHidden = section.isDefault
-            delBtn.target = self
-            delBtn.action = #selector(deleteSectionTapped(_:))
-        }
-
-        return cell
     }
 }
