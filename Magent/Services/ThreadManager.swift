@@ -878,7 +878,10 @@ final class ThreadManager {
         guard sessionMonitorTimer == nil else { return }
         sessionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             guard let self else { return }
-            Task { await self.checkForDeadSessions() }
+            Task {
+                await self.checkForMissingWorktrees()
+                await self.checkForDeadSessions()
+            }
         }
     }
 
@@ -918,6 +921,27 @@ final class ThreadManager {
                     "threadId": thread.id
                 ]
             )
+        }
+    }
+
+    private func checkForMissingWorktrees() async {
+        let candidates = threads.filter { !$0.isMain && !$0.isArchived }
+        var pruneRepos = Set<String>()
+
+        for thread in candidates {
+            var isDir: ObjCBool = false
+            let exists = FileManager.default.fileExists(atPath: thread.worktreePath, isDirectory: &isDir)
+            guard !exists || !isDir.boolValue else { continue }
+
+            let settings = persistence.loadSettings()
+            if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
+                pruneRepos.insert(project.repoPath)
+            }
+            try? await archiveThread(thread)
+        }
+
+        for repoPath in pruneRepos {
+            await git.pruneWorktrees(repoPath: repoPath)
         }
     }
 
