@@ -405,6 +405,14 @@ final class ThreadManager {
     }
 
     @MainActor
+    func toggleThreadPin(threadId: UUID) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        threads[index].isPinned.toggle()
+        try? persistence.saveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    @MainActor
     func reassignThreads(fromSection oldSectionId: UUID, toSection newSectionId: UUID) {
         var changed = false
         for i in threads.indices where threads[i].sectionId == oldSectionId {

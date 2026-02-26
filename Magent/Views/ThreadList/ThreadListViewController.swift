@@ -23,6 +23,7 @@ protocol ThreadListDelegate: AnyObject {
 final class ThreadListViewController: NSViewController {
 
     private static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
+    private static let collapsedProjectIdsKey = "MagentCollapsedProjectIds"
 
     weak var delegate: ThreadListDelegate?
 
@@ -44,11 +45,13 @@ final class ThreadListViewController: NSViewController {
     class SidebarProject {
         let projectId: UUID
         let name: String
+        let isPinned: Bool
         var children: [Any] // Mix of MagentThread (main) and SidebarSection
 
-        init(projectId: UUID, name: String, children: [Any]) {
+        init(projectId: UUID, name: String, isPinned: Bool, children: [Any]) {
             self.projectId = projectId
             self.name = name
+            self.isPinned = isPinned
             self.children = children
         }
     }
@@ -182,7 +185,12 @@ final class ThreadListViewController: NSViewController {
         let knownSectionIds = Set(settings.threadSections.map(\.id))
         let defaultSectionId = settings.defaultSection?.id
 
-        sidebarProjects = settings.projects.filter(\.isValid).map { project in
+        let sortedProjects = settings.projects.filter(\.isValid).sorted { a, b in
+            if a.isPinned != b.isPinned { return a.isPinned }
+            return false // stable: preserve original order within each group
+        }
+
+        sidebarProjects = sortedProjects.map { project in
             var children: [Any] = []
 
             // Main thread(s) for this project first
@@ -201,29 +209,40 @@ final class ThreadListViewController: NSViewController {
                     }
                     return effectiveSectionId == section.id
                 }
+                let sortedThreads = matchingThreads.sorted { a, b in
+                    if a.isPinned != b.isPinned { return a.isPinned }
+                    return false
+                }
                 children.append(SidebarSection(
                     sectionId: section.id,
                     name: section.name,
                     color: section.color,
-                    threads: matchingThreads
+                    threads: sortedThreads
                 ))
             }
 
             return SidebarProject(
                 projectId: project.id,
                 name: project.name,
+                isPinned: project.isPinned,
                 children: children
             )
         }
 
         outlineView.reloadData()
 
-        // Expand everything
+        // Expand projects that are not in the collapsed set; always expand sections
+        let collapsedIds = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
         for project in sidebarProjects {
-            outlineView.expandItem(project)
-            for child in project.children {
-                if child is SidebarSection {
-                    outlineView.expandItem(child)
+            let isCollapsed = collapsedIds.contains(project.projectId.uuidString)
+            if isCollapsed {
+                outlineView.collapseItem(project)
+            } else {
+                outlineView.expandItem(project)
+                for child in project.children {
+                    if child is SidebarSection {
+                        outlineView.expandItem(child)
+                    }
                 }
             }
         }
@@ -408,6 +427,14 @@ final class ThreadListViewController: NSViewController {
         // Main threads: no context menu
         if thread.isMain { return menu }
 
+        // Pin/Unpin
+        let pinTitle = thread.isPinned ? "Unpin" : "Pin"
+        let pinItem = NSMenuItem(title: pinTitle, action: #selector(toggleThreadPin(_:)), keyEquivalent: "")
+        pinItem.target = self
+        pinItem.image = NSImage(systemSymbolName: thread.isPinned ? "pin.slash" : "pin", accessibilityDescription: nil)
+        pinItem.representedObject = thread.id
+        menu.addItem(pinItem)
+
         // Move to... submenu
         let settings = persistence.loadSettings()
         let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
@@ -450,6 +477,31 @@ final class ThreadListViewController: NSViewController {
         menu.addItem(deleteItem)
 
         return menu
+    }
+
+    private func buildProjectContextMenu(for project: SidebarProject) -> NSMenu {
+        let menu = NSMenu()
+        let pinTitle = project.isPinned ? "Unpin" : "Pin"
+        let pinItem = NSMenuItem(title: pinTitle, action: #selector(toggleProjectPin(_:)), keyEquivalent: "")
+        pinItem.target = self
+        pinItem.image = NSImage(systemSymbolName: project.isPinned ? "pin.slash" : "pin", accessibilityDescription: nil)
+        pinItem.representedObject = project.projectId
+        menu.addItem(pinItem)
+        return menu
+    }
+
+    @objc private func toggleProjectPin(_ sender: NSMenuItem) {
+        guard let projectId = sender.representedObject as? UUID else { return }
+        var settings = persistence.loadSettings()
+        guard let index = settings.projects.firstIndex(where: { $0.id == projectId }) else { return }
+        settings.projects[index].isPinned.toggle()
+        try? persistence.saveSettings(settings)
+        reloadData()
+    }
+
+    @objc private func toggleThreadPin(_ sender: NSMenuItem) {
+        guard let threadId = sender.representedObject as? UUID else { return }
+        threadManager.toggleThreadPin(threadId: threadId)
     }
 
     @objc private func moveThreadToSection(_ sender: NSMenuItem) {
@@ -673,13 +725,24 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 ?? {
                     let c = NSTableCellView()
                     c.identifier = identifier
+
+                    let iv = NSImageView()
+                    iv.translatesAutoresizingMaskIntoConstraints = false
+                    c.addSubview(iv)
+                    c.imageView = iv
+
                     let tf = NSTextField(labelWithString: "")
                     tf.translatesAutoresizingMaskIntoConstraints = false
                     c.addSubview(tf)
                     c.textField = tf
+
                     NSLayoutConstraint.activate([
                         tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 2),
                         tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        iv.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 4),
+                        iv.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                        iv.widthAnchor.constraint(equalToConstant: 10),
+                        iv.heightAnchor.constraint(equalToConstant: 10),
                     ])
                     return c
                 }()
@@ -687,6 +750,14 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.textField?.stringValue = project.name.uppercased()
             cell.textField?.font = .systemFont(ofSize: 11, weight: .semibold)
             cell.textField?.textColor = NSColor(resource: .textSecondary)
+            if project.isPinned {
+                cell.imageView?.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
+                cell.imageView?.contentTintColor = NSColor(resource: .textSecondary)
+                cell.imageView?.isHidden = false
+            } else {
+                cell.imageView?.image = nil
+                cell.imageView?.isHidden = true
+            }
             return cell
         }
 
@@ -792,6 +863,20 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         return nil
     }
 
+    func outlineViewItemDidExpand(_ notification: Notification) {
+        guard let project = notification.userInfo?["NSObject"] as? SidebarProject else { return }
+        var collapsed = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
+        collapsed.remove(project.projectId.uuidString)
+        UserDefaults.standard.set(Array(collapsed), forKey: Self.collapsedProjectIdsKey)
+    }
+
+    func outlineViewItemDidCollapse(_ notification: Notification) {
+        guard let project = notification.userInfo?["NSObject"] as? SidebarProject else { return }
+        var collapsed = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
+        collapsed.insert(project.projectId.uuidString)
+        UserDefaults.standard.set(Array(collapsed), forKey: Self.collapsedProjectIdsKey)
+    }
+
     func outlineViewSelectionDidChange(_ notification: Notification) {
         let row = outlineView.selectedRow
         guard row >= 0,
@@ -808,13 +893,25 @@ extension ThreadListViewController: NSMenuDelegate {
         menu.removeAllItems()
 
         let clickedRow = outlineView.clickedRow
-        guard clickedRow >= 0,
-              let thread = outlineView.item(atRow: clickedRow) as? MagentThread else { return }
+        guard clickedRow >= 0 else { return }
 
-        let contextMenu = buildContextMenu(for: thread)
-        for item in contextMenu.items {
-            contextMenu.removeItem(item)
-            menu.addItem(item)
+        let clickedItem = outlineView.item(atRow: clickedRow)
+
+        if let project = clickedItem as? SidebarProject {
+            let contextMenu = buildProjectContextMenu(for: project)
+            for item in contextMenu.items {
+                contextMenu.removeItem(item)
+                menu.addItem(item)
+            }
+            return
+        }
+
+        if let thread = clickedItem as? MagentThread {
+            let contextMenu = buildContextMenu(for: thread)
+            for item in contextMenu.items {
+                contextMenu.removeItem(item)
+                menu.addItem(item)
+            }
         }
     }
 }

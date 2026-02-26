@@ -9,6 +9,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
     var agentType: AgentType?
     var terminalInjectionCommand: String?
     var agentContextInjection: String?
+    var isPinned: Bool
 
     init(
         id: UUID = UUID(),
@@ -18,7 +19,8 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         defaultBranch: String? = nil,
         agentType: AgentType? = nil,
         terminalInjectionCommand: String? = nil,
-        agentContextInjection: String? = nil
+        agentContextInjection: String? = nil,
+        isPinned: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -28,6 +30,20 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         self.agentType = agentType
         self.terminalInjectionCommand = terminalInjectionCommand
         self.agentContextInjection = agentContextInjection
+        self.isPinned = isPinned
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        repoPath = try container.decode(String.self, forKey: .repoPath)
+        worktreesBasePath = try container.decode(String.self, forKey: .worktreesBasePath)
+        defaultBranch = try container.decodeIfPresent(String.self, forKey: .defaultBranch)
+        agentType = try container.decodeIfPresent(AgentType.self, forKey: .agentType)
+        terminalInjectionCommand = try container.decodeIfPresent(String.self, forKey: .terminalInjectionCommand)
+        agentContextInjection = try container.decodeIfPresent(String.self, forKey: .agentContextInjection)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
     }
 
     /// Resolves template variables in `worktreesBasePath` (e.g. `$MAGENT_PROJECT_NAME`).
