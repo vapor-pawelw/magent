@@ -79,6 +79,7 @@ final class SettingsSplitViewController: NSSplitViewController {
 
 // MARK: - SettingsSidebarDelegate
 
+@MainActor
 protocol SettingsSidebarDelegate: AnyObject {
     func settingsSidebar(_ sidebar: SettingsSidebarViewController, didSelect category: SettingsCategory)
     func settingsSidebarDidDismiss(_ sidebar: SettingsSidebarViewController)

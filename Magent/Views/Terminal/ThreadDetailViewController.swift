@@ -1,4 +1,5 @@
 import Cocoa
+import GhosttyBridge
 
 // MARK: - TabItemView
 
@@ -159,6 +160,7 @@ final class ThreadDetailViewController: NSViewController {
     private let threadManager = ThreadManager.shared
     private let tabBarStack = NSStackView()
     private let terminalContainer = NSView()
+    private let archiveThreadButton = NSButton()
     private let addTabButton = NSButton()
 
     private var tabItems: [TabItemView] = []
@@ -230,12 +232,18 @@ final class ThreadDetailViewController: NSViewController {
         tabBarStack.alignment = .centerY
         tabBarStack.translatesAutoresizingMaskIntoConstraints = false
 
+        archiveThreadButton.bezelStyle = .texturedRounded
+        archiveThreadButton.image = NSImage(systemSymbolName: "archivebox", accessibilityDescription: "Archive Thread")
+        archiveThreadButton.target = self
+        archiveThreadButton.action = #selector(archiveThreadTapped)
+        archiveThreadButton.isHidden = thread.isMain
+
         addTabButton.bezelStyle = .texturedRounded
         addTabButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Tab")
         addTabButton.target = self
         addTabButton.action = #selector(addTabTapped)
 
-        let topBar = NSStackView(views: [tabBarStack, addTabButton])
+        let topBar = NSStackView(views: [tabBarStack, archiveThreadButton, addTabButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
@@ -684,6 +692,25 @@ final class ThreadDetailViewController: NSViewController {
 
     // MARK: - Add Tab
 
+    @objc private func archiveThreadTapped() {
+        guard !thread.isMain else { return }
+        let threadToArchive = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+
+        let alert = NSAlert()
+        alert.messageText = "Archive Thread"
+        alert.informativeText = "This will archive the thread \"\(threadToArchive.name)\", removing its worktree directory but keeping the git branch \"\(threadToArchive.branchName)\". You can restore the branch later if needed."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Archive")
+        alert.addButton(withTitle: "Cancel")
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
+            try await self.threadManager.archiveThread(threadToArchive)
+        }
+    }
+
     @objc private func addTabTapped() {
         presentAddTabAgentMenu()
     }
@@ -1008,8 +1035,11 @@ final class ThreadDetailViewController: NSViewController {
             let elapsed = Date().timeIntervalSince(startTime)
             if elapsed >= maxWait {
                 timer.invalidate()
-                self.loadingPollTimer = nil
-                self.dismissLoadingOverlay()
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.loadingPollTimer = nil
+                    self.dismissLoadingOverlay()
+                }
                 return
             }
 
@@ -1017,7 +1047,7 @@ final class ThreadDetailViewController: NSViewController {
                 let ready = await self.isAgentReady(sessionName: sessionName)
                 if ready {
                     await MainActor.run {
-                        timer.invalidate()
+                        self.loadingPollTimer?.invalidate()
                         self.loadingPollTimer = nil
                         self.dismissLoadingOverlay()
                     }
@@ -1041,8 +1071,61 @@ final class ThreadDetailViewController: NSViewController {
             context.duration = 0.3
             overlay.animator().alphaValue = 0
         } completionHandler: { [weak self] in
-            self?.loadingOverlay?.removeFromSuperview()
-            self?.loadingOverlay = nil
+            Task { @MainActor [weak self] in
+                self?.loadingOverlay?.removeFromSuperview()
+                self?.loadingOverlay = nil
+            }
+        }
+    }
+
+    private func performWithSpinner(message: String, errorTitle: String, work: @escaping () async throws -> Void) {
+        guard let window = view.window else { return }
+
+        let sheetVC = NSViewController()
+        sheetVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 80))
+
+        let spinner = NSProgressIndicator()
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.startAnimation(nil)
+
+        let label = NSTextField(labelWithString: message)
+        label.font = .systemFont(ofSize: 13)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView(views: [spinner, label])
+        stack.orientation = .horizontal
+        stack.spacing = 10
+        stack.alignment = .centerY
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        sheetVC.view.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: sheetVC.view.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: sheetVC.view.centerYAnchor),
+        ])
+
+        window.contentViewController?.presentAsSheet(sheetVC)
+
+        Task {
+            do {
+                try await work()
+                await MainActor.run {
+                    window.contentViewController?.dismiss(sheetVC)
+                }
+            } catch {
+                await MainActor.run {
+                    window.contentViewController?.dismiss(sheetVC)
+                    let alert = NSAlert()
+                    alert.messageText = errorTitle
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
+            }
         }
     }
 }

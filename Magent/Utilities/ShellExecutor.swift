@@ -16,14 +16,14 @@ enum ShellError: LocalizedError {
 
 enum ShellExecutor {
 
-    struct Result {
+    struct Result: Sendable {
         let stdout: String
         let stderr: String
         let exitCode: Int32
     }
 
     /// Runs a command using /bin/sh -c and returns the result.
-    static func run(_ command: String, workingDirectory: String? = nil) async throws -> String {
+    nonisolated static func run(_ command: String, workingDirectory: String? = nil) async throws -> String {
         let result = await execute(command, workingDirectory: workingDirectory)
 
         if result.exitCode != 0 {
@@ -34,7 +34,7 @@ enum ShellExecutor {
     }
 
     /// Runs a command and returns the full result including exit code.
-    static func execute(_ command: String, workingDirectory: String? = nil) async -> Result {
+    nonisolated static func execute(_ command: String, workingDirectory: String? = nil) async -> Result {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let result = synchronousExecute(command, workingDirectory: workingDirectory)
@@ -43,7 +43,7 @@ enum ShellExecutor {
         }
     }
 
-    private static func synchronousExecute(_ command: String, workingDirectory: String?) -> Result {
+    nonisolated private static func synchronousExecute(_ command: String, workingDirectory: String?) -> Result {
         // Create pipes for stdout and stderr
         var stdoutPipe: [Int32] = [0, 0]
         var stderrPipe: [Int32] = [0, 0]
@@ -121,7 +121,7 @@ enum ShellExecutor {
         )
     }
 
-    private static func readAll(fd: Int32) -> Data {
+    nonisolated private static func readAll(fd: Int32) -> Data {
         var data = Data()
         let bufferSize = 4096
         let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
@@ -135,7 +135,7 @@ enum ShellExecutor {
         return data
     }
 
-    private static func shellQuote(_ string: String) -> String {
+    nonisolated private static func shellQuote(_ string: String) -> String {
         "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }

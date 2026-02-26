@@ -20,15 +20,13 @@ final class BannerManager {
         isDismissible: Bool = true,
         actions: [BannerAction] = []
     ) {
-        DispatchQueue.main.async { [weak self] in
-            self?.showOnMain(config: BannerConfig(
-                message: message,
-                style: style,
-                duration: duration,
-                isDismissible: isDismissible,
-                actions: actions
-            ))
-        }
+        showOnMain(config: BannerConfig(
+            message: message,
+            style: style,
+            duration: duration,
+            isDismissible: isDismissible,
+            actions: actions
+        ))
     }
 
     // MARK: - Private
@@ -76,7 +74,9 @@ final class BannerManager {
         dismissTimer = nil
         if let duration = config.duration {
             dismissTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
-                self?.dismissAnimated()
+                Task { @MainActor [weak self] in
+                    self?.dismissAnimated()
+                }
             }
         }
     }
@@ -92,10 +92,12 @@ final class BannerManager {
             context.duration = 0.2
             banner.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
-            banner.removeFromSuperview()
-            if self?.currentBanner === banner {
-                self?.currentBanner = nil
-                self?.topConstraint = nil
+            Task { @MainActor [weak self] in
+                banner.removeFromSuperview()
+                if self?.currentBanner === banner {
+                    self?.currentBanner = nil
+                    self?.topConstraint = nil
+                }
             }
         })
     }

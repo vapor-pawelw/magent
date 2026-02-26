@@ -1,6 +1,6 @@
 import Foundation
 
-struct DependencyStatus {
+nonisolated struct DependencyStatus: Sendable {
     let name: String
     let isInstalled: Bool
     let path: String?

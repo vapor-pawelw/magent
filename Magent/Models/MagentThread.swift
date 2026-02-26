@@ -1,6 +1,6 @@
 import Foundation
 
-struct MagentThread: Codable, Identifiable {
+nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     let id: UUID
     let projectId: UUID
     var name: String

@@ -1,6 +1,6 @@
 import Foundation
 
-struct Tab: Codable, Identifiable, Hashable {
+nonisolated struct Tab: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let threadId: UUID
     var tmuxSessionName: String

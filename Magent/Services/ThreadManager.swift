@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 protocol ThreadManagerDelegate: AnyObject {
     func threadManager(_ manager: ThreadManager, didCreateThread thread: MagentThread)
     func threadManager(_ manager: ThreadManager, didArchiveThread thread: MagentThread)
@@ -52,14 +53,18 @@ final class ThreadManager {
         // Ensure every project has a main thread
         await ensureMainThreads()
 
-        let d = delegate
-        let t = threads
-        DispatchQueue.main.async { d?.threadManager(self, didUpdateThreads: t) }
+        await MainActor.run {
+            delegate?.threadManager(self, didUpdateThreads: threads)
+        }
     }
 
     // MARK: - Thread Creation
 
-    func createThread(project: Project, requestedAgentType: AgentType? = nil) async throws -> MagentThread {
+    func createThread(
+        project: Project,
+        requestedAgentType: AgentType? = nil,
+        useAgentCommand: Bool = true
+    ) async throws -> MagentThread {
         // Generate a unique name that doesn't conflict with existing worktrees, branches, or tmux sessions
         var name = NameGenerator.generate()
         var foundUnique = false
@@ -97,23 +102,33 @@ final class ThreadManager {
         )
 
         let settings = persistence.loadSettings()
-        let selectedAgentType = resolveAgentType(
-            for: project.id,
-            requestedAgentType: requestedAgentType,
-            settings: settings
-        )
+        let selectedAgentType: AgentType?
+        if useAgentCommand {
+            selectedAgentType = resolveAgentType(
+                for: project.id,
+                requestedAgentType: requestedAgentType,
+                settings: settings
+            )
+        } else {
+            selectedAgentType = nil
+        }
 
         // Pre-trust the worktree directory so the selected agent doesn't show a trust dialog
         trustDirectoryIfNeeded(worktreePath, agentType: selectedAgentType)
 
         // Create tmux session with selected agent command (or shell if no active agents)
         let envExports = "export WORKTREE_PATH=\(worktreePath) && export PROJECT_PATH=\(project.repoPath) && export WORKTREE_NAME=\(name)"
-        let startCmd = agentStartCommand(
-            settings: settings,
-            agentType: selectedAgentType,
-            envExports: envExports,
-            workingDirectory: worktreePath
-        )
+        let startCmd: String
+        if useAgentCommand {
+            startCmd = agentStartCommand(
+                settings: settings,
+                agentType: selectedAgentType,
+                envExports: envExports,
+                workingDirectory: worktreePath
+            )
+        } else {
+            startCmd = "\(envExports) && cd \(worktreePath) && exec zsh -l"
+        }
         try await tmux.createSession(
             name: tmuxSessionName,
             workingDirectory: worktreePath,
@@ -131,7 +146,7 @@ final class ThreadManager {
             worktreePath: worktreePath,
             branchName: branchName,
             tmuxSessionNames: [tmuxSessionName],
-            agentTmuxSessions: selectedAgentType != nil ? [tmuxSessionName] : [],
+            agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
             sectionId: settings.defaultSection?.id,
             selectedAgentType: selectedAgentType,
             lastSelectedTmuxSessionName: tmuxSessionName
@@ -139,8 +154,9 @@ final class ThreadManager {
 
         threads.append(thread)
         try persistence.saveThreads(threads)
-        let d = delegate
-        DispatchQueue.main.async { d?.threadManager(self, didCreateThread: thread) }
+        await MainActor.run {
+            delegate?.threadManager(self, didCreateThread: thread)
+        }
 
         // Inject terminal command and agent context
         let injection = effectiveInjection(for: project.id)
@@ -199,8 +215,9 @@ final class ThreadManager {
         // Insert main threads at front
         threads.insert(thread, at: 0)
         try persistence.saveThreads(threads)
-        let d = delegate
-        DispatchQueue.main.async { d?.threadManager(self, didCreateThread: thread) }
+        await MainActor.run {
+            delegate?.threadManager(self, didCreateThread: thread)
+        }
 
         // Inject terminal command and agent context
         let injection = effectiveInjection(for: project.id)
@@ -324,9 +341,9 @@ final class ThreadManager {
             index: tabIndex
         )
 
-        let d = delegate
-        let t = threads
-        DispatchQueue.main.async { d?.threadManager(self, didUpdateThreads: t) }
+        await MainActor.run {
+            delegate?.threadManager(self, didUpdateThreads: threads)
+        }
 
         // Inject terminal command (always) and agent context (only for agent tabs)
         let injection = effectiveInjection(for: thread.projectId)
@@ -361,15 +378,15 @@ final class ThreadManager {
 
     // MARK: - Section Management
 
+    @MainActor
     func moveThread(_ thread: MagentThread, toSection sectionId: UUID) {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else { return }
         threads[index].sectionId = sectionId
         try? persistence.saveThreads(threads)
-        let d = delegate
-        let t = threads
-        DispatchQueue.main.async { d?.threadManager(self, didUpdateThreads: t) }
+        delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
+    @MainActor
     func reassignThreads(fromSection oldSectionId: UUID, toSection newSectionId: UUID) {
         var changed = false
         for i in threads.indices where threads[i].sectionId == oldSectionId {
@@ -378,9 +395,7 @@ final class ThreadManager {
         }
         guard changed else { return }
         try? persistence.saveThreads(threads)
-        let d = delegate
-        let t = threads
-        DispatchQueue.main.async { d?.threadManager(self, didUpdateThreads: t) }
+        delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
     // MARK: - Rename
@@ -468,9 +483,9 @@ final class ThreadManager {
 
         try persistence.saveThreads(threads)
 
-        let d = delegate
-        let t = threads
-        DispatchQueue.main.async { d?.threadManager(self, didUpdateThreads: t) }
+        await MainActor.run {
+            delegate?.threadManager(self, didUpdateThreads: threads)
+        }
     }
 
     // MARK: - Close Tab
@@ -496,9 +511,9 @@ final class ThreadManager {
         }
         try persistence.saveThreads(threads)
 
-        let d = delegate
-        let t = threads
-        DispatchQueue.main.async { d?.threadManager(self, didUpdateThreads: t) }
+        await MainActor.run {
+            delegate?.threadManager(self, didUpdateThreads: threads)
+        }
     }
 
     // MARK: - Archive Thread
@@ -506,17 +521,6 @@ final class ThreadManager {
     func archiveThread(_ thread: MagentThread) async throws {
         guard !thread.isMain else {
             throw ThreadManagerError.cannotDeleteMainThread
-        }
-
-        // Kill all tmux sessions
-        for sessionName in thread.tmuxSessionNames {
-            try? await tmux.killSession(name: sessionName)
-        }
-
-        // Remove git worktree but keep the branch
-        let settings = persistence.loadSettings()
-        if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
-            try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
         }
 
         // Remove from active list
@@ -530,8 +534,19 @@ final class ThreadManager {
         }
         try persistence.saveThreads(allThreads)
 
-        let d = delegate
-        DispatchQueue.main.async { d?.threadManager(self, didArchiveThread: thread) }
+        await MainActor.run {
+            delegate?.threadManager(self, didArchiveThread: thread)
+        }
+
+        // Cleanup after UI has switched away from this thread.
+        for sessionName in thread.tmuxSessionNames {
+            try? await tmux.killSession(name: sessionName)
+        }
+
+        let settings = persistence.loadSettings()
+        if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
+            try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
+        }
     }
 
     // MARK: - Delete Thread
@@ -545,20 +560,6 @@ final class ThreadManager {
             throw ThreadManagerError.threadNotFound
         }
 
-        // Kill all tmux sessions for this thread
-        for sessionName in thread.tmuxSessionNames {
-            try? await tmux.killSession(name: sessionName)
-        }
-
-        // Remove git worktree and delete branch
-        let settings = persistence.loadSettings()
-        if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
-            try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
-            if !thread.branchName.isEmpty {
-                try? await git.deleteBranch(repoPath: project.repoPath, branchName: thread.branchName)
-            }
-        }
-
         // Remove from active list
         threads.remove(at: index)
 
@@ -567,8 +568,22 @@ final class ThreadManager {
         allThreads.removeAll { $0.id == thread.id }
         try persistence.saveThreads(allThreads)
 
-        let d = delegate
-        DispatchQueue.main.async { d?.threadManager(self, didDeleteThread: thread) }
+        await MainActor.run {
+            delegate?.threadManager(self, didDeleteThread: thread)
+        }
+
+        // Cleanup after UI has switched away from this thread.
+        for sessionName in thread.tmuxSessionNames {
+            try? await tmux.killSession(name: sessionName)
+        }
+
+        let settings = persistence.loadSettings()
+        if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
+            try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
+            if !thread.branchName.isEmpty {
+                try? await git.deleteBranch(repoPath: project.repoPath, branchName: thread.branchName)
+            }
+        }
     }
 
     // MARK: - Worktree Recovery
@@ -839,7 +854,7 @@ final class ThreadManager {
 
     // MARK: - Helpers
 
-    /// Builds the shell command to start the agent, including Claude-specific workarounds only when applicable.
+    /// Builds the shell command to start the selected agent with any required agent-specific setup.
     private func agentStartCommand(
         settings: AppSettings,
         agentType: AgentType?,

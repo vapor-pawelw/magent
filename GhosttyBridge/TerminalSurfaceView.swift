@@ -2,9 +2,9 @@ import Cocoa
 import GhosttyKit
 
 /// NSView subclass that hosts a ghostty terminal surface with Metal rendering.
-final class TerminalSurfaceView: NSView, NSTextInputClient {
+public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClient {
 
-    private(set) var surface: ghostty_surface_t?
+    public private(set) var surface: ghostty_surface_t?
     private let workingDirectory: String
     private let command: String?
 
@@ -15,9 +15,9 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     // Text input
     private var markedText = NSMutableAttributedString()
 
-    override var acceptsFirstResponder: Bool { true }
+    override public var acceptsFirstResponder: Bool { true }
 
-    init(workingDirectory: String, command: String? = nil) {
+    public init(workingDirectory: String, command: String? = nil) {
         self.workingDirectory = workingDirectory
         self.command = command
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
@@ -29,17 +29,11 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         fatalError("init(coder:) has not been implemented")
     }
 
-    deinit {
-        if let surface {
-            ghostty_surface_free(surface)
-        }
-        cWorkingDirectory?.deallocate()
-        cCommand?.deallocate()
-    }
+    deinit {}
 
     // MARK: - Layer
 
-    override func makeBackingLayer() -> CALayer {
+    override public func makeBackingLayer() -> CALayer {
         let layer = CAMetalLayer()
         layer.contentsScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
         return layer
@@ -87,12 +81,12 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     // MARK: - Layout & Rendering
 
-    override func setFrameSize(_ newSize: NSSize) {
+    override public func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         updateSurfaceSize()
     }
 
-    override func viewDidMoveToWindow() {
+    override public func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         GhosttyAppManager.log("viewDidMoveToWindow: window=\(window != nil), surface=\(surface != nil)")
         if window != nil && surface == nil {
@@ -103,6 +97,29 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
             GhosttyAppManager.shared.surfaceDidAppear()
         } else {
             GhosttyAppManager.shared.surfaceDidDisappear()
+            destroySurface()
+        }
+    }
+
+    override public func viewWillMove(toSuperview newSuperview: NSView?) {
+        super.viewWillMove(toSuperview: newSuperview)
+        if newSuperview == nil {
+            destroySurface()
+        }
+    }
+
+    private func destroySurface() {
+        if let surface {
+            ghostty_surface_free(surface)
+            self.surface = nil
+        }
+        if let cWorkingDirectory {
+            free(cWorkingDirectory)
+            self.cWorkingDirectory = nil
+        }
+        if let cCommand {
+            free(cCommand)
+            self.cCommand = nil
         }
     }
 
@@ -119,7 +136,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     // MARK: - Focus
 
-    override func becomeFirstResponder() -> Bool {
+    override public func becomeFirstResponder() -> Bool {
         let result = super.becomeFirstResponder()
         if result, let surface {
             ghostty_surface_set_focus(surface, true)
@@ -127,7 +144,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         return result
     }
 
-    override func resignFirstResponder() -> Bool {
+    override public func resignFirstResponder() -> Bool {
         let result = super.resignFirstResponder()
         if result, let surface {
             ghostty_surface_set_focus(surface, false)
@@ -137,7 +154,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     // MARK: - Keyboard Input
 
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    override public func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.type == .keyDown else { return false }
 
         // Ctrl+/ → treat as Ctrl+_ (avoids macOS beep)
@@ -172,7 +189,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         return false
     }
 
-    override func keyDown(with event: NSEvent) {
+    override public func keyDown(with event: NSEvent) {
         // Send key event to ghostty first. If ghostty consumed it, we're done.
         // If not, fall through to interpretKeyEvents for IME/dead key handling.
         let consumed = sendKeyEvent(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
@@ -181,14 +198,14 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         }
     }
 
-    override func keyUp(with event: NSEvent) {
+    override public func keyUp(with event: NSEvent) {
         _ = sendKeyEvent(event, action: GHOSTTY_ACTION_RELEASE)
     }
 
     // Prevents audible NSBeep for unhandled selectors (e.g. deleteWordBackward: from Ctrl+W)
-    override func doCommand(by selector: Selector) {}
+    override public func doCommand(by selector: Selector) {}
 
-    override func flagsChanged(with event: NSEvent) {
+    override public func flagsChanged(with event: NSEvent) {
         let mods = Self.ghosttyMods(event.modifierFlags)
 
         let action: ghostty_input_action_e
@@ -295,7 +312,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     // MARK: - NSTextInputClient
 
-    func insertText(_ string: Any, replacementRange: NSRange) {
+    public func insertText(_ string: Any, replacementRange: NSRange) {
         // Called by interpretKeyEvents for IME composition results / dead key output.
         // ghostty_surface_key() already handled normal typing, so this only fires
         // when interpretKeyEvents was invoked (i.e. ghostty didn't consume the key).
@@ -317,7 +334,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         markedText.mutableString.setString("")
     }
 
-    func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+    public func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         if let s = string as? String {
             markedText.mutableString.setString(s)
         } else if let attr = string as? NSAttributedString {
@@ -325,34 +342,34 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         }
     }
 
-    func unmarkText() {
+    public func unmarkText() {
         markedText.mutableString.setString("")
     }
 
-    func selectedRange() -> NSRange {
+    public func selectedRange() -> NSRange {
         NSRange(location: NSNotFound, length: 0)
     }
 
-    func markedRange() -> NSRange {
+    public func markedRange() -> NSRange {
         if markedText.length > 0 {
             return NSRange(location: 0, length: markedText.length)
         }
         return NSRange(location: NSNotFound, length: 0)
     }
 
-    func hasMarkedText() -> Bool {
+    public func hasMarkedText() -> Bool {
         markedText.length > 0
     }
 
-    func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
+    public func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
         nil
     }
 
-    func validAttributesForMarkedText() -> [NSAttributedString.Key] {
+    public func validAttributesForMarkedText() -> [NSAttributedString.Key] {
         []
     }
 
-    func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
+    public func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
         guard let windowFrame = window?.frame else { return .zero }
         let viewFrame = convert(bounds, to: nil)
         return NSRect(
@@ -363,18 +380,18 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         )
     }
 
-    func characterIndex(for point: NSPoint) -> Int {
+    public func characterIndex(for point: NSPoint) -> Int {
         0
     }
 
     // MARK: - Mouse Input
 
-    override func mouseDown(with event: NSEvent) {
+    override public func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         super.mouseDown(with: event)
     }
 
-    override func scrollWheel(with event: NSEvent) {
+    override public func scrollWheel(with event: NSEvent) {
         guard let surface else { return }
 
         var mods = GHOSTTY_MODS_NONE.rawValue

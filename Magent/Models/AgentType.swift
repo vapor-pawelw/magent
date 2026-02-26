@@ -1,6 +1,6 @@
 import Foundation
 
-enum AgentType: String, Codable, CaseIterable {
+nonisolated enum AgentType: String, Codable, CaseIterable, Sendable {
     case claude = "claude"
     case codex = "codex"
     case custom = "custom"

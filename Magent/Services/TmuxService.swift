@@ -11,16 +11,16 @@ final class TmuxService {
         if let command {
             cmd += " \(shellQuote(command))"
         }
-        try await ShellExecutor.run(cmd)
+        _ = try await ShellExecutor.run(cmd)
     }
 
     func killSession(name: String) async throws {
-        try await ShellExecutor.run("tmux kill-session -t \(shellQuote(name))")
+        _ = try await ShellExecutor.run("tmux kill-session -t \(shellQuote(name))")
     }
 
     func hasSession(name: String) async -> Bool {
         do {
-            try await ShellExecutor.run("tmux has-session -t \(shellQuote(name))")
+            _ = try await ShellExecutor.run("tmux has-session -t \(shellQuote(name))")
             return true
         } catch {
             return false
@@ -28,7 +28,7 @@ final class TmuxService {
     }
 
     func renameSession(from oldName: String, to newName: String) async throws {
-        try await ShellExecutor.run(
+        _ = try await ShellExecutor.run(
             "tmux rename-session -t \(shellQuote(oldName)) \(shellQuote(newName))"
         )
     }
@@ -39,13 +39,13 @@ final class TmuxService {
     }
 
     func sendKeys(sessionName: String, keys: String) async throws {
-        try await ShellExecutor.run(
+        _ = try await ShellExecutor.run(
             "tmux send-keys -t \(shellQuote(sessionName)) \(shellQuote(keys)) Enter"
         )
     }
 
     func setEnvironment(sessionName: String, key: String, value: String) async throws {
-        try await ShellExecutor.run(
+        _ = try await ShellExecutor.run(
             "tmux set-environment -t \(shellQuote(sessionName)) \(shellQuote(key)) \(shellQuote(value))"
         )
     }

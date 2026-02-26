@@ -1,5 +1,6 @@
 import Cocoa
 
+@MainActor
 protocol ThreadListDelegate: AnyObject {
     func threadList(_ controller: ThreadListViewController, didSelectThread thread: MagentThread)
     func threadList(_ controller: ThreadListViewController, didRenameThread thread: MagentThread)
@@ -245,7 +246,6 @@ final class ThreadListViewController: NSViewController {
 
         let settings = persistence.loadSettings()
         let projects = settings.projects
-        let activeAgents = settings.availableActiveAgents
 
         guard !projects.isEmpty else {
             let alert = NSAlert()
@@ -259,24 +259,14 @@ final class ThreadListViewController: NSViewController {
 
         if projects.count == 1 {
             let project = projects[0]
-            if activeAgents.count > 1 {
-                presentProjectAgentMenu(project: project)
-            } else {
-                createThread(for: project)
-            }
+            presentProjectAgentMenu(project: project)
         } else {
             let menu = NSMenu()
+            let activeAgents = settings.availableActiveAgents
             for project in projects {
-                if activeAgents.count > 1 {
-                    let item = NSMenuItem(title: project.name, action: nil, keyEquivalent: "")
-                    item.submenu = buildAgentSubmenu(for: project, activeAgents: activeAgents)
-                    menu.addItem(item)
-                } else {
-                    let item = NSMenuItem(title: project.name, action: #selector(projectMenuItemSelected(_:)), keyEquivalent: "")
-                    item.target = self
-                    item.representedObject = project
-                    menu.addItem(item)
-                }
+                let item = NSMenuItem(title: project.name, action: nil, keyEquivalent: "")
+                item.submenu = buildAgentSubmenu(for: project, activeAgents: activeAgents)
+                menu.addItem(item)
             }
             menu.popUp(positioning: nil, at: NSPoint(x: addButton.bounds.minX, y: addButton.bounds.minY), in: addButton)
         }
@@ -299,24 +289,27 @@ final class ThreadListViewController: NSViewController {
                 keyEquivalent: ""
             )
             defaultItem.target = self
-            defaultItem.representedObject = ["projectId": project.id.uuidString, "agentRaw": ""] as [String: String]
+            defaultItem.representedObject = ["projectId": project.id.uuidString, "mode": "default"] as [String: String]
             submenu.addItem(defaultItem)
-            submenu.addItem(.separator())
         }
 
         for agent in activeAgents {
             let item = NSMenuItem(title: agent.displayName, action: #selector(projectAgentMenuItemSelected(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = ["projectId": project.id.uuidString, "agentRaw": agent.rawValue] as [String: String]
+            item.representedObject = ["projectId": project.id.uuidString, "mode": "agent", "agentRaw": agent.rawValue] as [String: String]
             submenu.addItem(item)
         }
 
-        return submenu
-    }
+        if submenu.items.count > 0 {
+            submenu.addItem(.separator())
+        }
 
-    @objc private func projectMenuItemSelected(_ sender: NSMenuItem) {
-        guard let project = sender.representedObject as? Project else { return }
-        createThread(for: project)
+        let terminalItem = NSMenuItem(title: "Terminal", action: #selector(projectAgentMenuItemSelected(_:)), keyEquivalent: "")
+        terminalItem.target = self
+        terminalItem.representedObject = ["projectId": project.id.uuidString, "mode": "terminal"] as [String: String]
+        submenu.addItem(terminalItem)
+
+        return submenu
     }
 
     @objc private func projectAgentMenuItemSelected(_ sender: NSMenuItem) {
@@ -327,8 +320,16 @@ final class ThreadListViewController: NSViewController {
         let settings = persistence.loadSettings()
         guard let project = settings.projects.first(where: { $0.id == projectId }) else { return }
 
-        let agentRaw = data["agentRaw"] ?? ""
-        createThread(for: project, requestedAgentType: AgentType(rawValue: agentRaw))
+        let mode = data["mode"] ?? "default"
+        switch mode {
+        case "terminal":
+            createThread(for: project, requestedAgentType: nil, useAgentCommand: false)
+        case "agent":
+            let agentRaw = data["agentRaw"] ?? ""
+            createThread(for: project, requestedAgentType: AgentType(rawValue: agentRaw), useAgentCommand: true)
+        default:
+            createThread(for: project, requestedAgentType: nil, useAgentCommand: true)
+        }
     }
 
     /// Called from SplitViewController's Cmd+N shortcut to respect the loading guard
@@ -336,7 +337,11 @@ final class ThreadListViewController: NSViewController {
         addThreadTapped()
     }
 
-    private func createThread(for project: Project, requestedAgentType: AgentType? = nil) {
+    private func createThread(
+        for project: Project,
+        requestedAgentType: AgentType? = nil,
+        useAgentCommand: Bool = true
+    ) {
         isCreatingThread = true
         addButton.isEnabled = false
 
@@ -344,7 +349,8 @@ final class ThreadListViewController: NSViewController {
             do {
                 let thread = try await self.threadManager.createThread(
                     project: project,
-                    requestedAgentType: requestedAgentType
+                    requestedAgentType: requestedAgentType,
+                    useAgentCommand: useAgentCommand
                 )
                 await MainActor.run {
                     self.isCreatingThread = false
@@ -716,7 +722,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         return c
                     }()
 
-                (cell as? ThreadCell)?.configureAsMain()
+                cell.configureAsMain()
                 return cell
             }
 
@@ -753,7 +759,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             let settings = persistence.loadSettings()
             let sections = settings.threadSections
             let section = sections.first(where: { $0.id == thread.sectionId })
-            (cell as? ThreadCell)?.configure(with: thread, sectionColor: section?.color)
+            cell.configure(with: thread, sectionColor: section?.color)
             return cell
         }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-struct AppSettings: Codable {
+nonisolated struct AppSettings: Codable, Sendable {
     var projects: [Project]
     var activeAgents: [AgentType]
     var defaultAgentType: AgentType?

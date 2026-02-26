@@ -1,5 +1,7 @@
 import Cocoa
+import GhosttyBridge
 
+@objc(AppDelegate)
 class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var coordinator: AppCoordinator?

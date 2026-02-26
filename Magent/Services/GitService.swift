@@ -1,6 +1,6 @@
 import Foundation
 
-struct WorktreeInfo {
+nonisolated struct WorktreeInfo: Sendable {
     let path: String
     let branch: String
     let isBareStem: Bool
@@ -79,11 +79,11 @@ final class GitService {
     }
 
     func removeWorktree(repoPath: String, worktreePath: String) async throws {
-        try await ShellExecutor.run(
+        _ = try await ShellExecutor.run(
             "git worktree remove --force \(shellQuote(worktreePath))",
             workingDirectory: repoPath
         )
-        try await ShellExecutor.run(
+        _ = try await ShellExecutor.run(
             "git worktree prune",
             workingDirectory: repoPath
         )
@@ -124,21 +124,21 @@ final class GitService {
     }
 
     func moveWorktree(repoPath: String, oldPath: String, newPath: String) async throws {
-        try await ShellExecutor.run(
+        _ = try await ShellExecutor.run(
             "git worktree move \(shellQuote(oldPath)) \(shellQuote(newPath))",
             workingDirectory: repoPath
         )
     }
 
     func renameBranch(repoPath: String, oldName: String, newName: String) async throws {
-        try await ShellExecutor.run(
+        _ = try await ShellExecutor.run(
             "git branch -m \(shellQuote(oldName)) \(shellQuote(newName))",
             workingDirectory: repoPath
         )
     }
 
     func deleteBranch(repoPath: String, branchName: String) async throws {
-        try await ShellExecutor.run(
+        _ = try await ShellExecutor.run(
             "git branch -D \(shellQuote(branchName))",
             workingDirectory: repoPath
         )
@@ -146,7 +146,7 @@ final class GitService {
 
     func branchExists(repoPath: String, branchName: String) async -> Bool {
         do {
-            try await ShellExecutor.run(
+            _ = try await ShellExecutor.run(
                 "git rev-parse --verify \(shellQuote(branchName))",
                 workingDirectory: repoPath
             )
@@ -180,7 +180,7 @@ final class GitService {
 
     func isGitRepository(at path: String) async -> Bool {
         do {
-            try await ShellExecutor.run("git rev-parse --git-dir", workingDirectory: path)
+            _ = try await ShellExecutor.run("git rev-parse --git-dir", workingDirectory: path)
             return true
         } catch {
             return false

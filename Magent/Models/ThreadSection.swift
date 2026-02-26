@@ -1,6 +1,6 @@
 import Cocoa
 
-struct ThreadSection: Codable, Identifiable, Hashable {
+nonisolated struct ThreadSection: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     var name: String
     var colorHex: String
@@ -24,6 +24,7 @@ struct ThreadSection: Codable, Identifiable, Hashable {
         self.isVisible = isVisible
     }
 
+    @MainActor
     var color: NSColor {
         NSColor(hex: colorHex) ?? .systemGray
     }
