@@ -394,17 +394,32 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     override public func scrollWheel(with event: NSEvent) {
         guard let surface else { return }
 
-        var mods = GHOSTTY_MODS_NONE.rawValue
-        if event.modifierFlags.contains(.shift) { mods |= GHOSTTY_MODS_SHIFT.rawValue }
-        if event.modifierFlags.contains(.control) { mods |= GHOSTTY_MODS_CTRL.rawValue }
-        if event.modifierFlags.contains(.option) { mods |= GHOSTTY_MODS_ALT.rawValue }
-        if event.modifierFlags.contains(.command) { mods |= GHOSTTY_MODS_SUPER.rawValue }
+        var x = event.scrollingDeltaX
+        var y = event.scrollingDeltaY
+        let precision = event.hasPreciseScrollingDeltas
 
-        ghostty_surface_mouse_scroll(
-            surface,
-            event.scrollingDeltaX,
-            event.scrollingDeltaY,
-            ghostty_input_scroll_mods_t(mods)
-        )
+        if precision {
+            x *= 2
+            y *= 2
+        }
+
+        // ghostty_input_scroll_mods_t is a packed bitfield:
+        //   bit 0: precision flag (trackpad vs discrete mouse wheel)
+        //   bits 1-3: momentum phase enum
+        var scrollMods: Int32 = 0
+        if precision { scrollMods |= 1 }
+
+        let momentum: Int32 = switch event.momentumPhase {
+        case .began:      1
+        case .stationary: 2
+        case .changed:    3
+        case .ended:      4
+        case .cancelled:  5
+        case .mayBegin:   6
+        default:          0
+        }
+        scrollMods |= momentum << 1
+
+        ghostty_surface_mouse_scroll(surface, x, y, ghostty_input_scroll_mods_t(scrollMods))
     }
 }
