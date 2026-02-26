@@ -34,6 +34,8 @@ let project = Project(
                     "SWIFT_STRICT_CONCURRENCY": "complete",
                     "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
                     "OTHER_LDFLAGS": "$(inherited) -lc++ -framework Carbon",
+                    "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+                    "ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS": "YES",
                 ]
             )
         ),
