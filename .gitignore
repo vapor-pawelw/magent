@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Xcode/Tuist-generated projects (generated via Tuist)
+*.xcodeproj/
+*.xcworkspace/
+
+# Xcode user/build data
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Tuist
+Tuist/.build/
+Tuist/.swiftpm/
+Tuist/.cache/
+Derived/
+
+# Local binaries / objects
+*.o
+
+# Large local artifact (excluded from git history)
+Libraries/GhosttyKit.xcframework/macos-arm64_x86_64/libghostty.a
+
+# Local assistant data
+.claude/

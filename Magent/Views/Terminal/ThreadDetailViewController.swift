@@ -152,6 +152,9 @@ private final class TabItemView: NSView, NSMenuDelegate {
 
 final class ThreadDetailViewController: NSViewController {
 
+    private static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
+    private static let lastOpenedSessionDefaultsKey = "MagentLastOpenedSessionName"
+
     private(set) var thread: MagentThread
     private let threadManager = ThreadManager.shared
     private let tabBarStack = NSStackView()
@@ -200,8 +203,23 @@ final class ThreadDetailViewController: NSViewController {
         GhosttyAppManager.shared.initialize()
 
         setupUI()
-        setupTabs()
         setupLoadingOverlay()
+
+        // Observe dead session notifications for mid-use terminal replacement
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDeadSessionsNotification(_:)),
+            name: .magentDeadSessionsDetected,
+            object: nil
+        )
+
+        Task {
+            await setupTabs()
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     // MARK: - UI Setup
@@ -245,68 +263,143 @@ final class ThreadDetailViewController: NSViewController {
 
     // MARK: - Tab Setup
 
-    private func setupTabs() {
+    private func setupTabs() async {
+        if let latest = threadManager.threads.first(where: { $0.id == thread.id }) {
+            thread = latest
+        }
+
         let settings = PersistenceService.shared.loadSettings()
-        let agentCommand = settings.agentCommand
+        let selectedAgentType = thread.selectedAgentType ?? threadManager.effectiveAgentType(for: thread.projectId)
 
         // Determine tab order with pinned tabs first
         let pinnedSet = Set(thread.pinnedTmuxSessions)
 
+        let sessions: [String]
         if thread.isMain {
-            let projectPath = thread.worktreePath
             let sanitizedName = ThreadManager.sanitizeForTmux(
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
             )
-            let sessions = thread.tmuxSessionNames.isEmpty ? ["magent-main-\(sanitizedName)"] : thread.tmuxSessionNames
-            let pinned = sessions.filter { pinnedSet.contains($0) }
-            let unpinned = sessions.filter { !pinnedSet.contains($0) }
-            let orderedSessions = pinned + unpinned
-            pinnedCount = pinned.count
-
-            for (i, sessionName) in orderedSessions.enumerated() {
-                let title = i == 0 ? "Main" : "Tab \(i)"
-                createTabItem(title: title, closable: true, pinned: i < pinnedCount)
-
-                let envExports = "export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=main"
-                let claudeUnset = settings.isClaudeAgent ? " && unset CLAUDECODE" : ""
-                let startCmd = "\(envExports) && cd \(projectPath)\(claudeUnset) && \(agentCommand)"
-                let tmuxCommand = "/bin/zsh -l -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
-                let terminalView = TerminalSurfaceView(
-                    workingDirectory: projectPath,
-                    command: tmuxCommand
-                )
-                terminalViews.append(terminalView)
-            }
+            sessions = thread.tmuxSessionNames.isEmpty ? ["magent-main-\(sanitizedName)"] : thread.tmuxSessionNames
         } else {
-            let sessions = thread.tmuxSessionNames.isEmpty ? ["magent-\(thread.name)"] : thread.tmuxSessionNames
-            let projectPath = settings.projects.first(where: { $0.id == thread.projectId })?.repoPath ?? thread.worktreePath
-            let pinned = sessions.filter { pinnedSet.contains($0) }
-            let unpinned = sessions.filter { !pinnedSet.contains($0) }
-            let orderedSessions = pinned + unpinned
-            pinnedCount = pinned.count
+            sessions = thread.tmuxSessionNames.isEmpty ? ["magent-\(thread.name)"] : thread.tmuxSessionNames
+        }
 
-            for (i, sessionName) in orderedSessions.enumerated() {
+        let pinned = sessions.filter { pinnedSet.contains($0) }
+        let unpinned = sessions.filter { !pinnedSet.contains($0) }
+        let orderedSessions = pinned + unpinned
+        pinnedCount = pinned.count
+
+        for (i, sessionName) in orderedSessions.enumerated() {
+            let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
+
+            // If the session is dead, pre-create it so the terminal just attaches.
+            // For Claude agent sessions, this also triggers /resume injection.
+            let sessionExists = await TmuxService.shared.hasSession(name: sessionName)
+            if !sessionExists {
+                _ = await threadManager.recreateSessionIfNeeded(
+                    sessionName: sessionName,
+                    thread: thread,
+                    thenResume: isAgentSession && (selectedAgentType?.supportsResume == true)
+                )
+            }
+
+            await MainActor.run {
                 let title = i == 0 ? "Main" : "Tab \(i)"
-                createTabItem(title: title, closable: i != primaryTabIndex, pinned: i < pinnedCount)
+                let closable = thread.isMain ? true : (i != primaryTabIndex)
+                createTabItem(title: title, closable: closable, pinned: i < pinnedCount)
 
-                let wd = thread.worktreePath
-                let envExports = "export WORKTREE_PATH=\(wd) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(thread.name)"
-                let claudeUnset = settings.isClaudeAgent ? " && unset CLAUDECODE" : ""
-                let startCmd = "\(envExports) && cd \(wd)\(claudeUnset) && \(agentCommand)"
-                let tmuxCommand = "/bin/zsh -l -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
+                let tmuxCommand = buildTmuxCommand(for: sessionName)
                 let terminalView = TerminalSurfaceView(
                     workingDirectory: thread.worktreePath,
                     command: tmuxCommand
                 )
                 terminalViews.append(terminalView)
             }
-
-            // Update tmux session order to match pinned-first ordering
-            thread.tmuxSessionNames = orderedSessions
         }
 
-        rebuildTabBar()
-        selectTab(at: 0)
+        thread.tmuxSessionNames = orderedSessions
+
+        await MainActor.run {
+            rebuildTabBar()
+            let initialIndex: Int
+            let defaults = UserDefaults.standard
+            let defaultsThreadId = defaults
+                .string(forKey: Self.lastOpenedThreadDefaultsKey)
+                .flatMap(UUID.init(uuidString:))
+            let defaultsSession = defaults.string(forKey: Self.lastOpenedSessionDefaultsKey)
+
+            if defaultsThreadId == thread.id,
+               let defaultsSession,
+               let savedIndex = orderedSessions.firstIndex(of: defaultsSession) {
+                initialIndex = savedIndex
+            } else if let lastSelected = thread.lastSelectedTmuxSessionName,
+                      let savedIndex = orderedSessions.firstIndex(of: lastSelected) {
+                initialIndex = savedIndex
+            } else {
+                initialIndex = 0
+            }
+            selectTab(at: initialIndex)
+        }
+    }
+
+    private func buildTmuxCommand(for sessionName: String) -> String {
+        let settings = PersistenceService.shared.loadSettings()
+        let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
+        let selectedAgentType = thread.selectedAgentType ?? threadManager.effectiveAgentType(for: thread.projectId)
+
+        if thread.isMain {
+            let projectPath = thread.worktreePath
+            let envExports = "export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=main"
+            let startCmd: String
+            if isAgentSession, let selectedAgentType {
+                let unset = selectedAgentType == .claude ? " && unset CLAUDECODE" : ""
+                startCmd = "\(envExports) && cd \(projectPath)\(unset) && \(settings.command(for: selectedAgentType))"
+            } else {
+                startCmd = "\(envExports) && cd \(projectPath) && exec zsh -l"
+            }
+            return "/bin/zsh -l -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
+        } else {
+            let wd = thread.worktreePath
+            let projectPath = settings.projects.first(where: { $0.id == thread.projectId })?.repoPath ?? wd
+            let envExports = "export WORKTREE_PATH=\(wd) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(thread.name)"
+            let startCmd: String
+            if isAgentSession, let selectedAgentType {
+                let unset = selectedAgentType == .claude ? " && unset CLAUDECODE" : ""
+                startCmd = "\(envExports) && cd \(wd)\(unset) && \(settings.command(for: selectedAgentType))"
+            } else {
+                startCmd = "\(envExports) && cd \(wd) && exec zsh -l"
+            }
+            return "/bin/zsh -l -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
+        }
+    }
+
+    @objc private func handleDeadSessionsNotification(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let threadId = userInfo["threadId"] as? UUID,
+              threadId == thread.id,
+              let deadSessions = userInfo["deadSessions"] as? [String] else { return }
+
+        // The monitor already recreated the tmux sessions.
+        // Replace the terminal views that were attached to the old (dead) sessions.
+        for sessionName in deadSessions {
+            guard let i = thread.tmuxSessionNames.firstIndex(of: sessionName),
+                  i < terminalViews.count else { continue }
+
+            let wasSelected = (i == currentTabIndex)
+            let oldView = terminalViews[i]
+            oldView.removeFromSuperview()
+
+            let tmuxCommand = buildTmuxCommand(for: sessionName)
+            let newView = TerminalSurfaceView(
+                workingDirectory: thread.worktreePath,
+                command: tmuxCommand
+            )
+            terminalViews[i] = newView
+
+            if wasSelected {
+                selectTab(at: i)
+            }
+        }
     }
 
     // MARK: - Tab Bar Layout
@@ -383,6 +476,16 @@ final class ThreadDetailViewController: NSViewController {
 
         view.window?.makeFirstResponder(terminalView)
         currentTabIndex = index
+
+        if index < thread.tmuxSessionNames.count {
+            let sessionName = thread.tmuxSessionNames[index]
+            if thread.lastSelectedTmuxSessionName != sessionName {
+                thread.lastSelectedTmuxSessionName = sessionName
+                threadManager.updateLastSelectedSession(for: thread.id, sessionName: sessionName)
+            }
+            UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
+            UserDefaults.standard.set(sessionName, forKey: Self.lastOpenedSessionDefaultsKey)
+        }
     }
 
     private func rebindTabActions() {
@@ -582,22 +685,76 @@ final class ThreadDetailViewController: NSViewController {
     // MARK: - Add Tab
 
     @objc private func addTabTapped() {
+        presentAddTabAgentMenu()
+    }
+
+    private func presentAddTabAgentMenu() {
+        let settings = PersistenceService.shared.loadSettings()
+        let activeAgents = settings.availableActiveAgents
+
+        let menu = NSMenu()
+
+        if let defaultAgent = threadManager.effectiveAgentType(for: thread.projectId) {
+            let defaultItem = NSMenuItem(
+                title: "Use Project Default (\(defaultAgent.displayName))",
+                action: #selector(addTabMenuItemTapped(_:)),
+                keyEquivalent: ""
+            )
+            defaultItem.target = self
+            defaultItem.representedObject = ["mode": "default"] as [String: String]
+            menu.addItem(defaultItem)
+        }
+
+        for agent in activeAgents {
+            let item = NSMenuItem(title: agent.displayName, action: #selector(addTabMenuItemTapped(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = ["mode": "agent", "agentRaw": agent.rawValue] as [String: String]
+            menu.addItem(item)
+        }
+
+        if menu.items.count > 0 {
+            menu.addItem(.separator())
+        }
+
+        let terminalItem = NSMenuItem(
+            title: "Terminal",
+            action: #selector(addTabMenuItemTapped(_:)),
+            keyEquivalent: ""
+        )
+        terminalItem.target = self
+        terminalItem.representedObject = ["mode": "terminal"] as [String: String]
+        menu.addItem(terminalItem)
+
+        menu.popUp(positioning: nil, at: NSPoint(x: addTabButton.bounds.minX, y: addTabButton.bounds.minY), in: addTabButton)
+    }
+
+    @objc private func addTabMenuItemTapped(_ sender: NSMenuItem) {
+        let data = sender.representedObject as? [String: String]
+        let mode = data?["mode"] ?? "default"
+        switch mode {
+        case "terminal":
+            addTab(using: nil, useAgentCommand: false)
+        case "agent":
+            let raw = data?["agentRaw"] ?? ""
+            addTab(using: AgentType(rawValue: raw), useAgentCommand: true)
+        default:
+            addTab(using: nil, useAgentCommand: true)
+        }
+    }
+
+    private func addTab(using agentType: AgentType?, useAgentCommand: Bool) {
         Task {
             do {
-                let tab = try await threadManager.addTab(to: thread)
+                let tab = try await threadManager.addTab(
+                    to: thread,
+                    useAgentCommand: useAgentCommand,
+                    requestedAgentType: agentType
+                )
                 await MainActor.run {
-                    let settings = PersistenceService.shared.loadSettings()
-
-                    let tmuxCommand: String
-                    if self.thread.isMain {
-                        let projectPath = self.thread.worktreePath
-                        let claudeUnset = settings.isClaudeAgent ? " && unset CLAUDECODE" : ""
-                        tmuxCommand = "/bin/zsh -l -c 'tmux attach-session -t \(tab.tmuxSessionName) 2>/dev/null || { tmux new-session -d -s \(tab.tmuxSessionName) -c \"\(projectPath)\" \"export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=main && cd \(projectPath)\(claudeUnset) && \(settings.agentCommand)\" && tmux attach-session -t \(tab.tmuxSessionName); }'"
-                    } else {
-                        let wd = self.thread.worktreePath
-                        let projectPath = settings.projects.first(where: { $0.id == self.thread.projectId })?.repoPath ?? wd
-                        tmuxCommand = "/bin/zsh -l -c 'tmux attach-session -t \(tab.tmuxSessionName) 2>/dev/null || { tmux new-session -d -s \(tab.tmuxSessionName) -c \"\(wd)\" \"export WORKTREE_PATH=\(wd) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(self.thread.name) && cd \(wd) && exec zsh -l\" && tmux attach-session -t \(tab.tmuxSessionName); }'"
+                    if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
+                        self.thread = updated
                     }
+                    let tmuxCommand = self.buildTmuxCommand(for: tab.tmuxSessionName)
 
                     let terminalView = TerminalSurfaceView(
                         workingDirectory: self.thread.worktreePath,
@@ -650,15 +807,13 @@ final class ThreadDetailViewController: NSViewController {
             do {
                 let tab = try await threadManager.addTab(to: thread, useAgentCommand: true)
                 await MainActor.run {
-                    let settings = PersistenceService.shared.loadSettings()
-                    let wd = self.thread.worktreePath
-                    let projectPath = settings.projects.first(where: { $0.id == self.thread.projectId })?.repoPath ?? wd
-                    let envExports = "export WORKTREE_PATH=\(wd) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(self.thread.name)"
-                    let claudeUnset = settings.isClaudeAgent ? " && unset CLAUDECODE" : ""
-                    let tmuxCommand = "/bin/zsh -l -c 'tmux attach-session -t \(tab.tmuxSessionName) 2>/dev/null || { tmux new-session -d -s \(tab.tmuxSessionName) -c \"\(wd)\" \"\(envExports) && cd \(wd)\(claudeUnset) && \(settings.agentCommand)\" && tmux attach-session -t \(tab.tmuxSessionName); }'"
+                    if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
+                        self.thread = updated
+                    }
+                    let tmuxCommand = self.buildTmuxCommand(for: tab.tmuxSessionName)
 
                     let terminalView = TerminalSurfaceView(
-                        workingDirectory: wd,
+                        workingDirectory: self.thread.worktreePath,
                         command: tmuxCommand
                     )
                     self.terminalViews.append(terminalView)

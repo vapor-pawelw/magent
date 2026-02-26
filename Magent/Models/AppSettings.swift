@@ -2,8 +2,9 @@ import Foundation
 
 struct AppSettings: Codable {
     var projects: [Project]
-    var agentCommand: String
-    var agentType: AgentType
+    var activeAgents: [AgentType]
+    var defaultAgentType: AgentType?
+    var customAgentCommand: String
     var isConfigured: Bool
     var threadSections: [ThreadSection]
     var terminalInjectionCommand: String
@@ -11,16 +12,18 @@ struct AppSettings: Codable {
 
     init(
         projects: [Project] = [],
-        agentCommand: String = "claude",
-        agentType: AgentType = .claude,
+        activeAgents: [AgentType] = [.claude],
+        defaultAgentType: AgentType? = nil,
+        customAgentCommand: String = "claude",
         isConfigured: Bool = false,
         threadSections: [ThreadSection] = ThreadSection.defaults(),
         terminalInjectionCommand: String = "",
         agentContextInjection: String = ""
     ) {
         self.projects = projects
-        self.agentCommand = agentCommand
-        self.agentType = agentType
+        self.activeAgents = activeAgents
+        self.defaultAgentType = defaultAgentType
+        self.customAgentCommand = customAgentCommand
         self.isConfigured = isConfigured
         self.threadSections = threadSections
         self.terminalInjectionCommand = terminalInjectionCommand
@@ -30,12 +33,27 @@ struct AppSettings: Codable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         projects = try container.decode([Project].self, forKey: .projects)
-        agentCommand = try container.decode(String.self, forKey: .agentCommand)
-        agentType = try container.decodeIfPresent(AgentType.self, forKey: .agentType) ?? .claude
+        let legacyAgentType = try container.decodeIfPresent(AgentType.self, forKey: .agentType) ?? .claude
+        let legacyAgentCommand = try container.decodeIfPresent(String.self, forKey: .agentCommand) ?? "claude"
+        activeAgents = try container.decodeIfPresent([AgentType].self, forKey: .activeAgents) ?? [legacyAgentType]
+        defaultAgentType = try container.decodeIfPresent(AgentType.self, forKey: .defaultAgentType)
+        customAgentCommand = try container.decodeIfPresent(String.self, forKey: .customAgentCommand) ?? legacyAgentCommand
         isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
         threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections) ?? ThreadSection.defaults()
         terminalInjectionCommand = try container.decodeIfPresent(String.self, forKey: .terminalInjectionCommand) ?? ""
         agentContextInjection = try container.decodeIfPresent(String.self, forKey: .agentContextInjection) ?? ""
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(projects, forKey: .projects)
+        try container.encode(activeAgents, forKey: .activeAgents)
+        try container.encodeIfPresent(defaultAgentType, forKey: .defaultAgentType)
+        try container.encode(customAgentCommand, forKey: .customAgentCommand)
+        try container.encode(isConfigured, forKey: .isConfigured)
+        try container.encode(threadSections, forKey: .threadSections)
+        try container.encode(terminalInjectionCommand, forKey: .terminalInjectionCommand)
+        try container.encode(agentContextInjection, forKey: .agentContextInjection)
     }
 
     var visibleSections: [ThreadSection] {
@@ -46,7 +64,47 @@ struct AppSettings: Codable {
         visibleSections.first
     }
 
-    var isClaudeAgent: Bool {
-        agentType == .claude
+    var availableActiveAgents: [AgentType] {
+        var seen = Set<AgentType>()
+        return activeAgents.filter { seen.insert($0).inserted }
+    }
+
+    var effectiveGlobalDefaultAgentType: AgentType? {
+        let agents = availableActiveAgents
+        guard !agents.isEmpty else { return nil }
+        if agents.count == 1 {
+            return agents[0]
+        }
+        if let defaultAgentType, agents.contains(defaultAgentType) {
+            return defaultAgentType
+        }
+        return agents[0]
+    }
+
+    func command(for agentType: AgentType) -> String {
+        switch agentType {
+        case .claude:
+            return "claude"
+        case .codex:
+            return "codex --yolo"
+        case .custom:
+            let trimmed = customAgentCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "custom-agent" : trimmed
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projects
+        case activeAgents
+        case defaultAgentType
+        case customAgentCommand
+        case isConfigured
+        case threadSections
+        case terminalInjectionCommand
+        case agentContextInjection
+
+        // Legacy keys kept for migration.
+        case agentCommand
+        case agentType
     }
 }

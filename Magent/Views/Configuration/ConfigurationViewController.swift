@@ -111,7 +111,9 @@ final class ConfigurationViewController: NSViewController {
     }
 
     private func finishConfiguration() {
-        settings.agentCommand = agentConfigView.agentCommand
+        settings.customAgentCommand = agentConfigView.agentCommand
+        settings.activeAgents = [.claude]
+        settings.defaultAgentType = nil
         settings.isConfigured = true
         try? persistence.saveSettings(settings)
         onComplete?()

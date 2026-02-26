@@ -30,9 +30,17 @@ final class ThreadManager {
 
         // Migrate old threads that have no agentTmuxSessions recorded.
         // Heuristic: the first session was always created as the agent tab.
+        let settings = persistence.loadSettings()
         for i in threads.indices {
             if threads[i].agentTmuxSessions.isEmpty && !threads[i].tmuxSessionNames.isEmpty {
                 threads[i].agentTmuxSessions = [threads[i].tmuxSessionNames[0]]
+            }
+            if threads[i].selectedAgentType == nil && !threads[i].agentTmuxSessions.isEmpty {
+                threads[i].selectedAgentType = resolveAgentType(
+                    for: threads[i].projectId,
+                    requestedAgentType: nil,
+                    settings: settings
+                )
             }
         }
 
@@ -51,7 +59,7 @@ final class ThreadManager {
 
     // MARK: - Thread Creation
 
-    func createThread(project: Project) async throws -> MagentThread {
+    func createThread(project: Project, requestedAgentType: AgentType? = nil) async throws -> MagentThread {
         // Generate a unique name that doesn't conflict with existing worktrees, branches, or tmux sessions
         var name = NameGenerator.generate()
         var foundUnique = false
@@ -88,13 +96,24 @@ final class ThreadManager {
             baseBranch: baseBranch
         )
 
-        // Pre-trust the worktree directory so the agent doesn't show a trust dialog
-        trustDirectoryIfNeeded(worktreePath)
-
-        // Create tmux session with agent command as initial process
         let settings = persistence.loadSettings()
+        let selectedAgentType = resolveAgentType(
+            for: project.id,
+            requestedAgentType: requestedAgentType,
+            settings: settings
+        )
+
+        // Pre-trust the worktree directory so the selected agent doesn't show a trust dialog
+        trustDirectoryIfNeeded(worktreePath, agentType: selectedAgentType)
+
+        // Create tmux session with selected agent command (or shell if no active agents)
         let envExports = "export WORKTREE_PATH=\(worktreePath) && export PROJECT_PATH=\(project.repoPath) && export WORKTREE_NAME=\(name)"
-        let startCmd = agentStartCommand(settings: settings, envExports: envExports, workingDirectory: worktreePath)
+        let startCmd = agentStartCommand(
+            settings: settings,
+            agentType: selectedAgentType,
+            envExports: envExports,
+            workingDirectory: worktreePath
+        )
         try await tmux.createSession(
             name: tmuxSessionName,
             workingDirectory: worktreePath,
@@ -112,8 +131,10 @@ final class ThreadManager {
             worktreePath: worktreePath,
             branchName: branchName,
             tmuxSessionNames: [tmuxSessionName],
-            agentTmuxSessions: [tmuxSessionName],
-            sectionId: settings.defaultSection?.id
+            agentTmuxSessions: selectedAgentType != nil ? [tmuxSessionName] : [],
+            sectionId: settings.defaultSection?.id,
+            selectedAgentType: selectedAgentType,
+            lastSelectedTmuxSessionName: tmuxSessionName
         )
 
         threads.append(thread)
@@ -145,8 +166,15 @@ final class ThreadManager {
         }
 
         let settings = persistence.loadSettings()
+        let selectedAgentType = resolveAgentType(for: project.id, requestedAgentType: nil, settings: settings)
+        trustDirectoryIfNeeded(project.repoPath, agentType: selectedAgentType)
         let envExports = "export PROJECT_PATH=\(project.repoPath) && export WORKTREE_NAME=main"
-        let startCmd = agentStartCommand(settings: settings, envExports: envExports, workingDirectory: project.repoPath)
+        let startCmd = agentStartCommand(
+            settings: settings,
+            agentType: selectedAgentType,
+            envExports: envExports,
+            workingDirectory: project.repoPath
+        )
         try await tmux.createSession(
             name: tmuxSessionName,
             workingDirectory: project.repoPath,
@@ -162,8 +190,10 @@ final class ThreadManager {
             worktreePath: project.repoPath,
             branchName: "",
             tmuxSessionNames: [tmuxSessionName],
-            agentTmuxSessions: [tmuxSessionName],
-            isMain: true
+            agentTmuxSessions: selectedAgentType != nil ? [tmuxSessionName] : [],
+            isMain: true,
+            selectedAgentType: selectedAgentType,
+            lastSelectedTmuxSessionName: tmuxSessionName
         )
 
         // Insert main threads at front
@@ -190,7 +220,11 @@ final class ThreadManager {
 
     // MARK: - Tab Management
 
-    func addTab(to thread: MagentThread, useAgentCommand: Bool = false) async throws -> Tab {
+    func addTab(
+        to thread: MagentThread,
+        useAgentCommand: Bool = false,
+        requestedAgentType: AgentType? = nil
+    ) async throws -> Tab {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
             throw ThreadManagerError.threadNotFound
         }
@@ -203,6 +237,7 @@ final class ThreadManager {
         let tmuxSessionName: String
         let startCmd: String
 
+        var selectedAgentType = thread.selectedAgentType
         if thread.isMain {
             let sanitizedName = Self.sanitizeForTmux(
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
@@ -215,7 +250,22 @@ final class ThreadManager {
             tmuxSessionName = candidate
             let projectPath = thread.worktreePath
             let envExports = "export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=main"
-            startCmd = agentStartCommand(settings: settings, envExports: envExports, workingDirectory: projectPath)
+            if useAgentCommand {
+                selectedAgentType = resolveAgentType(
+                    for: thread.projectId,
+                    requestedAgentType: requestedAgentType,
+                    settings: settings
+                )
+                startCmd = agentStartCommand(
+                    settings: settings,
+                    agentType: selectedAgentType,
+                    envExports: envExports,
+                    workingDirectory: projectPath
+                )
+            } else {
+                selectedAgentType = nil
+                startCmd = "\(envExports) && cd \(projectPath) && exec zsh -l"
+            }
         } else {
             var candidate = "magent-\(thread.name)-tab-\(tabIndex)"
             while await isTabNameTaken(candidate, existingNames: existingNames) {
@@ -226,7 +276,17 @@ final class ThreadManager {
             let projectPath = settings.projects.first(where: { $0.id == thread.projectId })?.repoPath ?? thread.worktreePath
             let envExports = "export WORKTREE_PATH=\(thread.worktreePath) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(thread.name)"
             if useAgentCommand {
-                startCmd = agentStartCommand(settings: settings, envExports: envExports, workingDirectory: thread.worktreePath)
+                selectedAgentType = resolveAgentType(
+                    for: thread.projectId,
+                    requestedAgentType: requestedAgentType ?? thread.selectedAgentType,
+                    settings: settings
+                )
+                startCmd = agentStartCommand(
+                    settings: settings,
+                    agentType: selectedAgentType,
+                    envExports: envExports,
+                    workingDirectory: thread.worktreePath
+                )
             } else {
                 startCmd = "\(envExports) && cd \(thread.worktreePath) && exec zsh -l"
             }
@@ -249,8 +309,12 @@ final class ThreadManager {
         }
 
         threads[index].tmuxSessionNames.append(tmuxSessionName)
-        if thread.isMain || useAgentCommand {
+        let shouldMarkAsAgentTab = (thread.isMain || useAgentCommand) && selectedAgentType != nil
+        if shouldMarkAsAgentTab {
             threads[index].agentTmuxSessions.append(tmuxSessionName)
+        }
+        if selectedAgentType != nil {
+            threads[index].selectedAgentType = selectedAgentType
         }
         try persistence.saveThreads(threads)
 
@@ -266,7 +330,7 @@ final class ThreadManager {
 
         // Inject terminal command (always) and agent context (only for agent tabs)
         let injection = effectiveInjection(for: thread.projectId)
-        let isAgentTab = thread.isMain || useAgentCommand
+        let isAgentTab = shouldMarkAsAgentTab
         injectAfterStart(
             sessionName: tmuxSessionName,
             terminalCommand: injection.terminalCommand,
@@ -285,6 +349,13 @@ final class ThreadManager {
     func updatePinnedTabs(for threadId: UUID, pinnedSessions: [String]) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         threads[index].pinnedTmuxSessions = pinnedSessions
+        try? persistence.saveThreads(threads)
+    }
+
+    func updateLastSelectedSession(for threadId: UUID, sessionName: String?) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        if threads[index].lastSelectedTmuxSessionName == sessionName { return }
+        threads[index].lastSelectedTmuxSessionName = sessionName
         try? persistence.saveThreads(threads)
     }
 
@@ -382,7 +453,7 @@ final class ThreadManager {
         }
 
         // 6. Trust new path for the agent if needed
-        trustDirectoryIfNeeded(newWorktreePath)
+        trustDirectoryIfNeeded(newWorktreePath, agentType: thread.selectedAgentType)
 
         // 7. Update model fields and persist
         threads[index].name = trimmed
@@ -391,6 +462,9 @@ final class ThreadManager {
         threads[index].tmuxSessionNames = newSessionNames
         threads[index].agentTmuxSessions = newAgentSessions
         threads[index].pinnedTmuxSessions = newPinnedSessions
+        if let selectedName = threads[index].lastSelectedTmuxSessionName {
+            threads[index].lastSelectedTmuxSessionName = selectedName.replacingOccurrences(of: oldName, with: trimmed)
+        }
 
         try persistence.saveThreads(threads)
 
@@ -417,6 +491,9 @@ final class ThreadManager {
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
         threads[index].agentTmuxSessions.removeAll { $0 == sessionName }
         threads[index].tmuxSessionNames.remove(at: tabIndex)
+        if threads[index].lastSelectedTmuxSessionName == sessionName {
+            threads[index].lastSelectedTmuxSessionName = threads[index].tmuxSessionNames.first
+        }
         try persistence.saveThreads(threads)
 
         let d = delegate
@@ -532,6 +609,7 @@ final class ThreadManager {
                 try? await tmux.killSession(name: sessionName)
             }
             threads[index].tmuxSessionNames = []
+            threads[index].lastSelectedTmuxSessionName = nil
 
             // Re-create the worktree
             let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: thread.branchName)
@@ -552,7 +630,7 @@ final class ThreadManager {
             }
 
             // Trust the directory for the agent if needed
-            trustDirectoryIfNeeded(thread.worktreePath)
+            trustDirectoryIfNeeded(thread.worktreePath, agentType: thread.selectedAgentType)
 
             // Persist updated threads
             try persistence.saveThreads(threads)
@@ -593,24 +671,227 @@ final class ThreadManager {
         }
     }
 
+    // MARK: - Agent Type
+
+    func effectiveAgentType(for projectId: UUID) -> AgentType? {
+        let settings = persistence.loadSettings()
+        return resolveAgentType(for: projectId, requestedAgentType: nil, settings: settings)
+    }
+
+    // MARK: - Session Recreation
+
+    private var sessionsBeingRecreated: Set<String> = []
+
+    /// Checks if a tmux session is dead and recreates it if so.
+    /// Returns true if the session was recreated.
+    func recreateSessionIfNeeded(
+        sessionName: String,
+        thread: MagentThread,
+        thenResume: Bool
+    ) async -> Bool {
+        // Skip if already being recreated or still alive
+        guard !sessionsBeingRecreated.contains(sessionName) else { return false }
+        if await tmux.hasSession(name: sessionName) { return false }
+
+        sessionsBeingRecreated.insert(sessionName)
+        defer { sessionsBeingRecreated.remove(sessionName) }
+
+        let settings = persistence.loadSettings()
+        let project = settings.projects.first(where: { $0.id == thread.projectId })
+        let projectPath = project?.repoPath ?? thread.worktreePath
+        let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
+
+        let startCmd: String
+        let sessionAgentType = thread.selectedAgentType ?? effectiveAgentType(for: thread.projectId)
+        if isAgentSession {
+            let envExports: String
+            if thread.isMain {
+                envExports = "export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=main"
+            } else {
+                envExports = "export WORKTREE_PATH=\(thread.worktreePath) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(thread.name)"
+            }
+            startCmd = agentStartCommand(
+                settings: settings,
+                agentType: sessionAgentType,
+                envExports: envExports,
+                workingDirectory: thread.worktreePath
+            )
+        } else {
+            let envExports: String
+            if thread.isMain {
+                envExports = "export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=main"
+            } else {
+                envExports = "export WORKTREE_PATH=\(thread.worktreePath) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(thread.name)"
+            }
+            startCmd = "\(envExports) && cd \(thread.worktreePath) && exec zsh -l"
+        }
+
+        try? await tmux.createSession(
+            name: sessionName,
+            workingDirectory: thread.worktreePath,
+            command: startCmd
+        )
+
+        // Set tmux environment variables
+        if thread.isMain {
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "PROJECT_PATH", value: projectPath)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "WORKTREE_NAME", value: "main")
+        } else {
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "WORKTREE_PATH", value: thread.worktreePath)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "PROJECT_PATH", value: projectPath)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "WORKTREE_NAME", value: thread.name)
+        }
+
+        // Run normal injection (terminal command + agent context)
+        let injection = effectiveInjection(for: thread.projectId)
+        injectAfterStart(
+            sessionName: sessionName,
+            terminalCommand: injection.terminalCommand,
+            agentContext: isAgentSession ? injection.agentContext : ""
+        )
+
+        // For Claude agent sessions, inject /resume to restore the conversation
+        if thenResume && isAgentSession {
+            let agentType = sessionAgentType
+            if agentType?.supportsResume == true {
+                injectResume(sessionName: sessionName)
+            }
+        }
+
+        return true
+    }
+
+    private func injectResume(sessionName: String) {
+        Task {
+            let maxWait: TimeInterval = 20
+            let pollInterval: UInt64 = 500_000_000
+            let startTime = Date()
+
+            while Date().timeIntervalSince(startTime) < maxWait {
+                try? await Task.sleep(nanoseconds: pollInterval)
+                let result = await ShellExecutor.execute(
+                    "tmux capture-pane -t '\(sessionName)' -p 2>/dev/null"
+                )
+                guard result.exitCode == 0 else { continue }
+                let output = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+                if output.contains("╭") || output.contains("Claude") || output.count > 50 {
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    try? await tmux.sendKeys(sessionName: sessionName, keys: "/resume")
+                    return
+                }
+            }
+            // Timed out — best-effort attempt
+            try? await tmux.sendKeys(sessionName: sessionName, keys: "/resume")
+        }
+    }
+
+    // MARK: - Session Monitor
+
+    private var sessionMonitorTimer: Timer?
+
+    func startSessionMonitor() {
+        guard sessionMonitorTimer == nil else { return }
+        sessionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            Task { await self.checkForDeadSessions() }
+        }
+    }
+
+    func stopSessionMonitor() {
+        sessionMonitorTimer?.invalidate()
+        sessionMonitorTimer = nil
+    }
+
+    private func checkForDeadSessions() async {
+        let liveSessions: Set<String>
+        do {
+            liveSessions = Set(try await tmux.listSessions())
+        } catch {
+            // tmux server not running — all sessions are dead
+            liveSessions = []
+        }
+
+        for thread in threads {
+            guard !thread.isArchived else { continue }
+
+            let deadSessions = thread.tmuxSessionNames.filter { !liveSessions.contains($0) }
+            guard !deadSessions.isEmpty else { continue }
+
+            for sessionName in deadSessions {
+                _ = await recreateSessionIfNeeded(
+                    sessionName: sessionName,
+                    thread: thread,
+                    thenResume: true
+                )
+            }
+
+            // Notify UI so terminal views can be replaced
+            NotificationCenter.default.post(
+                name: .magentDeadSessionsDetected,
+                object: self,
+                userInfo: [
+                    "deadSessions": deadSessions,
+                    "threadId": thread.id
+                ]
+            )
+        }
+    }
+
     // MARK: - Helpers
 
     /// Builds the shell command to start the agent, including Claude-specific workarounds only when applicable.
-    private func agentStartCommand(settings: AppSettings, envExports: String, workingDirectory: String) -> String {
+    private func agentStartCommand(
+        settings: AppSettings,
+        agentType: AgentType?,
+        envExports: String,
+        workingDirectory: String
+    ) -> String {
         var parts = [envExports, "cd \(workingDirectory)"]
-        if settings.isClaudeAgent {
+        guard let agentType else {
+            parts.append("exec zsh -l")
+            return parts.joined(separator: " && ")
+        }
+        if agentType == .claude {
             parts.append("unset CLAUDECODE")
         }
-        parts.append(settings.agentCommand)
+        parts.append(settings.command(for: agentType))
         return parts.joined(separator: " && ")
     }
 
     /// Runs agent-specific post-setup (e.g. pre-trusting directories for Claude Code).
-    private func trustDirectoryIfNeeded(_ path: String) {
-        let settings = persistence.loadSettings()
-        if settings.isClaudeAgent {
+    private func trustDirectoryIfNeeded(_ path: String, agentType: AgentType?) {
+        switch agentType {
+        case .claude:
             ClaudeTrustHelper.trustDirectory(path)
+        case .codex:
+            CodexTrustHelper.trustDirectory(path)
+        case .custom, .none:
+            break
         }
+    }
+
+    private func resolveAgentType(
+        for projectId: UUID,
+        requestedAgentType: AgentType?,
+        settings: AppSettings
+    ) -> AgentType? {
+        let activeAgents = settings.availableActiveAgents
+        guard !activeAgents.isEmpty else { return nil }
+        if activeAgents.count == 1 {
+            return activeAgents[0]
+        }
+        if let requestedAgentType, activeAgents.contains(requestedAgentType) {
+            return requestedAgentType
+        }
+
+        let project = settings.projects.first(where: { $0.id == projectId })
+        if let projectDefault = project?.agentType, activeAgents.contains(projectDefault) {
+            return projectDefault
+        }
+        if let globalDefault = settings.effectiveGlobalDefaultAgentType, activeAgents.contains(globalDefault) {
+            return globalDefault
+        }
+        return activeAgents[0]
     }
 
     private func isTabNameTaken(_ name: String, existingNames: [String]) async -> Bool {
@@ -625,6 +906,10 @@ final class ThreadManager {
             .joined()
             .lowercased()
     }
+}
+
+extension Notification.Name {
+    static let magentDeadSessionsDetected = Notification.Name("magentDeadSessionsDetected")
 }
 
 enum ThreadManagerError: LocalizedError {

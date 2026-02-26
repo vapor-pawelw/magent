@@ -54,6 +54,7 @@ final class AppCoordinator {
         } else {
             Task {
                 await ThreadManager.shared.restoreThreads()
+                ThreadManager.shared.startSessionMonitor()
             }
         }
     }

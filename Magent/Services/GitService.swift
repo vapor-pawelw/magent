@@ -32,12 +32,17 @@ final class GitService {
             workingDirectory: repoPath
         )
 
-        // Verify the worktree was actually created, even if hooks/exit code failed
+        // Verify the worktree directory exists.
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: worktreePath, isDirectory: &isDir)
         if !exists || !isDir.boolValue {
             throw GitError.commandFailed(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
         }
+        try await validateWorktreeCheckout(
+            repoPath: repoPath,
+            worktreePath: worktreePath,
+            commandResult: result
+        )
 
         return worktreeURL
     }
@@ -58,12 +63,17 @@ final class GitService {
         let cmd = "git -c core.hooksPath=/dev/null worktree add \(shellQuote(worktreePath)) \(shellQuote(branchName))"
         let result = await ShellExecutor.execute(cmd, workingDirectory: repoPath)
 
-        // Verify the worktree was actually created
+        // Verify the worktree directory exists.
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: worktreePath, isDirectory: &isDir)
         if !exists || !isDir.boolValue {
             throw GitError.commandFailed(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
         }
+        try await validateWorktreeCheckout(
+            repoPath: repoPath,
+            worktreePath: worktreePath,
+            commandResult: result
+        )
 
         return worktreeURL
     }
@@ -179,6 +189,37 @@ final class GitService {
 
     private func shellQuote(_ string: String) -> String {
         "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// Ensures worktree creation completed with a checked-out commit when the source repo has commits.
+    private func validateWorktreeCheckout(
+        repoPath: String,
+        worktreePath: String,
+        commandResult: ShellExecutor.Result
+    ) async throws {
+        let sourceHead = await ShellExecutor.execute(
+            "git rev-parse --verify HEAD",
+            workingDirectory: repoPath
+        )
+
+        // Source repo has no commits (unborn) — empty worktree is expected.
+        guard sourceHead.exitCode == 0 else { return }
+
+        let worktreeHead = await ShellExecutor.execute(
+            "git rev-parse --verify HEAD",
+            workingDirectory: worktreePath
+        )
+
+        if commandResult.exitCode == 0 && worktreeHead.exitCode == 0 {
+            return
+        }
+
+        let message = commandResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !message.isEmpty {
+            throw GitError.commandFailed(message)
+        }
+        let headError = worktreeHead.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        throw GitError.commandFailed(headError.isEmpty ? "Worktree checkout failed" : headError)
     }
 }
 

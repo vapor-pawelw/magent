@@ -29,10 +29,6 @@ final class SettingsSplitViewController: NSSplitViewController {
     private let sidebarVC = SettingsSidebarViewController()
     private var currentCategory: SettingsCategory = .general
 
-    override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: 520))
-    }
-
     override func viewDidLoad() {
         super.viewDidLoad()
         preferredContentSize = NSSize(width: 760, height: 520)
@@ -50,6 +46,14 @@ final class SettingsSplitViewController: NSSplitViewController {
         addSplitViewItem(contentItem)
 
         splitView.dividerStyle = .thin
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        if let window = view.window, window.sheetParent == nil {
+            window.performClose(nil)
+        } else {
+            dismiss(nil)
+        }
     }
 
     private func detailViewController(for category: SettingsCategory) -> NSViewController {
@@ -86,7 +90,11 @@ extension SettingsSplitViewController: SettingsSidebarDelegate {
     }
 
     func settingsSidebarDidDismiss(_ sidebar: SettingsSidebarViewController) {
-        dismiss(nil)
+        if let window = view.window, window.sheetParent == nil {
+            window.performClose(nil)
+        } else {
+            dismiss(nil)
+        }
     }
 }
 
@@ -204,7 +212,12 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
 
     private let persistence = PersistenceService.shared
     private var settings: AppSettings!
-    private var agentCommandTextView: NSTextView!
+    private var claudeCheckbox: NSButton!
+    private var codexCheckbox: NSButton!
+    private var customCheckbox: NSButton!
+    private var defaultAgentSection: NSStackView!
+    private var defaultAgentPopup: NSPopUpButton!
+    private var customAgentCommandTextView: NSTextView!
     private var terminalInjectionTextView: NSTextView!
     private var agentContextTextView: NSTextView!
 
@@ -229,12 +242,73 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
-        // Agent Command
-        agentCommandTextView = createSection(
+        let agentsSection = NSStackView()
+        agentsSection.orientation = .vertical
+        agentsSection.alignment = .leading
+        agentsSection.spacing = 6
+
+        let agentsLabel = NSTextField(labelWithString: "Active Agents")
+        agentsLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        agentsSection.addArrangedSubview(agentsLabel)
+
+        let agentsDesc = NSTextField(
+            wrappingLabelWithString: "Enable agents that can be launched in new chats. If multiple are enabled, a default can be chosen."
+        )
+        agentsDesc.font = .systemFont(ofSize: 11)
+        agentsDesc.textColor = .secondaryLabelColor
+        agentsSection.addArrangedSubview(agentsDesc)
+
+        claudeCheckbox = NSButton(checkboxWithTitle: AgentType.claude.displayName, target: self, action: #selector(activeAgentsChanged))
+        codexCheckbox = NSButton(checkboxWithTitle: AgentType.codex.displayName, target: self, action: #selector(activeAgentsChanged))
+        customCheckbox = NSButton(checkboxWithTitle: AgentType.custom.displayName, target: self, action: #selector(activeAgentsChanged))
+
+        let active = Set(settings.availableActiveAgents)
+        claudeCheckbox.state = active.contains(.claude) ? .on : .off
+        codexCheckbox.state = active.contains(.codex) ? .on : .off
+        customCheckbox.state = active.contains(.custom) ? .on : .off
+
+        agentsSection.addArrangedSubview(claudeCheckbox)
+        agentsSection.addArrangedSubview(codexCheckbox)
+        agentsSection.addArrangedSubview(customCheckbox)
+
+        agentsSection.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(agentsSection)
+        NSLayoutConstraint.activate([
+            agentsSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        defaultAgentSection = NSStackView()
+        defaultAgentSection.orientation = .vertical
+        defaultAgentSection.alignment = .leading
+        defaultAgentSection.spacing = 4
+
+        let defaultLabel = NSTextField(labelWithString: "Default Agent")
+        defaultLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        defaultAgentSection.addArrangedSubview(defaultLabel)
+
+        let defaultDesc = NSTextField(labelWithString: "Used when no agent is explicitly selected for a new chat.")
+        defaultDesc.font = .systemFont(ofSize: 11)
+        defaultDesc.textColor = .secondaryLabelColor
+        defaultAgentSection.addArrangedSubview(defaultDesc)
+
+        defaultAgentPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        defaultAgentPopup.target = self
+        defaultAgentPopup.action = #selector(defaultAgentChanged)
+        defaultAgentSection.addArrangedSubview(defaultAgentPopup)
+
+        defaultAgentSection.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(defaultAgentSection)
+        NSLayoutConstraint.activate([
+            defaultAgentSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+        refreshDefaultAgentSection()
+
+        // Custom Agent Command
+        customAgentCommandTextView = createSection(
             in: stackView,
-            title: "Agent Command",
-            description: "Command to start the coding agent in new threads.",
-            value: settings.agentCommand,
+            title: "Custom Agent Command",
+            description: "Command used when the active agent is set to Custom.",
+            value: settings.customAgentCommand,
             font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
 
@@ -384,16 +458,57 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
         return textView
     }
 
+    @objc private func activeAgentsChanged() {
+        var active: [AgentType] = []
+        if claudeCheckbox.state == .on { active.append(.claude) }
+        if codexCheckbox.state == .on { active.append(.codex) }
+        if customCheckbox.state == .on { active.append(.custom) }
+        settings.activeAgents = active
+
+        if active.count <= 1 {
+            settings.defaultAgentType = nil
+        } else if let defaultAgent = settings.defaultAgentType, !active.contains(defaultAgent) {
+            settings.defaultAgentType = active.first
+        } else if settings.defaultAgentType == nil {
+            settings.defaultAgentType = active.first
+        }
+
+        refreshDefaultAgentSection()
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func defaultAgentChanged() {
+        let active = settings.availableActiveAgents
+        let index = defaultAgentPopup.indexOfSelectedItem
+        guard index >= 0, index < active.count else { return }
+        settings.defaultAgentType = active[index]
+        try? persistence.saveSettings(settings)
+    }
+
+    private func refreshDefaultAgentSection() {
+        let active = settings.availableActiveAgents
+        defaultAgentPopup.removeAllItems()
+        for agent in active {
+            defaultAgentPopup.addItem(withTitle: agent.displayName)
+        }
+
+        defaultAgentSection.isHidden = active.count <= 1
+        guard active.count > 1 else { return }
+
+        let currentDefault = settings.defaultAgentType.flatMap { active.contains($0) ? $0 : nil } ?? active[0]
+        settings.defaultAgentType = currentDefault
+        if let idx = active.firstIndex(of: currentDefault) {
+            defaultAgentPopup.selectItem(at: idx)
+        }
+    }
+
     // MARK: - NSTextViewDelegate
 
     func textDidChange(_ notification: Notification) {
         guard let textView = notification.object as? NSTextView else { return }
 
-        if textView === agentCommandTextView {
-            let value = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !value.isEmpty {
-                settings.agentCommand = value
-            }
+        if textView === customAgentCommandTextView {
+            settings.customAgentCommand = textView.string
         } else if textView === terminalInjectionTextView {
             settings.terminalInjectionCommand = textView.string
         } else if textView === agentContextTextView {
@@ -420,6 +535,7 @@ final class SettingsProjectsViewController: NSViewController {
     private var repoPathLabel: NSTextField!
     private var worktreesPathLabel: NSTextField!
     private var defaultBranchField: NSTextField!
+    private var agentTypePopup: NSPopUpButton!
     private var terminalInjectionTextView: NSTextView!
     private var agentContextTextView: NSTextView!
 
@@ -623,6 +739,36 @@ final class SettingsProjectsViewController: NSViewController {
         defaultBranchField.action = #selector(defaultBranchFieldChanged)
         stack.addArrangedSubview(defaultBranchField)
 
+        let activeAgents = settings.availableActiveAgents
+        if activeAgents.count > 1 {
+            // Project Default Agent Override
+            let agentTypeHeader = NSTextField(labelWithString: "Default Agent for This Project")
+            agentTypeHeader.font = .systemFont(ofSize: 12, weight: .semibold)
+            stack.addArrangedSubview(agentTypeHeader)
+
+            let agentTypeDesc = NSTextField(labelWithString: "Use app default or pick a specific default for this project")
+            agentTypeDesc.font = .systemFont(ofSize: 11)
+            agentTypeDesc.textColor = .tertiaryLabelColor
+            stack.addArrangedSubview(agentTypeDesc)
+
+            agentTypePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+            agentTypePopup.addItem(withTitle: "Use App Default")
+            for agentType in activeAgents {
+                agentTypePopup.addItem(withTitle: agentType.displayName)
+            }
+
+            if let projectAgentType = project.agentType, let idx = activeAgents.firstIndex(of: projectAgentType) {
+                agentTypePopup.selectItem(at: idx + 1)
+            } else {
+                agentTypePopup.selectItem(at: 0)
+            }
+            agentTypePopup.target = self
+            agentTypePopup.action = #selector(agentTypeOverrideChanged)
+            stack.addArrangedSubview(agentTypePopup)
+        } else {
+            agentTypePopup = nil
+        }
+
         // Separator
         let separator = NSBox()
         separator.boxType = .separator
@@ -791,6 +937,21 @@ final class SettingsProjectsViewController: NSViewController {
         guard let index = selectedProjectIndex else { return }
         let value = defaultBranchField.stringValue.trimmingCharacters(in: .whitespaces)
         settings.projects[index].defaultBranch = value.isEmpty ? nil : value
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func agentTypeOverrideChanged() {
+        guard let index = selectedProjectIndex, let agentTypePopup else { return }
+        let activeAgents = settings.availableActiveAgents
+        let selected = agentTypePopup.indexOfSelectedItem
+        if selected == 0 {
+            settings.projects[index].agentType = nil
+        } else {
+            let typeIndex = selected - 1
+            if typeIndex >= 0, typeIndex < activeAgents.count {
+                settings.projects[index].agentType = activeAgents[typeIndex]
+            }
+        }
         try? persistence.saveSettings(settings)
     }
 

@@ -5,6 +5,7 @@ final class SplitViewController: NSSplitViewController {
     private let threadListVC = ThreadListViewController()
     private let emptyStateVC = EmptyStateViewController()
     private var currentDetailVC: ThreadDetailViewController?
+    private var settingsWindowController: NSWindowController?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -58,17 +59,20 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func showThread(_ thread: MagentThread) {
+        // Sidebar items can be stale snapshots; always resolve the latest thread model.
+        let resolvedThread = ThreadManager.shared.threads.first(where: { $0.id == thread.id }) ?? thread
+
         // Skip if already showing this thread (preserves terminal scrollback)
-        if currentDetailVC?.thread.id == thread.id { return }
+        if currentDetailVC?.thread.id == resolvedThread.id { return }
 
         // Check if worktree exists on disk
         var isDir: ObjCBool = false
-        let exists = FileManager.default.fileExists(atPath: thread.worktreePath, isDirectory: &isDir) && isDir.boolValue
+        let exists = FileManager.default.fileExists(atPath: resolvedThread.worktreePath, isDirectory: &isDir) && isDir.boolValue
 
         if exists {
-            presentThread(thread)
+            presentThread(resolvedThread)
         } else {
-            recoverAndShowThread(thread)
+            recoverAndShowThread(resolvedThread)
         }
     }
 
@@ -152,8 +156,24 @@ final class SplitViewController: NSSplitViewController {
     }
 
     @objc private func settingsTapped() {
+        if let existing = settingsWindowController?.window {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
         let settingsVC = SettingsSplitViewController()
-        presentAsSheet(settingsVC)
+        let window = NSWindow(contentViewController: settingsVC)
+        window.title = "Settings"
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.setContentSize(NSSize(width: 760, height: 520))
+        window.center()
+        window.delegate = self
+
+        let controller = NSWindowController(window: window)
+        settingsWindowController = controller
+        controller.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func showEmptyState() {
@@ -204,9 +224,9 @@ extension SplitViewController: NSToolbarDelegate {
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.label = "Settings"
             item.toolTip = "Settings"
-            let button = NSButton(image: NSImage(systemSymbolName: "gear", accessibilityDescription: "Settings")!, target: self, action: #selector(settingsTapped))
-            button.bezelStyle = .texturedRounded
-            item.view = button
+            item.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
+            item.target = self
+            item.action = #selector(settingsTapped)
             return item
         }
         return nil
@@ -218,5 +238,14 @@ extension SplitViewController: NSToolbarDelegate {
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.flexibleSpace, Self.settingsToolbarItemId]
+    }
+}
+
+extension SplitViewController: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        guard let closingWindow = notification.object as? NSWindow else { return }
+        if closingWindow == settingsWindowController?.window {
+            settingsWindowController = nil
+        }
     }
 }
