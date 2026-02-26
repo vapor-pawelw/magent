@@ -28,18 +28,16 @@ final class ThreadManager {
     func restoreThreads() async {
         loadThreads()
 
-        // Verify which tmux sessions still exist
+        // Migrate old threads that have no agentTmuxSessions recorded.
+        // Heuristic: the first session was always created as the agent tab.
         for i in threads.indices {
-            var thread = threads[i]
-            var activeSessions: [String] = []
-            for sessionName in thread.tmuxSessionNames {
-                if await tmux.hasSession(name: sessionName) {
-                    activeSessions.append(sessionName)
-                }
+            if threads[i].agentTmuxSessions.isEmpty && !threads[i].tmuxSessionNames.isEmpty {
+                threads[i].agentTmuxSessions = [threads[i].tmuxSessionNames[0]]
             }
-            thread.tmuxSessionNames = activeSessions
-            threads[i] = thread
         }
+
+        // Do NOT prune dead tmux session names — the attach-or-create pattern
+        // in ThreadDetailViewController will recreate them when the user opens the thread.
 
         try? persistence.saveThreads(threads)
 
@@ -90,13 +88,13 @@ final class ThreadManager {
             baseBranch: baseBranch
         )
 
-        // Pre-trust the worktree directory so claude doesn't show the trust dialog
-        ClaudeTrustHelper.trustDirectory(worktreePath)
+        // Pre-trust the worktree directory so the agent doesn't show a trust dialog
+        trustDirectoryIfNeeded(worktreePath)
 
         // Create tmux session with agent command as initial process
         let settings = persistence.loadSettings()
         let envExports = "export WORKTREE_PATH=\(worktreePath) && export PROJECT_PATH=\(project.repoPath) && export WORKTREE_NAME=\(name)"
-        let startCmd = "\(envExports) && cd \(worktreePath) && unset CLAUDECODE && \(settings.agentCommand)"
+        let startCmd = agentStartCommand(settings: settings, envExports: envExports, workingDirectory: worktreePath)
         try await tmux.createSession(
             name: tmuxSessionName,
             workingDirectory: worktreePath,
@@ -114,6 +112,7 @@ final class ThreadManager {
             worktreePath: worktreePath,
             branchName: branchName,
             tmuxSessionNames: [tmuxSessionName],
+            agentTmuxSessions: [tmuxSessionName],
             sectionId: settings.defaultSection?.id
         )
 
@@ -147,7 +146,7 @@ final class ThreadManager {
 
         let settings = persistence.loadSettings()
         let envExports = "export PROJECT_PATH=\(project.repoPath) && export WORKTREE_NAME=main"
-        let startCmd = "\(envExports) && cd \(project.repoPath) && unset CLAUDECODE && \(settings.agentCommand)"
+        let startCmd = agentStartCommand(settings: settings, envExports: envExports, workingDirectory: project.repoPath)
         try await tmux.createSession(
             name: tmuxSessionName,
             workingDirectory: project.repoPath,
@@ -163,6 +162,7 @@ final class ThreadManager {
             worktreePath: project.repoPath,
             branchName: "",
             tmuxSessionNames: [tmuxSessionName],
+            agentTmuxSessions: [tmuxSessionName],
             isMain: true
         )
 
@@ -215,7 +215,7 @@ final class ThreadManager {
             tmuxSessionName = candidate
             let projectPath = thread.worktreePath
             let envExports = "export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=main"
-            startCmd = "\(envExports) && cd \(projectPath) && unset CLAUDECODE && \(settings.agentCommand)"
+            startCmd = agentStartCommand(settings: settings, envExports: envExports, workingDirectory: projectPath)
         } else {
             var candidate = "magent-\(thread.name)-tab-\(tabIndex)"
             while await isTabNameTaken(candidate, existingNames: existingNames) {
@@ -226,7 +226,7 @@ final class ThreadManager {
             let projectPath = settings.projects.first(where: { $0.id == thread.projectId })?.repoPath ?? thread.worktreePath
             let envExports = "export WORKTREE_PATH=\(thread.worktreePath) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(thread.name)"
             if useAgentCommand {
-                startCmd = "\(envExports) && cd \(thread.worktreePath) && unset CLAUDECODE && \(settings.agentCommand)"
+                startCmd = agentStartCommand(settings: settings, envExports: envExports, workingDirectory: thread.worktreePath)
             } else {
                 startCmd = "\(envExports) && cd \(thread.worktreePath) && exec zsh -l"
             }
@@ -249,6 +249,9 @@ final class ThreadManager {
         }
 
         threads[index].tmuxSessionNames.append(tmuxSessionName)
+        if thread.isMain || useAgentCommand {
+            threads[index].agentTmuxSessions.append(tmuxSessionName)
+        }
         try persistence.saveThreads(threads)
 
         let tab = Tab(
@@ -362,10 +365,14 @@ final class ThreadManager {
             newSessionNames.append(newSessionName)
         }
 
-        // 4. Update pinned sessions to reflect new names
+        // 4. Update pinned and agent sessions to reflect new names
         var newPinnedSessions: [String] = []
         for pinnedName in thread.pinnedTmuxSessions {
             newPinnedSessions.append(pinnedName.replacingOccurrences(of: oldName, with: trimmed))
+        }
+        var newAgentSessions: [String] = []
+        for agentName in thread.agentTmuxSessions {
+            newAgentSessions.append(agentName.replacingOccurrences(of: oldName, with: trimmed))
         }
 
         // 5. Update env vars on each session
@@ -374,14 +381,15 @@ final class ThreadManager {
             try? await tmux.setEnvironment(sessionName: sessionName, key: "WORKTREE_NAME", value: trimmed)
         }
 
-        // 6. Trust new path
-        ClaudeTrustHelper.trustDirectory(newWorktreePath)
+        // 6. Trust new path for the agent if needed
+        trustDirectoryIfNeeded(newWorktreePath)
 
         // 7. Update model fields and persist
         threads[index].name = trimmed
         threads[index].branchName = newBranchName
         threads[index].worktreePath = newWorktreePath
         threads[index].tmuxSessionNames = newSessionNames
+        threads[index].agentTmuxSessions = newAgentSessions
         threads[index].pinnedTmuxSessions = newPinnedSessions
 
         try persistence.saveThreads(threads)
@@ -405,8 +413,9 @@ final class ThreadManager {
         let sessionName = threads[index].tmuxSessionNames[tabIndex]
         try? await tmux.killSession(name: sessionName)
 
-        // Also remove from pinned sessions if present
+        // Also remove from pinned and agent sessions if present
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
+        threads[index].agentTmuxSessions.removeAll { $0 == sessionName }
         threads[index].tmuxSessionNames.remove(at: tabIndex)
         try persistence.saveThreads(threads)
 
@@ -485,6 +494,75 @@ final class ThreadManager {
         DispatchQueue.main.async { d?.threadManager(self, didDeleteThread: thread) }
     }
 
+    // MARK: - Worktree Recovery
+
+    enum RecoveryResult {
+        case recovered
+        case mainThreadMissing
+        case projectNotFound
+        case failed(Error)
+    }
+
+    func recoverWorktree(for thread: MagentThread) async -> RecoveryResult {
+        let settings = persistence.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else {
+            return .projectNotFound
+        }
+
+        if thread.isMain {
+            return .mainThreadMissing
+        }
+
+        // Verify the main repo still exists
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: project.repoPath, isDirectory: &isDir), isDir.boolValue else {
+            return .mainThreadMissing
+        }
+
+        guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
+            return .failed(ThreadManagerError.threadNotFound)
+        }
+
+        do {
+            // Prune stale worktree references
+            await git.pruneWorktrees(repoPath: project.repoPath)
+
+            // Kill any stale tmux sessions for this thread
+            for sessionName in threads[index].tmuxSessionNames {
+                try? await tmux.killSession(name: sessionName)
+            }
+            threads[index].tmuxSessionNames = []
+
+            // Re-create the worktree
+            let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: thread.branchName)
+            if branchExists {
+                _ = try await git.addWorktreeForExistingBranch(
+                    repoPath: project.repoPath,
+                    branchName: thread.branchName,
+                    worktreePath: thread.worktreePath
+                )
+            } else {
+                let baseBranch = project.defaultBranch?.isEmpty == false ? project.defaultBranch : nil
+                _ = try await git.createWorktree(
+                    repoPath: project.repoPath,
+                    branchName: thread.branchName,
+                    worktreePath: thread.worktreePath,
+                    baseBranch: baseBranch
+                )
+            }
+
+            // Trust the directory for the agent if needed
+            trustDirectoryIfNeeded(thread.worktreePath)
+
+            // Persist updated threads
+            try persistence.saveThreads(threads)
+
+            return .recovered
+        } catch {
+            return .failed(error)
+        }
+    }
+
     // MARK: - Injection
 
     private func effectiveInjection(for projectId: UUID) -> (terminalCommand: String, agentContext: String) {
@@ -516,6 +594,24 @@ final class ThreadManager {
     }
 
     // MARK: - Helpers
+
+    /// Builds the shell command to start the agent, including Claude-specific workarounds only when applicable.
+    private func agentStartCommand(settings: AppSettings, envExports: String, workingDirectory: String) -> String {
+        var parts = [envExports, "cd \(workingDirectory)"]
+        if settings.isClaudeAgent {
+            parts.append("unset CLAUDECODE")
+        }
+        parts.append(settings.agentCommand)
+        return parts.joined(separator: " && ")
+    }
+
+    /// Runs agent-specific post-setup (e.g. pre-trusting directories for Claude Code).
+    private func trustDirectoryIfNeeded(_ path: String) {
+        let settings = persistence.loadSettings()
+        if settings.isClaudeAgent {
+            ClaudeTrustHelper.trustDirectory(path)
+        }
+    }
 
     private func isTabNameTaken(_ name: String, existingNames: [String]) async -> Bool {
         if existingNames.contains(name) { return true }

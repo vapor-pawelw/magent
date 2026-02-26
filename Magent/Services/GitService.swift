@@ -42,6 +42,32 @@ final class GitService {
         return worktreeURL
     }
 
+    func pruneWorktrees(repoPath: String) async {
+        _ = await ShellExecutor.execute("git worktree prune", workingDirectory: repoPath)
+    }
+
+    func addWorktreeForExistingBranch(repoPath: String, branchName: String, worktreePath: String) async throws -> URL {
+        let worktreeURL = URL(fileURLWithPath: worktreePath)
+
+        // Create parent directory if needed
+        try FileManager.default.createDirectory(
+            at: worktreeURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        let cmd = "git -c core.hooksPath=/dev/null worktree add \(shellQuote(worktreePath)) \(shellQuote(branchName))"
+        let result = await ShellExecutor.execute(cmd, workingDirectory: repoPath)
+
+        // Verify the worktree was actually created
+        var isDir: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: worktreePath, isDirectory: &isDir)
+        if !exists || !isDir.boolValue {
+            throw GitError.commandFailed(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        return worktreeURL
+    }
+
     func removeWorktree(repoPath: String, worktreePath: String) async throws {
         try await ShellExecutor.run(
             "git worktree remove --force \(shellQuote(worktreePath))",
@@ -118,6 +144,28 @@ final class GitService {
         } catch {
             return false
         }
+    }
+
+    /// Detects the default branch via origin/HEAD, falling back to main/master existence check.
+    func detectDefaultBranch(repoPath: String) async -> String? {
+        // Try origin/HEAD (set during clone)
+        let result = await ShellExecutor.execute(
+            "git symbolic-ref refs/remotes/origin/HEAD",
+            workingDirectory: repoPath
+        )
+        let ref = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        if result.exitCode == 0, !ref.isEmpty {
+            return ref.replacingOccurrences(of: "refs/remotes/origin/", with: "")
+        }
+
+        // Fallback: check common branch names
+        for candidate in ["main", "master", "develop"] {
+            if await branchExists(repoPath: repoPath, branchName: candidate) {
+                return candidate
+            }
+        }
+
+        return nil
     }
 
     func isGitRepository(at path: String) async -> Bool {
