@@ -214,6 +214,26 @@ final class GitService {
         return branch
     }
 
+    /// Returns `true` when the worktree has no uncommitted changes (untracked files are ignored).
+    func isClean(worktreePath: String) async -> Bool {
+        let result = await ShellExecutor.execute(
+            "git status --porcelain -uno",
+            workingDirectory: worktreePath
+        )
+        return result.exitCode == 0
+            && result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Returns `true` when the branch has no commits beyond `baseBranch`.
+    func isMergedInto(worktreePath: String, baseBranch: String) async -> Bool {
+        let result = await ShellExecutor.execute(
+            "git log \(shellQuote(baseBranch))..HEAD --oneline",
+            workingDirectory: worktreePath
+        )
+        return result.exitCode == 0
+            && result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func isGitRepository(at path: String) async -> Bool {
         do {
             _ = try await ShellExecutor.run("git rev-parse --git-dir", workingDirectory: path)

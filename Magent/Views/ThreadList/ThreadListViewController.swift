@@ -555,18 +555,39 @@ final class ThreadListViewController: NSViewController {
     @objc private func archiveThread(_ sender: NSMenuItem) {
         guard let thread = sender.representedObject as? MagentThread else { return }
 
-        let alert = NSAlert()
-        alert.messageText = "Archive Thread"
-        alert.informativeText = "This will archive the thread \"\(thread.name)\", removing its worktree directory but keeping the git branch \"\(thread.branchName)\". You can restore the branch later if needed."
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Archive")
-        alert.addButton(withTitle: "Cancel")
+        let settings = persistence.loadSettings()
+        let project = settings.projects.first(where: { $0.id == thread.projectId })
+        let defaultBranch = project?.defaultBranch ?? "main"
 
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
+        Task {
+            let git = GitService.shared
+            let clean = await git.isClean(worktreePath: thread.worktreePath)
+            let merged = await git.isMergedInto(worktreePath: thread.worktreePath, baseBranch: defaultBranch)
 
-        performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-            try await self.threadManager.archiveThread(thread)
+            await MainActor.run {
+                if clean && merged {
+                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
+                        try await self.threadManager.archiveThread(thread)
+                    }
+                } else {
+                    let alert = NSAlert()
+                    alert.messageText = "Archive Thread"
+                    var reasons: [String] = []
+                    if !clean { reasons.append("uncommitted changes") }
+                    if !merged { reasons.append("commits not in \(defaultBranch)") }
+                    alert.informativeText = "The thread \"\(thread.name)\" has \(reasons.joined(separator: " and ")). Archiving will remove its worktree directory but keep the git branch \"\(thread.branchName)\"."
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: "Archive")
+                    alert.addButton(withTitle: "Cancel")
+
+                    let response = alert.runModal()
+                    guard response == .alertFirstButtonReturn else { return }
+
+                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
+                        try await self.threadManager.archiveThread(thread)
+                    }
+                }
+            }
         }
     }
 
