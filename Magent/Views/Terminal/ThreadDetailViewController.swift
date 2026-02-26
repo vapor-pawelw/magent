@@ -162,6 +162,7 @@ final class ThreadDetailViewController: NSViewController {
     private let threadManager = ThreadManager.shared
     private let tabBarStack = NSStackView()
     private let terminalContainer = NSView()
+    private let openPRButton = NSButton()
     private let archiveThreadButton = NSButton()
     private let addTabButton = NSButton()
 
@@ -234,6 +235,12 @@ final class ThreadDetailViewController: NSViewController {
         tabBarStack.alignment = .centerY
         tabBarStack.translatesAutoresizingMaskIntoConstraints = false
 
+        openPRButton.bezelStyle = .texturedRounded
+        openPRButton.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: "Open Pull Request")
+        openPRButton.target = self
+        openPRButton.action = #selector(openPRTapped(_:))
+        openPRButton.toolTip = "Open Pull Request in Browser"
+
         archiveThreadButton.bezelStyle = .texturedRounded
         archiveThreadButton.image = NSImage(systemSymbolName: "archivebox", accessibilityDescription: "Archive Thread")
         archiveThreadButton.target = self
@@ -245,7 +252,7 @@ final class ThreadDetailViewController: NSViewController {
         addTabButton.target = self
         addTabButton.action = #selector(addTabTapped)
 
-        let topBar = NSStackView(views: [tabBarStack, archiveThreadButton, addTabButton])
+        let topBar = NSStackView(views: [tabBarStack, openPRButton, archiveThreadButton, addTabButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
@@ -694,6 +701,70 @@ final class ThreadDetailViewController: NSViewController {
         rebindTabActions()
         rebuildTabBar()
         persistTabOrder()
+    }
+
+    // MARK: - Open PR/MR
+
+    @objc private func openPRTapped(_ sender: NSButton) {
+        Task {
+            let settings = PersistenceService.shared.loadSettings()
+            guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else { return }
+
+            let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
+            guard !remotes.isEmpty else {
+                BannerManager.shared.show(message: "No git remotes found", style: .warning)
+                return
+            }
+
+            let branch = thread.branchName
+            let defaultBranch = project.defaultBranch ?? await GitService.shared.detectDefaultBranch(repoPath: project.repoPath)
+
+            if remotes.count == 1 {
+                await MainActor.run {
+                    openRemoteURL(remotes[0], branch: branch, defaultBranch: defaultBranch)
+                }
+            } else {
+                // Find the "primary" remote — prefer origin
+                let origin = remotes.first(where: { $0.name == "origin" })
+                if let origin, remotes.allSatisfy({ $0.host == origin.host && $0.repoPath == origin.repoPath }) {
+                    // All remotes point to the same place
+                    await MainActor.run {
+                        openRemoteURL(origin, branch: branch, defaultBranch: defaultBranch)
+                    }
+                } else {
+                    await MainActor.run {
+                        showRemoteMenu(remotes: remotes, branch: branch, defaultBranch: defaultBranch, relativeTo: sender)
+                    }
+                }
+            }
+        }
+    }
+
+    private func showRemoteMenu(remotes: [GitRemote], branch: String, defaultBranch: String?, relativeTo button: NSButton) {
+        let menu = NSMenu(title: "Select Remote")
+        for remote in remotes {
+            let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.repoWebURL
+            guard let url else { continue }
+            let title = "\(remote.name) (\(remote.host)/\(remote.repoPath))"
+            let item = NSMenuItem(title: title, action: #selector(remoteMenuItemTapped(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = url
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
+    }
+
+    @objc private func remoteMenuItemTapped(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func openRemoteURL(_ remote: GitRemote, branch: String, defaultBranch: String?) {
+        guard let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.repoWebURL else {
+            BannerManager.shared.show(message: "Could not construct URL for remote \(remote.name)", style: .warning)
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     // MARK: - Add Tab
