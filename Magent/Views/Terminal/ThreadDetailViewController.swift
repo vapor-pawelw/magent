@@ -100,8 +100,10 @@ private final class TabItemView: NSView, NSMenuDelegate {
     override func mouseUp(with event: NSEvent) {
         guard !isDragging else { return }
         let loc = convert(event.locationInWindow, from: nil)
-        let closeBounds = closeButton.convert(closeButton.bounds, to: self)
-        if closeBounds.contains(loc) { return }
+        if !closeButton.isHidden {
+            let closeBounds = closeButton.convert(closeButton.bounds, to: self)
+            if closeBounds.contains(loc) { return }
+        }
         onSelect?()
     }
 
@@ -301,13 +303,11 @@ final class ThreadDetailViewController: NSViewController {
             let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
 
             // If the session is dead, pre-create it so the terminal just attaches.
-            // For Claude agent sessions, this also triggers /resume injection.
             let sessionExists = await TmuxService.shared.hasSession(name: sessionName)
             if !sessionExists {
                 _ = await threadManager.recreateSessionIfNeeded(
                     sessionName: sessionName,
-                    thread: thread,
-                    thenResume: isAgentSession && (selectedAgentType?.supportsResume == true)
+                    thread: thread
                 )
             }
 

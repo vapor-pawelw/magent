@@ -799,8 +799,7 @@ final class ThreadManager {
     /// Returns true if the session was recreated.
     func recreateSessionIfNeeded(
         sessionName: String,
-        thread: MagentThread,
-        thenResume: Bool
+        thread: MagentThread
     ) async -> Bool {
         // Skip if already being recreated or still alive
         guard !sessionsBeingRecreated.contains(sessionName) else { return false }
@@ -860,39 +859,7 @@ final class ThreadManager {
             agentContext: isAgentSession ? injection.agentContext : ""
         )
 
-        // For agent sessions, inject /resume to restore the conversation —
-        // but only if the agent was previously run in this thread.
-        if thenResume && isAgentSession && thread.agentHasRun {
-            if sessionAgentType?.supportsResume == true {
-                injectResume(sessionName: sessionName)
-            }
-        }
-
         return true
-    }
-
-    private func injectResume(sessionName: String) {
-        Task {
-            let maxWait: TimeInterval = 20
-            let pollInterval: UInt64 = 500_000_000
-            let startTime = Date()
-
-            while Date().timeIntervalSince(startTime) < maxWait {
-                try? await Task.sleep(nanoseconds: pollInterval)
-                let result = await ShellExecutor.execute(
-                    "tmux capture-pane -t '\(sessionName)' -p 2>/dev/null"
-                )
-                guard result.exitCode == 0 else { continue }
-                let output = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-                if output.contains("╭") || output.contains("Claude") || output.count > 50 {
-                    try? await Task.sleep(nanoseconds: 300_000_000)
-                    try? await tmux.sendKeys(sessionName: sessionName, keys: "/resume")
-                    return
-                }
-            }
-            // Timed out — best-effort attempt
-            try? await tmux.sendKeys(sessionName: sessionName, keys: "/resume")
-        }
     }
 
     // MARK: - Session Monitor
@@ -930,8 +897,7 @@ final class ThreadManager {
             for sessionName in deadSessions {
                 _ = await recreateSessionIfNeeded(
                     sessionName: sessionName,
-                    thread: thread,
-                    thenResume: true
+                    thread: thread
                 )
             }
 
