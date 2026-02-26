@@ -122,6 +122,10 @@ final class ThreadManager {
         let d = delegate
         DispatchQueue.main.async { d?.threadManager(self, didCreateThread: thread) }
 
+        // Inject terminal command and agent context
+        let injection = effectiveInjection(for: project.id)
+        injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext)
+
         return thread
     }
 
@@ -167,6 +171,10 @@ final class ThreadManager {
         try persistence.saveThreads(threads)
         let d = delegate
         DispatchQueue.main.async { d?.threadManager(self, didCreateThread: thread) }
+
+        // Inject terminal command and agent context
+        let injection = effectiveInjection(for: project.id)
+        injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext)
 
         return thread
     }
@@ -252,6 +260,16 @@ final class ThreadManager {
         let d = delegate
         let t = threads
         DispatchQueue.main.async { d?.threadManager(self, didUpdateThreads: t) }
+
+        // Inject terminal command (always) and agent context (only for agent tabs)
+        let injection = effectiveInjection(for: thread.projectId)
+        let isAgentTab = thread.isMain || useAgentCommand
+        injectAfterStart(
+            sessionName: tmuxSessionName,
+            terminalCommand: injection.terminalCommand,
+            agentContext: isAgentTab ? injection.agentContext : ""
+        )
+
         return tab
     }
 
@@ -465,6 +483,36 @@ final class ThreadManager {
 
         let d = delegate
         DispatchQueue.main.async { d?.threadManager(self, didDeleteThread: thread) }
+    }
+
+    // MARK: - Injection
+
+    private func effectiveInjection(for projectId: UUID) -> (terminalCommand: String, agentContext: String) {
+        let settings = persistence.loadSettings()
+        let project = settings.projects.first(where: { $0.id == projectId })
+        let termCmd = (project?.terminalInjectionCommand?.isEmpty == false)
+            ? project!.terminalInjectionCommand! : settings.terminalInjectionCommand
+        let agentCtx = (project?.agentContextInjection?.isEmpty == false)
+            ? project!.agentContextInjection! : settings.agentContextInjection
+        return (termCmd, agentCtx)
+    }
+
+    private func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String) {
+        guard !terminalCommand.isEmpty || !agentContext.isEmpty else { return }
+        Task {
+            // Wait for shell/agent to initialize
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if !terminalCommand.isEmpty {
+                try? await tmux.sendKeys(sessionName: sessionName, keys: terminalCommand)
+            }
+            if !agentContext.isEmpty {
+                // Additional delay if we also sent a terminal command
+                if !terminalCommand.isEmpty {
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                }
+                try? await tmux.sendKeys(sessionName: sessionName, keys: agentContext)
+            }
+        }
     }
 
     // MARK: - Helpers
