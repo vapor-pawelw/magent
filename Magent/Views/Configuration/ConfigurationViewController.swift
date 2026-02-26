@@ -289,7 +289,7 @@ final class AddProjectView: NSView {
     func addProject(_ project: Project) {
         let label = NSTextField(labelWithString: "\(project.name) — \(project.repoPath)")
         label.font = .preferredFont(forTextStyle: .body)
-        label.textColor = .secondaryLabelColor
+        label.textColor = NSColor(resource: .textSecondary)
         projectsStack.addArrangedSubview(label)
     }
 }

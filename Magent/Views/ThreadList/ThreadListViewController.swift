@@ -1,5 +1,16 @@
 import Cocoa
 
+// MARK: - AlwaysEmphasizedRowView
+
+/// Row view that always draws its selection in the emphasized (active) style,
+/// even when the outline view is not the first responder.
+private final class AlwaysEmphasizedRowView: NSTableRowView {
+    override var isEmphasized: Bool {
+        get { true }
+        set {}
+    }
+}
+
 @MainActor
 protocol ThreadListDelegate: AnyObject {
     func threadList(_ controller: ThreadListViewController, didSelectThread thread: MagentThread)
@@ -73,6 +84,17 @@ final class ThreadListViewController: NSViewController {
 
         // Auto-select first selectable item
         autoSelectFirst()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sectionsDidChange),
+            name: .magentSectionsDidChange,
+            object: nil
+        )
+    }
+
+    @objc private func sectionsDidChange() {
+        reloadData()
     }
 
     // MARK: - Toolbar Buttons
@@ -160,7 +182,7 @@ final class ThreadListViewController: NSViewController {
         let knownSectionIds = Set(settings.threadSections.map(\.id))
         let defaultSectionId = settings.defaultSection?.id
 
-        sidebarProjects = settings.projects.map { project in
+        sidebarProjects = settings.projects.filter(\.isValid).map { project in
             var children: [Any] = []
 
             // Main thread(s) for this project first
@@ -530,7 +552,7 @@ final class ThreadListViewController: NSViewController {
 
         let label = NSTextField(labelWithString: message)
         label.font = .systemFont(ofSize: 13)
-        label.textColor = .secondaryLabelColor
+        label.textColor = NSColor(resource: .textSecondary)
         label.translatesAutoresizingMaskIntoConstraints = false
 
         let stack = NSStackView(views: [spinner, label])
@@ -631,6 +653,10 @@ extension ThreadListViewController: NSOutlineViewDataSource {
 
 extension ThreadListViewController: NSOutlineViewDelegate {
 
+    func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
+        AlwaysEmphasizedRowView()
+    }
+
     func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool {
         item is SidebarProject
     }
@@ -660,7 +686,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
             cell.textField?.stringValue = project.name.uppercased()
             cell.textField?.font = .systemFont(ofSize: 11, weight: .semibold)
-            cell.textField?.textColor = .tertiaryLabelColor
+            cell.textField?.textColor = NSColor(resource: .textSecondary)
             return cell
         }
 
@@ -695,7 +721,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
             cell.textField?.stringValue = section.name.uppercased()
             cell.textField?.font = .systemFont(ofSize: 11, weight: .semibold)
-            cell.textField?.textColor = .tertiaryLabelColor
+            cell.textField?.textColor = NSColor(resource: .textSecondary)
             cell.imageView?.image = Self.colorDotImage(color: section.color, size: 8)
             return cell
         }

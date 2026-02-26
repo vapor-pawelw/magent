@@ -84,7 +84,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     func command(for agentType: AgentType) -> String {
         switch agentType {
         case .claude:
-            return "claude"
+            return "claude --dangerously-skip-permissions"
         case .codex:
             return "codex --yolo"
         case .custom:

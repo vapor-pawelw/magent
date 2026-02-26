@@ -15,6 +15,9 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     // Text input
     private var markedText = NSMutableAttributedString()
 
+    /// Called when user presses Cmd+C. Host app should copy tmux buffer to system clipboard.
+    public var onCopy: (() -> Void)?
+
     override public var acceptsFirstResponder: Bool { true }
 
     public init(workingDirectory: String, command: String? = nil) {
@@ -76,6 +79,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         if surface != nil {
             updateSurfaceSize()
             ghostty_surface_set_focus(surface, true)
+            GhosttyAppManager.shared.focusedSurface = surface
         }
     }
 
@@ -140,6 +144,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         let result = super.becomeFirstResponder()
         if result, let surface {
             ghostty_surface_set_focus(surface, true)
+            GhosttyAppManager.shared.focusedSurface = surface
         }
         return result
     }
@@ -148,6 +153,9 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         let result = super.resignFirstResponder()
         if result, let surface {
             ghostty_surface_set_focus(surface, false)
+            if GhosttyAppManager.shared.focusedSurface == surface {
+                GhosttyAppManager.shared.focusedSurface = nil
+            }
         }
         return result
     }
@@ -183,6 +191,20 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
            !event.modifierFlags.contains(.command),
            event.charactersIgnoringModifiers == "\r" {
             keyDown(with: event)
+            return true
+        }
+
+        // Cmd+V → pass to keyDown so ghostty handles paste via its keybindings
+        if event.modifierFlags.contains(.command),
+           event.charactersIgnoringModifiers == "v" {
+            keyDown(with: event)
+            return true
+        }
+
+        // Cmd+C → copy tmux buffer to system clipboard
+        if event.modifierFlags.contains(.command),
+           event.charactersIgnoringModifiers == "c" {
+            onCopy?()
             return true
         }
 
@@ -386,9 +408,104 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     // MARK: - Mouse Input
 
+    override public func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas {
+            removeTrackingArea(area)
+        }
+        let area = NSTrackingArea(
+            rect: frame,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+    }
+
     override public func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        super.mouseDown(with: event)
+        let mods = Self.ghosttyMods(event.modifierFlags)
+        guard let surface else { return }
+        ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, mods)
+    }
+
+    override public func mouseUp(with event: NSEvent) {
+        let mods = Self.ghosttyMods(event.modifierFlags)
+        guard let surface else { return }
+        ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, mods)
+    }
+
+    override public func mouseDragged(with event: NSEvent) {
+        sendMousePos(event)
+    }
+
+    override public func mouseMoved(with event: NSEvent) {
+        sendMousePos(event)
+    }
+
+    override public func rightMouseDown(with event: NSEvent) {
+        guard let surface else { return super.rightMouseDown(with: event) }
+        let mods = Self.ghosttyMods(event.modifierFlags)
+        if !ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, mods) {
+            super.rightMouseDown(with: event)
+        }
+    }
+
+    override public func rightMouseUp(with event: NSEvent) {
+        guard let surface else { return super.rightMouseUp(with: event) }
+        let mods = Self.ghosttyMods(event.modifierFlags)
+        if !ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT, mods) {
+            super.rightMouseUp(with: event)
+        }
+    }
+
+    override public func rightMouseDragged(with event: NSEvent) {
+        mouseMoved(with: event)
+    }
+
+    override public func otherMouseDown(with event: NSEvent) {
+        guard let surface else { return }
+        let mods = Self.ghosttyMods(event.modifierFlags)
+        let button = mouseButton(for: event.buttonNumber)
+        ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, button, mods)
+    }
+
+    override public func otherMouseUp(with event: NSEvent) {
+        guard let surface else { return }
+        let mods = Self.ghosttyMods(event.modifierFlags)
+        let button = mouseButton(for: event.buttonNumber)
+        ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, button, mods)
+    }
+
+    override public func otherMouseDragged(with event: NSEvent) {
+        mouseMoved(with: event)
+    }
+
+    private func sendMousePos(_ event: NSEvent) {
+        guard let surface else { return }
+        let pos = convert(event.locationInWindow, from: nil)
+        // Ghostty expects y=0 at top, NSView has y=0 at bottom
+        let x = pos.x
+        let y = frame.height - pos.y
+        let mods = Self.ghosttyMods(event.modifierFlags)
+        ghostty_surface_mouse_pos(surface, x, y, mods)
+    }
+
+    private func mouseButton(for buttonNumber: Int) -> ghostty_input_mouse_button_e {
+        switch buttonNumber {
+        case 0: GHOSTTY_MOUSE_LEFT
+        case 1: GHOSTTY_MOUSE_RIGHT
+        case 2: GHOSTTY_MOUSE_MIDDLE
+        case 3: GHOSTTY_MOUSE_FOUR
+        case 4: GHOSTTY_MOUSE_FIVE
+        case 5: GHOSTTY_MOUSE_SIX
+        case 6: GHOSTTY_MOUSE_SEVEN
+        case 7: GHOSTTY_MOUSE_EIGHT
+        case 8: GHOSTTY_MOUSE_NINE
+        case 9: GHOSTTY_MOUSE_TEN
+        case 10: GHOSTTY_MOUSE_ELEVEN
+        default: GHOSTTY_MOUSE_UNKNOWN
+        }
     }
 
     override public func scrollWheel(with event: NSEvent) {
@@ -399,8 +516,8 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         let precision = event.hasPreciseScrollingDeltas
 
         if precision {
-            x *= 2
-            y *= 2
+            x *= 1
+            y *= 1
         }
 
         // ghostty_input_scroll_mods_t is a packed bitfield:

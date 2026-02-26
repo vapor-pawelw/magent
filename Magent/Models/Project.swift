@@ -30,11 +30,20 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         self.agentContextInjection = agentContextInjection
     }
 
-    /// Suggests a default worktrees base path: `<parent>/<name>-worktrees/`
+    /// Resolves template variables in `worktreesBasePath` (e.g. `$MAGENT_PROJECT_NAME`).
+    func resolvedWorktreesBasePath() -> String {
+        worktreesBasePath.replacingOccurrences(of: "$MAGENT_PROJECT_NAME", with: name)
+    }
+
+    /// Whether the repo path still points to an existing directory.
+    var isValid: Bool {
+        FileManager.default.fileExists(atPath: repoPath)
+    }
+
+    /// Suggests a default worktrees base path using the `$MAGENT_PROJECT_NAME` template variable.
     static func suggestedWorktreesPath(for repoPath: String) -> String {
         let url = URL(fileURLWithPath: repoPath)
         let parent = url.deletingLastPathComponent().path
-        let name = url.lastPathComponent
-        return "\(parent)/\(name)-worktrees"
+        return "\(parent)/.worktrees-$MAGENT_PROJECT_NAME"
     }
 }

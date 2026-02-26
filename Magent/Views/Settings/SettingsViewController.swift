@@ -196,7 +196,7 @@ extension SettingsSidebarViewController: NSTableViewDelegate {
 
         cell.textField?.stringValue = category.title
         cell.imageView?.image = NSImage(systemSymbolName: category.symbolName, accessibilityDescription: category.title)
-        cell.imageView?.contentTintColor = .secondaryLabelColor
+        cell.imageView?.contentTintColor = NSColor(resource: .textSecondary)
         return cell
     }
 
@@ -256,7 +256,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
             wrappingLabelWithString: "Enable agents that can be launched in new chats. If multiple are enabled, a default can be chosen."
         )
         agentsDesc.font = .systemFont(ofSize: 11)
-        agentsDesc.textColor = .secondaryLabelColor
+        agentsDesc.textColor = NSColor(resource: .textSecondary)
         agentsSection.addArrangedSubview(agentsDesc)
 
         claudeCheckbox = NSButton(checkboxWithTitle: AgentType.claude.displayName, target: self, action: #selector(activeAgentsChanged))
@@ -289,7 +289,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
 
         let defaultDesc = NSTextField(labelWithString: "Used when no agent is explicitly selected for a new chat.")
         defaultDesc.font = .systemFont(ofSize: 11)
-        defaultDesc.textColor = .secondaryLabelColor
+        defaultDesc.textColor = NSColor(resource: .textSecondary)
         defaultAgentSection.addArrangedSubview(defaultDesc)
 
         defaultAgentPopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -337,12 +337,13 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
 
         let envDesc = NSTextField(wrappingLabelWithString: "Available in injection commands:")
         envDesc.font = .systemFont(ofSize: 11)
-        envDesc.textColor = .secondaryLabelColor
+        envDesc.textColor = NSColor(resource: .textSecondary)
 
         let envVars: [(String, String)] = [
-            ("$WORKTREE_PATH", "Absolute path to the thread's git worktree directory"),
-            ("$PROJECT_PATH", "Absolute path to the original git repository"),
-            ("$WORKTREE_NAME", "Name of the current thread"),
+            ("$MAGENT_WORKTREE_PATH", "Absolute path to the thread's git worktree directory"),
+            ("$MAGENT_PROJECT_PATH", "Absolute path to the original git repository"),
+            ("$MAGENT_WORKTREE_NAME", "Name of the current thread"),
+            ("$MAGENT_PROJECT_NAME", "Name of the project (also usable in Worktrees Path)"),
         ]
 
         let envStack = NSStackView()
@@ -364,7 +365,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
 
             let descLabel = NSTextField(labelWithString: desc)
             descLabel.font = .systemFont(ofSize: 11)
-            descLabel.textColor = .secondaryLabelColor
+            descLabel.textColor = NSColor(resource: .textSecondary)
 
             row.addArrangedSubview(nameLabel)
             row.addArrangedSubview(descLabel)
@@ -413,7 +414,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate 
 
         let descLabel = NSTextField(wrappingLabelWithString: description)
         descLabel.font = .systemFont(ofSize: 11)
-        descLabel.textColor = .secondaryLabelColor
+        descLabel.textColor = NSColor(resource: .textSecondary)
         sectionStack.addArrangedSubview(descLabel)
 
         let textView = NSTextView()
@@ -582,7 +583,7 @@ final class SettingsProjectsViewController: NSViewController {
 
         emptyLabel = NSTextField(labelWithString: "Select a project")
         emptyLabel.font = .systemFont(ofSize: 14)
-        emptyLabel.textColor = .secondaryLabelColor
+        emptyLabel.textColor = NSColor(resource: .textSecondary)
         emptyLabel.alignment = .center
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
     }
@@ -694,7 +695,7 @@ final class SettingsProjectsViewController: NSViewController {
         repoRow.spacing = 8
         repoPathLabel = NSTextField(labelWithString: project.repoPath)
         repoPathLabel.font = .systemFont(ofSize: 12)
-        repoPathLabel.textColor = .secondaryLabelColor
+        repoPathLabel.textColor = project.isValid ? NSColor(resource: .textSecondary) : .systemRed
         repoPathLabel.lineBreakMode = .byTruncatingMiddle
         repoRow.addArrangedSubview(repoPathLabel)
         let browseRepoBtn = NSButton(title: "Browse...", target: self, action: #selector(browseRepoPath))
@@ -702,6 +703,13 @@ final class SettingsProjectsViewController: NSViewController {
         browseRepoBtn.controlSize = .small
         repoRow.addArrangedSubview(browseRepoBtn)
         stack.addArrangedSubview(repoRow)
+
+        if !project.isValid {
+            let warningLabel = NSTextField(labelWithString: "⚠ Path does not exist. Update the repository path.")
+            warningLabel.font = .systemFont(ofSize: 11)
+            warningLabel.textColor = .systemRed
+            stack.addArrangedSubview(warningLabel)
+        }
 
         // Worktrees path
         let wtHeader = NSTextField(labelWithString: "Worktrees Path")
@@ -713,7 +721,7 @@ final class SettingsProjectsViewController: NSViewController {
         wtRow.spacing = 8
         worktreesPathLabel = NSTextField(labelWithString: project.worktreesBasePath)
         worktreesPathLabel.font = .systemFont(ofSize: 12)
-        worktreesPathLabel.textColor = .secondaryLabelColor
+        worktreesPathLabel.textColor = NSColor(resource: .textSecondary)
         worktreesPathLabel.lineBreakMode = .byTruncatingMiddle
         wtRow.addArrangedSubview(worktreesPathLabel)
         let browseWtBtn = NSButton(title: "Browse...", target: self, action: #selector(browseWorktreesPath))
@@ -722,6 +730,16 @@ final class SettingsProjectsViewController: NSViewController {
         wtRow.addArrangedSubview(browseWtBtn)
         stack.addArrangedSubview(wtRow)
 
+        // Resolved path preview (shows what template variables expand to)
+        let resolved = project.resolvedWorktreesBasePath()
+        if resolved != project.worktreesBasePath {
+            let resolvedLabel = NSTextField(labelWithString: "Resolves to: \(resolved)")
+            resolvedLabel.font = .systemFont(ofSize: 11)
+            resolvedLabel.textColor = NSColor(resource: .textSecondary)
+            resolvedLabel.lineBreakMode = .byTruncatingMiddle
+            stack.addArrangedSubview(resolvedLabel)
+        }
+
         // Default branch
         let branchHeader = NSTextField(labelWithString: "Default Branch")
         branchHeader.font = .systemFont(ofSize: 12, weight: .semibold)
@@ -729,7 +747,7 @@ final class SettingsProjectsViewController: NSViewController {
 
         let branchDesc = NSTextField(labelWithString: "Base branch for new worktrees (empty = repo HEAD)")
         branchDesc.font = .systemFont(ofSize: 11)
-        branchDesc.textColor = .tertiaryLabelColor
+        branchDesc.textColor = NSColor(resource: .textSecondary)
         stack.addArrangedSubview(branchDesc)
 
         defaultBranchField = NSTextField(string: project.defaultBranch ?? "")
@@ -749,7 +767,7 @@ final class SettingsProjectsViewController: NSViewController {
 
             let agentTypeDesc = NSTextField(labelWithString: "Use app default or pick a specific default for this project")
             agentTypeDesc.font = .systemFont(ofSize: 11)
-            agentTypeDesc.textColor = .tertiaryLabelColor
+            agentTypeDesc.textColor = NSColor(resource: .textSecondary)
             stack.addArrangedSubview(agentTypeDesc)
 
             agentTypePopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -825,7 +843,7 @@ final class SettingsProjectsViewController: NSViewController {
 
         let descLabel = NSTextField(labelWithString: description)
         descLabel.font = .systemFont(ofSize: 11)
-        descLabel.textColor = .tertiaryLabelColor
+        descLabel.textColor = NSColor(resource: .textSecondary)
         stackView.addArrangedSubview(descLabel)
 
         let textView = NSTextView()
@@ -966,9 +984,29 @@ final class SettingsProjectsViewController: NSViewController {
 
         panel.beginSheetModal(for: view.window!) { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
-            self.settings.projects[index].repoPath = url.path
-            try? self.persistence.saveSettings(self.settings)
-            self.repoPathLabel.stringValue = url.path
+            let path = url.path
+            Task {
+                let isRepo = await GitService.shared.isGitRepository(at: path)
+                let defaultBranch = isRepo ? await GitService.shared.detectDefaultBranch(repoPath: path) : nil
+                await MainActor.run {
+                    if isRepo {
+                        self.settings.projects[index].repoPath = path
+                        self.settings.projects[index].defaultBranch = defaultBranch
+                        try? self.persistence.saveSettings(self.settings)
+                        self.projectTableView.reloadData()
+                        self.showDetailForProject(self.settings.projects[index])
+                        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+                        Task { await ThreadManager.shared.syncThreadsWithWorktrees(for: self.settings.projects[index]) }
+                    } else {
+                        let alert = NSAlert()
+                        alert.messageText = "Not a Git Repository"
+                        alert.informativeText = "The selected folder is not a git repository."
+                        alert.alertStyle = .warning
+                        alert.addButton(withTitle: "OK")
+                        alert.runModal()
+                    }
+                }
+            }
         }
     }
 
@@ -978,13 +1016,15 @@ final class SettingsProjectsViewController: NSViewController {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath: settings.projects[index].worktreesBasePath)
+        let resolved = settings.projects[index].resolvedWorktreesBasePath()
+        panel.directoryURL = URL(fileURLWithPath: resolved)
 
         panel.beginSheetModal(for: view.window!) { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
             self.settings.projects[index].worktreesBasePath = url.path
             try? self.persistence.saveSettings(self.settings)
-            self.worktreesPathLabel.stringValue = url.path
+            self.showDetailForProject(self.settings.projects[index])
+            Task { await ThreadManager.shared.syncThreadsWithWorktrees(for: self.settings.projects[index]) }
         }
     }
 }
@@ -1015,6 +1055,7 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
         }()
 
         cell.textField?.stringValue = project.name
+        cell.textField?.textColor = project.isValid ? .labelColor : .systemRed
         return cell
     }
 
@@ -1072,7 +1113,7 @@ final class SettingsAppearanceViewController: NSViewController {
 
         let descLabel = NSTextField(wrappingLabelWithString: "Organize threads into sections in the sidebar. Click a color dot to change it.")
         descLabel.font = .systemFont(ofSize: 11)
-        descLabel.textColor = .secondaryLabelColor
+        descLabel.textColor = NSColor(resource: .textSecondary)
         descLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(descLabel)
 
@@ -1162,9 +1203,36 @@ final class SettingsAppearanceViewController: NSViewController {
 
         let section = sortedSections[row]
         guard let index = settings.threadSections.firstIndex(where: { $0.id == section.id }) else { return }
+
+        // When hiding a section, check if it has any open threads
+        if section.isVisible {
+            let knownSectionIds = Set(settings.threadSections.map(\.id))
+            let defaultSectionId = settings.defaultSection?.id
+            let threadsInSection = ThreadManager.shared.threads.filter { thread in
+                guard !thread.isMain else { return false }
+                let effectiveSectionId: UUID?
+                if let sid = thread.sectionId, knownSectionIds.contains(sid) {
+                    effectiveSectionId = sid
+                } else {
+                    effectiveSectionId = defaultSectionId
+                }
+                return effectiveSectionId == section.id
+            }
+            if !threadsInSection.isEmpty {
+                let alert = NSAlert()
+                alert.messageText = "Cannot Hide Section"
+                alert.informativeText = "Move all threads out of \"\(section.name)\" before hiding it."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+                return
+            }
+        }
+
         settings.threadSections[index].isVisible.toggle()
         try? persistence.saveSettings(settings)
         tableView.reloadData()
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
     @objc private func deleteSectionTapped(_ sender: NSButton) {
@@ -1327,7 +1395,7 @@ extension SettingsAppearanceViewController: NSTableViewDelegate {
         if let visBtn = cell.viewWithTag(101) as? NSButton {
             let symbolName = section.isVisible ? "eye" : "eye.slash"
             visBtn.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-            visBtn.contentTintColor = section.isVisible ? .labelColor : .tertiaryLabelColor
+            visBtn.contentTintColor = section.isVisible ? NSColor(resource: .textPrimary) : NSColor(resource: .textSecondary)
             visBtn.target = self
             visBtn.action = #selector(visibilityToggled(_:))
         }

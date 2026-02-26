@@ -8,6 +8,7 @@ public final class GhosttyAppManager {
     public static let shared = GhosttyAppManager()
 
     public private(set) var app: ghostty_app_t?
+    public var focusedSurface: ghostty_surface_t?
     private var isInitialized = false
     private var displayLink: CVDisplayLink?
     private var surfaceCount = 0
@@ -127,6 +128,11 @@ public final class GhosttyAppManager {
 // They are naturally nonisolated as top-level functions in a module
 // without SWIFT_DEFAULT_ACTOR_ISOLATION.
 
+/// Wraps a raw pointer so it can be sent across isolation boundaries.
+private struct SendableRawPointer: @unchecked Sendable {
+    let pointer: UnsafeMutableRawPointer?
+}
+
 private func ghosttyWakeupCallback(_ userdata: UnsafeMutableRawPointer?) {
     Task { @MainActor in
         GhosttyAppManager.shared.tick()
@@ -158,10 +164,12 @@ private func ghosttyReadClipboardCallback(
     _ location: ghostty_clipboard_e,
     _ state: UnsafeMutableRawPointer?
 ) {
+    let wrappedState = SendableRawPointer(pointer: state)
     Task { @MainActor in
+        guard let surface = GhosttyAppManager.shared.focusedSurface else { return }
         let string = NSPasteboard.general.string(forType: .string) ?? ""
-        string.withCString { _ in
-            // Full implementation would track pending clipboard requests per surface
+        string.withCString { ptr in
+            ghostty_surface_complete_clipboard_request(surface, ptr, wrappedState.pointer, true)
         }
     }
 }
@@ -172,7 +180,18 @@ private func ghosttyConfirmReadClipboardCallback(
     _ state: UnsafeMutableRawPointer?,
     _ request: ghostty_clipboard_request_e
 ) {
-    // Auto-confirm clipboard reads for now
+    let copiedStr: String? = str.map { String(cString: $0) }
+    let wrappedState = SendableRawPointer(pointer: state)
+    Task { @MainActor in
+        guard let surface = GhosttyAppManager.shared.focusedSurface else { return }
+        if let copiedStr {
+            copiedStr.withCString { ptr in
+                ghostty_surface_complete_clipboard_request(surface, ptr, wrappedState.pointer, true)
+            }
+        } else {
+            ghostty_surface_complete_clipboard_request(surface, nil, wrappedState.pointer, true)
+        }
+    }
 }
 
 private func ghosttyWriteClipboardCallback(

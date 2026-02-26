@@ -30,6 +30,13 @@ final class SplitViewController: NSSplitViewController {
 
         setupWindowToolbar()
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(openSettingsFromNotification),
+            name: .magentOpenSettings,
+            object: nil
+        )
+
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             guard event.modifierFlags.contains(.command) else { return event }
@@ -153,6 +160,10 @@ final class SplitViewController: NSSplitViewController {
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         window.toolbar = toolbar
+    }
+
+    @objc private func openSettingsFromNotification(_ notification: Notification) {
+        settingsTapped()
     }
 
     @objc private func settingsTapped() {

@@ -55,6 +55,22 @@ final class AppCoordinator {
             Task {
                 await ThreadManager.shared.restoreThreads()
                 ThreadManager.shared.startSessionMonitor()
+
+                // Warn about projects with invalid paths
+                let invalidProjects = settings.projects.filter { !$0.isValid }
+                if !invalidProjects.isEmpty {
+                    await MainActor.run {
+                        let names = invalidProjects.map(\.name).joined(separator: ", ")
+                        BannerManager.shared.show(
+                            message: "Invalid project paths: \(names). Update them in Settings.",
+                            style: .warning,
+                            isDismissible: true,
+                            actions: [BannerAction(title: "Settings") {
+                                NotificationCenter.default.post(name: .magentOpenSettings, object: nil)
+                            }]
+                        )
+                    }
+                }
             }
         }
     }

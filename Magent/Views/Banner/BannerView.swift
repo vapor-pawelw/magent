@@ -100,7 +100,7 @@ final class BannerView: NSView {
         // Message
         messageLabel.stringValue = config.message
         messageLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        messageLabel.textColor = .labelColor
+        messageLabel.textColor = NSColor(resource: .textPrimary)
         messageLabel.lineBreakMode = .byTruncatingTail
         messageLabel.maximumNumberOfLines = 1
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -123,7 +123,7 @@ final class BannerView: NSView {
         closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Dismiss")
         closeButton.bezelStyle = .inline
         closeButton.isBordered = false
-        closeButton.contentTintColor = .secondaryLabelColor
+        closeButton.contentTintColor = NSColor(resource: .textSecondary)
         closeButton.target = self
         closeButton.action = #selector(closeTapped)
         closeButton.translatesAutoresizingMaskIntoConstraints = false

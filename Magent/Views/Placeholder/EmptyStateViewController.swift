@@ -11,16 +11,16 @@ class EmptyStateViewController: NSViewController {
 
         let imageView = NSImageView()
         imageView.image = NSImage(systemSymbolName: "rectangle.split.3x1", accessibilityDescription: nil)
-        imageView.contentTintColor = .tertiaryLabelColor
+        imageView.contentTintColor = NSColor(resource: .textSecondary)
         imageView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 48, weight: .regular)
 
         let titleLabel = NSTextField(labelWithString: "No Thread Selected")
         titleLabel.font = .preferredFont(forTextStyle: .title2)
-        titleLabel.textColor = .secondaryLabelColor
+        titleLabel.textColor = NSColor(resource: .textPrimary)
 
         let subtitleLabel = NSTextField(labelWithString: "Create a new thread or select one from the sidebar")
         subtitleLabel.font = .preferredFont(forTextStyle: .body)
-        subtitleLabel.textColor = .tertiaryLabelColor
+        subtitleLabel.textColor = NSColor(resource: .textSecondary)
 
         let stack = NSStackView(views: [imageView, titleLabel, subtitleLabel])
         stack.orientation = .vertical

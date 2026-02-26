@@ -21,6 +21,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         GhosttyAppManager.shared.initialize()
+        Task { await TmuxService.shared.applyGlobalSettings() }
         coordinator = AppCoordinator()
         coordinator?.start()
     }

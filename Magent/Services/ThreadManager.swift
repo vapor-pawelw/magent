@@ -54,6 +54,11 @@ final class ThreadManager {
 
         try? persistence.saveThreads(threads)
 
+        // Sync threads with worktrees on disk for each valid project
+        for project in settings.projects where project.isValid {
+            await syncThreadsWithWorktrees(for: project)
+        }
+
         // Ensure every project has a main thread
         await ensureMainThreads()
 
@@ -74,7 +79,7 @@ final class ThreadManager {
         var foundUnique = false
         for _ in 0..<5 {
             let branchCandidate = name
-            let worktreeCandidate = "\(project.worktreesBasePath)/\(name)"
+            let worktreeCandidate = "\(project.resolvedWorktreesBasePath())/\(name)"
             let tmuxCandidate = "magent-\(name)"
 
             let nameInUse = threads.contains(where: { $0.name == name })
@@ -93,7 +98,7 @@ final class ThreadManager {
         }
 
         let branchName = name
-        let worktreePath = "\(project.worktreesBasePath)/\(name)"
+        let worktreePath = "\(project.resolvedWorktreesBasePath())/\(name)"
         let tmuxSessionName = "magent-\(name)"
 
         // Create git worktree branching off the project's default branch
@@ -121,7 +126,7 @@ final class ThreadManager {
         trustDirectoryIfNeeded(worktreePath, agentType: selectedAgentType)
 
         // Create tmux session with selected agent command (or shell if no active agents)
-        let envExports = "export WORKTREE_PATH=\(worktreePath) && export PROJECT_PATH=\(project.repoPath) && export WORKTREE_NAME=\(name)"
+        let envExports = "export MAGENT_WORKTREE_PATH=\(worktreePath) && export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=\(name) && export MAGENT_PROJECT_NAME=\(project.name)"
         let startCmd: String
         if useAgentCommand {
             startCmd = agentStartCommand(
@@ -140,9 +145,10 @@ final class ThreadManager {
         )
 
         // Also set on the tmux session so new panes/windows inherit them
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "WORKTREE_PATH", value: worktreePath)
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "PROJECT_PATH", value: project.repoPath)
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "WORKTREE_NAME", value: name)
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_PATH", value: worktreePath)
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: name)
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
 
         let thread = MagentThread(
             projectId: project.id,
@@ -188,7 +194,7 @@ final class ThreadManager {
         let settings = persistence.loadSettings()
         let selectedAgentType = resolveAgentType(for: project.id, requestedAgentType: nil, settings: settings)
         trustDirectoryIfNeeded(project.repoPath, agentType: selectedAgentType)
-        let envExports = "export PROJECT_PATH=\(project.repoPath) && export WORKTREE_NAME=main"
+        let envExports = "export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(project.name)"
         let startCmd = agentStartCommand(
             settings: settings,
             agentType: selectedAgentType,
@@ -201,8 +207,9 @@ final class ThreadManager {
             command: startCmd
         )
 
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "PROJECT_PATH", value: project.repoPath)
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "WORKTREE_NAME", value: "main")
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
 
         let thread = MagentThread(
             projectId: project.id,
@@ -270,7 +277,8 @@ final class ThreadManager {
             }
             tmuxSessionName = candidate
             let projectPath = thread.worktreePath
-            let envExports = "export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=main"
+            let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
+            let envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName)"
             if useAgentCommand {
                 selectedAgentType = resolveAgentType(
                     for: thread.projectId,
@@ -294,8 +302,9 @@ final class ThreadManager {
                 candidate = "magent-\(thread.name)-tab-\(tabIndex)"
             }
             tmuxSessionName = candidate
-            let projectPath = settings.projects.first(where: { $0.id == thread.projectId })?.repoPath ?? thread.worktreePath
-            let envExports = "export WORKTREE_PATH=\(thread.worktreePath) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(thread.name)"
+            let project = settings.projects.first(where: { $0.id == thread.projectId })
+            let projectPath = project?.repoPath ?? thread.worktreePath
+            let envExports = "export MAGENT_WORKTREE_PATH=\(thread.worktreePath) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(thread.name) && export MAGENT_PROJECT_NAME=\(project?.name ?? "project")"
             if useAgentCommand {
                 selectedAgentType = resolveAgentType(
                     for: thread.projectId,
@@ -320,13 +329,17 @@ final class ThreadManager {
         )
 
         if thread.isMain {
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "PROJECT_PATH", value: thread.worktreePath)
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "WORKTREE_NAME", value: "main")
+            let mainProjectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: thread.worktreePath)
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: mainProjectName)
         } else {
-            let projectPath = settings.projects.first(where: { $0.id == thread.projectId })?.repoPath ?? thread.worktreePath
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "WORKTREE_PATH", value: thread.worktreePath)
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "PROJECT_PATH", value: projectPath)
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "WORKTREE_NAME", value: thread.name)
+            let tabProject = settings.projects.first(where: { $0.id == thread.projectId })
+            let projectPath = tabProject?.repoPath ?? thread.worktreePath
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_PATH", value: thread.worktreePath)
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: projectPath)
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: thread.name)
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: tabProject?.name ?? "project")
         }
 
         threads[index].tmuxSessionNames.append(tmuxSessionName)
@@ -468,8 +481,8 @@ final class ThreadManager {
 
         // 5. Update env vars on each session
         for sessionName in newSessionNames {
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "WORKTREE_PATH", value: newWorktreePath)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "WORKTREE_NAME", value: trimmed)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH", value: newWorktreePath)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: trimmed)
         }
 
         // 6. Trust new path for the agent if needed
@@ -661,6 +674,86 @@ final class ThreadManager {
         }
     }
 
+    // MARK: - Worktree Sync
+
+    func syncThreadsWithWorktrees(for project: Project) async {
+        let basePath = project.resolvedWorktreesBasePath()
+        let fm = FileManager.default
+
+        // Discover directories in the worktrees base path
+        guard let contents = try? fm.contentsOfDirectory(atPath: basePath) else { return }
+
+        var changed = false
+        let existingPaths = Set(threads.filter { $0.projectId == project.id }.map(\.worktreePath))
+
+        for dirName in contents {
+            let fullPath = (basePath as NSString).appendingPathComponent(dirName)
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: fullPath, isDirectory: &isDir), isDir.boolValue else { continue }
+
+            // Check if this is a git worktree (has a .git file, not directory)
+            let gitPath = (fullPath as NSString).appendingPathComponent(".git")
+            var gitIsDir: ObjCBool = false
+            let gitExists = fm.fileExists(atPath: gitPath, isDirectory: &gitIsDir)
+            guard gitExists && !gitIsDir.boolValue else { continue }
+
+            // Skip if we already have a thread for this path
+            guard !existingPaths.contains(fullPath) else { continue }
+
+            // Detect branch name from the worktree
+            let branchName = dirName
+
+            let settings = persistence.loadSettings()
+            let thread = MagentThread(
+                projectId: project.id,
+                name: dirName,
+                worktreePath: fullPath,
+                branchName: branchName,
+                sectionId: settings.defaultSection?.id
+            )
+            threads.append(thread)
+            changed = true
+        }
+
+        // Archive threads whose worktree directories no longer exist on disk
+        // (skip main threads — those point at the repo itself)
+        for i in threads.indices {
+            guard threads[i].projectId == project.id,
+                  !threads[i].isMain,
+                  !threads[i].isArchived else { continue }
+
+            var isDir: ObjCBool = false
+            let exists = fm.fileExists(atPath: threads[i].worktreePath, isDirectory: &isDir) && isDir.boolValue
+            if !exists {
+                threads[i].isArchived = true
+                changed = true
+            }
+        }
+
+        if changed {
+            // Remove archived from active list
+            threads = threads.filter { !$0.isArchived }
+
+            // Save all (including newly archived) to persistence
+            var allThreads = persistence.loadThreads()
+            // Merge: update archived flags, add new threads
+            for thread in threads where !allThreads.contains(where: { $0.id == thread.id }) {
+                allThreads.append(thread)
+            }
+            // Update archived flags
+            for i in allThreads.indices {
+                if !threads.contains(where: { $0.id == allThreads[i].id }) && allThreads[i].projectId == project.id && !allThreads[i].isMain {
+                    allThreads[i].isArchived = true
+                }
+            }
+            try? persistence.saveThreads(allThreads)
+
+            await MainActor.run {
+                delegate?.threadManager(self, didUpdateThreads: threads)
+            }
+        }
+    }
+
     // MARK: - Injection
 
     private func effectiveInjection(for projectId: UUID) -> (terminalCommand: String, agentContext: String) {
@@ -723,13 +816,14 @@ final class ThreadManager {
 
         let startCmd: String
         let sessionAgentType = thread.selectedAgentType ?? effectiveAgentType(for: thread.projectId)
+        let projectName = project?.name ?? "project"
+        let envExports: String
+        if thread.isMain {
+            envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName)"
+        } else {
+            envExports = "export MAGENT_WORKTREE_PATH=\(thread.worktreePath) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(thread.name) && export MAGENT_PROJECT_NAME=\(projectName)"
+        }
         if isAgentSession {
-            let envExports: String
-            if thread.isMain {
-                envExports = "export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=main"
-            } else {
-                envExports = "export WORKTREE_PATH=\(thread.worktreePath) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(thread.name)"
-            }
             startCmd = agentStartCommand(
                 settings: settings,
                 agentType: sessionAgentType,
@@ -737,12 +831,6 @@ final class ThreadManager {
                 workingDirectory: thread.worktreePath
             )
         } else {
-            let envExports: String
-            if thread.isMain {
-                envExports = "export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=main"
-            } else {
-                envExports = "export WORKTREE_PATH=\(thread.worktreePath) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(thread.name)"
-            }
             startCmd = "\(envExports) && cd \(thread.worktreePath) && exec zsh -l"
         }
 
@@ -754,12 +842,14 @@ final class ThreadManager {
 
         // Set tmux environment variables
         if thread.isMain {
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "PROJECT_PATH", value: projectPath)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "WORKTREE_NAME", value: "main")
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_PATH", value: projectPath)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: projectName)
         } else {
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "WORKTREE_PATH", value: thread.worktreePath)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "PROJECT_PATH", value: projectPath)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "WORKTREE_NAME", value: thread.name)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH", value: thread.worktreePath)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_PATH", value: projectPath)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: thread.name)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: projectName)
         }
 
         // Run normal injection (terminal command + agent context)
@@ -930,6 +1020,8 @@ final class ThreadManager {
 
 extension Notification.Name {
     static let magentDeadSessionsDetected = Notification.Name("magentDeadSessionsDetected")
+    static let magentSectionsDidChange = Notification.Name("magentSectionsDidChange")
+    static let magentOpenSettings = Notification.Name("magentOpenSettings")
 }
 
 enum ThreadManagerError: LocalizedError {

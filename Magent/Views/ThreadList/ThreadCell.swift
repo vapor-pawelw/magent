@@ -7,7 +7,7 @@ final class ThreadCell: NSTableCellView {
         textField?.font = .preferredFont(forTextStyle: .body)
 
         imageView?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
-        imageView?.contentTintColor = sectionColor ?? .systemGreen
+        imageView?.contentTintColor = sectionColor ?? NSColor(resource: .primaryBrand)
     }
 
     func configureAsMain() {

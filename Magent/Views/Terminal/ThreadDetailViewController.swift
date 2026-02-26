@@ -43,7 +43,7 @@ private final class TabItemView: NSView, NSMenuDelegate {
 
         // Pin icon
         pinIcon.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
-        pinIcon.contentTintColor = .tertiaryLabelColor
+        pinIcon.contentTintColor = NSColor(resource: .textSecondary)
         pinIcon.translatesAutoresizingMaskIntoConstraints = false
         pinIcon.isHidden = true
         pinIcon.setContentHuggingPriority(.required, for: .horizontal)
@@ -59,7 +59,7 @@ private final class TabItemView: NSView, NSMenuDelegate {
 
         // Close button — use xmark.circle.fill for visibility
         closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close Tab")
-        closeButton.contentTintColor = .tertiaryLabelColor
+        closeButton.contentTintColor = NSColor(resource: .textSecondary)
         closeButton.bezelStyle = .inline
         closeButton.isBordered = false
         closeButton.target = self
@@ -119,9 +119,9 @@ private final class TabItemView: NSView, NSMenuDelegate {
 
     private func updateAppearance() {
         layer?.backgroundColor = isSelected
-            ? NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
-            : NSColor(white: 0.2, alpha: 0.5).cgColor
-        titleLabel.textColor = isSelected ? .labelColor : .secondaryLabelColor
+            ? NSColor(resource: .primaryBrand).withAlphaComponent(0.2).cgColor
+            : NSColor(resource: .surface).withAlphaComponent(0.5).cgColor
+        titleLabel.textColor = isSelected ? NSColor(resource: .textPrimary) : NSColor(resource: .textSecondary)
     }
 
     // MARK: NSMenuDelegate
@@ -200,7 +200,7 @@ final class ThreadDetailViewController: NSViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor(white: 0.1, alpha: 1).cgColor
+        view.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
 
         GhosttyAppManager.shared.initialize()
 
@@ -251,7 +251,7 @@ final class ThreadDetailViewController: NSViewController {
 
         terminalContainer.translatesAutoresizingMaskIntoConstraints = false
         terminalContainer.wantsLayer = true
-        terminalContainer.layer?.backgroundColor = NSColor.black.cgColor
+        terminalContainer.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
 
         view.addSubview(topBar)
         view.addSubview(terminalContainer)
@@ -316,11 +316,7 @@ final class ThreadDetailViewController: NSViewController {
                 let closable = thread.isMain ? true : (i != primaryTabIndex)
                 createTabItem(title: title, closable: closable, pinned: i < pinnedCount)
 
-                let tmuxCommand = buildTmuxCommand(for: sessionName)
-                let terminalView = TerminalSurfaceView(
-                    workingDirectory: thread.worktreePath,
-                    command: tmuxCommand
-                )
+                let terminalView = makeTerminalView(for: sessionName)
                 terminalViews.append(terminalView)
             }
         }
@@ -350,14 +346,28 @@ final class ThreadDetailViewController: NSViewController {
         }
     }
 
+    private func makeTerminalView(for sessionName: String) -> TerminalSurfaceView {
+        let tmuxCommand = buildTmuxCommand(for: sessionName)
+        let view = TerminalSurfaceView(
+            workingDirectory: thread.worktreePath,
+            command: tmuxCommand
+        )
+        view.onCopy = { [sessionName = sessionName] in
+            Task { await TmuxService.shared.copySelectionToClipboard(sessionName: sessionName) }
+        }
+        return view
+    }
+
     private func buildTmuxCommand(for sessionName: String) -> String {
         let settings = PersistenceService.shared.loadSettings()
         let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
         let selectedAgentType = thread.selectedAgentType ?? threadManager.effectiveAgentType(for: thread.projectId)
 
+        let project = settings.projects.first(where: { $0.id == thread.projectId })
+        let projectName = project?.name ?? "project"
         if thread.isMain {
             let projectPath = thread.worktreePath
-            let envExports = "export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=main"
+            let envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName)"
             let startCmd: String
             if isAgentSession, let selectedAgentType {
                 let unset = selectedAgentType == .claude ? " && unset CLAUDECODE" : ""
@@ -368,8 +378,8 @@ final class ThreadDetailViewController: NSViewController {
             return "/bin/zsh -l -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
         } else {
             let wd = thread.worktreePath
-            let projectPath = settings.projects.first(where: { $0.id == thread.projectId })?.repoPath ?? wd
-            let envExports = "export WORKTREE_PATH=\(wd) && export PROJECT_PATH=\(projectPath) && export WORKTREE_NAME=\(thread.name)"
+            let projectPath = project?.repoPath ?? wd
+            let envExports = "export MAGENT_WORKTREE_PATH=\(wd) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(thread.name) && export MAGENT_PROJECT_NAME=\(projectName)"
             let startCmd: String
             if isAgentSession, let selectedAgentType {
                 let unset = selectedAgentType == .claude ? " && unset CLAUDECODE" : ""
@@ -397,11 +407,7 @@ final class ThreadDetailViewController: NSViewController {
             let oldView = terminalViews[i]
             oldView.removeFromSuperview()
 
-            let tmuxCommand = buildTmuxCommand(for: sessionName)
-            let newView = TerminalSurfaceView(
-                workingDirectory: thread.worktreePath,
-                command: tmuxCommand
-            )
+            let newView = makeTerminalView(for: sessionName)
             terminalViews[i] = newView
 
             if wasSelected {
@@ -781,12 +787,7 @@ final class ThreadDetailViewController: NSViewController {
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated
                     }
-                    let tmuxCommand = self.buildTmuxCommand(for: tab.tmuxSessionName)
-
-                    let terminalView = TerminalSurfaceView(
-                        workingDirectory: self.thread.worktreePath,
-                        command: tmuxCommand
-                    )
+                    let terminalView = self.makeTerminalView(for: tab.tmuxSessionName)
                     self.terminalViews.append(terminalView)
 
                     let index = self.tabItems.count
@@ -837,12 +838,7 @@ final class ThreadDetailViewController: NSViewController {
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated
                     }
-                    let tmuxCommand = self.buildTmuxCommand(for: tab.tmuxSessionName)
-
-                    let terminalView = TerminalSurfaceView(
-                        workingDirectory: self.thread.worktreePath,
-                        command: tmuxCommand
-                    )
+                    let terminalView = self.makeTerminalView(for: tab.tmuxSessionName)
                     self.terminalViews.append(terminalView)
 
                     let index = self.tabItems.count
@@ -981,7 +977,7 @@ final class ThreadDetailViewController: NSViewController {
     private func setupLoadingOverlay() {
         let overlay = NSView()
         overlay.wantsLayer = true
-        overlay.layer?.backgroundColor = NSColor(white: 0.1, alpha: 1).cgColor
+        overlay.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
         overlay.translatesAutoresizingMaskIntoConstraints = false
 
         let spinner = NSProgressIndicator()
@@ -992,7 +988,7 @@ final class ThreadDetailViewController: NSViewController {
 
         let label = NSTextField(labelWithString: "Starting agent...")
         label.font = .systemFont(ofSize: 13)
-        label.textColor = .secondaryLabelColor
+        label.textColor = NSColor(resource: .textSecondary)
         label.translatesAutoresizingMaskIntoConstraints = false
 
         let stack = NSStackView(views: [spinner, label])
@@ -1092,7 +1088,7 @@ final class ThreadDetailViewController: NSViewController {
 
         let label = NSTextField(labelWithString: message)
         label.font = .systemFont(ofSize: 13)
-        label.textColor = .secondaryLabelColor
+        label.textColor = NSColor(resource: .textSecondary)
         label.translatesAutoresizingMaskIntoConstraints = false
 
         let stack = NSStackView(views: [spinner, label])
