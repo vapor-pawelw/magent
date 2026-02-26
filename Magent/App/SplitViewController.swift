@@ -206,8 +206,8 @@ extension SplitViewController: ThreadListDelegate {
     }
 
     func threadList(_ controller: ThreadListViewController, didRenameThread thread: MagentThread) {
-        // Keep old terminal tabs with "(renamed)" suffix and open a fresh agent tab
-        // in the renamed worktree path.
+        // Update thread reference and rebind onCopy closures to new tmux session names.
+        // Existing terminal connections survive rename since tmux rename-session keeps clients attached.
         currentDetailVC?.handleRename(thread)
     }
 
