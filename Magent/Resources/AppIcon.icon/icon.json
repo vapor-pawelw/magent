@@ -8,7 +8,7 @@
         {
           "hidden-specializations" : [
             {
-              "value" : false
+              "value" : true
             },
             {
               "appearance" : "dark",
@@ -47,7 +47,7 @@
           "glass" : true,
           "hidden-specializations" : [
             {
-              "value" : true
+              "value" : false
             },
             {
               "appearance" : "dark",
@@ -63,7 +63,7 @@
             }
           ],
           "position" : {
-            "scale" : 3,
+            "scale" : 2.5,
             "translation-in-points" : [
               0,
               0
