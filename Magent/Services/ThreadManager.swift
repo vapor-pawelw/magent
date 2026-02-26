@@ -43,6 +43,10 @@ final class ThreadManager {
                     settings: settings
                 )
             }
+            // Migrate: existing threads with agent sessions must have had the agent run.
+            if !threads[i].agentHasRun && !threads[i].agentTmuxSessions.isEmpty {
+                threads[i].agentHasRun = true
+            }
         }
 
         // Do NOT prune dead tmux session names — the attach-or-create pattern
@@ -329,6 +333,7 @@ final class ThreadManager {
         let shouldMarkAsAgentTab = (thread.isMain || useAgentCommand) && selectedAgentType != nil
         if shouldMarkAsAgentTab {
             threads[index].agentTmuxSessions.append(tmuxSessionName)
+            threads[index].agentHasRun = true
         }
         if selectedAgentType != nil {
             threads[index].selectedAgentType = selectedAgentType
@@ -765,15 +770,11 @@ final class ThreadManager {
             agentContext: isAgentSession ? injection.agentContext : ""
         )
 
-        // For Claude agent sessions, inject /resume to restore the conversation —
-        // but only if Claude was previously run in this worktree (i.e. .claude/ exists).
-        if thenResume && isAgentSession {
-            let agentType = sessionAgentType
-            if agentType?.supportsResume == true {
-                let claudeDir = (thread.worktreePath as NSString).appendingPathComponent(".claude")
-                if FileManager.default.fileExists(atPath: claudeDir) {
-                    injectResume(sessionName: sessionName)
-                }
+        // For agent sessions, inject /resume to restore the conversation —
+        // but only if the agent was previously run in this thread.
+        if thenResume && isAgentSession && thread.agentHasRun {
+            if sessionAgentType?.supportsResume == true {
+                injectResume(sessionName: sessionName)
             }
         }
 
