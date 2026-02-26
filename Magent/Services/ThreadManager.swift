@@ -81,12 +81,13 @@ final class ThreadManager {
         let worktreePath = "\(project.worktreesBasePath)/\(name)"
         let tmuxSessionName = "magent-\(name)"
 
-        // Create git worktree branching off develop
+        // Create git worktree branching off the project's default branch
+        let baseBranch = project.defaultBranch?.isEmpty == false ? project.defaultBranch : nil
         _ = try await git.createWorktree(
             repoPath: project.repoPath,
             branchName: branchName,
             worktreePath: worktreePath,
-            baseBranch: "develop"
+            baseBranch: baseBranch
         )
 
         // Pre-trust the worktree directory so claude doesn't show the trust dialog
