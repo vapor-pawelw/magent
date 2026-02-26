@@ -44,7 +44,7 @@
               "value" : "none"
             }
           ],
-          "glass" : true,
+          "glass" : false,
           "hidden-specializations" : [
             {
               "value" : false

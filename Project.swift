@@ -21,6 +21,7 @@ let project = Project(
                 "LSMinimumSystemVersion": "$(MACOSX_DEPLOYMENT_TARGET)",
                 "NSPrincipalClass": "NSApplication",
                 "NSApplicationDelegateClassName": "AppDelegate",
+                "CFBundleIconFile": "AppIcon",
             ]),
             sources: ["Magent/**"],
             resources: ["Magent/Resources/**"],
