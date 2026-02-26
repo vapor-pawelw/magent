@@ -16,6 +16,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var selectedAgentType: AgentType?
     var lastSelectedTmuxSessionName: String?
     var agentHasRun: Bool
+    var isPinned: Bool
 
     init(
         id: UUID = UUID(),
@@ -32,7 +33,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isMain: Bool = false,
         selectedAgentType: AgentType? = nil,
         lastSelectedTmuxSessionName: String? = nil,
-        agentHasRun: Bool = false
+        agentHasRun: Bool = false,
+        isPinned: Bool = false
     ) {
         self.id = id
         self.projectId = projectId
@@ -49,6 +51,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.selectedAgentType = selectedAgentType
         self.lastSelectedTmuxSessionName = lastSelectedTmuxSessionName
         self.agentHasRun = agentHasRun
+        self.isPinned = isPinned
     }
 
     init(from decoder: Decoder) throws {
@@ -68,6 +71,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         selectedAgentType = try container.decodeIfPresent(AgentType.self, forKey: .selectedAgentType)
         lastSelectedTmuxSessionName = try container.decodeIfPresent(String.self, forKey: .lastSelectedTmuxSessionName)
         agentHasRun = try container.decodeIfPresent(Bool.self, forKey: .agentHasRun) ?? false
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
     }
 }
 
