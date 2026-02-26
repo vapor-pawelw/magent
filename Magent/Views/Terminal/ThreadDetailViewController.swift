@@ -819,42 +819,14 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     func handleRename(_ updated: MagentThread) {
-        // 1. Suffix all existing tab labels with " (renamed)" and make them closable
-        for item in tabItems {
-            if !item.titleLabel.stringValue.hasSuffix(" (renamed)") {
-                item.titleLabel.stringValue += " (renamed)"
-            }
-            item.showCloseButton = true
-        }
-
-        // 2. Update thread reference
         thread = updated
 
-        // 3. Create new agent tab in the renamed worktree
-        Task {
-            do {
-                let tab = try await threadManager.addTab(to: thread, useAgentCommand: true)
-                await MainActor.run {
-                    if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
-                        self.thread = updated
-                    }
-                    let terminalView = self.makeTerminalView(for: tab.tmuxSessionName)
-                    self.terminalViews.append(terminalView)
-
-                    let index = self.tabItems.count
-                    self.primaryTabIndex = index
-                    self.createTabItem(title: "Main", closable: false)
-                    self.rebuildTabBar()
-                    self.selectTab(at: index)
-                }
-            } catch {
-                await MainActor.run {
-                    let alert = NSAlert()
-                    alert.messageText = "Error"
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
+        // Update onCopy closures to use the new (renamed) tmux session names
+        for (i, terminalView) in terminalViews.enumerated() {
+            if i < thread.tmuxSessionNames.count {
+                let newSessionName = thread.tmuxSessionNames[i]
+                terminalView.onCopy = {
+                    Task { await TmuxService.shared.copySelectionToClipboard(sessionName: newSessionName) }
                 }
             }
         }
