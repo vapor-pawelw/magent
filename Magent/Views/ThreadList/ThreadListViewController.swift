@@ -40,10 +40,10 @@ final class ThreadListViewController: NSViewController {
     static let projectSeparatorIdentifier = NSUserInterfaceItemIdentifier("ProjectTopSeparator")
     static let projectDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectDisclosureButton")
     static let sectionDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("SectionDisclosureButton")
-    static let sidebarHorizontalInset: CGFloat = 6
-    static let projectDisclosureTrailingInset: CGFloat = 12
-    static let outlineIndentationPerLevel: CGFloat = 5
-    static let toolbarPlusTrailingInset: CGFloat = (projectDisclosureTrailingInset - outlineIndentationPerLevel) + 4
+    static let sidebarHorizontalInset: CGFloat = 0
+    static let projectDisclosureTrailingInset: CGFloat = 18
+    static let outlineIndentationPerLevel: CGFloat = 16
+    static let toolbarPlusTrailingInset: CGFloat = projectDisclosureTrailingInset
     static let disclosureButtonSize: CGFloat = 16
 
     weak var delegate: ThreadListDelegate?
@@ -172,11 +172,12 @@ final class ThreadListViewController: NSViewController {
 
     private func setupOutlineView() {
         outlineView = NSOutlineView()
-        outlineView.style = .sourceList
+        outlineView.style = .fullWidth
         outlineView.headerView = nil
         outlineView.floatsGroupRows = true
         outlineView.indentationPerLevel = Self.outlineIndentationPerLevel
         outlineView.rowSizeStyle = .default
+        outlineView.backgroundColor = .clear
         outlineView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("ThreadColumn"))
@@ -203,6 +204,7 @@ final class ThreadListViewController: NSViewController {
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
         scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.drawsBackground = false
         scrollView.contentInsets = NSEdgeInsets(top: 6, left: 0, bottom: 4, right: 0)
 
         view.addSubview(scrollView)

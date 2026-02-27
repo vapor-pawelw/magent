@@ -42,7 +42,7 @@ final class ThreadCell: NSTableCellView {
 
         NSLayoutConstraint.activate([
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.centerXAnchor.constraint(equalTo: trailingAnchor, constant: -(ThreadListViewController.projectDisclosureTrailingInset + ThreadListViewController.disclosureButtonSize / 2)),
             dirtyIV.widthAnchor.constraint(equalToConstant: 7),
             dirtyIV.heightAnchor.constraint(equalToConstant: 7),
             pinIV.widthAnchor.constraint(equalToConstant: 12),

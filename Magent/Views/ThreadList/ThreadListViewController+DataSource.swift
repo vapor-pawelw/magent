@@ -328,8 +328,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
-        if item is SidebarProject {
-            return 32
+        if let project = item as? SidebarProject {
+            return shouldShowTopSeparator(for: project) ? 52 : 28
         }
         return outlineView.rowHeight
     }
@@ -401,13 +401,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     c.addSubview(separator)
 
                     NSLayoutConstraint.activate([
-                        separator.topAnchor.constraint(equalTo: c.topAnchor, constant: 4),
-                        // AppKit source-list group rows have extra left inset vs content area.
-                        // Compensate so separator appears visually centered in full sidebar width.
-                        separator.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 2),
-                        separator.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -Self.sidebarHorizontalInset),
+                        separator.topAnchor.constraint(equalTo: c.topAnchor, constant: 16),
+                        separator.leadingAnchor.constraint(equalTo: c.leadingAnchor),
+                        separator.trailingAnchor.constraint(equalTo: c.trailingAnchor),
                         separator.heightAnchor.constraint(equalToConstant: 1),
-                        tf.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 10),
+                        tf.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 16),
                         tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
                         tf.trailingAnchor.constraint(lessThanOrEqualTo: disclosureButton.leadingAnchor, constant: -6),
                         iv.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 6),
@@ -416,7 +414,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         iv.heightAnchor.constraint(equalToConstant: 10),
                         disclosureButton.trailingAnchor.constraint(
                             equalTo: c.trailingAnchor,
-                            constant: -(Self.projectDisclosureTrailingInset - self.outlineView.indentationPerLevel)
+                            constant: -Self.projectDisclosureTrailingInset
                         ),
                         disclosureButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
                         disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
@@ -490,7 +488,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         disclosureButton.trailingAnchor.constraint(
                             equalTo: c.trailingAnchor,
-                            constant: -(Self.projectDisclosureTrailingInset - self.outlineView.indentationPerLevel)
+                            constant: -Self.projectDisclosureTrailingInset
                         ),
                         disclosureButton.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
