@@ -181,6 +181,7 @@ final class ThreadDetailViewController: NSViewController {
     private let tabBarStack = NSStackView()
     private let terminalContainer = NSView()
     private let openPRButton = NSButton()
+    private let openInXcodeButton = NSButton()
     private let openInFinderButton = NSButton()
     private let archiveThreadButton = NSButton()
     private let addTabButton = NSButton()
@@ -228,6 +229,7 @@ final class ThreadDetailViewController: NSViewController {
 
         setupUI()
         refreshOpenPRButtonIcon()
+        refreshXcodeButton()
         setupLoadingOverlay()
 
         // Observe dead session notifications for mid-use terminal replacement
@@ -270,6 +272,14 @@ final class ThreadDetailViewController: NSViewController {
         openPRButton.action = #selector(openPRTapped(_:))
         openPRButton.toolTip = "Open Pull Request in Browser"
 
+        openInXcodeButton.bezelStyle = .texturedRounded
+        openInXcodeButton.image = xcodeButtonImage()
+        openInXcodeButton.imageScaling = .scaleProportionallyDown
+        openInXcodeButton.target = self
+        openInXcodeButton.action = #selector(openInXcodeTapped)
+        openInXcodeButton.toolTip = "Open in Xcode"
+        openInXcodeButton.isHidden = true
+
         openInFinderButton.bezelStyle = .texturedRounded
         openInFinderButton.image = finderButtonImage()
         openInFinderButton.imageScaling = .scaleProportionallyDown
@@ -288,7 +298,7 @@ final class ThreadDetailViewController: NSViewController {
         addTabButton.target = self
         addTabButton.action = #selector(addTabTapped)
 
-        let topBar = NSStackView(views: [tabBarStack, openInFinderButton, openPRButton, archiveThreadButton, addTabButton])
+        let topBar = NSStackView(views: [tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, archiveThreadButton, addTabButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
@@ -947,6 +957,46 @@ final class ThreadDetailViewController: NSViewController {
             return
         }
         NSWorkspace.shared.open(url)
+    }
+
+    private func xcodeButtonImage() -> NSImage {
+        let image = NSWorkspace.shared.icon(forFile: "/Applications/Xcode.app")
+        image.size = NSSize(width: 14, height: 14)
+        return image
+    }
+
+    private func xcodeProjectPath() -> String? {
+        let dirPath = NSString(string: finderTargetPath()).expandingTildeInPath
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: dirPath) else { return nil }
+
+        // Look for .xcworkspace first (prefer over .xcodeproj)
+        let workspaces = contents.filter { name in
+            guard name.hasSuffix(".xcworkspace") else { return false }
+            // Filter out Xcode-internal project.xcworkspace
+            if name == "project.xcworkspace" { return false }
+            return true
+        }
+        if let first = workspaces.first {
+            return (dirPath as NSString).appendingPathComponent(first)
+        }
+
+        // Fall back to .xcodeproj
+        let projects = contents.filter { $0.hasSuffix(".xcodeproj") }
+        if let first = projects.first {
+            return (dirPath as NSString).appendingPathComponent(first)
+        }
+
+        return nil
+    }
+
+    private func refreshXcodeButton() {
+        let xcodeExists = FileManager.default.fileExists(atPath: "/Applications/Xcode.app")
+        openInXcodeButton.isHidden = !xcodeExists || xcodeProjectPath() == nil
+    }
+
+    @objc private func openInXcodeTapped() {
+        guard let path = xcodeProjectPath() else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
     private func finderButtonImage() -> NSImage {
