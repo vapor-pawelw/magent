@@ -1708,8 +1708,15 @@ final class ThreadManager {
                         changed = true
                     }
                 } else {
-                    // Non-shell process running — agent is busy
-                    if !threads[i].busySessions.contains(session) {
+                    // Non-shell process running — agent is busy.
+                    // Skip if a completion bell was recently received for this session;
+                    // the bell fires just before the process exits, so pane_current_command
+                    // can still show the agent binary for a brief window after completion.
+                    let recentlyCompleted: Bool = {
+                        guard let bellDate = recentBellBySession[session] else { return false }
+                        return Date().timeIntervalSince(bellDate) < 5.0
+                    }()
+                    if !recentlyCompleted && !threads[i].busySessions.contains(session) {
                         threads[i].busySessions.insert(session)
                         changed = true
                     }
