@@ -25,9 +25,6 @@ Magent is a native macOS app for managing git worktrees as thread-like work sess
 
 ## License
 
-This project is licensed under **PolyForm Noncommercial 1.0.0**.
-
-- You can use, fork, and modify it for noncommercial use.
-- Selling this software or commercializing forks is not allowed.
+This project is licensed under **PolyForm Shield 1.0.0**.
 
 See [LICENSE](./LICENSE) for full terms.
