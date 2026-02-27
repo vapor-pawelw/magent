@@ -49,6 +49,7 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 - **Stale tmux cleanup** is centralized in `ThreadManager.cleanupStaleMagentSessions()` and should be used for lifecycle hooks (app restore, thread open, archive/delete) instead of ad hoc `tmux kill-session` sweeps in controllers.
 - **Agent completion attention** is bell-driven and tracked **per-session**: tmux `alert-bell` hook events are consumed by `ThreadManager` to trigger system notifications and to populate `unreadCompletionSessions: Set<String>` on each thread. The computed `hasUnreadAgentCompletion` checks `!unreadCompletionSessions.isEmpty`. Tab-level green dots in `ThreadDetailViewController` react via `magentAgentCompletionDetected` notification, and selecting a tab calls `markSessionCompletionSeen(threadId:sessionName:)` to clear individual sessions.
 - **tmux bell monitoring must be re-applied when sessions are created**: tmux can start lazily, so startup-only hook setup is insufficient. Keep bell hook setup in `TmuxService.configureBellMonitoring(...)`, and call it from both startup setup and `createSession(...)`.
+- **tmux zombie overload recovery** is banner-driven: `ThreadManager.checkTmuxZombieHealth()` monitors zombie-heavy tmux parents and offers a one-click `restartTmuxAndRecoverSessions()` action via a persistent warning banner.
 - **Tuist**: Run `mise x -- tuist generate --no-open` after adding/removing Swift files.
 
 ## Important Files
