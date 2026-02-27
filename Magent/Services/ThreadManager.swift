@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import UserNotifications
 
@@ -33,6 +34,7 @@ final class ThreadManager {
 
     func restoreThreads() async {
         loadThreads()
+        installClaudeHooksSettings()
 
         // Migrate old threads that have no agentTmuxSessions recorded.
         // Heuristic: the first session was always created as the agent tab.
@@ -1464,11 +1466,12 @@ final class ThreadManager {
     }
 
     private func sendAgentCompletionNotification(for thread: MagentThread, projectName: String, playSound: Bool) {
+        let settings = persistence.loadSettings()
         let content = UNMutableNotificationContent()
         content.title = "Agent Finished"
         content.body = "\(projectName) · \(thread.name)"
         if playSound {
-            content.sound = .default
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(settings.agentCompletionSoundName))
         }
         content.userInfo = ["threadId": thread.id.uuidString]
 
@@ -1478,11 +1481,25 @@ final class ThreadManager {
             trigger: nil
         )
         UNUserNotificationCenter.current().add(request)
+
+        // Play sound directly via NSSound as a fallback — UNNotification sound
+        // can be throttled by macOS when many notifications are delivered.
+        if playSound {
+            let soundName = settings.agentCompletionSoundName
+            DispatchQueue.main.async {
+                if let sound = NSSound(named: NSSound.Name(soundName)) {
+                    sound.play()
+                } else {
+                    NSSound.beep()
+                }
+            }
+        }
     }
 
     private func checkForMissingWorktrees() async {
         let candidates = threads.filter { !$0.isMain && !$0.isArchived }
         var pruneRepos = Set<String>()
+        var archivedAny = false
 
         for thread in candidates {
             var isDir: ObjCBool = false
@@ -1494,6 +1511,17 @@ final class ThreadManager {
                 pruneRepos.insert(project.repoPath)
             }
             try? await archiveThread(thread)
+            archivedAny = true
+        }
+
+        if archivedAny {
+            let settings = persistence.loadSettings()
+            if settings.playSoundForAgentCompletion {
+                let soundName = settings.agentCompletionSoundName
+                if let sound = NSSound(named: NSSound.Name(soundName)) {
+                    sound.play()
+                }
+            }
         }
 
         for repoPath in pruneRepos {
@@ -1565,6 +1593,44 @@ final class ThreadManager {
         try? fileManager.createSymbolicLink(atPath: oldPath, withDestinationPath: newPath)
     }
 
+    /// Path to the Magent-specific Claude Code hooks settings file.
+    private static let claudeHooksSettingsPath = "/tmp/magent-claude-hooks.json"
+
+    /// Writes (or refreshes) the Claude Code hooks JSON that Magent injects via `--settings`.
+    /// The `Stop` hook writes the tmux session name to the agent-completion event log so
+    /// Magent can detect when Claude finishes responding.
+    func installClaudeHooksSettings() {
+        let marker = "magent-hooks-v1"
+        let path = Self.claudeHooksSettingsPath
+        if let existing = try? String(contentsOfFile: path, encoding: .utf8),
+           existing.contains(marker) {
+            return
+        }
+        let eventsPath = "/tmp/magent-agent-completion-events.log"
+        // The Stop hook runs `tmux display-message` to get the session name and
+        // appends it to the event log. Guarded by MAGENT_WORKTREE_NAME so it
+        // only fires inside Magent-managed sessions.
+        let json = """
+        {
+            "_comment": "\(marker)",
+            "hooks": {
+                "Stop": [
+                    {
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": "[ -n \\"$MAGENT_WORKTREE_NAME\\" ] && tmux display-message -p '#{session_name}' >> \(eventsPath) || true",
+                                "timeout": 5
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        """
+        try? json.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
     /// Builds the shell command to start the selected agent with any required agent-specific setup.
     private func agentStartCommand(
         settings: AppSettings,
@@ -1580,7 +1646,11 @@ final class ThreadManager {
         if agentType == .claude {
             parts.append("unset CLAUDECODE")
         }
-        parts.append(settings.command(for: agentType))
+        var command = settings.command(for: agentType)
+        if agentType == .claude {
+            command += " --settings \(Self.claudeHooksSettingsPath)"
+        }
+        parts.append(command)
         return parts.joined(separator: " && ")
     }
 

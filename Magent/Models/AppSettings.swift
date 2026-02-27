@@ -6,6 +6,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var defaultAgentType: AgentType?
     var customAgentCommand: String
     var playSoundForAgentCompletion: Bool
+    var agentCompletionSoundName: String
     var autoRenameWorktrees: Bool
     var isConfigured: Bool
     var threadSections: [ThreadSection]
@@ -18,6 +19,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         defaultAgentType: AgentType? = nil,
         customAgentCommand: String = "claude",
         playSoundForAgentCompletion: Bool = true,
+        agentCompletionSoundName: String = "Ping",
         autoRenameWorktrees: Bool = true,
         isConfigured: Bool = false,
         threadSections: [ThreadSection] = ThreadSection.defaults(),
@@ -29,6 +31,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.defaultAgentType = defaultAgentType
         self.customAgentCommand = customAgentCommand
         self.playSoundForAgentCompletion = playSoundForAgentCompletion
+        self.agentCompletionSoundName = agentCompletionSoundName
         self.autoRenameWorktrees = autoRenameWorktrees
         self.isConfigured = isConfigured
         self.threadSections = threadSections
@@ -45,6 +48,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         defaultAgentType = try container.decodeIfPresent(AgentType.self, forKey: .defaultAgentType)
         customAgentCommand = try container.decodeIfPresent(String.self, forKey: .customAgentCommand) ?? legacyAgentCommand
         playSoundForAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .playSoundForAgentCompletion) ?? true
+        agentCompletionSoundName = try container.decodeIfPresent(String.self, forKey: .agentCompletionSoundName) ?? "Ping"
         autoRenameWorktrees = try container.decodeIfPresent(Bool.self, forKey: .autoRenameWorktrees) ?? true
         isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
         threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections) ?? ThreadSection.defaults()
@@ -59,6 +63,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encodeIfPresent(defaultAgentType, forKey: .defaultAgentType)
         try container.encode(customAgentCommand, forKey: .customAgentCommand)
         try container.encode(playSoundForAgentCompletion, forKey: .playSoundForAgentCompletion)
+        try container.encode(agentCompletionSoundName, forKey: .agentCompletionSoundName)
         try container.encode(autoRenameWorktrees, forKey: .autoRenameWorktrees)
         try container.encode(isConfigured, forKey: .isConfigured)
         try container.encode(threadSections, forKey: .threadSections)
@@ -109,6 +114,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case defaultAgentType
         case customAgentCommand
         case playSoundForAgentCompletion
+        case agentCompletionSoundName
         case autoRenameWorktrees
         case isConfigured
         case threadSections

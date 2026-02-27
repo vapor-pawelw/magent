@@ -55,13 +55,15 @@ final class TmuxService {
     private func installBellWatcherScript() {
         let path = bellWatcherScriptPath
         // Only write if missing or outdated
-        let marker = "# magent-bell-watcher-v2"
+        let marker = "# magent-bell-watcher-v3"
         if let existing = try? String(contentsOfFile: path, encoding: .utf8), existing.hasPrefix(marker) {
             return
         }
-        // The script reads pane output in chunks via perl, detects BEL (0x07),
-        // and appends the session name to the events log.
-        // perl is used for efficiency — it reads in 8KB chunks instead of byte-by-byte.
+        // Reads pane output in chunks via perl, detects standalone BEL (0x07).
+        // Uses a state machine to filter out BEL used as String Terminator (ST)
+        // inside escape sequences: OSC (ESC ]), APC (ESC _), PM (ESC ^),
+        // DCS (ESC P), SOS (ESC X), and their C1 single-byte equivalents.
+        // State persists across buffer boundaries.
         let script = """
         \(marker)
         #!/bin/sh
@@ -71,25 +73,34 @@ final class TmuxService {
         $| = 1;
         my $s = $ARGV[0];
         my $f = $ARGV[1];
-        my $osc = 0;
+        # States: 0=normal, 1=saw_esc, 2=in_string_cmd
+        my $st = 0;
         while (sysread(STDIN, my $buf, 8192)) {
             for my $i (0..length($buf)-1) {
                 my $c = ord(substr($buf, $i, 1));
-                if ($c == 0x1b) {
-                    $osc = 0;
-                } elsif ($c == 0x5d && $osc == 0) {
-                    # Check if previous char was ESC (start of OSC)
-                    $osc = 1 if $i > 0 && ord(substr($buf, $i-1, 1)) == 0x1b;
-                } elsif ($c == 0x07) {
-                    if ($osc) {
-                        $osc = 0;  # BEL terminates OSC — not a real bell
-                    } else {
+                if ($st == 0) {
+                    if ($c == 0x1b) {
+                        $st = 1;
+                    } elsif ($c == 0x90 || $c == 0x98 || $c == 0x9d || $c == 0x9e || $c == 0x9f) {
+                        $st = 2;  # C1 string command starter
+                    } elsif ($c == 0x07) {
                         open(my $fh, ">>", $f);
                         print $fh "$s\\n";
                         close($fh);
                     }
-                } else {
-                    $osc = 0 if $c != 0x3b && ($c < 0x20 || $c > 0x7e) && $osc;
+                } elsif ($st == 1) {
+                    # After ESC: ] _ ^ P X start string commands
+                    if ($c == 0x5d || $c == 0x5f || $c == 0x5e || $c == 0x50 || $c == 0x58) {
+                        $st = 2;
+                    } else {
+                        $st = 0;
+                    }
+                } elsif ($st == 2) {
+                    if ($c == 0x07) {
+                        $st = 0;  # BEL as ST — not a real bell
+                    } elsif ($c == 0x1b) {
+                        $st = 1;  # Could be ESC \\ (ST) or new sequence
+                    }
                 }
             }
         }

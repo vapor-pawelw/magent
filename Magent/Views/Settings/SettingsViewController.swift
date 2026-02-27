@@ -258,6 +258,9 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     private var defaultAgentPopup: NSPopUpButton!
     private var customAgentSection: NSStackView!
     private var completionSoundCheckbox: NSButton!
+    private var soundPickerPopup: NSPopUpButton!
+    private var soundPickerRow: NSStackView!
+    private var soundPreviewPlayer: NSSound?
     private var autoRenameCheckbox: NSButton!
     private var customAgentCommandTextView: NSTextView!
     private var terminalInjectionTextView: NSTextView!
@@ -330,6 +333,29 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         )
         completionSoundCheckbox.state = settings.playSoundForAgentCompletion ? .on : .off
         notificationsSection.addArrangedSubview(completionSoundCheckbox)
+
+        // Sound picker row
+        soundPickerRow = NSStackView()
+        soundPickerRow.orientation = .horizontal
+        soundPickerRow.alignment = .centerY
+        soundPickerRow.spacing = 8
+
+        let soundLabel = NSTextField(labelWithString: "Sound:")
+        soundLabel.font = .systemFont(ofSize: 12)
+        soundPickerRow.addArrangedSubview(soundLabel)
+
+        soundPickerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        soundPickerPopup.controlSize = .small
+        soundPickerPopup.font = .systemFont(ofSize: 12)
+        soundPickerPopup.target = self
+        soundPickerPopup.action = #selector(soundPickerChanged)
+        populateSoundPicker()
+        soundPickerRow.addArrangedSubview(soundPickerPopup)
+
+        soundPickerRow.isHidden = !settings.playSoundForAgentCompletion
+        // Indent to align with checkbox label
+        soundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
+        notificationsSection.addArrangedSubview(soundPickerRow)
 
         notificationsSection.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(notificationsSection)
@@ -672,8 +698,55 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
 
     // MARK: - Agent Actions
 
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        soundPreviewPlayer?.stop()
+        soundPreviewPlayer = nil
+    }
+
+    private func populateSoundPicker() {
+        soundPickerPopup.removeAllItems()
+        let soundNames = Self.systemSoundNames()
+        for name in soundNames {
+            soundPickerPopup.addItem(withTitle: name)
+        }
+        if let index = soundNames.firstIndex(of: settings.agentCompletionSoundName) {
+            soundPickerPopup.selectItem(at: index)
+        }
+    }
+
+    static func systemSoundNames() -> [String] {
+        let soundsDir = "/System/Library/Sounds"
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: soundsDir) else {
+            return ["Tink"]
+        }
+        return contents
+            .filter { $0.hasSuffix(".aiff") }
+            .map { ($0 as NSString).deletingPathExtension }
+            .sorted()
+    }
+
+    @objc private func soundPickerChanged() {
+        guard let selectedName = soundPickerPopup.selectedItem?.title else { return }
+        settings.agentCompletionSoundName = selectedName
+        try? persistence.saveSettings(settings)
+
+        // Stop any currently playing preview
+        soundPreviewPlayer?.stop()
+        // Play the selected sound as preview
+        if let sound = NSSound(named: NSSound.Name(selectedName)) {
+            soundPreviewPlayer = sound
+            sound.play()
+        }
+    }
+
     @objc private func completionSoundToggled() {
         settings.playSoundForAgentCompletion = completionSoundCheckbox.state == .on
+        soundPickerRow.isHidden = !settings.playSoundForAgentCompletion
+        if !settings.playSoundForAgentCompletion {
+            soundPreviewPlayer?.stop()
+            soundPreviewPlayer = nil
+        }
         try? persistence.saveSettings(settings)
     }
 
