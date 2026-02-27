@@ -313,7 +313,8 @@ final class ThreadManager {
     func addTab(
         to thread: MagentThread,
         useAgentCommand: Bool = false,
-        requestedAgentType: AgentType? = nil
+        requestedAgentType: AgentType? = nil,
+        initialPrompt: String? = nil
     ) async throws -> Tab {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
             throw ThreadManagerError.threadNotFound
@@ -439,7 +440,8 @@ final class ThreadManager {
         injectAfterStart(
             sessionName: tmuxSessionName,
             terminalCommand: injection.terminalCommand,
-            agentContext: isAgentTab ? injection.agentContext : ""
+            agentContext: isAgentTab ? injection.agentContext : "",
+            initialPrompt: initialPrompt
         )
 
         return tab

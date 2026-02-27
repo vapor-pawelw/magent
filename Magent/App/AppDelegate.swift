@@ -40,6 +40,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func applicationWillTerminate(_ notification: Notification) {
         let server = ipcServer
         Task { await server?.stop() }
+
+        // Clean up any leftover ephemeral context transfer files
+        let worktreePaths = ThreadManager.shared.threads.map(\.worktreePath)
+        ContextExporter.cleanupAllContextFiles(worktreePaths: worktreePaths)
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {

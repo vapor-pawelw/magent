@@ -103,13 +103,14 @@ extension ThreadDetailViewController {
         }
     }
 
-    private func addTab(using agentType: AgentType?, useAgentCommand: Bool) {
+    private func addTab(using agentType: AgentType?, useAgentCommand: Bool, initialPrompt: String? = nil) {
         Task {
             do {
                 let tab = try await threadManager.addTab(
                     to: thread,
                     useAgentCommand: useAgentCommand,
-                    requestedAgentType: agentType
+                    requestedAgentType: agentType,
+                    initialPrompt: initialPrompt
                 )
                 let latestThread = self.threadManager.threads.first(where: { $0.id == self.thread.id }) ?? self.thread
                 _ = await self.threadManager.recreateSessionIfNeeded(
@@ -204,6 +205,99 @@ extension ThreadDetailViewController {
         guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
         if updated.name != previousThread.name || updated.worktreePath != previousThread.worktreePath {
             handleRename(updated)
+        }
+    }
+
+    // MARK: - Context Transfer
+
+    @objc func exportContextButtonTapped() {
+        exportTabContext(at: currentTabIndex)
+    }
+
+    func continueTabInAgent(at index: Int, targetAgent: AgentType) {
+        guard index < thread.tmuxSessionNames.count else { return }
+        let sessionName = thread.tmuxSessionNames[index]
+        let sourceAgent = thread.agentTmuxSessions.contains(sessionName) ? thread.selectedAgentType : nil
+        let settings = PersistenceService.shared.loadSettings()
+        let project = settings.projects.first(where: { $0.id == thread.projectId })
+        let projectName = project?.name ?? "project"
+
+        Task {
+            guard let rawContent = await TmuxService.shared.captureFullPane(sessionName: sessionName) else {
+                await MainActor.run {
+                    BannerManager.shared.show(message: "Failed to capture terminal content", style: .error)
+                }
+                return
+            }
+
+            let markdown = ContextExporter.formatAsMarkdown(
+                rawContent: rawContent,
+                sourceAgent: sourceAgent,
+                threadName: thread.name,
+                projectName: projectName
+            )
+
+            guard let contextPath = ContextExporter.writeContextFile(
+                markdown: markdown,
+                in: thread.worktreePath
+            ) else {
+                await MainActor.run {
+                    BannerManager.shared.show(message: "Failed to write context file", style: .error)
+                }
+                return
+            }
+
+            let prompt = ContextExporter.transferPrompt(
+                contextFilePath: contextPath,
+                sourceAgent: sourceAgent,
+                targetAgent: targetAgent
+            )
+
+            await MainActor.run {
+                self.addTab(using: targetAgent, useAgentCommand: true, initialPrompt: prompt)
+            }
+        }
+    }
+
+    func exportTabContext(at index: Int) {
+        guard index < thread.tmuxSessionNames.count else { return }
+        let sessionName = thread.tmuxSessionNames[index]
+        let sourceAgent = thread.agentTmuxSessions.contains(sessionName) ? thread.selectedAgentType : nil
+        let settings = PersistenceService.shared.loadSettings()
+        let project = settings.projects.first(where: { $0.id == thread.projectId })
+        let projectName = project?.name ?? "project"
+
+        Task {
+            guard let rawContent = await TmuxService.shared.captureFullPane(sessionName: sessionName) else {
+                await MainActor.run {
+                    BannerManager.shared.show(message: "Failed to capture terminal content", style: .error)
+                }
+                return
+            }
+
+            let markdown = ContextExporter.formatAsMarkdown(
+                rawContent: rawContent,
+                sourceAgent: sourceAgent,
+                threadName: thread.name,
+                projectName: projectName
+            )
+
+            await MainActor.run {
+                let panel = NSSavePanel()
+                panel.allowedContentTypes = [.init(filenameExtension: "md")!]
+                panel.nameFieldStringValue = "context-\(self.thread.name).md"
+                panel.title = "Export Terminal Context"
+
+                let response = panel.runModal()
+                guard response == .OK, let url = panel.url else { return }
+
+                do {
+                    try markdown.write(to: url, atomically: true, encoding: .utf8)
+                    BannerManager.shared.show(message: "Context exported to \(url.lastPathComponent)", style: .info)
+                } catch {
+                    BannerManager.shared.show(message: "Failed to export: \(error.localizedDescription)", style: .error)
+                }
+            }
         }
     }
 

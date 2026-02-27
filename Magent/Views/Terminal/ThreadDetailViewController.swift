@@ -64,6 +64,9 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onClose: (() -> Void)?
     var onRename: (() -> Void)?
     var onPin: (() -> Void)?
+    var onContinueIn: ((AgentType) -> Void)?
+    var onExportContext: (() -> Void)?
+    var availableAgentsForContinue: [AgentType] = []
 
     init(title: String) {
         pinIcon = NSImageView()
@@ -180,6 +183,15 @@ final class TabItemView: NSView, NSMenuDelegate {
         onPin?()
     }
 
+    @objc private func continueInAgentTapped(_ sender: NSMenuItem) {
+        guard let agent = sender.representedObject as? AgentType else { return }
+        onContinueIn?(agent)
+    }
+
+    @objc private func exportContextTapped() {
+        onExportContext?()
+    }
+
     private func updateAppearance() {
         layer?.backgroundColor = isSelected
             ? NSColor(resource: .primaryBrand).withAlphaComponent(0.2).cgColor
@@ -209,6 +221,38 @@ final class TabItemView: NSView, NSMenuDelegate {
             renameItem.target = self
             menu.addItem(renameItem)
         }
+
+        // Context transfer items
+        if !availableAgentsForContinue.isEmpty || onExportContext != nil {
+            menu.addItem(.separator())
+        }
+
+        if !availableAgentsForContinue.isEmpty {
+            let continueItem = NSMenuItem(title: "Continue in...", action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+            for agent in availableAgentsForContinue {
+                let agentItem = NSMenuItem(
+                    title: agent.displayName,
+                    action: #selector(continueInAgentTapped(_:)),
+                    keyEquivalent: ""
+                )
+                agentItem.target = self
+                agentItem.representedObject = agent
+                submenu.addItem(agentItem)
+            }
+            continueItem.submenu = submenu
+            menu.addItem(continueItem)
+        }
+
+        if onExportContext != nil {
+            let exportItem = NSMenuItem(
+                title: "Export as Markdown...",
+                action: #selector(exportContextTapped),
+                keyEquivalent: ""
+            )
+            exportItem.target = self
+            menu.addItem(exportItem)
+        }
     }
 }
 
@@ -227,6 +271,7 @@ final class ThreadDetailViewController: NSViewController {
     let openInXcodeButton = NSButton()
     let openInFinderButton = NSButton()
     let archiveThreadButton = NSButton()
+    let exportContextButton = NSButton()
     let addTabButton = NSButton()
 
     var tabItems: [TabItemView] = []
@@ -351,12 +396,18 @@ final class ThreadDetailViewController: NSViewController {
         archiveThreadButton.action = #selector(archiveThreadTapped)
         archiveThreadButton.isHidden = thread.isMain
 
+        exportContextButton.bezelStyle = .texturedRounded
+        exportContextButton.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Export Context")
+        exportContextButton.target = self
+        exportContextButton.action = #selector(exportContextButtonTapped)
+        exportContextButton.toolTip = "Export terminal context as Markdown"
+
         addTabButton.bezelStyle = .texturedRounded
         addTabButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Tab")
         addTabButton.target = self
         addTabButton.action = #selector(addTabTapped)
 
-        let topBar = NSStackView(views: [tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, archiveThreadButton, addTabButton])
+        let topBar = NSStackView(views: [tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, archiveThreadButton, exportContextButton, addTabButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
@@ -625,6 +676,7 @@ final class ThreadDetailViewController: NSViewController {
 
     func createTabItem(title: String, closable: Bool, pinned: Bool = false) {
         let index = tabItems.count
+        let settings = PersistenceService.shared.loadSettings()
         let item = TabItemView(title: title)
         item.showCloseButton = closable
         item.showPinIcon = pinned
@@ -632,6 +684,9 @@ final class ThreadDetailViewController: NSViewController {
         item.onClose = { [weak self] in self?.closeTab(at: index) }
         item.onRename = { [weak self] in self?.showTabRenameDialog(at: index) }
         item.onPin = { [weak self] in self?.togglePin(at: index) }
+        item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: index, targetAgent: agent) }
+        item.onExportContext = { [weak self] in self?.exportTabContext(at: index) }
+        item.availableAgentsForContinue = settings.availableActiveAgents
 
         // Pan gesture for drag-to-reorder
         let pan = NSPanGestureRecognizer(target: self, action: #selector(handleTabDrag(_:)))
@@ -689,11 +744,15 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     func rebindTabActions() {
+        let settings = PersistenceService.shared.loadSettings()
         for (i, item) in tabItems.enumerated() {
             item.onSelect = { [weak self] in self?.selectTab(at: i) }
             item.onClose = { [weak self] in self?.closeTab(at: i) }
             item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
             item.onPin = { [weak self] in self?.togglePin(at: i) }
+            item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: i, targetAgent: agent) }
+            item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
+            item.availableAgentsForContinue = settings.availableActiveAgents
             item.showCloseButton = (i != primaryTabIndex)
             item.showPinIcon = (i < pinnedCount)
         }
