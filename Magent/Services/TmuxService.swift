@@ -387,6 +387,16 @@ final class TmuxService {
         return result
     }
 
+    /// Captures the full scrollback history of the active pane in a tmux session.
+    func captureFullPane(sessionName: String) async -> String? {
+        guard let output = try? await ShellExecutor.run(
+            "tmux capture-pane -p -t \(shellQuote(sessionName)) -S - -E -"
+        ) else {
+            return nil
+        }
+        return output
+    }
+
     /// Captures the last N lines of the active pane in a tmux session.
     func capturePane(sessionName: String, lastLines: Int = 15) async -> String? {
         guard let output = try? await ShellExecutor.run(
