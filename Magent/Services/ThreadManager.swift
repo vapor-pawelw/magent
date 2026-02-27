@@ -1533,6 +1533,7 @@ final class ThreadManager {
                 await self.checkForMissingWorktrees()
                 await self.checkForDeadSessions()
                 await self.checkForAgentCompletions()
+                await self.syncBusySessionsFromProcessState()
                 await self.ensureBellPipes()
                 await self.checkPendingCwdEnforcements()
             }
@@ -1668,6 +1669,47 @@ final class ThreadManager {
                     NSSound.beep()
                 }
             }
+        }
+    }
+
+    /// Syncs `busySessions` with actual tmux pane state by checking `pane_current_command`.
+    /// If the foreground process is a non-shell command, the session is busy.
+    /// If it's a shell (zsh, bash, etc.), the agent has exited and the session is idle.
+    private func syncBusySessionsFromProcessState() async {
+        // Collect all agent sessions across non-archived threads
+        var allAgentSessions = Set<String>()
+        for thread in threads where !thread.isArchived {
+            allAgentSessions.formUnion(thread.agentTmuxSessions)
+        }
+        guard !allAgentSessions.isEmpty else { return }
+
+        let commands = await tmux.activeCommands(forSessions: allAgentSessions)
+        guard !commands.isEmpty else { return }
+
+        var changed = false
+        for i in threads.indices {
+            guard !threads[i].isArchived else { continue }
+            for session in threads[i].agentTmuxSessions {
+                guard let command = commands[session] else { continue }
+                let isShell = TmuxService.shellCommands.contains(command)
+                if isShell {
+                    // Agent not running — clear busy if it was set
+                    if threads[i].busySessions.contains(session) {
+                        threads[i].busySessions.remove(session)
+                        changed = true
+                    }
+                } else {
+                    // Non-shell process running — agent is busy
+                    if !threads[i].busySessions.contains(session) {
+                        threads[i].busySessions.insert(session)
+                        changed = true
+                    }
+                }
+            }
+        }
+
+        if changed {
+            delegate?.threadManager(self, didUpdateThreads: threads)
         }
     }
 

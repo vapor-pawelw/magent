@@ -315,6 +315,31 @@ final class TmuxService {
         return (newlyEnforced, hasUnenforced)
     }
 
+    /// Returns a dictionary mapping session names to their active pane's current command.
+    /// Only includes sessions from the given set that are alive.
+    func activeCommands(forSessions sessionNames: Set<String>) async -> [String: String] {
+        guard !sessionNames.isEmpty else { return [:] }
+        guard let output = try? await ShellExecutor.run(
+            "tmux list-panes -a -F '#{session_name}\t#{pane_active}\t#{pane_current_command}'"
+        ), !output.isEmpty else {
+            return [:]
+        }
+        var result = [String: String]()
+        for line in output.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: "\t", maxSplits: 2)
+            guard parts.count >= 3 else { continue }
+            let session = String(parts[0])
+            guard sessionNames.contains(session) else { continue }
+            let isActive = parts[1] == "1"
+            let command = String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)
+            // Prefer the active pane; fall back to first pane seen
+            if isActive || result[session] == nil {
+                result[session] = command
+            }
+        }
+        return result
+    }
+
     static let shellCommands: Set<String> = [
         "sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh",
         "-sh", "-bash", "-zsh", "-fish", "-ksh", "-tcsh", "-csh"
