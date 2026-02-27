@@ -370,6 +370,11 @@ final class ThreadDetailViewController: NSViewController {
         view.onCopy = { [sessionName = sessionName] in
             Task { await TmuxService.shared.copySelectionToClipboard(sessionName: sessionName) }
         }
+        view.onSubmitLine = { [weak self, sessionName = sessionName] line in
+            Task { @MainActor [weak self] in
+                await self?.handleSubmittedLine(line, sessionName: sessionName)
+            }
+        }
         return view
     }
 
@@ -958,7 +963,30 @@ final class ThreadDetailViewController: NSViewController {
                 terminalView.onCopy = {
                     Task { await TmuxService.shared.copySelectionToClipboard(sessionName: newSessionName) }
                 }
+                terminalView.onSubmitLine = { [weak self, sessionName = newSessionName] line in
+                    Task { @MainActor [weak self] in
+                        await self?.handleSubmittedLine(line, sessionName: sessionName)
+                    }
+                }
             }
+        }
+    }
+
+    @MainActor
+    private func handleSubmittedLine(_ line: String, sessionName: String) async {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let previousThread = thread
+        await threadManager.autoRenameThreadAfterFirstPromptIfNeeded(
+            threadId: thread.id,
+            sessionName: sessionName,
+            prompt: trimmed
+        )
+
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
+        if updated.name != previousThread.name || updated.worktreePath != previousThread.worktreePath {
+            handleRename(updated)
         }
     }
 

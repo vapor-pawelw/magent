@@ -17,6 +17,10 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     /// Called when user presses Cmd+C. Host app should copy tmux buffer to system clipboard.
     public var onCopy: (() -> Void)?
+    /// Called when user submits a line with Return (best-effort local keystroke tracking).
+    public var onSubmitLine: ((String) -> Void)?
+
+    private var currentInputLine = ""
 
     override public var acceptsFirstResponder: Bool { true }
 
@@ -212,6 +216,8 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     }
 
     override public func keyDown(with event: NSEvent) {
+        captureSubmittedLineIfNeeded(from: event)
+
         // Send key event to ghostty first. If ghostty consumed it, we're done.
         // If not, fall through to interpretKeyEvents for IME/dead key handling.
         let consumed = sendKeyEvent(event, action: event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS)
@@ -255,6 +261,39 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
             composing: false
         )
         _ = ghostty_surface_key(surface, keyEvent)
+    }
+
+    private func captureSubmittedLineIfNeeded(from event: NSEvent) {
+        let isReturnKey = event.keyCode == 36 || event.keyCode == 76 || event.characters == "\r"
+        if isReturnKey {
+            let hasOnlyShift = event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+            guard hasOnlyShift, !event.modifierFlags.contains(.shift) else { return }
+            let submitted = currentInputLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            currentInputLine.removeAll(keepingCapacity: true)
+            if !submitted.isEmpty {
+                onSubmitLine?(submitted)
+            }
+            return
+        }
+
+        if event.keyCode == 51 || event.keyCode == 117 {
+            if !currentInputLine.isEmpty {
+                currentInputLine.removeLast()
+            }
+            return
+        }
+
+        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return }
+        guard let chars = event.characters, !chars.isEmpty else { return }
+        guard chars.unicodeScalars.allSatisfy({
+            guard $0.value >= 0x20 else { return false }
+            return !($0.value >= 0xF700 && $0.value <= 0xF8FF)
+        }) else { return }
+
+        currentInputLine.append(chars)
+        if currentInputLine.count > 600 {
+            currentInputLine = String(currentInputLine.suffix(600))
+        }
     }
 
     @discardableResult

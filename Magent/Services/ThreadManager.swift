@@ -22,6 +22,7 @@ final class ThreadManager {
     private(set) var threads: [MagentThread] = []
     private var activeThreadId: UUID?
     private var recentBellBySession: [String: Date] = [:]
+    private var autoRenameInProgress: Set<UUID> = []
 
     // MARK: - Lifecycle
 
@@ -449,7 +450,66 @@ final class ThreadManager {
 
     // MARK: - Rename
 
-    func renameThread(_ thread: MagentThread, to newName: String) async throws {
+    private func isFirstRegularThreadInProject(threadId: UUID, projectId: UUID) -> Bool {
+        let allThreads = persistence.loadThreads().filter { $0.projectId == projectId && !$0.isMain }
+        guard !allThreads.isEmpty else { return false }
+        let first = allThreads.min { a, b in
+            if a.createdAt == b.createdAt {
+                return a.id.uuidString < b.id.uuidString
+            }
+            return a.createdAt < b.createdAt
+        }
+        return first?.id == threadId
+    }
+
+    private func autoRenameCandidates(from prompt: String) -> [String] {
+        let words = prompt
+            .lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+        guard !words.isEmpty else { return [] }
+
+        let baseWords = Array(words.prefix(3))
+        var candidates: [String] = []
+
+        func append(_ parts: [String]) {
+            let trimmed = parts
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            guard !trimmed.isEmpty else { return }
+            let candidate = trimmed.joined(separator: "-")
+            guard !candidate.isEmpty else { return }
+            guard !candidates.contains(candidate) else { return }
+            candidates.append(candidate)
+        }
+
+        append(baseWords)
+
+        if baseWords.count == 3 {
+            append(Array(baseWords.prefix(2)))
+        }
+
+        if let first = baseWords.first {
+            if baseWords.count >= 2 {
+                let twoWords = Array(baseWords.prefix(2))
+                for i in 2...9 {
+                    append(twoWords + ["\(i)"])
+                }
+            } else {
+                for i in 2...9 {
+                    append([first, "\(i)"])
+                }
+            }
+        }
+
+        return candidates
+    }
+
+    func renameThread(
+        _ thread: MagentThread,
+        to newName: String,
+        markFirstPromptRenameHandled: Bool = true
+    ) async throws {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
             throw ThreadManagerError.threadNotFound
         }
@@ -530,11 +590,46 @@ final class ThreadManager {
         if let selectedName = threads[index].lastSelectedTmuxSessionName {
             threads[index].lastSelectedTmuxSessionName = selectedName.replacingOccurrences(of: oldName, with: trimmed)
         }
+        if markFirstPromptRenameHandled {
+            threads[index].didAutoRenameFromFirstPrompt = true
+        }
 
         try persistence.saveThreads(threads)
 
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
+        }
+    }
+
+    func autoRenameThreadAfterFirstPromptIfNeeded(
+        threadId: UUID,
+        sessionName: String,
+        prompt: String
+    ) async {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        let thread = threads[index]
+
+        guard !thread.isMain else { return }
+        guard !thread.didAutoRenameFromFirstPrompt else { return }
+        guard thread.agentTmuxSessions.contains(sessionName) else { return }
+        guard !isFirstRegularThreadInProject(threadId: thread.id, projectId: thread.projectId) else { return }
+        guard !autoRenameInProgress.contains(thread.id) else { return }
+
+        let candidates = autoRenameCandidates(from: prompt)
+        guard !candidates.isEmpty else { return }
+
+        autoRenameInProgress.insert(thread.id)
+        defer { autoRenameInProgress.remove(thread.id) }
+
+        for candidate in candidates where candidate != thread.name {
+            do {
+                try await renameThread(thread, to: candidate, markFirstPromptRenameHandled: true)
+                return
+            } catch ThreadManagerError.duplicateName {
+                continue
+            } catch {
+                return
+            }
         }
     }
 

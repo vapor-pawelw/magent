@@ -19,6 +19,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var isPinned: Bool
     var lastAgentCompletionAt: Date?
     var hasUnreadAgentCompletion: Bool
+    var didAutoRenameFromFirstPrompt: Bool
 
     init(
         id: UUID = UUID(),
@@ -38,7 +39,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         agentHasRun: Bool = false,
         isPinned: Bool = false,
         lastAgentCompletionAt: Date? = nil,
-        hasUnreadAgentCompletion: Bool = false
+        hasUnreadAgentCompletion: Bool = false,
+        didAutoRenameFromFirstPrompt: Bool = false
     ) {
         self.id = id
         self.projectId = projectId
@@ -58,6 +60,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.isPinned = isPinned
         self.lastAgentCompletionAt = lastAgentCompletionAt
         self.hasUnreadAgentCompletion = hasUnreadAgentCompletion
+        self.didAutoRenameFromFirstPrompt = didAutoRenameFromFirstPrompt
     }
 
     init(from decoder: Decoder) throws {
@@ -80,6 +83,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         lastAgentCompletionAt = try container.decodeIfPresent(Date.self, forKey: .lastAgentCompletionAt)
         hasUnreadAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .hasUnreadAgentCompletion) ?? false
+        didAutoRenameFromFirstPrompt = try container.decodeIfPresent(Bool.self, forKey: .didAutoRenameFromFirstPrompt) ?? false
     }
 }
 
