@@ -3,6 +3,7 @@ import Foundation
 final class TmuxService {
 
     static let shared = TmuxService()
+    private let agentCompletionEventsPath = "/tmp/magent-agent-completion-events.log"
 
     // MARK: - Session Operations
 
@@ -23,6 +24,23 @@ final class TmuxService {
         // Click anywhere to deselect (exit copy-mode)
         _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode MouseDown1Pane send-keys -X cancel")
         _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode-vi MouseDown1Pane send-keys -X cancel")
+
+        // Capture terminal bell events emitted by agent sessions for completion notifications.
+        _ = try? await ShellExecutor.run("tmux set-option -g monitor-bell on")
+        _ = try? await ShellExecutor.run(": > \(shellQuote(agentCompletionEventsPath))")
+        let bellHook = "run-shell \"echo #{session_name} >> \(agentCompletionEventsPath)\""
+        _ = try? await ShellExecutor.run("tmux set-hook -g alert-bell \(shellQuote(bellHook))")
+    }
+
+    func consumeAgentCompletionSessions() async -> [String] {
+        let command = "if [ -f \(shellQuote(agentCompletionEventsPath)) ]; then cat \(shellQuote(agentCompletionEventsPath)); : > \(shellQuote(agentCompletionEventsPath)); fi"
+        guard let output = try? await ShellExecutor.run(command), !output.isEmpty else {
+            return []
+        }
+        return output
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     /// Copies the current tmux copy-mode selection to the system clipboard, then exits copy-mode.

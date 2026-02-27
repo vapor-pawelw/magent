@@ -17,6 +17,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var lastSelectedTmuxSessionName: String?
     var agentHasRun: Bool
     var isPinned: Bool
+    var lastAgentCompletionAt: Date?
+    var hasUnreadAgentCompletion: Bool
 
     init(
         id: UUID = UUID(),
@@ -34,7 +36,9 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         selectedAgentType: AgentType? = nil,
         lastSelectedTmuxSessionName: String? = nil,
         agentHasRun: Bool = false,
-        isPinned: Bool = false
+        isPinned: Bool = false,
+        lastAgentCompletionAt: Date? = nil,
+        hasUnreadAgentCompletion: Bool = false
     ) {
         self.id = id
         self.projectId = projectId
@@ -52,6 +56,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.lastSelectedTmuxSessionName = lastSelectedTmuxSessionName
         self.agentHasRun = agentHasRun
         self.isPinned = isPinned
+        self.lastAgentCompletionAt = lastAgentCompletionAt
+        self.hasUnreadAgentCompletion = hasUnreadAgentCompletion
     }
 
     init(from decoder: Decoder) throws {
@@ -72,6 +78,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         lastSelectedTmuxSessionName = try container.decodeIfPresent(String.self, forKey: .lastSelectedTmuxSessionName)
         agentHasRun = try container.decodeIfPresent(Bool.self, forKey: .agentHasRun) ?? false
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        lastAgentCompletionAt = try container.decodeIfPresent(Date.self, forKey: .lastAgentCompletionAt)
+        hasUnreadAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .hasUnreadAgentCompletion) ?? false
     }
 }
 

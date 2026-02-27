@@ -46,6 +46,7 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 - **Banner notifications** for user-facing status messages: `BannerManager.shared.show(message:style:duration:isDismissible:actions:)`. Styles: `.info`, `.warning`, `.error`. Set `duration: nil` for persistent banners, `isDismissible: false` to block user dismissal.
 - **Worktree recovery** is automatic — when a user selects a thread whose worktree directory is missing, `SplitViewController` triggers recovery via `ThreadManager.recoverWorktree()`, showing progress via banners.
 - **Stale tmux cleanup** is centralized in `ThreadManager.cleanupStaleMagentSessions()` and should be used for lifecycle hooks (app restore, thread open, archive/delete) instead of ad hoc `tmux kill-session` sweeps in controllers.
+- **Agent completion attention** is bell-driven: tmux `alert-bell` hook events are consumed by `ThreadManager` to trigger system notifications and to set per-thread attention state (`hasUnreadAgentCompletion`, `lastAgentCompletionAt`) used for sidebar highlight and ordering.
 - **Tuist**: Run `mise x -- tuist generate --no-open` after adding/removing Swift files.
 
 ## Important Files

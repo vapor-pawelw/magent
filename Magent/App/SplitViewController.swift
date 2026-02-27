@@ -192,6 +192,7 @@ final class SplitViewController: NSSplitViewController {
 
     private func showEmptyState() {
         currentDetailVC = nil
+        ThreadManager.shared.setActiveThread(nil)
         if splitViewItems.count > 1 {
             removeSplitViewItem(splitViewItems[1])
         }
@@ -204,6 +205,7 @@ final class SplitViewController: NSSplitViewController {
 
 extension SplitViewController: ThreadListDelegate {
     func threadList(_ controller: ThreadListViewController, didSelectThread thread: MagentThread) {
+        ThreadManager.shared.setActiveThread(thread.id)
         showThread(thread)
     }
 
