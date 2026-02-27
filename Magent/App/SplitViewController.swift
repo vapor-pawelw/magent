@@ -66,6 +66,8 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func showThread(_ thread: MagentThread) {
+        Task { await ThreadManager.shared.cleanupStaleMagentSessions() }
+
         // Sidebar items can be stale snapshots; always resolve the latest thread model.
         let resolvedThread = ThreadManager.shared.threads.first(where: { $0.id == thread.id }) ?? thread
 

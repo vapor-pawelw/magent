@@ -62,6 +62,9 @@ final class ThreadManager {
         // Ensure every project has a main thread
         await ensureMainThreads()
 
+        // Remove orphaned Magent tmux sessions that no longer map to an active thread/tab.
+        await cleanupStaleMagentSessions()
+
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
         }
@@ -575,6 +578,8 @@ final class ThreadManager {
         if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
             try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
         }
+
+        await cleanupStaleMagentSessions()
     }
 
     // MARK: - Delete Thread
@@ -612,6 +617,8 @@ final class ThreadManager {
                 try? await git.deleteBranch(repoPath: project.repoPath, branchName: thread.branchName)
             }
         }
+
+        await cleanupStaleMagentSessions()
     }
 
     // MARK: - Worktree Recovery
@@ -804,6 +811,54 @@ final class ThreadManager {
     // MARK: - Session Recreation
 
     private var sessionsBeingRecreated: Set<String> = []
+
+    /// Kills live tmux sessions prefixed with "magent" that are not referenced by any non-archived thread/tab.
+    @discardableResult
+    func cleanupStaleMagentSessions() async -> [String] {
+        let referencedSessions = referencedMagentSessionNames()
+
+        let liveSessions: [String]
+        do {
+            liveSessions = try await tmux.listSessions()
+        } catch {
+            return []
+        }
+
+        let staleSessions = liveSessions.filter { sessionName in
+            sessionName.hasPrefix("magent") && !referencedSessions.contains(sessionName)
+        }
+
+        guard !staleSessions.isEmpty else { return [] }
+
+        for sessionName in staleSessions {
+            try? await tmux.killSession(name: sessionName)
+        }
+
+        return staleSessions
+    }
+
+    private func referencedMagentSessionNames() -> Set<String> {
+        var names = Set<String>()
+
+        // Include both in-memory and persisted threads so cleanup is safe during transitional states.
+        let allNonArchivedThreads = threads.filter { !$0.isArchived } + persistence.loadThreads().filter { !$0.isArchived }
+        for thread in allNonArchivedThreads {
+            for sessionName in thread.tmuxSessionNames where sessionName.hasPrefix("magent") {
+                names.insert(sessionName)
+            }
+            for sessionName in thread.agentTmuxSessions where sessionName.hasPrefix("magent") {
+                names.insert(sessionName)
+            }
+            for sessionName in thread.pinnedTmuxSessions where sessionName.hasPrefix("magent") {
+                names.insert(sessionName)
+            }
+            if let selectedSession = thread.lastSelectedTmuxSessionName, selectedSession.hasPrefix("magent") {
+                names.insert(selectedSession)
+            }
+        }
+
+        return names
+    }
 
     /// Checks if a tmux session is dead and recreates it if so.
     /// Returns true if the session was recreated.
