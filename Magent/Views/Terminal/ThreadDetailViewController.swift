@@ -730,7 +730,12 @@ final class ThreadDetailViewController: NSViewController {
             }
 
             let branch = thread.branchName
-            let defaultBranch = project.defaultBranch ?? await GitService.shared.detectDefaultBranch(repoPath: project.repoPath)
+            let defaultBranch: String?
+            if let projectDefaultBranch = project.defaultBranch {
+                defaultBranch = projectDefaultBranch
+            } else {
+                defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: project.repoPath)
+            }
 
             if remotes.count == 1 {
                 await MainActor.run {
