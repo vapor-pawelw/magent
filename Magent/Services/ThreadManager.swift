@@ -69,8 +69,25 @@ final class ThreadManager {
         // Remove orphaned Magent tmux sessions that no longer map to an active thread/tab.
         await cleanupStaleMagentSessions()
 
+        // Set up bell detection pipes on all live agent sessions.
+        await ensureBellPipes()
+
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
+        }
+    }
+
+    /// Ensures every live agent tmux session has a pipe-pane bell watcher set up.
+    /// Called at startup and periodically from the session monitor.
+    func ensureBellPipes() async {
+        let pipedSessions = await tmux.sessionsWithActivePipe()
+        for thread in threads where !thread.isArchived {
+            for sessionName in thread.agentTmuxSessions {
+                guard !pipedSessions.contains(sessionName) else { continue }
+                // Only set up if the session is actually alive
+                guard await tmux.hasSession(name: sessionName) else { continue }
+                await tmux.setupBellPipe(for: sessionName)
+            }
         }
     }
 
@@ -1195,6 +1212,7 @@ final class ThreadManager {
                 await self.checkForMissingWorktrees()
                 await self.checkForDeadSessions()
                 await self.checkForAgentCompletions()
+                await self.ensureBellPipes()
             }
         }
     }

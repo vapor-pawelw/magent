@@ -102,6 +102,24 @@ final class TmuxService {
         )
     }
 
+    /// Returns the set of session names that currently have an active pipe-pane.
+    func sessionsWithActivePipe() async -> Set<String> {
+        // Query all panes: session_name and pane_pipe flag
+        guard let output = try? await ShellExecutor.run(
+            "tmux list-panes -a -F '#{session_name} #{pane_pipe}'"
+        ), !output.isEmpty else {
+            return []
+        }
+        var result = Set<String>()
+        for line in output.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: " ", maxSplits: 1)
+            if parts.count == 2, parts[1] == "1" {
+                result.insert(String(parts[0]))
+            }
+        }
+        return result
+    }
+
     func consumeAgentCompletionSessions() async -> [String] {
         let command = "if [ -f \(shellQuote(agentCompletionEventsPath)) ]; then cat \(shellQuote(agentCompletionEventsPath)); : > \(shellQuote(agentCompletionEventsPath)); fi"
         guard let output = try? await ShellExecutor.run(command), !output.isEmpty else {
