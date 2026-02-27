@@ -40,8 +40,10 @@ final class ThreadListViewController: NSViewController {
     private static let projectSeparatorIdentifier = NSUserInterfaceItemIdentifier("ProjectTopSeparator")
     private static let projectDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectDisclosureButton")
     private static let sectionDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("SectionDisclosureButton")
-    private static let sidebarHorizontalInset: CGFloat = 12
+    private static let sidebarHorizontalInset: CGFloat = 6
     private static let projectDisclosureTrailingInset: CGFloat = 12
+    private static let outlineIndentationPerLevel: CGFloat = 5
+    private static let toolbarPlusTrailingInset: CGFloat = (projectDisclosureTrailingInset - outlineIndentationPerLevel) + 4
     private static let disclosureButtonSize: CGFloat = 16
 
     weak var delegate: ThreadListDelegate?
@@ -126,22 +128,26 @@ final class ThreadListViewController: NSViewController {
     // MARK: - Toolbar Buttons
 
     private func setupToolbar() {
-        addButton = NSButton(image: NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Thread")!, target: self, action: #selector(addThreadTapped))
-        addButton.bezelStyle = .texturedRounded
+        let plusImage = NSImage(
+            systemSymbolName: "plus",
+            accessibilityDescription: "Add Thread"
+        )?.withSymbolConfiguration(.init(pointSize: 15, weight: .heavy))
+        addButton = NSButton(
+            image: plusImage ?? NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Thread")!,
+            target: self,
+            action: #selector(addThreadTapped)
+        )
+        addButton.isBordered = false
+        addButton.contentTintColor = .controlAccentColor
+        addButton.translatesAutoresizingMaskIntoConstraints = false
 
-        let buttonBar = NSStackView(views: [NSView(), addButton])
-        buttonBar.orientation = .horizontal
-        buttonBar.spacing = 4
-        buttonBar.translatesAutoresizingMaskIntoConstraints = false
-        buttonBar.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
-
-        view.addSubview(buttonBar)
+        view.addSubview(addButton)
 
         NSLayoutConstraint.activate([
-            buttonBar.topAnchor.constraint(equalTo: view.topAnchor),
-            buttonBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            buttonBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            buttonBar.heightAnchor.constraint(equalToConstant: 32),
+            addButton.topAnchor.constraint(equalTo: view.topAnchor, constant: 10),
+            addButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Self.toolbarPlusTrailingInset),
+            addButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
+            addButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
         ])
     }
 
@@ -152,7 +158,7 @@ final class ThreadListViewController: NSViewController {
         outlineView.style = .sourceList
         outlineView.headerView = nil
         outlineView.floatsGroupRows = true
-        outlineView.indentationPerLevel = 14
+        outlineView.indentationPerLevel = Self.outlineIndentationPerLevel
         outlineView.rowSizeStyle = .default
         outlineView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
 
@@ -211,9 +217,23 @@ final class ThreadListViewController: NSViewController {
         let knownSectionIds = Set(settings.threadSections.map(\.id))
         let defaultSectionId = settings.defaultSection?.id
 
-        let sortedProjects = settings.projects.filter(\.isValid).sorted { a, b in
+        let sortedValidProjects = settings.projects.filter(\.isValid).sorted { a, b in
             if a.isPinned != b.isPinned { return a.isPinned }
             return false // stable: preserve original order within each group
+        }
+        // If project path validation temporarily excludes all projects, still render
+        // projects referenced by live threads so users can recover from Settings.
+        let sortedProjects: [Project]
+        if sortedValidProjects.isEmpty && !allThreads.isEmpty {
+            let projectIdsWithThreads = Set(allThreads.map(\.projectId))
+            sortedProjects = settings.projects
+                .filter { projectIdsWithThreads.contains($0.id) }
+                .sorted { a, b in
+                    if a.isPinned != b.isPinned { return a.isPinned }
+                    return false
+                }
+        } else {
+            sortedProjects = sortedValidProjects
         }
 
         sidebarProjects = sortedProjects.map { project in
@@ -1040,13 +1060,13 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     c.addSubview(separator)
 
                     NSLayoutConstraint.activate([
-                        separator.topAnchor.constraint(equalTo: c.topAnchor),
+                        separator.topAnchor.constraint(equalTo: c.topAnchor, constant: 4),
                         // AppKit source-list group rows have extra left inset vs content area.
                         // Compensate so separator appears visually centered in full sidebar width.
                         separator.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 2),
                         separator.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -Self.sidebarHorizontalInset),
                         separator.heightAnchor.constraint(equalToConstant: 1),
-                        tf.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 14),
+                        tf.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 10),
                         tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
                         tf.trailingAnchor.constraint(lessThanOrEqualTo: disclosureButton.leadingAnchor, constant: -6),
                         iv.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 6),
