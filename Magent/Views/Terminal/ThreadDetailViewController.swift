@@ -743,7 +743,7 @@ final class ThreadDetailViewController: NSViewController {
     private func showRemoteMenu(remotes: [GitRemote], branch: String, defaultBranch: String?, relativeTo button: NSButton) {
         let menu = NSMenu(title: "Select Remote")
         for remote in remotes {
-            let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.repoWebURL
+            let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.openPullRequestsURL ?? remote.repoWebURL
             guard let url else { continue }
             let title = "\(remote.name) (\(remote.host)/\(remote.repoPath))"
             let item = NSMenuItem(title: title, action: #selector(remoteMenuItemTapped(_:)), keyEquivalent: "")
@@ -760,7 +760,7 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     private func openRemoteURL(_ remote: GitRemote, branch: String, defaultBranch: String?) {
-        guard let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.repoWebURL else {
+        guard let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.openPullRequestsURL ?? remote.repoWebURL else {
             BannerManager.shared.show(message: "Could not construct URL for remote \(remote.name)", style: .warning)
             return
         }

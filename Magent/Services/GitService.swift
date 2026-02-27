@@ -309,10 +309,24 @@ nonisolated struct GitRemote: Sendable {
         URL(string: "https://\(host)/\(repoPath)")
     }
 
-    func pullRequestURL(for branch: String, defaultBranch: String?) -> URL? {
-        // If on the default branch, just open the repo page
-        if let defaultBranch, branch == defaultBranch {
+    /// URL to the open pull/merge requests listing page.
+    var openPullRequestsURL: URL? {
+        switch provider {
+        case .github:
+            return URL(string: "https://\(host)/\(repoPath)/pulls?q=is%3Aopen+is%3Apr")
+        case .gitlab:
+            return URL(string: "https://\(host)/\(repoPath)/-/merge_requests?state=opened")
+        case .bitbucket:
+            return URL(string: "https://\(host)/\(repoPath)/pull-requests?state=OPEN")
+        case .unknown:
             return repoWebURL
+        }
+    }
+
+    func pullRequestURL(for branch: String, defaultBranch: String?) -> URL? {
+        // If on the default branch, show the open PRs listing
+        if let defaultBranch, branch == defaultBranch {
+            return openPullRequestsURL
         }
 
         let encodedBranch = branch.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? branch
@@ -325,7 +339,7 @@ nonisolated struct GitRemote: Sendable {
         case .bitbucket:
             return URL(string: "https://\(host)/\(repoPath)/pull-requests?source=\(encodedBranch)")
         case .unknown:
-            return repoWebURL
+            return openPullRequestsURL
         }
     }
 
