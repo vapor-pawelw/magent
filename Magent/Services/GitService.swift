@@ -234,6 +234,95 @@ final class GitService {
             && result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    // MARK: - Diff & Status
+
+    /// Returns `true` when the worktree has any uncommitted changes or untracked files.
+    func isDirty(worktreePath: String) async -> Bool {
+        let result = await ShellExecutor.execute(
+            "git status --porcelain",
+            workingDirectory: worktreePath
+        )
+        return result.exitCode == 0
+            && !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Returns per-file diff stats comparing the worktree to its base branch.
+    func diffStats(worktreePath: String, baseBranch: String) async -> [FileDiffEntry] {
+        // Find the merge-base (common ancestor)
+        let mergeBaseResult = await ShellExecutor.execute(
+            "git merge-base \(shellQuote(baseBranch)) HEAD",
+            workingDirectory: worktreePath
+        )
+        let mergeBase = mergeBaseResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard mergeBaseResult.exitCode == 0, !mergeBase.isEmpty else { return [] }
+
+        // Get numstat for all changes from merge-base to working tree (includes uncommitted)
+        let numstatResult = await ShellExecutor.execute(
+            "git diff --numstat \(shellQuote(mergeBase))",
+            workingDirectory: worktreePath
+        )
+
+        // Get working tree status for coloring
+        let statusResult = await ShellExecutor.execute(
+            "git status --porcelain",
+            workingDirectory: worktreePath
+        )
+
+        // Parse status into a map: relativePath → FileWorkingStatus
+        var statusMap: [String: FileWorkingStatus] = [:]
+        if statusResult.exitCode == 0 {
+            for line in statusResult.stdout.components(separatedBy: "\n") where line.count >= 3 {
+                let indexChar = line[line.startIndex]
+                let workChar = line[line.index(after: line.startIndex)]
+                let path = String(line.dropFirst(3))
+                guard !path.isEmpty else { continue }
+
+                if indexChar == "?" {
+                    statusMap[path] = .untracked
+                } else if workChar != " " && workChar != "?" {
+                    statusMap[path] = .unstaged
+                } else if indexChar != " " && indexChar != "?" {
+                    statusMap[path] = .staged
+                }
+            }
+        }
+
+        // Parse numstat
+        var entries: [FileDiffEntry] = []
+        var seenPaths = Set<String>()
+        if numstatResult.exitCode == 0 {
+            for line in numstatResult.stdout.components(separatedBy: "\n") where !line.isEmpty {
+                let parts = line.split(separator: "\t", maxSplits: 2)
+                guard parts.count >= 3 else { continue }
+                let additions = Int(parts[0]) ?? 0
+                let deletions = Int(parts[1]) ?? 0
+                let filePath = String(parts[2])
+                guard !filePath.isEmpty else { continue }
+
+                seenPaths.insert(filePath)
+                let status = statusMap[filePath] ?? .committed
+                entries.append(FileDiffEntry(
+                    relativePath: filePath,
+                    additions: additions,
+                    deletions: deletions,
+                    workingStatus: status
+                ))
+            }
+        }
+
+        // Add untracked files not already in numstat
+        for (path, status) in statusMap where status == .untracked && !seenPaths.contains(path) {
+            entries.append(FileDiffEntry(
+                relativePath: path,
+                additions: 0,
+                deletions: 0,
+                workingStatus: .untracked
+            ))
+        }
+
+        return entries
+    }
+
     func isGitRepository(at path: String) async -> Bool {
         do {
             _ = try await ShellExecutor.run("git rev-parse --git-dir", workingDirectory: path)
@@ -409,4 +498,20 @@ nonisolated struct GitRemote: Sendable {
         }
         return path
     }
+}
+
+// MARK: - Diff Types
+
+nonisolated enum FileWorkingStatus: Sendable {
+    case committed   // only in committed diff, working tree clean
+    case staged      // staged changes
+    case unstaged    // unstaged modifications
+    case untracked   // untracked file
+}
+
+nonisolated struct FileDiffEntry: Sendable {
+    let relativePath: String
+    let additions: Int
+    let deletions: Int
+    let workingStatus: FileWorkingStatus
 }

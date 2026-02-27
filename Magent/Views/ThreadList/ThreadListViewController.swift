@@ -54,6 +54,7 @@ final class ThreadListViewController: NSViewController {
     let persistence = PersistenceService.shared
 
     private var addButton: NSButton!
+    var diffPanelView: DiffPanelView!
     private var isCreatingThread = false
     var suppressNextSectionRowToggle = false
     var suppressNextProjectRowToggle = false
@@ -119,10 +120,26 @@ final class ThreadListViewController: NSViewController {
             name: .magentSectionsDidChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(agentCompletionDetected(_:)),
+            name: .magentAgentCompletionDetected,
+            object: nil
+        )
     }
 
     @objc private func sectionsDidChange() {
         reloadData()
+    }
+
+    @objc private func agentCompletionDetected(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
+        // If the completed thread is currently selected, refresh the diff panel
+        let row = outlineView.selectedRow
+        guard row >= 0,
+              let selected = outlineView.item(atRow: row) as? MagentThread,
+              selected.id == threadId else { return }
+        refreshDiffPanel(for: selected)
     }
 
     // MARK: - Toolbar Buttons
@@ -190,11 +207,19 @@ final class ThreadListViewController: NSViewController {
 
         view.addSubview(scrollView)
 
+        // Diff panel at the bottom of sidebar
+        diffPanelView = DiffPanelView()
+        view.addSubview(diffPanelView)
+
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.topAnchor, constant: 32),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: diffPanelView.topAnchor),
+
+            diffPanelView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            diffPanelView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            diffPanelView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
     }
 
@@ -657,6 +682,33 @@ final class ThreadListViewController: NSViewController {
             return true
         }
         return image
+    }
+
+    // MARK: - Diff Panel
+
+    func refreshDiffPanelForSelectedThread() {
+        let row = outlineView.selectedRow
+        guard row >= 0,
+              let thread = outlineView.item(atRow: row) as? MagentThread else {
+            diffPanelView.clear()
+            return
+        }
+        refreshDiffPanel(for: thread)
+    }
+
+    func refreshDiffPanel(for thread: MagentThread) {
+        // Main threads on the default branch don't need diff stats
+        if thread.isMain {
+            diffPanelView.clear()
+            return
+        }
+
+        Task {
+            let entries = await threadManager.refreshDiffStats(for: thread.id)
+            await MainActor.run {
+                self.diffPanelView.update(with: entries)
+            }
+        }
     }
 
 }

@@ -138,14 +138,12 @@ extension ThreadListViewController {
     @objc private func archiveThread(_ sender: NSMenuItem) {
         guard let thread = sender.representedObject as? MagentThread else { return }
 
-        let settings = persistence.loadSettings()
-        let project = settings.projects.first(where: { $0.id == thread.projectId })
-        let defaultBranch = project?.defaultBranch ?? "main"
+        let baseBranch = threadManager.resolveBaseBranch(for: thread)
 
         Task {
             let git = GitService.shared
             let clean = await git.isClean(worktreePath: thread.worktreePath)
-            let merged = await git.isMergedInto(worktreePath: thread.worktreePath, baseBranch: defaultBranch)
+            let merged = await git.isMergedInto(worktreePath: thread.worktreePath, baseBranch: baseBranch)
 
             await MainActor.run {
                 if clean && merged {
@@ -157,7 +155,7 @@ extension ThreadListViewController {
                     alert.messageText = "Archive Thread"
                     var reasons: [String] = []
                     if !clean { reasons.append("uncommitted changes") }
-                    if !merged { reasons.append("commits not in \(defaultBranch)") }
+                    if !merged { reasons.append("commits not in \(baseBranch)") }
                     alert.informativeText = "The thread \"\(thread.name)\" has \(reasons.joined(separator: " and ")). Archiving will remove its worktree directory but keep the git branch \"\(thread.branchName)\"."
                     alert.alertStyle = .informational
                     alert.addButton(withTitle: "Archive")
@@ -538,7 +536,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         return c
                     }()
 
-                cell.configureAsMain(isUnreadCompletion: thread.hasUnreadAgentCompletion, isBusy: thread.hasAgentBusy, isWaitingForInput: thread.hasWaitingForInput)
+                cell.configureAsMain(isUnreadCompletion: thread.hasUnreadAgentCompletion, isBusy: thread.hasAgentBusy, isWaitingForInput: thread.hasWaitingForInput, isDirty: thread.isDirty)
                 return cell
             }
 
@@ -599,10 +597,14 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     func outlineViewSelectionDidChange(_ notification: Notification) {
         let row = outlineView.selectedRow
         guard row >= 0,
-              let thread = outlineView.item(atRow: row) as? MagentThread else { return }
+              let thread = outlineView.item(atRow: row) as? MagentThread else {
+            diffPanelView?.clear()
+            return
+        }
         UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
         UserDefaults.standard.set(thread.projectId.uuidString, forKey: Self.lastOpenedProjectDefaultsKey)
         delegate?.threadList(self, didSelectThread: thread)
+        refreshDiffPanel(for: thread)
     }
 }
 

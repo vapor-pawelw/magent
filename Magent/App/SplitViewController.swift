@@ -241,6 +241,7 @@ extension SplitViewController: ThreadListDelegate {
     func threadList(_ controller: ThreadListViewController, didSelectThread thread: MagentThread) {
         ThreadManager.shared.setActiveThread(thread.id)
         showThread(thread)
+        threadListVC.refreshDiffPanelForSelectedThread()
     }
 
     func threadList(_ controller: ThreadListViewController, didRenameThread thread: MagentThread) {
