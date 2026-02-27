@@ -150,6 +150,7 @@ final class ThreadManager {
             workingDirectory: worktreePath,
             command: startCmd
         )
+        enforceWorkingDirectoryAfterStartup(sessionName: tmuxSessionName, path: worktreePath)
 
         // Also set on the tmux session so new panes/windows inherit them
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_PATH", value: worktreePath)
@@ -213,6 +214,7 @@ final class ThreadManager {
             workingDirectory: project.repoPath,
             command: startCmd
         )
+        enforceWorkingDirectoryAfterStartup(sessionName: tmuxSessionName, path: project.repoPath)
 
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
@@ -1270,10 +1272,15 @@ final class ThreadManager {
 
     /// Some shell startup configs can change cwd after the session starts.
     /// Re-apply working directory shortly after startup to keep tabs anchored to the thread worktree.
+    /// Checks the pane's actual cwd and stops early once it's within the expected path.
     private func enforceWorkingDirectoryAfterStartup(sessionName: String, path: String) {
         Task {
-            for delayNs in [250_000_000, 900_000_000, 2_000_000_000] {
-                try? await Task.sleep(nanoseconds: UInt64(delayNs))
+            for delayNs: UInt64 in [300_000_000, 1_000_000_000, 2_500_000_000, 5_000_000_000] {
+                try? await Task.sleep(nanoseconds: delayNs)
+                if let info = await tmux.activePaneInfo(sessionName: sessionName),
+                   self.path(info.path, isWithin: path) {
+                    break
+                }
                 await tmux.updateWorkingDirectory(sessionName: sessionName, to: path)
             }
         }

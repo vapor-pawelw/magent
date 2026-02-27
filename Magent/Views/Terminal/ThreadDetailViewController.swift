@@ -424,7 +424,11 @@ final class ThreadDetailViewController: NSViewController {
             } else {
                 startCmd = "\(envExports) && cd \(projectPath) && exec zsh -l"
             }
-            return "/bin/zsh -l -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
+            if isAgentSession {
+                return "/bin/zsh -l -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
+            }
+            // Force cwd on every open for terminal tabs, even if shell init changes it.
+            return "/bin/zsh -l -c 'tmux send-keys -t \(sessionName) \"cd \(projectPath)\" Enter 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(projectPath)\" Enter && tmux attach-session -t \(sessionName); }'"
         } else {
             let wd = thread.worktreePath
             let projectPath = project?.repoPath ?? wd
@@ -436,7 +440,11 @@ final class ThreadDetailViewController: NSViewController {
             } else {
                 startCmd = "\(envExports) && cd \(wd) && exec zsh -l"
             }
-            return "/bin/zsh -l -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
+            if isAgentSession {
+                return "/bin/zsh -l -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
+            }
+            // Force cwd on every open for terminal tabs, even if shell init changes it.
+            return "/bin/zsh -l -c 'tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter && tmux attach-session -t \(sessionName); }'"
         }
     }
 

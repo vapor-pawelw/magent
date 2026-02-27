@@ -215,7 +215,10 @@ final class TmuxService {
             return
         }
 
-        let shellCommands: Set<String> = ["sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh"]
+        let shellCommands: Set<String> = [
+            "sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh",
+            "-sh", "-bash", "-zsh", "-fish", "-ksh", "-tcsh", "-csh"
+        ]
         let cdCommand = "cd \(shellQuote(path))"
 
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
@@ -226,6 +229,10 @@ final class TmuxService {
             let paneCommand = parts[1]
             guard shellCommands.contains(paneCommand) else { continue }
 
+            // Clear any partial input before sending cd
+            _ = try? await ShellExecutor.run(
+                "tmux send-keys -t \(shellQuote(paneId)) C-u"
+            )
             _ = try? await ShellExecutor.run(
                 "tmux send-keys -t \(shellQuote(paneId)) \(shellQuote(cdCommand)) Enter"
             )
