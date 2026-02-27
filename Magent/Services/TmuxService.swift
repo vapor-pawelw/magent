@@ -23,9 +23,9 @@ final class TmuxService {
         // Keep selection visible after mouse drag — don't copy or exit copy-mode
         _ = try? await ShellExecutor.run("tmux unbind-key -T copy-mode MouseDragEnd1Pane")
         _ = try? await ShellExecutor.run("tmux unbind-key -T copy-mode-vi MouseDragEnd1Pane")
-        // Click anywhere to deselect (exit copy-mode)
-        _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode MouseDown1Pane send-keys -X cancel")
-        _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode-vi MouseDown1Pane send-keys -X cancel")
+        // Click anywhere to clear selection but stay in copy-mode (preserves scroll position)
+        _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode MouseDown1Pane send-keys -X clear-selection")
+        _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode-vi MouseDown1Pane send-keys -X clear-selection")
         await configureBellMonitoring(resetEventLog: true)
     }
 

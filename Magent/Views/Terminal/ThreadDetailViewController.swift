@@ -431,10 +431,10 @@ final class ThreadDetailViewController: NSViewController {
             if isAgentSession {
                 // Create session without a command so tmux starts a login shell that sources
                 // the user's profile (PATH, aliases, etc.), then inject the agent command via send-keys.
-                return "/bin/sh -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" && tmux send-keys -t \(sessionName) \"\(startCmd)\" Enter && tmux attach-session -t \(sessionName); }'"
+                return "/bin/sh -c 'tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" && tmux send-keys -t \(sessionName) \"\(startCmd)\" Enter && tmux attach-session -t \(sessionName); }'"
             }
             // Force cwd on every open for terminal tabs, even if shell init changes it.
-            return "/bin/sh -c 'tmux send-keys -t \(sessionName) \"cd \(projectPath)\" Enter 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(projectPath)\" Enter && tmux attach-session -t \(sessionName); }'"
+            return "/bin/sh -c 'tmux send-keys -t \(sessionName) \"cd \(projectPath)\" Enter 2>/dev/null; tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(projectPath)\" Enter && tmux attach-session -t \(sessionName); }'"
         } else {
             let wd = thread.worktreePath
             let projectPath = project?.repoPath ?? wd
@@ -453,10 +453,10 @@ final class ThreadDetailViewController: NSViewController {
             if isAgentSession {
                 // Create session without a command so tmux starts a login shell that sources
                 // the user's profile (PATH, aliases, etc.), then inject the agent command via send-keys.
-                return "/bin/sh -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" && tmux send-keys -t \(sessionName) \"\(startCmd)\" Enter && tmux attach-session -t \(sessionName); }'"
+                return "/bin/sh -c 'tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" && tmux send-keys -t \(sessionName) \"\(startCmd)\" Enter && tmux attach-session -t \(sessionName); }'"
             }
             // Force cwd on every open for terminal tabs, even if shell init changes it.
-            return "/bin/sh -c 'tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter && tmux attach-session -t \(sessionName); }'"
+            return "/bin/sh -c 'tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter 2>/dev/null; tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter && tmux attach-session -t \(sessionName); }'"
         }
     }
 
@@ -547,10 +547,6 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     private func selectTab(at index: Int) {
-        for tv in terminalViews {
-            tv.removeFromSuperview()
-        }
-
         guard index < terminalViews.count else { return }
 
         for (i, item) in tabItems.enumerated() {
@@ -558,15 +554,24 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         let terminalView = terminalViews[index]
-        terminalView.translatesAutoresizingMaskIntoConstraints = false
-        terminalContainer.addSubview(terminalView)
 
-        NSLayoutConstraint.activate([
-            terminalView.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
-            terminalView.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
-            terminalView.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
-            terminalView.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
-        ])
+        // Lazily add the view to the container on first selection (creates the surface).
+        // On subsequent selections just show/hide to avoid destroying and recreating
+        // the ghostty surface, which causes a visible tmux re-attach scroll animation.
+        if terminalView.superview == nil {
+            terminalView.translatesAutoresizingMaskIntoConstraints = false
+            terminalContainer.addSubview(terminalView)
+            NSLayoutConstraint.activate([
+                terminalView.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
+                terminalView.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
+                terminalView.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
+                terminalView.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
+            ])
+        }
+
+        for (i, tv) in terminalViews.enumerated() {
+            tv.isHidden = (i != index)
+        }
 
         view.window?.makeFirstResponder(terminalView)
         currentTabIndex = index
