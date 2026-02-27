@@ -613,6 +613,7 @@ final class ThreadManager {
             Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
             If the input is a plain question (not an actionable task or job), output exactly: SLUG: EMPTY \
             Example: "Fix auth bug in login" → SLUG: fix-auth-login \
+            Example: "I want to have a way for agents to communicate with the app so it can create threads automatically" → SLUG: agent-app-communication \
             Example: "How does the auth system work?" → SLUG: EMPTY
             Task: \(truncated)
             """
