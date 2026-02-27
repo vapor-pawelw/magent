@@ -48,7 +48,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        var options: UNNotificationPresentationOptions = [.banner, .list]
+        let settings = PersistenceService.shared.loadSettings()
+        var options: UNNotificationPresentationOptions = []
+        if settings.showSystemBanners {
+            options.formUnion([.banner, .list])
+        }
         if notification.request.content.sound != nil {
             options.insert(.sound)
         }
