@@ -1,8 +1,9 @@
 import Cocoa
 import GhosttyBridge
+import UserNotifications
 
 @objc(AppDelegate)
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
 
     private var coordinator: AppCoordinator?
 
@@ -21,6 +22,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         GhosttyAppManager.shared.initialize()
+        let notificationCenter = UNUserNotificationCenter.current()
+        notificationCenter.delegate = self
+        notificationCenter.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+
         Task { await TmuxService.shared.applyGlobalSettings() }
         coordinator = AppCoordinator()
         coordinator?.start()
@@ -31,10 +36,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillResignActive(_ notification: Notification) {
-        ThreadManager.shared.stopSessionMonitor()
+        // Keep monitor alive in background so completion notifications still fire.
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        var options: UNNotificationPresentationOptions = [.banner, .list]
+        if notification.request.content.sound != nil {
+            options.insert(.sound)
+        }
+        completionHandler(options)
     }
 }

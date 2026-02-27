@@ -81,6 +81,7 @@ final class AppCoordinator {
             viewController?.dismiss(nil)
             Task {
                 await ThreadManager.shared.restoreThreads()
+                ThreadManager.shared.startSessionMonitor()
             }
         }
         viewController.presentAsSheet(configVC)

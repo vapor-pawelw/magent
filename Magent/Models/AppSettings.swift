@@ -5,6 +5,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var activeAgents: [AgentType]
     var defaultAgentType: AgentType?
     var customAgentCommand: String
+    var playSoundForAgentCompletion: Bool
     var isConfigured: Bool
     var threadSections: [ThreadSection]
     var terminalInjectionCommand: String
@@ -15,6 +16,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         activeAgents: [AgentType] = [.claude],
         defaultAgentType: AgentType? = nil,
         customAgentCommand: String = "claude",
+        playSoundForAgentCompletion: Bool = true,
         isConfigured: Bool = false,
         threadSections: [ThreadSection] = ThreadSection.defaults(),
         terminalInjectionCommand: String = "",
@@ -24,6 +26,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.activeAgents = activeAgents
         self.defaultAgentType = defaultAgentType
         self.customAgentCommand = customAgentCommand
+        self.playSoundForAgentCompletion = playSoundForAgentCompletion
         self.isConfigured = isConfigured
         self.threadSections = threadSections
         self.terminalInjectionCommand = terminalInjectionCommand
@@ -38,6 +41,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         activeAgents = try container.decodeIfPresent([AgentType].self, forKey: .activeAgents) ?? [legacyAgentType]
         defaultAgentType = try container.decodeIfPresent(AgentType.self, forKey: .defaultAgentType)
         customAgentCommand = try container.decodeIfPresent(String.self, forKey: .customAgentCommand) ?? legacyAgentCommand
+        playSoundForAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .playSoundForAgentCompletion) ?? true
         isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
         threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections) ?? ThreadSection.defaults()
         terminalInjectionCommand = try container.decodeIfPresent(String.self, forKey: .terminalInjectionCommand) ?? ""
@@ -50,6 +54,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(activeAgents, forKey: .activeAgents)
         try container.encodeIfPresent(defaultAgentType, forKey: .defaultAgentType)
         try container.encode(customAgentCommand, forKey: .customAgentCommand)
+        try container.encode(playSoundForAgentCompletion, forKey: .playSoundForAgentCompletion)
         try container.encode(isConfigured, forKey: .isConfigured)
         try container.encode(threadSections, forKey: .threadSections)
         try container.encode(terminalInjectionCommand, forKey: .terminalInjectionCommand)
@@ -98,6 +103,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case activeAgents
         case defaultAgentType
         case customAgentCommand
+        case playSoundForAgentCompletion
         case isConfigured
         case threadSections
         case terminalInjectionCommand

@@ -215,6 +215,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     private var defaultAgentSection: NSStackView!
     private var defaultAgentPopup: NSPopUpButton!
     private var customAgentSection: NSStackView!
+    private var completionSoundCheckbox: NSButton!
     private var customAgentCommandTextView: NSTextView!
     private var terminalInjectionTextView: NSTextView!
     private var agentContextTextView: NSTextView!
@@ -258,6 +259,37 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         stackView.addArrangedSubview(defaultsNote)
         NSLayoutConstraint.activate([
             defaultsNote.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        // Notifications
+        let notificationsSection = NSStackView()
+        notificationsSection.orientation = .vertical
+        notificationsSection.alignment = .leading
+        notificationsSection.spacing = 6
+
+        let notificationsLabel = NSTextField(labelWithString: "Notifications")
+        notificationsLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        notificationsSection.addArrangedSubview(notificationsLabel)
+
+        let notificationsDesc = NSTextField(
+            wrappingLabelWithString: "When an agent finishes a command, Magent sends a system notification and moves the thread to the top of its section."
+        )
+        notificationsDesc.font = .systemFont(ofSize: 11)
+        notificationsDesc.textColor = NSColor(resource: .textSecondary)
+        notificationsSection.addArrangedSubview(notificationsDesc)
+
+        completionSoundCheckbox = NSButton(
+            checkboxWithTitle: "Play sound for completion notifications",
+            target: self,
+            action: #selector(completionSoundToggled)
+        )
+        completionSoundCheckbox.state = settings.playSoundForAgentCompletion ? .on : .off
+        notificationsSection.addArrangedSubview(completionSoundCheckbox)
+
+        notificationsSection.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(notificationsSection)
+        NSLayoutConstraint.activate([
+            notificationsSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
 
         // Active Agents
@@ -541,6 +573,11 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     }
 
     // MARK: - Agent Actions
+
+    @objc private func completionSoundToggled() {
+        settings.playSoundForAgentCompletion = completionSoundCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
 
     @objc private func activeAgentsChanged() {
         var active: [AgentType] = []

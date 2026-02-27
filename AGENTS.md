@@ -45,6 +45,7 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 - **Agent-specific code must be gated**: Any code specific to a particular agent (e.g. Claude's trust dialog, CLAUDECODE env var) must be gated by selected `AgentType`. Use `ThreadManager.trustDirectoryIfNeeded()` and `agentStartCommand()` — never call trust helpers directly or insert `unset CLAUDECODE` ad hoc.
 - **Banner notifications** for user-facing status messages: `BannerManager.shared.show(message:style:duration:isDismissible:actions:)`. Styles: `.info`, `.warning`, `.error`. Set `duration: nil` for persistent banners, `isDismissible: false` to block user dismissal.
 - **Worktree recovery** is automatic — when a user selects a thread whose worktree directory is missing, `SplitViewController` triggers recovery via `ThreadManager.recoverWorktree()`, showing progress via banners.
+- **Agent completion attention** is bell-driven: tmux `alert-bell` hook events are consumed by `ThreadManager` to trigger system notifications and to set per-thread attention state (`hasUnreadAgentCompletion`, `lastAgentCompletionAt`) used for sidebar highlight and ordering.
 - **Tuist**: Run `mise x -- tuist generate --no-open` after adding/removing Swift files.
 
 ## Important Files

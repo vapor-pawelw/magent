@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 
 @MainActor
 protocol ThreadManagerDelegate: AnyObject {
@@ -19,6 +20,8 @@ final class ThreadManager {
     private let tmux = TmuxService.shared
 
     private(set) var threads: [MagentThread] = []
+    private var activeThreadId: UUID?
+    private var recentBellBySession: [String: Date] = [:]
 
     // MARK: - Lifecycle
 
@@ -392,6 +395,22 @@ final class ThreadManager {
         if threads[index].lastSelectedTmuxSessionName == sessionName { return }
         threads[index].lastSelectedTmuxSessionName = sessionName
         try? persistence.saveThreads(threads)
+    }
+
+    @MainActor
+    func setActiveThread(_ threadId: UUID?) {
+        activeThreadId = threadId
+        guard let threadId else { return }
+        markThreadCompletionSeen(threadId: threadId)
+    }
+
+    @MainActor
+    func markThreadCompletionSeen(threadId: UUID) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard threads[index].hasUnreadAgentCompletion else { return }
+        threads[index].hasUnreadAgentCompletion = false
+        try? persistence.saveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
     // MARK: - Section Management
@@ -881,6 +900,7 @@ final class ThreadManager {
             Task {
                 await self.checkForMissingWorktrees()
                 await self.checkForDeadSessions()
+                await self.checkForAgentCompletions()
             }
         }
     }
@@ -922,6 +942,64 @@ final class ThreadManager {
                 ]
             )
         }
+    }
+
+    private func checkForAgentCompletions() async {
+        let sessions = await tmux.consumeAgentCompletionSessions()
+        guard !sessions.isEmpty else { return }
+
+        let now = Date()
+        let settings = persistence.loadSettings()
+        let playSound = settings.playSoundForAgentCompletion
+        let orderedUniqueSessions = sessions.reduce(into: [String]()) { result, session in
+            if !result.contains(session) {
+                result.append(session)
+            }
+        }
+
+        var changed = false
+
+        for session in orderedUniqueSessions {
+            if let previous = recentBellBySession[session], now.timeIntervalSince(previous) < 1.0 {
+                continue
+            }
+            recentBellBySession[session] = now
+
+            guard let index = threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }) else {
+                continue
+            }
+
+            threads[index].lastAgentCompletionAt = now
+            let isActiveThread = threads[index].id == activeThreadId
+            threads[index].hasUnreadAgentCompletion = !isActiveThread
+            changed = true
+
+            let projectName = settings.projects.first(where: { $0.id == threads[index].projectId })?.name ?? "Project"
+            sendAgentCompletionNotification(for: threads[index], projectName: projectName, playSound: playSound)
+        }
+
+        guard changed else { return }
+        try? persistence.saveThreads(threads)
+        await MainActor.run {
+            delegate?.threadManager(self, didUpdateThreads: threads)
+        }
+    }
+
+    private func sendAgentCompletionNotification(for thread: MagentThread, projectName: String, playSound: Bool) {
+        let content = UNMutableNotificationContent()
+        content.title = "Agent Finished"
+        content.body = "\(projectName) · \(thread.name)"
+        if playSound {
+            content.sound = .default
+        }
+        content.userInfo = ["threadId": thread.id.uuidString]
+
+        let request = UNNotificationRequest(
+            identifier: "magent-agent-finished-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     private func checkForMissingWorktrees() async {

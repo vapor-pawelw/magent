@@ -5,9 +5,20 @@ import Cocoa
 /// Row view that always draws its selection in the emphasized (active) style,
 /// even when the outline view is not the first responder.
 private final class AlwaysEmphasizedRowView: NSTableRowView {
+    var showsCompletionHighlight = false {
+        didSet { needsDisplay = true }
+    }
+
     override var isEmphasized: Bool {
         get { true }
         set {}
+    }
+
+    override func drawBackground(in dirtyRect: NSRect) {
+        super.drawBackground(in: dirtyRect)
+        guard showsCompletionHighlight, !isSelected else { return }
+        NSColor.controlAccentColor.withAlphaComponent(0.14).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 1), xRadius: 6, yRadius: 6).fill()
     }
 }
 
@@ -209,10 +220,7 @@ final class ThreadListViewController: NSViewController {
                     }
                     return effectiveSectionId == section.id
                 }
-                let sortedThreads = matchingThreads.sorted { a, b in
-                    if a.isPinned != b.isPinned { return a.isPinned }
-                    return false
-                }
+                let sortedThreads = sortThreadsForDisplay(matchingThreads)
                 children.append(SidebarSection(
                     sectionId: section.id,
                     name: section.name,
@@ -256,6 +264,32 @@ final class ThreadListViewController: NSViewController {
                 }
             }
         }
+    }
+
+    private func sortThreadsForDisplay(_ threads: [MagentThread]) -> [MagentThread] {
+        threads
+            .enumerated()
+            .sorted { lhs, rhs in
+                let left = lhs.element
+                let right = rhs.element
+
+                if left.isPinned != right.isPinned {
+                    return left.isPinned
+                }
+
+                switch (left.lastAgentCompletionAt, right.lastAgentCompletionAt) {
+                case let (l?, r?) where l != r:
+                    return l > r
+                case (.some, .none):
+                    return true
+                case (.none, .some):
+                    return false
+                default:
+                    // Preserve input order when priority keys tie.
+                    return lhs.offset < rhs.offset
+                }
+            }
+            .map(\.element)
     }
 
     private func autoSelectFirst() {
@@ -727,7 +761,13 @@ extension ThreadListViewController: NSOutlineViewDataSource {
 extension ThreadListViewController: NSOutlineViewDelegate {
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
-        AlwaysEmphasizedRowView()
+        let rowView = AlwaysEmphasizedRowView()
+        if let thread = item as? MagentThread {
+            rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion
+        } else {
+            rowView.showsCompletionHighlight = false
+        }
+        return rowView
     }
 
     func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool {
@@ -840,7 +880,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         return c
                     }()
 
-                cell.configureAsMain()
+                cell.configureAsMain(isUnreadCompletion: thread.hasUnreadAgentCompletion)
                 return cell
             }
 
@@ -867,7 +907,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         iv.widthAnchor.constraint(equalToConstant: 16),
                         iv.heightAnchor.constraint(equalToConstant: 16),
                         tf.leadingAnchor.constraint(equalTo: iv.trailingAnchor, constant: 6),
-                        tf.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
+                        tf.trailingAnchor.constraint(lessThanOrEqualTo: c.trailingAnchor, constant: -30),
                         tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                     ])
 
