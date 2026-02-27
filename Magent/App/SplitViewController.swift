@@ -208,6 +208,7 @@ extension SplitViewController: ThreadListDelegate {
     func threadList(_ controller: ThreadListViewController, didRenameThread thread: MagentThread) {
         // Update thread reference and rebind onCopy closures to new tmux session names.
         // Existing terminal connections survive rename since tmux rename-session keeps clients attached.
+        guard currentDetailVC?.thread.id == thread.id else { return }
         currentDetailVC?.handleRename(thread)
     }
 
