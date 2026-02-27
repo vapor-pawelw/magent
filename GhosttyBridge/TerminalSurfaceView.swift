@@ -201,6 +201,15 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         // Cmd+V → pass to keyDown so ghostty handles paste via its keybindings
         if event.modifierFlags.contains(.command),
            event.charactersIgnoringModifiers == "v" {
+            // Capture pasted text for prompt tracking – ghostty sends paste content
+            // directly to the PTY, bypassing keyDown per-character events, so
+            // currentInputLine would otherwise miss it.
+            if let pasted = NSPasteboard.general.string(forType: .string) {
+                currentInputLine.append(pasted)
+                if currentInputLine.count > 600 {
+                    currentInputLine = String(currentInputLine.suffix(600))
+                }
+            }
             keyDown(with: event)
             return true
         }
