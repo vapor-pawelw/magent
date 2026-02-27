@@ -11,8 +11,15 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     private var defaultAgentPopup: NSPopUpButton!
     private var customAgentSection: NSStackView!
     private var customAgentCommandTextView: NSTextView!
+    private var skipPermissionsCheckbox: NSButton!
+    private var sandboxCheckbox: NSButton!
+    private var fdaStatusLabel: NSTextField!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
@@ -97,6 +104,105 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
             defaultAgentSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
         refreshDefaultAgentSection()
+
+        // Agent Permissions
+        let permissionsSection = NSStackView()
+        permissionsSection.orientation = .vertical
+        permissionsSection.alignment = .leading
+        permissionsSection.spacing = 6
+
+        let permissionsLabel = NSTextField(labelWithString: "Agent Permissions")
+        permissionsLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        permissionsSection.addArrangedSubview(permissionsLabel)
+
+        let permissionsDesc = NSTextField(
+            wrappingLabelWithString: "Control how agents handle permissions and sandboxing. Only applies to Claude and Codex."
+        )
+        permissionsDesc.font = .systemFont(ofSize: 11)
+        permissionsDesc.textColor = NSColor(resource: .textSecondary)
+        permissionsSection.addArrangedSubview(permissionsDesc)
+
+        skipPermissionsCheckbox = NSButton(
+            checkboxWithTitle: "Skip permission prompts",
+            target: self,
+            action: #selector(permissionsSettingChanged)
+        )
+        skipPermissionsCheckbox.state = settings.agentSkipPermissions ? .on : .off
+        let skipDesc = NSTextField(
+            wrappingLabelWithString: "Agents run without asking for approval. Claude uses --dangerously-skip-permissions, Codex uses --yolo."
+        )
+        skipDesc.font = .systemFont(ofSize: 11)
+        skipDesc.textColor = NSColor(resource: .textSecondary)
+        permissionsSection.addArrangedSubview(skipPermissionsCheckbox)
+        permissionsSection.addArrangedSubview(skipDesc)
+
+        sandboxCheckbox = NSButton(
+            checkboxWithTitle: "Enable sandbox",
+            target: self,
+            action: #selector(permissionsSettingChanged)
+        )
+        sandboxCheckbox.state = settings.agentSandboxEnabled ? .on : .off
+        let sandboxDesc = NSTextField(
+            wrappingLabelWithString: "Restrict agent filesystem access to the workspace. Codex uses --full-auto. Only applies to Codex (Claude sandboxes by default when permissions are not skipped)."
+        )
+        sandboxDesc.font = .systemFont(ofSize: 11)
+        sandboxDesc.textColor = NSColor(resource: .textSecondary)
+        permissionsSection.addArrangedSubview(sandboxCheckbox)
+        permissionsSection.addArrangedSubview(sandboxDesc)
+
+        permissionsSection.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(permissionsSection)
+        NSLayoutConstraint.activate([
+            permissionsSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        // Full Disk Access
+        let fdaSection = NSStackView()
+        fdaSection.orientation = .vertical
+        fdaSection.alignment = .leading
+        fdaSection.spacing = 6
+
+        let fdaLabel = NSTextField(labelWithString: "Full Disk Access")
+        fdaLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        fdaSection.addArrangedSubview(fdaLabel)
+
+        let fdaDesc = NSTextField(
+            wrappingLabelWithString: "Grant Full Disk Access to Magent so agents can read and modify files outside the workspace (e.g. ~/.zshrc, ~/Library). Useful when agents need to inspect shell configs, install tools, or access protected directories. Without it, macOS may silently block file access."
+        )
+        fdaDesc.font = .systemFont(ofSize: 11)
+        fdaDesc.textColor = NSColor(resource: .textSecondary)
+        fdaSection.addArrangedSubview(fdaDesc)
+
+        let fdaStatusRow = NSStackView()
+        fdaStatusRow.orientation = .horizontal
+        fdaStatusRow.alignment = .centerY
+        fdaStatusRow.spacing = 8
+
+        fdaStatusLabel = NSTextField(labelWithString: "")
+        fdaStatusLabel.font = .systemFont(ofSize: 12)
+        fdaStatusRow.addArrangedSubview(fdaStatusLabel)
+
+        let fdaButton = NSButton(title: "Open System Settings", target: self, action: #selector(openFullDiskAccessSettings))
+        fdaButton.bezelStyle = .push
+        fdaButton.controlSize = .small
+        fdaStatusRow.addArrangedSubview(fdaButton)
+
+        fdaSection.addArrangedSubview(fdaStatusRow)
+
+        fdaSection.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(fdaSection)
+        NSLayoutConstraint.activate([
+            fdaSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        refreshFDAStatus()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
 
         // Custom Agent Command (only shown when Custom is active)
         customAgentSection = NSStackView()
@@ -241,6 +347,43 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
 
         refreshDefaultAgentSection()
         customAgentSection.isHidden = !active.contains(.custom)
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func openFullDiskAccessSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc private func appDidBecomeActive() {
+        refreshFDAStatus()
+    }
+
+    private func refreshFDAStatus() {
+        let granted = Self.isFullDiskAccessGranted()
+        if granted {
+            fdaStatusLabel.stringValue = "\u{2705} Granted"
+            fdaStatusLabel.textColor = .systemGreen
+        } else {
+            fdaStatusLabel.stringValue = "\u{274C} Not Granted"
+            fdaStatusLabel.textColor = .secondaryLabelColor
+        }
+    }
+
+    private static func isFullDiskAccessGranted() -> Bool {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let probePath = home.appendingPathComponent("Library/Containers/com.apple.stocks").path
+        if (try? FileManager.default.contentsOfDirectory(atPath: probePath)) != nil {
+            return true
+        }
+        let safariPath = home.appendingPathComponent("Library/Safari/History.db").path
+        return FileManager.default.isReadableFile(atPath: safariPath)
+    }
+
+    @objc private func permissionsSettingChanged() {
+        settings.agentSkipPermissions = skipPermissionsCheckbox.state == .on
+        settings.agentSandboxEnabled = sandboxCheckbox.state == .on
         try? persistence.saveSettings(settings)
     }
 

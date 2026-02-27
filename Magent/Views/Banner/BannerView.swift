@@ -49,9 +49,12 @@ struct BannerConfig {
 final class BannerOverlayView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
+        // point is in our superview's coordinate system.
+        // Since the overlay is pinned to (0,0) of its superview, this equals
+        // our own coordinate system — which is what subview.hitTest() expects
+        // (point in the subview's superview coords, i.e. our coords).
         for subview in subviews {
-            let converted = subview.convert(point, from: self)
-            if let hit = subview.hitTest(converted) {
+            if let hit = subview.hitTest(point) {
                 return hit
             }
         }

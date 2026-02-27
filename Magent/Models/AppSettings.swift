@@ -16,6 +16,8 @@ nonisolated struct AppSettings: Codable, Sendable {
     var threadSections: [ThreadSection]
     var terminalInjectionCommand: String
     var agentContextInjection: String
+    var agentSandboxEnabled: Bool
+    var agentSkipPermissions: Bool
 
     init(
         projects: [Project] = [],
@@ -30,7 +32,9 @@ nonisolated struct AppSettings: Codable, Sendable {
         isConfigured: Bool = false,
         threadSections: [ThreadSection] = ThreadSection.defaults(),
         terminalInjectionCommand: String = "",
-        agentContextInjection: String = ""
+        agentContextInjection: String = "",
+        agentSandboxEnabled: Bool = false,
+        agentSkipPermissions: Bool = true
     ) {
         self.projects = projects
         self.activeAgents = activeAgents
@@ -45,6 +49,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.threadSections = threadSections
         self.terminalInjectionCommand = terminalInjectionCommand
         self.agentContextInjection = agentContextInjection
+        self.agentSandboxEnabled = agentSandboxEnabled
+        self.agentSkipPermissions = agentSkipPermissions
     }
 
     init(from decoder: Decoder) throws {
@@ -64,6 +70,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections) ?? ThreadSection.defaults()
         terminalInjectionCommand = try container.decodeIfPresent(String.self, forKey: .terminalInjectionCommand) ?? ""
         agentContextInjection = try container.decodeIfPresent(String.self, forKey: .agentContextInjection) ?? ""
+        agentSandboxEnabled = try container.decodeIfPresent(Bool.self, forKey: .agentSandboxEnabled) ?? false
+        agentSkipPermissions = try container.decodeIfPresent(Bool.self, forKey: .agentSkipPermissions) ?? true
     }
 
     func encode(to encoder: Encoder) throws {
@@ -81,6 +89,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(threadSections, forKey: .threadSections)
         try container.encode(terminalInjectionCommand, forKey: .terminalInjectionCommand)
         try container.encode(agentContextInjection, forKey: .agentContextInjection)
+        try container.encode(agentSandboxEnabled, forKey: .agentSandboxEnabled)
+        try container.encode(agentSkipPermissions, forKey: .agentSkipPermissions)
     }
 
     var visibleSections: [ThreadSection] {
@@ -111,9 +121,15 @@ nonisolated struct AppSettings: Codable, Sendable {
     func command(for agentType: AgentType) -> String {
         switch agentType {
         case .claude:
-            return "claude --dangerously-skip-permissions"
+            return agentSkipPermissions ? "claude --dangerously-skip-permissions" : "claude"
         case .codex:
-            return "codex --yolo"
+            if agentSkipPermissions {
+                return "codex --yolo"
+            } else if agentSandboxEnabled {
+                return "codex --full-auto"
+            } else {
+                return "codex"
+            }
         case .custom:
             let trimmed = customAgentCommand.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? "custom-agent" : trimmed
@@ -134,6 +150,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         case threadSections
         case terminalInjectionCommand
         case agentContextInjection
+        case agentSandboxEnabled
+        case agentSkipPermissions
 
         // Legacy keys kept for migration.
         case agentCommand
