@@ -734,8 +734,12 @@ extension ThreadManager {
         // Codex approval prompts
         if lastChunk.contains("approve") && lastChunk.contains("deny") { return true }
 
-        // Claude Code AskUserQuestion / interactive prompt: ❯ with numbered options
-        if lastChunk.contains("\u{276F}") && lastChunk.range(of: #"\d+\."#, options: .regularExpression) != nil { return true }
+        // Claude Code AskUserQuestion / interactive prompt: ❯ selector at line start
+        // Only match when ❯ is at the start of a line (interactive selector indicator),
+        // not just anywhere in terminal (e.g. Claude Code's input prompt character).
+        let lastFew = trimmedLines.suffix(6)
+        let hasSelectorAtLineStart = lastFew.contains { $0.hasPrefix("\u{276F}") }
+        if hasSelectorAtLineStart && lastFew.contains(where: { $0.range(of: #"^\u{276F}?\s*\d+\."#, options: .regularExpression) != nil }) { return true }
 
         // Claude Code ExitPlanMode / plan approval prompt
         if lastChunk.contains("Do you want me to go ahead") { return true }
