@@ -185,6 +185,19 @@ final class TmuxService {
         )
     }
 
+    /// Sends text without pressing Enter — use `sendEnter` separately to submit.
+    func sendText(sessionName: String, text: String) async throws {
+        _ = try await ShellExecutor.run(
+            "tmux send-keys -t \(shellQuote(sessionName)) \(shellQuote(text))"
+        )
+    }
+
+    func sendEnter(sessionName: String) async throws {
+        _ = try await ShellExecutor.run(
+            "tmux send-keys -t \(shellQuote(sessionName)) Enter"
+        )
+    }
+
     func setEnvironment(sessionName: String, key: String, value: String) async throws {
         _ = try await ShellExecutor.run(
             "tmux set-environment -t \(shellQuote(sessionName)) \(shellQuote(key)) \(shellQuote(value))"
