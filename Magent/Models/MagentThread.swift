@@ -20,9 +20,17 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var lastAgentCompletionAt: Date?
     var unreadCompletionSessions: Set<String>
     var didAutoRenameFromFirstPrompt: Bool
+    var customTabNames: [String: String]
 
     var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
+    }
+
+    func displayName(for sessionName: String, at index: Int) -> String {
+        if let custom = customTabNames[sessionName], !custom.isEmpty {
+            return custom
+        }
+        return index == 0 ? "Main" : "Tab \(index)"
     }
 
     enum CodingKeys: String, CodingKey {
@@ -34,6 +42,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case unreadCompletionSessions
         case hasUnreadAgentCompletion // migration only
         case didAutoRenameFromFirstPrompt
+        case customTabNames
     }
 
     init(
@@ -55,7 +64,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isPinned: Bool = false,
         lastAgentCompletionAt: Date? = nil,
         unreadCompletionSessions: Set<String> = [],
-        didAutoRenameFromFirstPrompt: Bool = false
+        didAutoRenameFromFirstPrompt: Bool = false,
+        customTabNames: [String: String] = [:]
     ) {
         self.id = id
         self.projectId = projectId
@@ -76,6 +86,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.lastAgentCompletionAt = lastAgentCompletionAt
         self.unreadCompletionSessions = unreadCompletionSessions
         self.didAutoRenameFromFirstPrompt = didAutoRenameFromFirstPrompt
+        self.customTabNames = customTabNames
     }
 
     init(from decoder: Decoder) throws {
@@ -98,6 +109,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         lastAgentCompletionAt = try container.decodeIfPresent(Date.self, forKey: .lastAgentCompletionAt)
         didAutoRenameFromFirstPrompt = try container.decodeIfPresent(Bool.self, forKey: .didAutoRenameFromFirstPrompt) ?? false
+        customTabNames = try container.decodeIfPresent([String: String].self, forKey: .customTabNames) ?? [:]
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -129,6 +141,9 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encodeIfPresent(lastAgentCompletionAt, forKey: .lastAgentCompletionAt)
         try container.encode(unreadCompletionSessions, forKey: .unreadCompletionSessions)
         try container.encode(didAutoRenameFromFirstPrompt, forKey: .didAutoRenameFromFirstPrompt)
+        if !customTabNames.isEmpty {
+            try container.encode(customTabNames, forKey: .customTabNames)
+        }
     }
 }
 

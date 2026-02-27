@@ -712,6 +712,13 @@ final class ThreadManager {
         threads[index].unreadCompletionSessions = Set(
             threads[index].unreadCompletionSessions.map { sessionRenameMap[$0] ?? $0 }
         )
+        // Re-key custom tab names to reflect new session names
+        var newCustomTabNames: [String: String] = [:]
+        for (oldKey, value) in threads[index].customTabNames {
+            let newKey = sessionRenameMap[oldKey] ?? oldKey
+            newCustomTabNames[newKey] = value
+        }
+        threads[index].customTabNames = newCustomTabNames
         if let selectedName = threads[index].lastSelectedTmuxSessionName {
             threads[index].lastSelectedTmuxSessionName = sessionRenameMap[selectedName] ?? selectedName
         }
@@ -759,6 +766,97 @@ final class ThreadManager {
         }
     }
 
+    // MARK: - Rename Tab
+
+    func renameTab(threadId: UUID, sessionName: String, newDisplayName: String) async throws {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+        let currentThread = threads[index]
+        guard let sessionIndex = currentThread.tmuxSessionNames.firstIndex(of: sessionName) else {
+            throw ThreadManagerError.invalidTabIndex
+        }
+
+        let trimmed = newDisplayName.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            throw ThreadManagerError.invalidName
+        }
+
+        // Compute new tmux session name
+        let sanitizedTabName = Self.sanitizeForTmux(trimmed)
+        let newSessionName: String
+        if currentThread.isMain {
+            let settings = persistence.loadSettings()
+            let projectName = Self.sanitizeForTmux(
+                settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
+            )
+            if sessionIndex == 0 {
+                newSessionName = "magent-main-\(projectName)-\(sanitizedTabName)"
+            } else {
+                newSessionName = "magent-main-\(projectName)-\(sanitizedTabName)"
+            }
+        } else {
+            newSessionName = "magent-\(currentThread.name)-\(sanitizedTabName)"
+        }
+
+        // Check uniqueness
+        guard newSessionName != sessionName else {
+            // Display name changed but session name is the same — just update the display name
+            threads[index].customTabNames[sessionName] = trimmed
+            try persistence.saveThreads(threads)
+            await MainActor.run {
+                delegate?.threadManager(self, didUpdateThreads: threads)
+            }
+            return
+        }
+
+        // Check for collisions
+        let otherSessionNames = Set(currentThread.tmuxSessionNames).subtracting([sessionName])
+        guard !otherSessionNames.contains(newSessionName) else {
+            throw ThreadManagerError.duplicateName
+        }
+        if await tmux.hasSession(name: newSessionName) {
+            throw ThreadManagerError.duplicateName
+        }
+
+        // Rename tmux session
+        try await renameTmuxSessions(from: [sessionName], to: [newSessionName])
+
+        // Update all references
+        threads[index].tmuxSessionNames[sessionIndex] = newSessionName
+        if currentThread.agentTmuxSessions.contains(sessionName) {
+            threads[index].agentTmuxSessions = currentThread.agentTmuxSessions.map {
+                $0 == sessionName ? newSessionName : $0
+            }
+        }
+        if currentThread.pinnedTmuxSessions.contains(sessionName) {
+            threads[index].pinnedTmuxSessions = currentThread.pinnedTmuxSessions.map {
+                $0 == sessionName ? newSessionName : $0
+            }
+        }
+        if currentThread.lastSelectedTmuxSessionName == sessionName {
+            threads[index].lastSelectedTmuxSessionName = newSessionName
+        }
+        if currentThread.unreadCompletionSessions.contains(sessionName) {
+            threads[index].unreadCompletionSessions.remove(sessionName)
+            threads[index].unreadCompletionSessions.insert(newSessionName)
+        }
+
+        // Update custom tab names: remove old key, store under new key
+        threads[index].customTabNames.removeValue(forKey: sessionName)
+        threads[index].customTabNames[newSessionName] = trimmed
+
+        // Re-setup bell monitoring if this was an agent session
+        if threads[index].agentTmuxSessions.contains(newSessionName) {
+            await tmux.setupBellPipe(for: newSessionName)
+        }
+
+        try persistence.saveThreads(threads)
+        await MainActor.run {
+            delegate?.threadManager(self, didUpdateThreads: threads)
+        }
+    }
+
     // MARK: - Close Tab
 
     func removeTab(from thread: MagentThread, at tabIndex: Int) async throws {
@@ -773,10 +871,11 @@ final class ThreadManager {
         let sessionName = threads[index].tmuxSessionNames[tabIndex]
         try? await tmux.killSession(name: sessionName)
 
-        // Also remove from pinned, agent, and unread completion sessions if present
+        // Also remove from pinned, agent, unread completion, and custom tab names if present
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
         threads[index].agentTmuxSessions.removeAll { $0 == sessionName }
         threads[index].unreadCompletionSessions.remove(sessionName)
+        threads[index].customTabNames.removeValue(forKey: sessionName)
         threads[index].tmuxSessionNames.remove(at: tabIndex)
         if threads[index].lastSelectedTmuxSessionName == sessionName {
             threads[index].lastSelectedTmuxSessionName = threads[index].tmuxSessionNames.first

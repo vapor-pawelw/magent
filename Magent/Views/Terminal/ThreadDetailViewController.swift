@@ -162,7 +162,7 @@ private final class TabItemView: NSView, NSMenuDelegate {
 
         if onRename != nil {
             menu.addItem(.separator())
-            let renameItem = NSMenuItem(title: "Rename Thread...", action: #selector(renameTapped), keyEquivalent: "")
+            let renameItem = NSMenuItem(title: "Rename Tab...", action: #selector(renameTapped), keyEquivalent: "")
             renameItem.target = self
             menu.addItem(renameItem)
         }
@@ -350,7 +350,7 @@ final class ThreadDetailViewController: NSViewController {
             )
 
             await MainActor.run {
-                let title = i == 0 ? "Main" : "Tab \(i)"
+                let title = thread.displayName(for: sessionName, at: i)
                 let closable = thread.isMain ? true : (i != primaryTabIndex)
                 createTabItem(title: title, closable: closable, pinned: i < pinnedCount)
 
@@ -527,7 +527,7 @@ final class ThreadDetailViewController: NSViewController {
         item.showPinIcon = pinned
         item.onSelect = { [weak self] in self?.selectTab(at: index) }
         item.onClose = { [weak self] in self?.closeTab(at: index) }
-        item.onRename = thread.isMain ? nil : { [weak self] in self?.showRenameDialog() }
+        item.onRename = { [weak self] in self?.showTabRenameDialog(at: index) }
         item.onPin = { [weak self] in self?.togglePin(at: index) }
 
         // Pan gesture for drag-to-reorder
@@ -582,6 +582,7 @@ final class ThreadDetailViewController: NSViewController {
         for (i, item) in tabItems.enumerated() {
             item.onSelect = { [weak self] in self?.selectTab(at: i) }
             item.onClose = { [weak self] in self?.closeTab(at: i) }
+            item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
             item.onPin = { [weak self] in self?.togglePin(at: i) }
             item.showCloseButton = (i != primaryTabIndex)
             item.showPinIcon = (i < pinnedCount)
@@ -1130,6 +1131,11 @@ final class ThreadDetailViewController: NSViewController {
                 }
             }
         }
+
+        // Refresh tab labels to reflect re-keyed custom names
+        for (i, item) in tabItems.enumerated() where i < thread.tmuxSessionNames.count {
+            item.titleLabel.stringValue = thread.displayName(for: thread.tmuxSessionNames[i], at: i)
+        }
     }
 
     @MainActor
@@ -1222,30 +1228,47 @@ final class ThreadDetailViewController: NSViewController {
 
     // MARK: - Rename Dialog
 
-    private func showRenameDialog() {
-        guard !thread.isMain else { return }
+    private func showTabRenameDialog(at index: Int) {
+        guard index < thread.tmuxSessionNames.count else { return }
+        let sessionName = thread.tmuxSessionNames[index]
+        let currentCustomName = thread.customTabNames[sessionName]
+        let defaultName = index == 0 ? "Main" : "Tab \(index)"
 
         let alert = NSAlert()
-        alert.messageText = "Rename Thread"
-        alert.informativeText = "Enter new name for the thread"
+        alert.messageText = "Rename Tab"
+        alert.informativeText = "Enter a new name for this tab"
         alert.addButton(withTitle: "Rename")
         alert.addButton(withTitle: "Cancel")
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-        textField.stringValue = thread.name
+        textField.stringValue = currentCustomName ?? ""
+        textField.placeholderString = defaultName
         alert.accessoryView = textField
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
 
         let newName = textField.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !newName.isEmpty, newName != thread.name else { return }
+        guard !newName.isEmpty, newName != currentCustomName else { return }
 
         Task {
             do {
-                try await threadManager.renameThread(thread, to: newName)
+                try await threadManager.renameTab(
+                    threadId: thread.id,
+                    sessionName: sessionName,
+                    newDisplayName: newName
+                )
                 await MainActor.run {
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
+                        self.thread = updated
+                        // Update tab label
+                        if index < self.tabItems.count {
+                            self.tabItems[index].titleLabel.stringValue = updated.displayName(
+                                for: updated.tmuxSessionNames[index],
+                                at: index
+                            )
+                        }
+                        // Re-bind closures in case session name changed
                         self.handleRename(updated)
                     }
                 }
