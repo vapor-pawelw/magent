@@ -454,6 +454,7 @@ extension Notification.Name {
     static let magentDeadSessionsDetected = Notification.Name("magentDeadSessionsDetected")
     static let magentAgentCompletionDetected = Notification.Name("magentAgentCompletionDetected")
     static let magentAgentWaitingForInput = Notification.Name("magentAgentWaitingForInput")
+    static let magentAgentBusySessionsChanged = Notification.Name("magentAgentBusySessionsChanged")
     static let magentSectionsDidChange = Notification.Name("magentSectionsDidChange")
     static let magentOpenSettings = Notification.Name("magentOpenSettings")
 }

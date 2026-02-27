@@ -472,6 +472,7 @@ extension ThreadManager {
         }
 
         var changed = false
+        var changedThreadIds = Set<UUID>()
 
         for session in orderedUniqueSessions {
             if let previous = recentBellBySession[session], now.timeIntervalSince(previous) < 1.0 {
@@ -494,6 +495,7 @@ extension ThreadManager {
                 threads[index].unreadCompletionSessions.insert(session)
             }
             changed = true
+            changedThreadIds.insert(threads[index].id)
 
             let projectName = settings.projects.first(where: { $0.id == threads[index].projectId })?.name ?? "Project"
             sendAgentCompletionNotification(for: threads[index], projectName: projectName, playSound: playSound)
@@ -504,6 +506,11 @@ extension ThreadManager {
         await MainActor.run {
             updateDockBadge()
             delegate?.threadManager(self, didUpdateThreads: threads)
+            for threadId in changedThreadIds {
+                if let thread = threads.first(where: { $0.id == threadId }) {
+                    postBusySessionsChangedNotification(for: thread)
+                }
+            }
             for session in orderedUniqueSessions {
                 if let index = threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }) {
                     NotificationCenter.default.post(
@@ -555,7 +562,9 @@ extension ThreadManager {
 
     /// Syncs `busySessions` with actual tmux pane state by checking `pane_current_command`.
     /// If the foreground process is a non-shell command, the session is busy.
-    /// If it's a shell (zsh, bash, etc.), the agent has exited and the session is idle.
+    /// If it's the login shell for this app session, the agent has exited and the session is idle.
+    /// This intentionally avoids treating every shell binary as idle because custom agent wrappers
+    /// can run under `bash`/`sh` even while agent work is still in progress.
     func syncBusySessionsFromProcessState() async {
         // Collect all agent sessions across non-archived threads
         var allAgentSessions = Set<String>()
@@ -564,25 +573,38 @@ extension ThreadManager {
         }
         guard !allAgentSessions.isEmpty else { return }
 
-        let commands = await tmux.activeCommands(forSessions: allAgentSessions)
-        guard !commands.isEmpty else { return }
+        let paneStates = await tmux.activePaneStates(forSessions: allAgentSessions)
+        guard !paneStates.isEmpty else { return }
 
         var changed = false
+        var changedThreadIds = Set<UUID>()
         for i in threads.indices {
             guard !threads[i].isArchived else { continue }
             for session in threads[i].agentTmuxSessions {
-                guard let command = commands[session] else { continue }
-                let isShell = TmuxService.shellCommands.contains(command)
+                guard let paneState = paneStates[session] else { continue }
+                let command = paneState.command
+                let isShell = Self.idleShellCommands.contains(command)
+                let titleIndicatesBusy = paneTitleIndicatesBusy(paneState.title)
                 if isShell {
+                    if titleIndicatesBusy && !threads[i].waitingForInputSessions.contains(session) {
+                        if !threads[i].busySessions.contains(session) {
+                            threads[i].busySessions.insert(session)
+                            changed = true
+                            changedThreadIds.insert(threads[i].id)
+                        }
+                        continue
+                    }
                     // Agent not running — clear busy and waiting if set
                     if threads[i].busySessions.contains(session) {
                         threads[i].busySessions.remove(session)
                         changed = true
+                        changedThreadIds.insert(threads[i].id)
                     }
                     if threads[i].waitingForInputSessions.contains(session) {
                         threads[i].waitingForInputSessions.remove(session)
                         notifiedWaitingSessions.remove(session)
                         changed = true
+                        changedThreadIds.insert(threads[i].id)
                     }
                 } else {
                     // Non-shell process running — mark busy only if not in waiting state.
@@ -597,6 +619,7 @@ extension ThreadManager {
                         if !threads[i].busySessions.contains(session) {
                             threads[i].busySessions.insert(session)
                             changed = true
+                            changedThreadIds.insert(threads[i].id)
                         }
                     }
                 }
@@ -606,8 +629,20 @@ extension ThreadManager {
         if changed {
             await MainActor.run {
                 delegate?.threadManager(self, didUpdateThreads: threads)
+                for threadId in changedThreadIds {
+                    if let thread = threads.first(where: { $0.id == threadId }) {
+                        postBusySessionsChangedNotification(for: thread)
+                    }
+                }
             }
         }
+    }
+
+    private func paneTitleIndicatesBusy(_ title: String) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let scalar = trimmed.unicodeScalars.first else { return false }
+        // Claude/Codex often prefix titles with a braille spinner while processing.
+        return (0x2800...0x28FF).contains(scalar.value)
     }
 
 
@@ -617,6 +652,7 @@ extension ThreadManager {
         let settings = persistence.loadSettings()
         let playSound = settings.playSoundForAgentCompletion
         var changed = false
+        var changedThreadIds = Set<UUID>()
         var notifyPairs: [(threadIndex: Int, sessionName: String)] = []
 
         for i in threads.indices {
@@ -636,6 +672,7 @@ extension ThreadManager {
                     threads[i].busySessions.remove(session)
                     threads[i].waitingForInputSessions.insert(session)
                     changed = true
+                    changedThreadIds.insert(threads[i].id)
 
                     let isActiveThread = threads[i].id == activeThreadId
                     let isActiveTab = isActiveThread && threads[i].lastSelectedTmuxSessionName == session
@@ -648,13 +685,14 @@ extension ThreadManager {
                     threads[i].waitingForInputSessions.remove(session)
                     notifiedWaitingSessions.remove(session)
                     changed = true
+                    changedThreadIds.insert(threads[i].id)
                     // syncBusy will re-mark as busy on the same tick
                 }
             }
         }
 
         guard changed else { return }
-        for (threadIndex, session) in notifyPairs {
+        for (threadIndex, _) in notifyPairs {
             let projectName = settings.projects.first(where: { $0.id == threads[threadIndex].projectId })?.name ?? "Project"
             sendAgentWaitingNotification(for: threads[threadIndex], projectName: projectName, playSound: playSound)
         }
@@ -662,6 +700,11 @@ extension ThreadManager {
         await MainActor.run {
             updateDockBadge()
             delegate?.threadManager(self, didUpdateThreads: threads)
+            for threadId in changedThreadIds {
+                if let thread = threads.first(where: { $0.id == threadId }) {
+                    postBusySessionsChangedNotification(for: thread)
+                }
+            }
             for i in threads.indices where !threads[i].isArchived && threads[i].hasWaitingForInput {
                 NotificationCenter.default.post(
                     name: .magentAgentWaitingForInput,
@@ -698,6 +741,18 @@ extension ThreadManager {
         if lastChunk.contains("Do you want me to go ahead") { return true }
 
         return false
+    }
+
+    @MainActor
+    func postBusySessionsChangedNotification(for thread: MagentThread) {
+        NotificationCenter.default.post(
+            name: .magentAgentBusySessionsChanged,
+            object: self,
+            userInfo: [
+                "threadId": thread.id,
+                "busySessions": thread.busySessions
+            ]
+        )
     }
 
     private func sendAgentWaitingNotification(for thread: MagentThread, projectName: String, playSound: Bool) {

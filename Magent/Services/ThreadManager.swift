@@ -32,6 +32,12 @@ final class ThreadManager {
     var lastTmuxZombieHealthCheckAt: Date = .distantPast
     var didShowTmuxZombieWarning = false
     var isRestartingTmuxForRecovery = false
+    static let idleShellCommands: Set<String> = {
+        let shellPath = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        let shellName = URL(fileURLWithPath: shellPath).lastPathComponent
+        guard !shellName.isEmpty else { return ["zsh", "-zsh"] }
+        return [shellName, "-\(shellName)"]
+    }()
 
     // MARK: - Lifecycle
 
@@ -493,6 +499,7 @@ final class ThreadManager {
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
+    @MainActor
     func markSessionBusy(threadId: UUID, sessionName: String) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[index].agentTmuxSessions.contains(sessionName) else { return }
@@ -502,6 +509,7 @@ final class ThreadManager {
         guard !threads[index].busySessions.contains(sessionName) else { return }
         threads[index].busySessions.insert(sessionName)
         delegate?.threadManager(self, didUpdateThreads: threads)
+        postBusySessionsChangedNotification(for: threads[index])
     }
 
     // MARK: - Dock Badge

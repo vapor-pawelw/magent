@@ -361,6 +361,32 @@ final class TmuxService {
         return result
     }
 
+    /// Returns a dictionary mapping session names to the active pane's command and title.
+    /// Only includes sessions from the given set that are alive.
+    func activePaneStates(forSessions sessionNames: Set<String>) async -> [String: (command: String, title: String)] {
+        guard !sessionNames.isEmpty else { return [:] }
+        guard let output = try? await ShellExecutor.run(
+            "tmux list-panes -a -F '#{session_name}\t#{pane_active}\t#{pane_current_command}\t#{pane_title}'"
+        ), !output.isEmpty else {
+            return [:]
+        }
+        var result = [String: (command: String, title: String)]()
+        for line in output.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: "\t", maxSplits: 3, omittingEmptySubsequences: false)
+            guard parts.count >= 4 else { continue }
+            let session = String(parts[0])
+            guard sessionNames.contains(session) else { continue }
+            let isActive = parts[1] == "1"
+            let command = String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let title = String(parts[3]).trimmingCharacters(in: .whitespacesAndNewlines)
+            // Prefer the active pane; fall back to first pane seen.
+            if isActive || result[session] == nil {
+                result[session] = (command: command, title: title)
+            }
+        }
+        return result
+    }
+
     /// Captures the last N lines of the active pane in a tmux session.
     func capturePane(sessionName: String, lastLines: Int = 15) async -> String? {
         guard let output = try? await ShellExecutor.run(

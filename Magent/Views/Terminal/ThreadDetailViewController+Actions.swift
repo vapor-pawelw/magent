@@ -149,6 +149,7 @@ extension ThreadDetailViewController {
 
     func updateThread(_ updated: MagentThread) {
         thread = updated
+        refreshTabStatusIndicators()
     }
 
     func handleRename(_ updated: MagentThread) {
@@ -172,6 +173,15 @@ extension ThreadDetailViewController {
         // Refresh tab labels to reflect re-keyed custom names
         for (i, item) in tabItems.enumerated() where i < thread.tmuxSessionNames.count {
             item.titleLabel.stringValue = thread.displayName(for: thread.tmuxSessionNames[i], at: i)
+        }
+        refreshTabStatusIndicators()
+    }
+
+    private func refreshTabStatusIndicators() {
+        for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
+            tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
+            tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
+            tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
         }
     }
 

@@ -6,6 +6,7 @@ import GhosttyBridge
 final class TabItemView: NSView, NSMenuDelegate {
 
     let pinIcon: NSImageView
+    let busySpinner: NSProgressIndicator
     let completionDot: NSView
     let titleLabel: NSTextField
     let closeButton: NSButton
@@ -26,21 +27,35 @@ final class TabItemView: NSView, NSMenuDelegate {
     }
 
     var hasUnreadCompletion: Bool = false {
-        didSet { updateIndicatorDot() }
+        didSet { updateIndicator() }
     }
 
     var hasWaitingForInput: Bool = false {
-        didSet { updateIndicatorDot() }
+        didSet { updateIndicator() }
     }
 
-    private func updateIndicatorDot() {
+    var hasBusy: Bool = false {
+        didSet { updateIndicator() }
+    }
+
+    private func updateIndicator() {
         if hasWaitingForInput {
+            busySpinner.stopAnimation(nil)
+            busySpinner.isHidden = true
             completionDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
             completionDot.isHidden = false
+        } else if hasBusy {
+            completionDot.isHidden = true
+            busySpinner.isHidden = false
+            busySpinner.startAnimation(nil)
         } else if hasUnreadCompletion {
+            busySpinner.stopAnimation(nil)
+            busySpinner.isHidden = true
             completionDot.layer?.backgroundColor = NSColor.systemGreen.cgColor
             completionDot.isHidden = false
         } else {
+            busySpinner.stopAnimation(nil)
+            busySpinner.isHidden = true
             completionDot.isHidden = true
         }
     }
@@ -52,6 +67,7 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     init(title: String) {
         pinIcon = NSImageView()
+        busySpinner = NSProgressIndicator()
         completionDot = NSView()
         titleLabel = NSTextField(labelWithString: title)
         closeButton = NSButton()
@@ -79,6 +95,15 @@ final class TabItemView: NSView, NSMenuDelegate {
         completionDot.setContentHuggingPriority(.required, for: .horizontal)
         completionDot.setContentCompressionResistancePriority(.required, for: .horizontal)
 
+        // Busy spinner
+        busySpinner.style = .spinning
+        busySpinner.controlSize = .small
+        busySpinner.isIndeterminate = true
+        busySpinner.translatesAutoresizingMaskIntoConstraints = false
+        busySpinner.isHidden = true
+        busySpinner.setContentHuggingPriority(.required, for: .horizontal)
+        busySpinner.setContentCompressionResistancePriority(.required, for: .horizontal)
+
         // Title
         titleLabel.font = .systemFont(ofSize: 12)
         titleLabel.isEditable = false
@@ -99,7 +124,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
 
         // Layout using an internal stack
-        let contentStack = NSStackView(views: [pinIcon, completionDot, titleLabel, closeButton])
+        let contentStack = NSStackView(views: [pinIcon, completionDot, busySpinner, titleLabel, closeButton])
         contentStack.orientation = .horizontal
         contentStack.spacing = 4
         contentStack.alignment = .centerY
@@ -115,6 +140,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             pinIcon.heightAnchor.constraint(equalToConstant: 12),
             completionDot.widthAnchor.constraint(equalToConstant: 8),
             completionDot.heightAnchor.constraint(equalToConstant: 8),
+            busySpinner.widthAnchor.constraint(equalToConstant: 10),
+            busySpinner.heightAnchor.constraint(equalToConstant: 10),
             closeButton.widthAnchor.constraint(equalToConstant: 16),
             closeButton.heightAnchor.constraint(equalToConstant: 16),
         ])
@@ -125,6 +152,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         menu = tabMenu
 
         updateAppearance()
+        updateIndicator()
     }
 
     @available(*, unavailable)
@@ -268,6 +296,13 @@ final class ThreadDetailViewController: NSViewController {
             self,
             selector: #selector(handleAgentWaitingNotification(_:)),
             name: .magentAgentWaitingForInput,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAgentBusyNotification(_:)),
+            name: .magentAgentBusySessionsChanged,
             object: nil
         )
 
@@ -418,6 +453,7 @@ final class ThreadDetailViewController: NSViewController {
             for (i, sessionName) in orderedSessions.enumerated() where i < tabItems.count {
                 tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
                 tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
+                tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
             }
 
             selectTab(at: initialIndex)
@@ -525,6 +561,7 @@ final class ThreadDetailViewController: NSViewController {
               threadId == thread.id,
               let unreadSessions = userInfo["unreadSessions"] as? Set<String> else { return }
 
+        thread.unreadCompletionSessions = unreadSessions
         for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
             tabItems[i].hasUnreadCompletion = unreadSessions.contains(sessionName)
         }
@@ -536,8 +573,21 @@ final class ThreadDetailViewController: NSViewController {
               threadId == thread.id,
               let waitingSessions = userInfo["waitingSessions"] as? Set<String> else { return }
 
+        thread.waitingForInputSessions = waitingSessions
         for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
             tabItems[i].hasWaitingForInput = waitingSessions.contains(sessionName)
+        }
+    }
+
+    @objc private func handleAgentBusyNotification(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let threadId = userInfo["threadId"] as? UUID,
+              threadId == thread.id,
+              let busySessions = userInfo["busySessions"] as? Set<String> else { return }
+
+        thread.busySessions = busySessions
+        for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
+            tabItems[i].hasBusy = busySessions.contains(sessionName)
         }
     }
 
