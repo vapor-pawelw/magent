@@ -518,19 +518,25 @@ final class ThreadManager {
         guard !trimmed.isEmpty, !trimmed.contains("/") else {
             throw ThreadManagerError.invalidName
         }
-        guard !threads.contains(where: { $0.name == trimmed && $0.id != thread.id }) else {
+        let currentThread = threads[index]
+        guard !threads.contains(where: { $0.name == trimmed && $0.id != currentThread.id }) else {
             throw ThreadManagerError.duplicateName
         }
 
-        let oldName = thread.name
+        let oldName = currentThread.name
         let newBranchName = trimmed
-        let oldWorktreePath = thread.worktreePath
+        let oldWorktreePath = currentThread.worktreePath
         let parentDir = (oldWorktreePath as NSString).deletingLastPathComponent
         let newWorktreePath = (parentDir as NSString).appendingPathComponent(trimmed)
+        let sessionRenameMap = Dictionary(uniqueKeysWithValues: currentThread.tmuxSessionNames.map { sessionName in
+            (sessionName, renamedSessionName(sessionName, fromThreadName: oldName, toThreadName: trimmed))
+        })
+        let oldSessionNames = Set(currentThread.tmuxSessionNames)
+        let newSessionNames = currentThread.tmuxSessionNames.map { sessionRenameMap[$0] ?? $0 }
 
         // Look up project for repo path
         let settings = persistence.loadSettings()
-        guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else {
+        guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else {
             throw ThreadManagerError.threadNotFound
         }
 
@@ -541,44 +547,42 @@ final class ThreadManager {
         if await git.branchExists(repoPath: project.repoPath, branchName: newBranchName) {
             throw ThreadManagerError.duplicateName
         }
-        let newPrimarySession = "magent-\(trimmed)"
-        if await tmux.hasSession(name: newPrimarySession) {
+        if Set(newSessionNames).count != newSessionNames.count {
             throw ThreadManagerError.duplicateName
+        }
+        for (oldSessionName, newSessionName) in zip(currentThread.tmuxSessionNames, newSessionNames)
+        where oldSessionName != newSessionName {
+            if !oldSessionNames.contains(newSessionName), await tmux.hasSession(name: newSessionName) {
+                throw ThreadManagerError.duplicateName
+            }
         }
 
         // 1. Rename git branch
-        try await git.renameBranch(repoPath: project.repoPath, oldName: thread.branchName, newName: newBranchName)
+        try await git.renameBranch(repoPath: project.repoPath, oldName: currentThread.branchName, newName: newBranchName)
 
-        // 2. Move worktree (physically moves directory, running processes keep working)
+        // 2. Move worktree and keep a compatibility symlink at the old path.
+        // Running agent processes keep their original env/cwd, so the alias avoids broken paths.
         try await git.moveWorktree(repoPath: project.repoPath, oldPath: oldWorktreePath, newPath: newWorktreePath)
+        createCompatibilitySymlink(from: oldWorktreePath, to: newWorktreePath)
 
         // 3. Rename each tmux session
-        var newSessionNames: [String] = []
-        for sessionName in thread.tmuxSessionNames {
-            let newSessionName = sessionName.replacingOccurrences(of: oldName, with: trimmed)
-            try? await tmux.renameSession(from: sessionName, to: newSessionName)
-            newSessionNames.append(newSessionName)
-        }
+        try await renameTmuxSessions(from: currentThread.tmuxSessionNames, to: newSessionNames)
 
         // 4. Update pinned and agent sessions to reflect new names
-        var newPinnedSessions: [String] = []
-        for pinnedName in thread.pinnedTmuxSessions {
-            newPinnedSessions.append(pinnedName.replacingOccurrences(of: oldName, with: trimmed))
-        }
-        var newAgentSessions: [String] = []
-        for agentName in thread.agentTmuxSessions {
-            newAgentSessions.append(agentName.replacingOccurrences(of: oldName, with: trimmed))
-        }
+        let newPinnedSessions = currentThread.pinnedTmuxSessions.map { sessionRenameMap[$0] ?? $0 }
+        let newAgentSessions = currentThread.agentTmuxSessions.map { sessionRenameMap[$0] ?? $0 }
 
         // 5. Update env vars on each session
         for sessionName in newSessionNames {
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH", value: newWorktreePath)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: trimmed)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
             await tmux.updateWorkingDirectory(sessionName: sessionName, to: newWorktreePath)
         }
 
         // 6. Trust new path for the agent if needed
-        trustDirectoryIfNeeded(newWorktreePath, agentType: thread.selectedAgentType)
+        trustDirectoryIfNeeded(newWorktreePath, agentType: currentThread.selectedAgentType)
 
         // 7. Update model fields and persist
         threads[index].name = trimmed
@@ -588,7 +592,7 @@ final class ThreadManager {
         threads[index].agentTmuxSessions = newAgentSessions
         threads[index].pinnedTmuxSessions = newPinnedSessions
         if let selectedName = threads[index].lastSelectedTmuxSessionName {
-            threads[index].lastSelectedTmuxSessionName = selectedName.replacingOccurrences(of: oldName, with: trimmed)
+            threads[index].lastSelectedTmuxSessionName = sessionRenameMap[selectedName] ?? selectedName
         }
         if markFirstPromptRenameHandled {
             threads[index].didAutoRenameFromFirstPrompt = true
@@ -1182,6 +1186,68 @@ final class ThreadManager {
     }
 
     // MARK: - Helpers
+
+    /// Renames session names produced by Magent without touching unrelated substrings.
+    /// This avoids accidental rewrites when thread names overlap with the "magent" prefix.
+    private func renamedSessionName(_ sessionName: String, fromThreadName oldName: String, toThreadName newName: String) -> String {
+        let oldPrefix = "magent-\(oldName)"
+        let newPrefix = "magent-\(newName)"
+
+        if sessionName == oldPrefix {
+            return newPrefix
+        }
+        if sessionName.hasPrefix(oldPrefix + "-") {
+            return newPrefix + String(sessionName.dropFirst(oldPrefix.count))
+        }
+        return sessionName
+    }
+
+    /// Renames tmux sessions in two phases to avoid collisions during rename.
+    /// Dead sessions are skipped; they will be recreated lazily with the new name.
+    private func renameTmuxSessions(from oldNames: [String], to newNames: [String]) async throws {
+        precondition(oldNames.count == newNames.count)
+
+        var currentNames = oldNames
+        var liveIndices: [Int] = []
+
+        for i in oldNames.indices where oldNames[i] != newNames[i] {
+            if await tmux.hasSession(name: oldNames[i]) {
+                liveIndices.append(i)
+            }
+        }
+
+        do {
+            for i in liveIndices {
+                let tempName = "magent-rename-\(UUID().uuidString.lowercased())"
+                try await tmux.renameSession(from: oldNames[i], to: tempName)
+                currentNames[i] = tempName
+            }
+
+            for i in liveIndices {
+                try await tmux.renameSession(from: currentNames[i], to: newNames[i])
+                currentNames[i] = newNames[i]
+            }
+        } catch {
+            // Best-effort rollback so the model doesn't diverge from live tmux state.
+            for i in liveIndices.reversed() where currentNames[i] != oldNames[i] {
+                try? await tmux.renameSession(from: currentNames[i], to: oldNames[i])
+            }
+            throw error
+        }
+    }
+
+    private func createCompatibilitySymlink(from oldPath: String, to newPath: String) {
+        let fileManager = FileManager.default
+        let oldURL = URL(fileURLWithPath: oldPath)
+
+        if let values = try? oldURL.resourceValues(forKeys: [.isSymbolicLinkKey]),
+           values.isSymbolicLink == true {
+            try? fileManager.removeItem(atPath: oldPath)
+        }
+
+        guard !fileManager.fileExists(atPath: oldPath) else { return }
+        try? fileManager.createSymbolicLink(atPath: oldPath, withDestinationPath: newPath)
+    }
 
     /// Builds the shell command to start the selected agent with any required agent-specific setup.
     private func agentStartCommand(
