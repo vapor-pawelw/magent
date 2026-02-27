@@ -1151,6 +1151,10 @@ final class ThreadDetailViewController: NSViewController {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
+        if thread.agentTmuxSessions.contains(sessionName) {
+            threadManager.markSessionBusy(threadId: thread.id, sessionName: sessionName)
+        }
+
         let previousThread = thread
         await threadManager.autoRenameThreadAfterFirstPromptIfNeeded(
             threadId: thread.id,

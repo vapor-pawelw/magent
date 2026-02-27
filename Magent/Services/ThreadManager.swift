@@ -467,6 +467,14 @@ final class ThreadManager {
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
+    func markSessionBusy(threadId: UUID, sessionName: String) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard threads[index].agentTmuxSessions.contains(sessionName) else { return }
+        guard !threads[index].busySessions.contains(sessionName) else { return }
+        threads[index].busySessions.insert(sessionName)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
     // MARK: - Dock Badge
 
     @MainActor
@@ -1596,6 +1604,7 @@ final class ThreadManager {
             }
 
             threads[index].lastAgentCompletionAt = now
+            threads[index].busySessions.remove(session)
 
             let isActiveThread = threads[index].id == activeThreadId
             let isActiveTab = isActiveThread && threads[index].lastSelectedTmuxSessionName == session

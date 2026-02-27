@@ -4,6 +4,7 @@ final class ThreadCell: NSTableCellView {
 
     private var pinImageView: NSImageView?
     private var completionImageView: NSImageView?
+    private var busySpinner: NSProgressIndicator?
     private var trailingStackView: NSStackView?
 
     private func ensureTrailingStack() {
@@ -17,7 +18,15 @@ final class ThreadCell: NSTableCellView {
         completionIV.translatesAutoresizingMaskIntoConstraints = false
         completionIV.setContentHuggingPriority(.required, for: .horizontal)
 
-        let stack = NSStackView(views: [completionIV, pinIV])
+        let spinner = NSProgressIndicator()
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isIndeterminate = true
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.setContentHuggingPriority(.required, for: .horizontal)
+        spinner.isHidden = true
+
+        let stack = NSStackView(views: [spinner, completionIV, pinIV])
         stack.orientation = .horizontal
         stack.spacing = 3
         stack.alignment = .centerY
@@ -31,10 +40,13 @@ final class ThreadCell: NSTableCellView {
             pinIV.heightAnchor.constraint(equalToConstant: 12),
             completionIV.widthAnchor.constraint(equalToConstant: 10),
             completionIV.heightAnchor.constraint(equalToConstant: 10),
+            spinner.widthAnchor.constraint(equalToConstant: 14),
+            spinner.heightAnchor.constraint(equalToConstant: 14),
         ])
         trailingStackView = stack
         pinImageView = pinIV
         completionImageView = completionIV
+        busySpinner = spinner
     }
 
     func configure(with thread: MagentThread, sectionColor: NSColor?) {
@@ -59,17 +71,26 @@ final class ThreadCell: NSTableCellView {
             pinImageView?.isHidden = true
         }
 
-        if thread.hasUnreadAgentCompletion {
+        if thread.hasAgentBusy {
+            busySpinner?.startAnimation(nil)
+            busySpinner?.isHidden = false
+            completionImageView?.image = nil
+            completionImageView?.isHidden = true
+        } else if thread.hasUnreadAgentCompletion {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
             completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent finished")
             completionImageView?.contentTintColor = .systemGreen
             completionImageView?.isHidden = false
         } else {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
             completionImageView?.image = nil
             completionImageView?.isHidden = true
         }
     }
 
-    func configureAsMain(isUnreadCompletion: Bool = false) {
+    func configureAsMain(isUnreadCompletion: Bool = false, isBusy: Bool = false) {
         textField?.stringValue = "Main"
         textField?.font = .systemFont(
             ofSize: NSFont.systemFontSize,
@@ -82,11 +103,20 @@ final class ThreadCell: NSTableCellView {
         ensureTrailingStack()
         pinImageView?.isHidden = true
 
-        if isUnreadCompletion {
+        if isBusy {
+            busySpinner?.startAnimation(nil)
+            busySpinner?.isHidden = false
+            completionImageView?.image = nil
+            completionImageView?.isHidden = true
+        } else if isUnreadCompletion {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
             completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent finished")
             completionImageView?.contentTintColor = .systemGreen
             completionImageView?.isHidden = false
         } else {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
             completionImageView?.image = nil
             completionImageView?.isHidden = true
         }
