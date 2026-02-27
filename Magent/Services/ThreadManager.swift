@@ -95,6 +95,9 @@ final class ThreadManager {
         // after restart (busySessions is transient and starts empty on launch).
         await syncBusySessionsFromProcessState()
 
+        // Populate dirty states at launch so indicators show immediately.
+        await refreshDirtyStates()
+
         await MainActor.run {
             updateDockBadge()
             delegate?.threadManager(self, didUpdateThreads: threads)
