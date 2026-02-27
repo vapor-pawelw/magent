@@ -619,13 +619,32 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         let section = sortedSections[row]
         guard !section.isDefault else { return }
 
-        if let defaultSection = settings.defaultSection {
-            ThreadManager.shared.reassignThreads(fromSection: section.id, toSection: defaultSection.id)
+        let knownSectionIds = Set(settings.threadSections.map(\.id))
+        let defaultSectionId = settings.defaultSection?.id
+        let threadsInSection = ThreadManager.shared.threads.filter { thread in
+            guard !thread.isMain else { return false }
+            let effectiveSectionId: UUID?
+            if let sid = thread.sectionId, knownSectionIds.contains(sid) {
+                effectiveSectionId = sid
+            } else {
+                effectiveSectionId = defaultSectionId
+            }
+            return effectiveSectionId == section.id
+        }
+        if !threadsInSection.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = "Cannot Delete Section"
+            alert.informativeText = "Move all threads out of \"\(section.name)\" before deleting it."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
         }
 
         settings.threadSections.removeAll { $0.id == section.id }
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
     @objc private func colorDotClicked(_ sender: NSButton) {
