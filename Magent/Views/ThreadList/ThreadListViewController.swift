@@ -914,7 +914,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         return c
                     }()
 
-                cell.configureAsMain(isUnreadCompletion: thread.hasUnreadAgentCompletion)
+                cell.configureAsMain(isUnreadCompletion: thread.hasUnreadAgentCompletion, isBusy: thread.hasAgentBusy)
                 return cell
             }
 

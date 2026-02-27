@@ -22,8 +22,15 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var didAutoRenameFromFirstPrompt: Bool
     var customTabNames: [String: String]
 
+    // Transient (not persisted) — tracks which agent sessions are currently working
+    var busySessions: Set<String> = []
+
     var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
+    }
+
+    var hasAgentBusy: Bool {
+        !busySessions.isEmpty
     }
 
     func displayName(for sessionName: String, at index: Int) -> String {
