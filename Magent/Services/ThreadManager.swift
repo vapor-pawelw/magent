@@ -581,6 +581,7 @@ final class ThreadManager {
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: trimmed)
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
             await tmux.updateWorkingDirectory(sessionName: sessionName, to: newWorktreePath)
+            enforceWorkingDirectoryAfterStartup(sessionName: sessionName, path: newWorktreePath)
         }
 
         // 6. Trust new path for the agent if needed
