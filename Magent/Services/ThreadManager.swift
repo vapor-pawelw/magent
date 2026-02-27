@@ -25,6 +25,8 @@ final class ThreadManager {
     private var recentBellBySession: [String: Date] = [:]
     private var autoRenameInProgress: Set<UUID> = []
     private var pendingCwdEnforcements: [String: PendingCwdEnforcement] = [:]
+    /// Dedup tracker — prevents repeated "waiting for input" notifications for the same session.
+    private var notifiedWaitingSessions: Set<String> = []
 
     // MARK: - Lifecycle
 
@@ -471,9 +473,22 @@ final class ThreadManager {
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
+    @MainActor
+    func markSessionWaitingSeen(threadId: UUID, sessionName: String) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard threads[index].waitingForInputSessions.contains(sessionName) else { return }
+        threads[index].waitingForInputSessions.remove(sessionName)
+        notifiedWaitingSessions.remove(sessionName)
+        updateDockBadge()
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
     func markSessionBusy(threadId: UUID, sessionName: String) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[index].agentTmuxSessions.contains(sessionName) else { return }
+        // Clear waiting state — user submitted a prompt
+        threads[index].waitingForInputSessions.remove(sessionName)
+        notifiedWaitingSessions.remove(sessionName)
         guard !threads[index].busySessions.contains(sessionName) else { return }
         threads[index].busySessions.insert(sessionName)
         delegate?.threadManager(self, didUpdateThreads: threads)
@@ -483,7 +498,7 @@ final class ThreadManager {
 
     @MainActor
     func updateDockBadge() {
-        let unreadCount = threads.filter({ !$0.isArchived && $0.hasUnreadAgentCompletion }).count
+        let unreadCount = threads.filter({ !$0.isArchived && ($0.hasUnreadAgentCompletion || $0.hasWaitingForInput) }).count
         NSApp.dockTile.badgeLabel = unreadCount > 0 ? "\(unreadCount)" : nil
     }
 
@@ -941,10 +956,12 @@ final class ThreadManager {
         let sessionName = threads[index].tmuxSessionNames[tabIndex]
         try? await tmux.killSession(name: sessionName)
 
-        // Also remove from pinned, agent, unread completion, and custom tab names if present
+        // Also remove from pinned, agent, unread completion, waiting, and custom tab names if present
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
         threads[index].agentTmuxSessions.removeAll { $0 == sessionName }
         threads[index].unreadCompletionSessions.remove(sessionName)
+        threads[index].waitingForInputSessions.remove(sessionName)
+        notifiedWaitingSessions.remove(sessionName)
         threads[index].customTabNames.removeValue(forKey: sessionName)
         threads[index].tmuxSessionNames.remove(at: tabIndex)
         if threads[index].lastSelectedTmuxSessionName == sessionName {
@@ -1552,6 +1569,7 @@ final class ThreadManager {
             await self.checkForMissingWorktrees()
             await self.checkForDeadSessions()
             await self.checkForAgentCompletions()
+            await self.checkForWaitingForInput()
             await self.syncBusySessionsFromProcessState()
             await self.ensureBellPipes()
             await self.checkPendingCwdEnforcements()
@@ -1619,6 +1637,8 @@ final class ThreadManager {
 
             threads[index].lastAgentCompletionAt = now
             threads[index].busySessions.remove(session)
+            threads[index].waitingForInputSessions.remove(session)
+            notifiedWaitingSessions.remove(session)
 
             let isActiveThread = threads[index].id == activeThreadId
             let isActiveTab = isActiveThread && threads[index].lastSelectedTmuxSessionName == session
@@ -1706,13 +1726,18 @@ final class ThreadManager {
                 guard let command = commands[session] else { continue }
                 let isShell = TmuxService.shellCommands.contains(command)
                 if isShell {
-                    // Agent not running — clear busy if it was set
+                    // Agent not running — clear busy and waiting if set
                     if threads[i].busySessions.contains(session) {
                         threads[i].busySessions.remove(session)
                         changed = true
                     }
+                    if threads[i].waitingForInputSessions.contains(session) {
+                        threads[i].waitingForInputSessions.remove(session)
+                        notifiedWaitingSessions.remove(session)
+                        changed = true
+                    }
                 } else {
-                    // Non-shell process running — agent is busy.
+                    // Non-shell process running — mark busy only if not in waiting state.
                     // Skip if a completion bell was recently received for this session;
                     // the bell fires just before the process exits, so pane_current_command
                     // can still show the agent binary for a brief window after completion.
@@ -1720,9 +1745,11 @@ final class ThreadManager {
                         guard let bellDate = recentBellBySession[session] else { return false }
                         return Date().timeIntervalSince(bellDate) < 5.0
                     }()
-                    if !recentlyCompleted && !threads[i].busySessions.contains(session) {
-                        threads[i].busySessions.insert(session)
-                        changed = true
+                    if !recentlyCompleted && !threads[i].waitingForInputSessions.contains(session) {
+                        if !threads[i].busySessions.contains(session) {
+                            threads[i].busySessions.insert(session)
+                            changed = true
+                        }
                     }
                 }
             }
@@ -1730,6 +1757,127 @@ final class ThreadManager {
 
         if changed {
             delegate?.threadManager(self, didUpdateThreads: threads)
+        }
+    }
+
+    // MARK: - Waiting-for-Input Detection
+
+    private func checkForWaitingForInput() async {
+        let settings = persistence.loadSettings()
+        let playSound = settings.playSoundForAgentCompletion
+        var changed = false
+        var notifyPairs: [(threadIndex: Int, sessionName: String)] = []
+
+        for i in threads.indices {
+            guard !threads[i].isArchived else { continue }
+            for session in threads[i].agentTmuxSessions {
+                let wasWaiting = threads[i].waitingForInputSessions.contains(session)
+                let isBusy = threads[i].busySessions.contains(session)
+
+                // Only check busy sessions (or already-waiting sessions to detect resolution)
+                guard isBusy || wasWaiting else { continue }
+
+                guard let paneContent = await tmux.capturePane(sessionName: session) else { continue }
+                let isWaiting = matchesWaitingForInputPattern(paneContent)
+
+                if isWaiting && !wasWaiting {
+                    // Transition: busy → waiting
+                    threads[i].busySessions.remove(session)
+                    threads[i].waitingForInputSessions.insert(session)
+                    changed = true
+
+                    let isActiveThread = threads[i].id == activeThreadId
+                    let isActiveTab = isActiveThread && threads[i].lastSelectedTmuxSessionName == session
+                    if !isActiveTab && !notifiedWaitingSessions.contains(session) {
+                        notifiedWaitingSessions.insert(session)
+                        notifyPairs.append((i, session))
+                    }
+                } else if !isWaiting && wasWaiting {
+                    // Transition: waiting → cleared (user provided input)
+                    threads[i].waitingForInputSessions.remove(session)
+                    notifiedWaitingSessions.remove(session)
+                    changed = true
+                    // syncBusy will re-mark as busy on the same tick
+                }
+            }
+        }
+
+        guard changed else { return }
+        for (threadIndex, session) in notifyPairs {
+            let projectName = settings.projects.first(where: { $0.id == threads[threadIndex].projectId })?.name ?? "Project"
+            sendAgentWaitingNotification(for: threads[threadIndex], projectName: projectName, playSound: playSound)
+        }
+
+        await MainActor.run {
+            updateDockBadge()
+            delegate?.threadManager(self, didUpdateThreads: threads)
+            for i in threads.indices where !threads[i].isArchived && threads[i].hasWaitingForInput {
+                NotificationCenter.default.post(
+                    name: .magentAgentWaitingForInput,
+                    object: self,
+                    userInfo: [
+                        "threadId": threads[i].id,
+                        "waitingSessions": threads[i].waitingForInputSessions
+                    ]
+                )
+            }
+        }
+    }
+
+    private func matchesWaitingForInputPattern(_ text: String) -> Bool {
+        // Trim trailing whitespace/newlines and look at the last non-empty lines
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        let trimmedLines = lines.suffix(20).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard !trimmedLines.isEmpty else { return false }
+        let lastChunk = trimmedLines.suffix(15).joined(separator: "\n")
+
+        // Claude Code plan mode
+        if lastChunk.contains("Would you like to proceed?") { return true }
+
+        // Claude Code permission prompts
+        if lastChunk.contains("Do you want to") && (lastChunk.contains("Yes") || lastChunk.contains("No")) { return true }
+
+        // Codex approval prompts
+        if lastChunk.contains("approve") && lastChunk.contains("deny") { return true }
+
+        // Claude Code AskUserQuestion / interactive prompt: ❯ with numbered options
+        if lastChunk.contains("\u{276F}") && lastChunk.range(of: #"\d+\."#, options: .regularExpression) != nil { return true }
+
+        // Claude Code ExitPlanMode / plan approval prompt
+        if lastChunk.contains("Do you want me to go ahead") { return true }
+
+        return false
+    }
+
+    private func sendAgentWaitingNotification(for thread: MagentThread, projectName: String, playSound: Bool) {
+        let settings = persistence.loadSettings()
+
+        if settings.showSystemBanners {
+            let content = UNMutableNotificationContent()
+            content.title = "Agent Needs Input"
+            content.body = "\(projectName) · \(thread.name)"
+            if playSound {
+                content.sound = UNNotificationSound(named: UNNotificationSoundName(settings.agentCompletionSoundName))
+            }
+            content.userInfo = ["threadId": thread.id.uuidString]
+
+            let request = UNNotificationRequest(
+                identifier: "magent-agent-waiting-\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            )
+            UNUserNotificationCenter.current().add(request)
+        }
+
+        if playSound {
+            let soundName = settings.agentCompletionSoundName
+            DispatchQueue.main.async {
+                if let sound = NSSound(named: NSSound.Name(soundName)) {
+                    sound.play()
+                } else {
+                    NSSound.beep()
+                }
+            }
         }
     }
 
@@ -2012,6 +2160,7 @@ final class ThreadManager {
 extension Notification.Name {
     static let magentDeadSessionsDetected = Notification.Name("magentDeadSessionsDetected")
     static let magentAgentCompletionDetected = Notification.Name("magentAgentCompletionDetected")
+    static let magentAgentWaitingForInput = Notification.Name("magentAgentWaitingForInput")
     static let magentSectionsDidChange = Notification.Name("magentSectionsDidChange")
     static let magentOpenSettings = Notification.Name("magentOpenSettings")
 }

@@ -24,6 +24,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     // Transient (not persisted) — tracks which agent sessions are currently working
     var busySessions: Set<String> = []
+    // Transient (not persisted) — tracks which agent sessions are waiting for user input
+    var waitingForInputSessions: Set<String> = []
 
     var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
@@ -31,6 +33,10 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     var hasAgentBusy: Bool {
         !busySessions.isEmpty
+    }
+
+    var hasWaitingForInput: Bool {
+        !waitingForInputSessions.isEmpty
     }
 
     func displayName(for sessionName: String, at index: Int) -> String {

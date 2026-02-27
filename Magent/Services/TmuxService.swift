@@ -340,6 +340,16 @@ final class TmuxService {
         return result
     }
 
+    /// Captures the last N lines of the active pane in a tmux session.
+    func capturePane(sessionName: String, lastLines: Int = 15) async -> String? {
+        guard let output = try? await ShellExecutor.run(
+            "tmux capture-pane -p -t \(shellQuote(sessionName)) -S -\(lastLines)"
+        ) else {
+            return nil
+        }
+        return output
+    }
+
     static let shellCommands: Set<String> = [
         "sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh",
         "-sh", "-bash", "-zsh", "-fish", "-ksh", "-tcsh", "-csh"

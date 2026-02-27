@@ -25,9 +25,24 @@ private final class TabItemView: NSView, NSMenuDelegate {
         set { pinIcon.isHidden = !newValue }
     }
 
-    var hasUnreadCompletion: Bool {
-        get { !completionDot.isHidden }
-        set { completionDot.isHidden = !newValue }
+    var hasUnreadCompletion: Bool = false {
+        didSet { updateIndicatorDot() }
+    }
+
+    var hasWaitingForInput: Bool = false {
+        didSet { updateIndicatorDot() }
+    }
+
+    private func updateIndicatorDot() {
+        if hasWaitingForInput {
+            completionDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
+            completionDot.isHidden = false
+        } else if hasUnreadCompletion {
+            completionDot.layer?.backgroundColor = NSColor.systemGreen.cgColor
+            completionDot.isHidden = false
+        } else {
+            completionDot.isHidden = true
+        }
     }
 
     var onSelect: (() -> Void)?
@@ -248,6 +263,14 @@ final class ThreadDetailViewController: NSViewController {
             object: nil
         )
 
+        // Observe agent waiting-for-input notifications for tab dot indicators
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAgentWaitingNotification(_:)),
+            name: .magentAgentWaitingForInput,
+            object: nil
+        )
+
         Task {
             await setupTabs()
         }
@@ -391,9 +414,10 @@ final class ThreadDetailViewController: NSViewController {
                 initialIndex = 0
             }
 
-            // Initialize completion dots from thread model
+            // Initialize indicator dots from thread model
             for (i, sessionName) in orderedSessions.enumerated() where i < tabItems.count {
                 tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
+                tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
             }
 
             selectTab(at: initialIndex)
@@ -506,6 +530,17 @@ final class ThreadDetailViewController: NSViewController {
         }
     }
 
+    @objc private func handleAgentWaitingNotification(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let threadId = userInfo["threadId"] as? UUID,
+              threadId == thread.id,
+              let waitingSessions = userInfo["waitingSessions"] as? Set<String> else { return }
+
+        for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
+            tabItems[i].hasWaitingForInput = waitingSessions.contains(sessionName)
+        }
+    }
+
     // MARK: - Tab Bar Layout
 
     private func rebuildTabBar() {
@@ -595,9 +630,11 @@ final class ThreadDetailViewController: NSViewController {
             UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
             UserDefaults.standard.set(sessionName, forKey: Self.lastOpenedSessionDefaultsKey)
 
-            // Clear unread completion dot for this tab
+            // Clear unread completion and waiting dots for this tab
             tabItems[index].hasUnreadCompletion = false
+            tabItems[index].hasWaitingForInput = false
             threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: sessionName)
+            threadManager.markSessionWaitingSeen(threadId: thread.id, sessionName: sessionName)
         }
     }
 
