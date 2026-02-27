@@ -355,6 +355,13 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         autoRenameCheckbox.state = settings.autoRenameWorktrees ? .on : .off
         worktreeSection.addArrangedSubview(autoRenameCheckbox)
 
+        let autoRenameDesc = NSTextField(
+            wrappingLabelWithString: "Uses AI to generate a meaningful branch name from the prompt. Currently works with Claude Code and Codex."
+        )
+        autoRenameDesc.font = .systemFont(ofSize: 11)
+        autoRenameDesc.textColor = NSColor(resource: .textSecondary)
+        worktreeSection.addArrangedSubview(autoRenameDesc)
+
         worktreeSection.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(worktreeSection)
         NSLayoutConstraint.activate([

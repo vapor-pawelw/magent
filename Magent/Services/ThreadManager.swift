@@ -471,7 +471,7 @@ final class ThreadManager {
         return first?.id == threadId
     }
 
-    private func autoRenameCandidates(from prompt: String) -> [String] {
+    private func naiveAutoRenameCandidates(from prompt: String) -> [String] {
         let words = prompt
             .lowercased()
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
@@ -512,6 +512,102 @@ final class ThreadManager {
         }
 
         return candidates
+    }
+
+    private func sanitizeSlug(_ raw: String) -> String? {
+        // Take first line only
+        let line = raw.components(separatedBy: .newlines).first ?? raw
+
+        // Strip quotes and backticks
+        var slug = line
+            .replacingOccurrences(of: "`", with: "")
+            .replacingOccurrences(of: "\"", with: "")
+            .replacingOccurrences(of: "'", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Lowercase, replace non-alphanumeric with hyphens
+        slug = slug.lowercased()
+        slug = slug.map { $0.isLetter || $0.isNumber || $0 == "-" ? String($0) : "-" }.joined()
+
+        // Collapse consecutive hyphens and trim leading/trailing hyphens
+        while slug.contains("--") {
+            slug = slug.replacingOccurrences(of: "--", with: "-")
+        }
+        slug = slug.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+
+        // Validate: 2–50 chars, must contain at least one letter
+        guard slug.count >= 2, slug.count <= 50 else { return nil }
+        guard slug.contains(where: { $0.isLetter }) else { return nil }
+
+        // Reject if too many segments — a slug should be 2-5 words, not a sentence
+        let segments = slug.split(separator: "-")
+        guard segments.count <= 5 else { return nil }
+
+        // Reject if it looks like an error message rather than a slug
+        let errorWords: Set<String> = [
+            "error", "failed", "failure", "unauthorized", "forbidden",
+            "denied", "invalid", "unavailable", "exceeded", "limit",
+            "timeout", "sorry", "cannot", "unable", "please", "warning",
+            "deprecated", "unknown", "not", "found", "model",
+        ]
+        let segmentSet = Set(segments.map(String.init))
+        guard segmentSet.intersection(errorWords).count <= 1 else { return nil }
+
+        return slug
+    }
+
+    private func generateSlugViaAgent(from prompt: String, agentType: AgentType?) async -> String? {
+        let truncated = String(prompt.prefix(500))
+        let aiPrompt = """
+            Generate a short kebab-case slug (2-4 words) for a git branch name based on this task. \
+            Output ONLY the slug, nothing else. No quotes, no explanation. \
+            Example: "Fix auth bug in login" → fix-auth-login
+            Task: \(truncated)
+            """
+
+        let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
+        let command: String
+        switch agentType {
+        case .codex:
+            command = "codex exec \(escapedPrompt) --model o4-mini --ephemeral"
+        default:
+            // Use claude for .claude, .custom, and nil (claude is a prerequisite for this app)
+            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+            command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence"
+        }
+
+        let result: String? = await withTaskGroup(of: String?.self) { group in
+            group.addTask {
+                let result = await ShellExecutor.execute(command)
+                guard result.exitCode == 0 else { return nil }
+                // Non-empty stderr alongside stdout suggests error output mixed in
+                let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard stderr.isEmpty else { return nil }
+                return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                return nil
+            }
+            // Return whichever finishes first
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+
+        guard let raw = result, !raw.isEmpty else { return nil }
+        return sanitizeSlug(raw)
+    }
+
+    private func autoRenameCandidates(from prompt: String, agentType: AgentType?) async -> [String] {
+        if let slug = await generateSlugViaAgent(from: prompt, agentType: agentType) {
+            var candidates = [slug]
+            for i in 2...9 {
+                candidates.append("\(slug)-\(i)")
+            }
+            return candidates
+        }
+        return naiveAutoRenameCandidates(from: prompt)
     }
 
     func renameThread(
@@ -638,7 +734,7 @@ final class ThreadManager {
         guard !isFirstRegularThreadInProject(threadId: thread.id, projectId: thread.projectId) else { return }
         guard !autoRenameInProgress.contains(thread.id) else { return }
 
-        let candidates = autoRenameCandidates(from: prompt)
+        let candidates = await autoRenameCandidates(from: prompt, agentType: thread.selectedAgentType)
         guard !candidates.isEmpty else { return }
 
         autoRenameInProgress.insert(thread.id)
