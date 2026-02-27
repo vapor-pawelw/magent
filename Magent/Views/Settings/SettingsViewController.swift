@@ -18,11 +18,13 @@ private final class NonCapturingScrollView: NSScrollView {
 // MARK: - Settings Category
 
 enum SettingsCategory: Int, CaseIterable {
-    case general, projects
+    case general, agents, notifications, projects
 
     var title: String {
         switch self {
         case .general: return "General"
+        case .agents: return "Agents"
+        case .notifications: return "Notifications"
         case .projects: return "Projects"
         }
     }
@@ -30,6 +32,8 @@ enum SettingsCategory: Int, CaseIterable {
     var symbolName: String {
         switch self {
         case .general: return "gearshape"
+        case .agents: return "cpu"
+        case .notifications: return "bell"
         case .projects: return "folder"
         }
     }
@@ -42,6 +46,8 @@ final class SettingsSplitViewController: NSSplitViewController {
     private let sidebarVC = SettingsSidebarViewController()
     private let detailContainerVC = NSViewController()
     private let generalVC = SettingsGeneralViewController()
+    private let agentsVC = SettingsAgentsViewController()
+    private let notificationsVC = SettingsNotificationsViewController()
     private let projectsVC = SettingsProjectsViewController()
     private var detailSplitItem: NSSplitViewItem!
     private var currentCategory: SettingsCategory = .general
@@ -81,31 +87,24 @@ final class SettingsSplitViewController: NSSplitViewController {
         detailContainerVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
         let container = detailContainerVC.view
 
-        detailContainerVC.addChild(generalVC)
-        detailContainerVC.addChild(projectsVC)
-
-        let generalView = generalVC.view
-        let projectsView = projectsVC.view
-        generalView.translatesAutoresizingMaskIntoConstraints = false
-        projectsView.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(generalView)
-        container.addSubview(projectsView)
-
-        NSLayoutConstraint.activate([
-            generalView.topAnchor.constraint(equalTo: container.topAnchor),
-            generalView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            generalView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            generalView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-
-            projectsView.topAnchor.constraint(equalTo: container.topAnchor),
-            projectsView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            projectsView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            projectsView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
+        let allVCs: [NSViewController] = [generalVC, agentsVC, notificationsVC, projectsVC]
+        for vc in allVCs {
+            detailContainerVC.addChild(vc)
+            vc.view.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(vc.view)
+            NSLayoutConstraint.activate([
+                vc.view.topAnchor.constraint(equalTo: container.topAnchor),
+                vc.view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                vc.view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                vc.view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+        }
     }
 
     private func showCategoryContent(_ category: SettingsCategory) {
         generalVC.view.isHidden = category != .general
+        agentsVC.view.isHidden = category != .agents
+        notificationsVC.view.isHidden = category != .notifications
         projectsVC.view.isHidden = category != .projects
     }
 
@@ -252,23 +251,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
 
     private let persistence = PersistenceService.shared
     private var settings: AppSettings!
-    private var claudeCheckbox: NSButton!
-    private var codexCheckbox: NSButton!
-    private var customCheckbox: NSButton!
-    private var defaultAgentSection: NSStackView!
-    private var defaultAgentPopup: NSPopUpButton!
-    private var customAgentSection: NSStackView!
-    private var notificationStatusDot: NSView!
-    private var notificationStatusLabel: NSTextField!
-    private var openNotifSettingsButton: NSButton!
-    private var showBannersCheckbox: NSButton!
-    private var completionSoundCheckbox: NSButton!
-    private var soundPickerPopup: NSPopUpButton!
-    private var soundPickerRow: NSStackView!
-    private var windowObserver: NSObjectProtocol?
-    private var soundPreviewPlayer: NSSound?
     private var autoRenameCheckbox: NSButton!
-    private var customAgentCommandTextView: NSTextView!
     private var terminalInjectionTextView: NSTextView!
     private var agentContextTextView: NSTextView!
     private var contentScrollView: NSScrollView!
@@ -303,114 +286,6 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
-        // Defaults note
-        let defaultsNote = NSTextField(
-            wrappingLabelWithString: "These are the default settings for all projects. Individual projects can override them in the Projects tab."
-        )
-        defaultsNote.font = .systemFont(ofSize: 11)
-        defaultsNote.textColor = NSColor(resource: .textSecondary)
-        defaultsNote.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(defaultsNote)
-        NSLayoutConstraint.activate([
-            defaultsNote.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
-
-        // Notifications
-        let notificationsSection = NSStackView()
-        notificationsSection.orientation = .vertical
-        notificationsSection.alignment = .leading
-        notificationsSection.spacing = 6
-
-        let notificationsLabel = NSTextField(labelWithString: "Notifications")
-        notificationsLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        notificationsSection.addArrangedSubview(notificationsLabel)
-
-        let notificationsDesc = NSTextField(
-            wrappingLabelWithString: "When an agent finishes a command, Magent sends a system notification and moves the thread to the top of its section."
-        )
-        notificationsDesc.font = .systemFont(ofSize: 11)
-        notificationsDesc.textColor = NSColor(resource: .textSecondary)
-        notificationsSection.addArrangedSubview(notificationsDesc)
-
-        // Permission status row
-        let statusRow = NSStackView()
-        statusRow.orientation = .horizontal
-        statusRow.alignment = .centerY
-        statusRow.spacing = 6
-
-        notificationStatusDot = NSView()
-        notificationStatusDot.wantsLayer = true
-        notificationStatusDot.layer?.cornerRadius = 5
-        notificationStatusDot.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            notificationStatusDot.widthAnchor.constraint(equalToConstant: 10),
-            notificationStatusDot.heightAnchor.constraint(equalToConstant: 10),
-        ])
-        statusRow.addArrangedSubview(notificationStatusDot)
-
-        notificationStatusLabel = NSTextField(labelWithString: "Notifications: Checking...")
-        notificationStatusLabel.font = .systemFont(ofSize: 12)
-        statusRow.addArrangedSubview(notificationStatusLabel)
-
-        notificationsSection.addArrangedSubview(statusRow)
-
-        // Open Notification Settings button
-        openNotifSettingsButton = NSButton(
-            title: "Open Notification Settings",
-            target: self,
-            action: #selector(openSystemNotificationSettings)
-        )
-        openNotifSettingsButton.bezelStyle = .accessoryBarAction
-        openNotifSettingsButton.controlSize = .small
-        openNotifSettingsButton.font = .systemFont(ofSize: 11)
-        notificationsSection.addArrangedSubview(openNotifSettingsButton)
-
-        // Show system banners checkbox
-        showBannersCheckbox = NSButton(
-            checkboxWithTitle: "Show system banners",
-            target: self,
-            action: #selector(showBannersToggled)
-        )
-        showBannersCheckbox.state = settings.showSystemBanners ? .on : .off
-        notificationsSection.addArrangedSubview(showBannersCheckbox)
-
-        completionSoundCheckbox = NSButton(
-            checkboxWithTitle: "Play sound for completion notifications",
-            target: self,
-            action: #selector(completionSoundToggled)
-        )
-        completionSoundCheckbox.state = settings.playSoundForAgentCompletion ? .on : .off
-        notificationsSection.addArrangedSubview(completionSoundCheckbox)
-
-        // Sound picker row
-        soundPickerRow = NSStackView()
-        soundPickerRow.orientation = .horizontal
-        soundPickerRow.alignment = .centerY
-        soundPickerRow.spacing = 8
-
-        let soundLabel = NSTextField(labelWithString: "Sound:")
-        soundLabel.font = .systemFont(ofSize: 12)
-        soundPickerRow.addArrangedSubview(soundLabel)
-
-        soundPickerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        soundPickerPopup.controlSize = .small
-        soundPickerPopup.font = .systemFont(ofSize: 12)
-        soundPickerPopup.target = self
-        soundPickerPopup.action = #selector(soundPickerChanged)
-        populateSoundPicker()
-        soundPickerRow.addArrangedSubview(soundPickerPopup)
-
-        soundPickerRow.isHidden = !settings.playSoundForAgentCompletion
-        // Indent to align with checkbox label
-        soundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
-        notificationsSection.addArrangedSubview(soundPickerRow)
-
-        notificationsSection.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(notificationsSection)
-        NSLayoutConstraint.activate([
-            notificationsSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
-
         // Worktree Behavior
         let worktreeSection = NSStackView()
         worktreeSection.orientation = .vertical
@@ -441,89 +316,6 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         NSLayoutConstraint.activate([
             worktreeSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
-
-        // Active Agents
-        let agentsSection = NSStackView()
-        agentsSection.orientation = .vertical
-        agentsSection.alignment = .leading
-        agentsSection.spacing = 6
-
-        let agentsLabel = NSTextField(labelWithString: "Active Agents")
-        agentsLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        agentsSection.addArrangedSubview(agentsLabel)
-
-        let agentsDesc = NSTextField(
-            wrappingLabelWithString: "Enable agents that can be launched in new chats. If multiple are enabled, a default can be chosen."
-        )
-        agentsDesc.font = .systemFont(ofSize: 11)
-        agentsDesc.textColor = NSColor(resource: .textSecondary)
-        agentsSection.addArrangedSubview(agentsDesc)
-
-        claudeCheckbox = NSButton(checkboxWithTitle: AgentType.claude.displayName, target: self, action: #selector(activeAgentsChanged))
-        codexCheckbox = NSButton(checkboxWithTitle: AgentType.codex.displayName, target: self, action: #selector(activeAgentsChanged))
-        customCheckbox = NSButton(checkboxWithTitle: AgentType.custom.displayName, target: self, action: #selector(activeAgentsChanged))
-
-        let active = Set(settings.availableActiveAgents)
-        claudeCheckbox.state = active.contains(.claude) ? .on : .off
-        codexCheckbox.state = active.contains(.codex) ? .on : .off
-        customCheckbox.state = active.contains(.custom) ? .on : .off
-
-        agentsSection.addArrangedSubview(claudeCheckbox)
-        agentsSection.addArrangedSubview(codexCheckbox)
-        agentsSection.addArrangedSubview(customCheckbox)
-
-        agentsSection.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(agentsSection)
-        NSLayoutConstraint.activate([
-            agentsSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
-
-        // Default Agent
-        defaultAgentSection = NSStackView()
-        defaultAgentSection.orientation = .vertical
-        defaultAgentSection.alignment = .leading
-        defaultAgentSection.spacing = 4
-
-        let defaultLabel = NSTextField(labelWithString: "Default Agent")
-        defaultLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        defaultAgentSection.addArrangedSubview(defaultLabel)
-
-        let defaultDesc = NSTextField(labelWithString: "Used when no agent is explicitly selected for a new chat.")
-        defaultDesc.font = .systemFont(ofSize: 11)
-        defaultDesc.textColor = NSColor(resource: .textSecondary)
-        defaultAgentSection.addArrangedSubview(defaultDesc)
-
-        defaultAgentPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        defaultAgentPopup.target = self
-        defaultAgentPopup.action = #selector(defaultAgentChanged)
-        defaultAgentSection.addArrangedSubview(defaultAgentPopup)
-
-        defaultAgentSection.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(defaultAgentSection)
-        NSLayoutConstraint.activate([
-            defaultAgentSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
-        refreshDefaultAgentSection()
-
-        // Custom Agent Command (only shown when Custom is active)
-        customAgentSection = NSStackView()
-        customAgentSection.orientation = .vertical
-        customAgentSection.alignment = .leading
-        customAgentSection.spacing = 4
-        customAgentSection.translatesAutoresizingMaskIntoConstraints = false
-
-        customAgentCommandTextView = createSection(
-            in: customAgentSection,
-            title: "Custom Agent Command",
-            description: "Command used when the active agent is set to Custom.",
-            value: settings.customAgentCommand,
-            font: .monospacedSystemFont(ofSize: 13, weight: .regular)
-        )
-        stackView.addArrangedSubview(customAgentSection)
-        NSLayoutConstraint.activate([
-            customAgentSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
-        customAgentSection.isHidden = !active.contains(.custom)
 
         // Terminal Injection Command
         terminalInjectionTextView = createSection(
@@ -666,14 +458,6 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             scrollToTop()
             didInitialScrollToTop = true
         }
-        refreshNotificationPermissionStatus()
-        windowObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didBecomeKeyNotification,
-            object: view.window,
-            queue: .main
-        ) { [weak self] _ in
-            self?.refreshNotificationPermissionStatus()
-        }
     }
 
     override func viewDidLayout() {
@@ -752,149 +536,9 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         return textView
     }
 
-    // MARK: - Agent Actions
-
-    override func viewWillDisappear() {
-        super.viewWillDisappear()
-        soundPreviewPlayer?.stop()
-        soundPreviewPlayer = nil
-        if let windowObserver {
-            NotificationCenter.default.removeObserver(windowObserver)
-        }
-        windowObserver = nil
-    }
-
-    private func populateSoundPicker() {
-        soundPickerPopup.removeAllItems()
-        let soundNames = Self.systemSoundNames()
-        for name in soundNames {
-            soundPickerPopup.addItem(withTitle: name)
-        }
-        if let index = soundNames.firstIndex(of: settings.agentCompletionSoundName) {
-            soundPickerPopup.selectItem(at: index)
-        }
-    }
-
-    static func systemSoundNames() -> [String] {
-        let soundsDir = "/System/Library/Sounds"
-        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: soundsDir) else {
-            return ["Tink"]
-        }
-        return contents
-            .filter { $0.hasSuffix(".aiff") }
-            .map { ($0 as NSString).deletingPathExtension }
-            .sorted()
-    }
-
-    @objc private func soundPickerChanged() {
-        guard let selectedName = soundPickerPopup.selectedItem?.title else { return }
-        settings.agentCompletionSoundName = selectedName
-        try? persistence.saveSettings(settings)
-
-        // Stop any currently playing preview
-        soundPreviewPlayer?.stop()
-        // Play the selected sound as preview
-        if let sound = NSSound(named: NSSound.Name(selectedName)) {
-            soundPreviewPlayer = sound
-            sound.play()
-        }
-    }
-
-    @objc private func completionSoundToggled() {
-        settings.playSoundForAgentCompletion = completionSoundCheckbox.state == .on
-        soundPickerRow.isHidden = !settings.playSoundForAgentCompletion
-        if !settings.playSoundForAgentCompletion {
-            soundPreviewPlayer?.stop()
-            soundPreviewPlayer = nil
-        }
-        try? persistence.saveSettings(settings)
-    }
-
-    @objc private func showBannersToggled() {
-        settings.showSystemBanners = showBannersCheckbox.state == .on
-        try? persistence.saveSettings(settings)
-    }
-
-    @objc private func openSystemNotificationSettings() {
-        let bundleId = Bundle.main.bundleIdentifier ?? ""
-        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleId)") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    private func refreshNotificationPermissionStatus() {
-        UNUserNotificationCenter.current().getNotificationSettings { [weak self] notifSettings in
-            let authorized = notifSettings.authorizationStatus == .authorized
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.notificationStatusDot.layer?.backgroundColor = authorized
-                    ? NSColor.systemGreen.cgColor
-                    : NSColor.systemRed.cgColor
-                self.notificationStatusLabel.stringValue = authorized
-                    ? "Notifications: Enabled"
-                    : "Notifications: Disabled \u{2014} enable in System Settings"
-                self.notificationStatusLabel.textColor = authorized
-                    ? .labelColor
-                    : .systemRed
-
-                self.showBannersCheckbox.isEnabled = authorized
-                self.completionSoundCheckbox.isEnabled = authorized
-                self.soundPickerPopup.isEnabled = authorized
-                self.showBannersCheckbox.alphaValue = authorized ? 1.0 : 0.5
-                self.completionSoundCheckbox.alphaValue = authorized ? 1.0 : 0.5
-                self.soundPickerRow.alphaValue = authorized ? 1.0 : 0.5
-            }
-        }
-    }
-
     @objc private func autoRenameToggled() {
         settings.autoRenameWorktrees = autoRenameCheckbox.state == .on
         try? persistence.saveSettings(settings)
-    }
-
-    @objc private func activeAgentsChanged() {
-        var active: [AgentType] = []
-        if claudeCheckbox.state == .on { active.append(.claude) }
-        if codexCheckbox.state == .on { active.append(.codex) }
-        if customCheckbox.state == .on { active.append(.custom) }
-        settings.activeAgents = active
-
-        if active.count <= 1 {
-            settings.defaultAgentType = nil
-        } else if let defaultAgent = settings.defaultAgentType, !active.contains(defaultAgent) {
-            settings.defaultAgentType = active.first
-        } else if settings.defaultAgentType == nil {
-            settings.defaultAgentType = active.first
-        }
-
-        refreshDefaultAgentSection()
-        customAgentSection.isHidden = !active.contains(.custom)
-        try? persistence.saveSettings(settings)
-    }
-
-    @objc private func defaultAgentChanged() {
-        let active = settings.availableActiveAgents
-        let index = defaultAgentPopup.indexOfSelectedItem
-        guard index >= 0, index < active.count else { return }
-        settings.defaultAgentType = active[index]
-        try? persistence.saveSettings(settings)
-    }
-
-    private func refreshDefaultAgentSection() {
-        let active = settings.availableActiveAgents
-        defaultAgentPopup.removeAllItems()
-        for agent in active {
-            defaultAgentPopup.addItem(withTitle: agent.displayName)
-        }
-
-        defaultAgentSection.isHidden = active.count <= 1
-        guard active.count > 1 else { return }
-
-        let currentDefault = settings.defaultAgentType.flatMap { active.contains($0) ? $0 : nil } ?? active[0]
-        settings.defaultAgentType = currentDefault
-        if let idx = active.firstIndex(of: currentDefault) {
-            defaultAgentPopup.selectItem(at: idx)
-        }
     }
 
     // MARK: - Thread Section Actions
@@ -1024,9 +668,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     func textDidChange(_ notification: Notification) {
         guard let textView = notification.object as? NSTextView else { return }
 
-        if textView === customAgentCommandTextView {
-            settings.customAgentCommand = textView.string
-        } else if textView === terminalInjectionTextView {
+        if textView === terminalInjectionTextView {
             settings.terminalInjectionCommand = textView.string
         } else if textView === agentContextTextView {
             settings.agentContextInjection = textView.string
@@ -1145,6 +787,557 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         }
 
         return cell
+    }
+}
+
+// MARK: - SettingsAgentsViewController
+
+final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
+
+    private let persistence = PersistenceService.shared
+    private var settings: AppSettings!
+    private var claudeCheckbox: NSButton!
+    private var codexCheckbox: NSButton!
+    private var customCheckbox: NSButton!
+    private var defaultAgentSection: NSStackView!
+    private var defaultAgentPopup: NSPopUpButton!
+    private var customAgentSection: NSStackView!
+    private var customAgentCommandTextView: NSTextView!
+    private var contentScrollView: NSScrollView!
+    private var didInitialScrollToTop = false
+
+    override func loadView() {
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        settings = persistence.loadSettings()
+
+        contentScrollView = NSScrollView()
+        contentScrollView.hasVerticalScroller = true
+        contentScrollView.autohidesScrollers = true
+        contentScrollView.drawsBackground = false
+        contentScrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        let stackView = NSStackView()
+        stackView.orientation = .vertical
+        stackView.alignment = .leading
+        stackView.spacing = 20
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+
+        // Active Agents
+        let agentsSection = NSStackView()
+        agentsSection.orientation = .vertical
+        agentsSection.alignment = .leading
+        agentsSection.spacing = 6
+
+        let agentsLabel = NSTextField(labelWithString: "Active Agents")
+        agentsLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        agentsSection.addArrangedSubview(agentsLabel)
+
+        let agentsDesc = NSTextField(
+            wrappingLabelWithString: "Enable agents that can be launched in new chats. If multiple are enabled, a default can be chosen."
+        )
+        agentsDesc.font = .systemFont(ofSize: 11)
+        agentsDesc.textColor = NSColor(resource: .textSecondary)
+        agentsSection.addArrangedSubview(agentsDesc)
+
+        claudeCheckbox = NSButton(checkboxWithTitle: AgentType.claude.displayName, target: self, action: #selector(activeAgentsChanged))
+        codexCheckbox = NSButton(checkboxWithTitle: AgentType.codex.displayName, target: self, action: #selector(activeAgentsChanged))
+        customCheckbox = NSButton(checkboxWithTitle: AgentType.custom.displayName, target: self, action: #selector(activeAgentsChanged))
+
+        let active = Set(settings.availableActiveAgents)
+        claudeCheckbox.state = active.contains(.claude) ? .on : .off
+        codexCheckbox.state = active.contains(.codex) ? .on : .off
+        customCheckbox.state = active.contains(.custom) ? .on : .off
+
+        agentsSection.addArrangedSubview(claudeCheckbox)
+        agentsSection.addArrangedSubview(codexCheckbox)
+        agentsSection.addArrangedSubview(customCheckbox)
+
+        agentsSection.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(agentsSection)
+        NSLayoutConstraint.activate([
+            agentsSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        // Default Agent
+        defaultAgentSection = NSStackView()
+        defaultAgentSection.orientation = .vertical
+        defaultAgentSection.alignment = .leading
+        defaultAgentSection.spacing = 4
+
+        let defaultLabel = NSTextField(labelWithString: "Default Agent")
+        defaultLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        defaultAgentSection.addArrangedSubview(defaultLabel)
+
+        let defaultDesc = NSTextField(labelWithString: "Used when no agent is explicitly selected for a new chat.")
+        defaultDesc.font = .systemFont(ofSize: 11)
+        defaultDesc.textColor = NSColor(resource: .textSecondary)
+        defaultAgentSection.addArrangedSubview(defaultDesc)
+
+        defaultAgentPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        defaultAgentPopup.target = self
+        defaultAgentPopup.action = #selector(defaultAgentChanged)
+        defaultAgentSection.addArrangedSubview(defaultAgentPopup)
+
+        defaultAgentSection.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(defaultAgentSection)
+        NSLayoutConstraint.activate([
+            defaultAgentSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+        refreshDefaultAgentSection()
+
+        // Custom Agent Command (only shown when Custom is active)
+        customAgentSection = NSStackView()
+        customAgentSection.orientation = .vertical
+        customAgentSection.alignment = .leading
+        customAgentSection.spacing = 4
+        customAgentSection.translatesAutoresizingMaskIntoConstraints = false
+
+        customAgentCommandTextView = createSection(
+            in: customAgentSection,
+            title: "Custom Agent Command",
+            description: "Command used when the active agent is set to Custom.",
+            value: settings.customAgentCommand,
+            font: .monospacedSystemFont(ofSize: 13, weight: .regular)
+        )
+        stackView.addArrangedSubview(customAgentSection)
+        NSLayoutConstraint.activate([
+            customAgentSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+        customAgentSection.isHidden = !active.contains(.custom)
+
+        // Document view wrapper
+        let documentView = FlippedDocumentView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        documentView.addSubview(stackView)
+        contentScrollView.documentView = documentView
+
+        view.addSubview(contentScrollView)
+
+        NSLayoutConstraint.activate([
+            contentScrollView.topAnchor.constraint(equalTo: view.topAnchor),
+            contentScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            contentScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            contentScrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            stackView.topAnchor.constraint(equalTo: documentView.topAnchor),
+            stackView.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
+            stackView.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
+            stackView.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
+
+            documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
+        ])
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        if !didInitialScrollToTop {
+            scrollToTop()
+            didInitialScrollToTop = true
+        }
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        if !didInitialScrollToTop, view.window != nil {
+            scrollToTop()
+            didInitialScrollToTop = true
+        }
+    }
+
+    private func scrollToTop() {
+        guard let clipView = contentScrollView?.contentView as NSClipView? else { return }
+        clipView.scroll(to: NSPoint(x: 0, y: 0))
+        contentScrollView.reflectScrolledClipView(clipView)
+    }
+
+    private func createSection(
+        in stackView: NSStackView,
+        title: String,
+        description: String,
+        value: String,
+        font: NSFont
+    ) -> NSTextView {
+        let sectionStack = NSStackView()
+        sectionStack.orientation = .vertical
+        sectionStack.alignment = .leading
+        sectionStack.spacing = 4
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        sectionStack.addArrangedSubview(titleLabel)
+
+        let descLabel = NSTextField(wrappingLabelWithString: description)
+        descLabel.font = .systemFont(ofSize: 11)
+        descLabel.textColor = NSColor(resource: .textSecondary)
+        sectionStack.addArrangedSubview(descLabel)
+
+        let textView = NSTextView()
+        textView.font = font
+        textView.string = value
+        textView.isRichText = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.delegate = self
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainerInset = NSSize(width: 4, height: 4)
+
+        let textScrollView = NonCapturingScrollView()
+        textScrollView.documentView = textView
+        textScrollView.hasVerticalScroller = true
+        textScrollView.autohidesScrollers = true
+        textScrollView.borderType = .bezelBorder
+        textScrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        let lineHeight = font.ascender + abs(font.descender) + font.leading
+        let height = max(lineHeight * 3 + 12, 56)
+
+        NSLayoutConstraint.activate([
+            textScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: height),
+        ])
+
+        sectionStack.addArrangedSubview(textScrollView)
+        sectionStack.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(sectionStack)
+
+        NSLayoutConstraint.activate([
+            textScrollView.widthAnchor.constraint(equalTo: sectionStack.widthAnchor),
+            sectionStack.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+
+        return textView
+    }
+
+    // MARK: - Actions
+
+    @objc private func activeAgentsChanged() {
+        var active: [AgentType] = []
+        if claudeCheckbox.state == .on { active.append(.claude) }
+        if codexCheckbox.state == .on { active.append(.codex) }
+        if customCheckbox.state == .on { active.append(.custom) }
+        settings.activeAgents = active
+
+        if active.count <= 1 {
+            settings.defaultAgentType = nil
+        } else if let defaultAgent = settings.defaultAgentType, !active.contains(defaultAgent) {
+            settings.defaultAgentType = active.first
+        } else if settings.defaultAgentType == nil {
+            settings.defaultAgentType = active.first
+        }
+
+        refreshDefaultAgentSection()
+        customAgentSection.isHidden = !active.contains(.custom)
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func defaultAgentChanged() {
+        let active = settings.availableActiveAgents
+        let index = defaultAgentPopup.indexOfSelectedItem
+        guard index >= 0, index < active.count else { return }
+        settings.defaultAgentType = active[index]
+        try? persistence.saveSettings(settings)
+    }
+
+    private func refreshDefaultAgentSection() {
+        let active = settings.availableActiveAgents
+        defaultAgentPopup.removeAllItems()
+        for agent in active {
+            defaultAgentPopup.addItem(withTitle: agent.displayName)
+        }
+
+        defaultAgentSection.isHidden = active.count <= 1
+        guard active.count > 1 else { return }
+
+        let currentDefault = settings.defaultAgentType.flatMap { active.contains($0) ? $0 : nil } ?? active[0]
+        settings.defaultAgentType = currentDefault
+        if let idx = active.firstIndex(of: currentDefault) {
+            defaultAgentPopup.selectItem(at: idx)
+        }
+    }
+
+    // MARK: - NSTextViewDelegate
+
+    func textDidChange(_ notification: Notification) {
+        guard let textView = notification.object as? NSTextView else { return }
+
+        if textView === customAgentCommandTextView {
+            settings.customAgentCommand = textView.string
+        }
+
+        try? persistence.saveSettings(settings)
+    }
+}
+
+// MARK: - SettingsNotificationsViewController
+
+final class SettingsNotificationsViewController: NSViewController {
+
+    private let persistence = PersistenceService.shared
+    private var settings: AppSettings!
+    private var notificationStatusDot: NSView!
+    private var notificationStatusLabel: NSTextField!
+    private var showBannersCheckbox: NSButton!
+    private var completionSoundCheckbox: NSButton!
+    private var soundPickerPopup: NSPopUpButton!
+    private var soundPickerRow: NSStackView!
+    private var appActiveObserver: NSObjectProtocol?
+    private var soundPreviewPlayer: NSSound?
+
+    override func loadView() {
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        settings = persistence.loadSettings()
+
+        let stackView = NSStackView()
+        stackView.orientation = .vertical
+        stackView.alignment = .leading
+        stackView.spacing = 20
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+
+        // Description
+        let notificationsDesc = NSTextField(
+            wrappingLabelWithString: "When an agent finishes a command, Magent sends a system notification and moves the thread to the top of its section."
+        )
+        notificationsDesc.font = .systemFont(ofSize: 11)
+        notificationsDesc.textColor = NSColor(resource: .textSecondary)
+        notificationsDesc.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(notificationsDesc)
+        NSLayoutConstraint.activate([
+            notificationsDesc.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        // Permission status section
+        let permissionSection = NSStackView()
+        permissionSection.orientation = .vertical
+        permissionSection.alignment = .leading
+        permissionSection.spacing = 6
+
+        let permissionLabel = NSTextField(labelWithString: "Permission Status")
+        permissionLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        permissionSection.addArrangedSubview(permissionLabel)
+
+        // Permission status row
+        let statusRow = NSStackView()
+        statusRow.orientation = .horizontal
+        statusRow.alignment = .centerY
+        statusRow.spacing = 6
+
+        notificationStatusDot = NSView()
+        notificationStatusDot.wantsLayer = true
+        notificationStatusDot.layer?.cornerRadius = 5
+        notificationStatusDot.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            notificationStatusDot.widthAnchor.constraint(equalToConstant: 10),
+            notificationStatusDot.heightAnchor.constraint(equalToConstant: 10),
+        ])
+        statusRow.addArrangedSubview(notificationStatusDot)
+
+        notificationStatusLabel = NSTextField(labelWithString: "Notifications: Checking...")
+        notificationStatusLabel.font = .systemFont(ofSize: 12)
+        statusRow.addArrangedSubview(notificationStatusLabel)
+
+        permissionSection.addArrangedSubview(statusRow)
+
+        // Open Notification Settings button
+        let openNotifSettingsButton = NSButton(
+            title: "Open Notification Settings",
+            target: self,
+            action: #selector(openSystemNotificationSettings)
+        )
+        openNotifSettingsButton.bezelStyle = .accessoryBarAction
+        openNotifSettingsButton.controlSize = .small
+        openNotifSettingsButton.font = .systemFont(ofSize: 11)
+        permissionSection.addArrangedSubview(openNotifSettingsButton)
+
+        permissionSection.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(permissionSection)
+        NSLayoutConstraint.activate([
+            permissionSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        // Behavior section
+        let behaviorSection = NSStackView()
+        behaviorSection.orientation = .vertical
+        behaviorSection.alignment = .leading
+        behaviorSection.spacing = 6
+
+        let behaviorLabel = NSTextField(labelWithString: "Behavior")
+        behaviorLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        behaviorSection.addArrangedSubview(behaviorLabel)
+
+        // Show system banners checkbox
+        showBannersCheckbox = NSButton(
+            checkboxWithTitle: "Show system banners",
+            target: self,
+            action: #selector(showBannersToggled)
+        )
+        showBannersCheckbox.state = settings.showSystemBanners ? .on : .off
+        behaviorSection.addArrangedSubview(showBannersCheckbox)
+
+        completionSoundCheckbox = NSButton(
+            checkboxWithTitle: "Play sound for completion notifications",
+            target: self,
+            action: #selector(completionSoundToggled)
+        )
+        completionSoundCheckbox.state = settings.playSoundForAgentCompletion ? .on : .off
+        behaviorSection.addArrangedSubview(completionSoundCheckbox)
+
+        // Sound picker row
+        soundPickerRow = NSStackView()
+        soundPickerRow.orientation = .horizontal
+        soundPickerRow.alignment = .centerY
+        soundPickerRow.spacing = 8
+
+        let soundLabel = NSTextField(labelWithString: "Sound:")
+        soundLabel.font = .systemFont(ofSize: 12)
+        soundPickerRow.addArrangedSubview(soundLabel)
+
+        soundPickerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        soundPickerPopup.controlSize = .small
+        soundPickerPopup.font = .systemFont(ofSize: 12)
+        soundPickerPopup.target = self
+        soundPickerPopup.action = #selector(soundPickerChanged)
+        populateSoundPicker()
+        soundPickerRow.addArrangedSubview(soundPickerPopup)
+
+        soundPickerRow.isHidden = !settings.playSoundForAgentCompletion
+        // Indent to align with checkbox label
+        soundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
+        behaviorSection.addArrangedSubview(soundPickerRow)
+
+        behaviorSection.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(behaviorSection)
+        NSLayoutConstraint.activate([
+            behaviorSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        view.addSubview(stackView)
+
+        NSLayoutConstraint.activate([
+            stackView.topAnchor.constraint(equalTo: view.topAnchor),
+            stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        refreshNotificationPermissionStatus()
+        appActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshNotificationPermissionStatus()
+        }
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        soundPreviewPlayer?.stop()
+        soundPreviewPlayer = nil
+        if let appActiveObserver {
+            NotificationCenter.default.removeObserver(appActiveObserver)
+        }
+        appActiveObserver = nil
+    }
+
+    // MARK: - Actions
+
+    private func populateSoundPicker() {
+        soundPickerPopup.removeAllItems()
+        let soundNames = Self.systemSoundNames()
+        for name in soundNames {
+            soundPickerPopup.addItem(withTitle: name)
+        }
+        if let index = soundNames.firstIndex(of: settings.agentCompletionSoundName) {
+            soundPickerPopup.selectItem(at: index)
+        }
+    }
+
+    static func systemSoundNames() -> [String] {
+        let soundsDir = "/System/Library/Sounds"
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: soundsDir) else {
+            return ["Tink"]
+        }
+        return contents
+            .filter { $0.hasSuffix(".aiff") }
+            .map { ($0 as NSString).deletingPathExtension }
+            .sorted()
+    }
+
+    @objc private func soundPickerChanged() {
+        guard let selectedName = soundPickerPopup.selectedItem?.title else { return }
+        settings.agentCompletionSoundName = selectedName
+        try? persistence.saveSettings(settings)
+
+        // Stop any currently playing preview
+        soundPreviewPlayer?.stop()
+        // Play the selected sound as preview
+        if let sound = NSSound(named: NSSound.Name(selectedName)) {
+            soundPreviewPlayer = sound
+            sound.play()
+        }
+    }
+
+    @objc private func completionSoundToggled() {
+        settings.playSoundForAgentCompletion = completionSoundCheckbox.state == .on
+        soundPickerRow.isHidden = !settings.playSoundForAgentCompletion
+        if !settings.playSoundForAgentCompletion {
+            soundPreviewPlayer?.stop()
+            soundPreviewPlayer = nil
+        }
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func showBannersToggled() {
+        settings.showSystemBanners = showBannersCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func openSystemNotificationSettings() {
+        let bundleId = Bundle.main.bundleIdentifier ?? ""
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleId)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func refreshNotificationPermissionStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] notifSettings in
+            let authorized = notifSettings.authorizationStatus == .authorized
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.notificationStatusDot.layer?.backgroundColor = authorized
+                    ? NSColor.systemGreen.cgColor
+                    : NSColor.systemRed.cgColor
+                self.notificationStatusLabel.stringValue = authorized
+                    ? "Notifications: Enabled"
+                    : "Notifications: Disabled \u{2014} enable in System Settings"
+                self.notificationStatusLabel.textColor = authorized
+                    ? .labelColor
+                    : .systemRed
+
+                self.showBannersCheckbox.isEnabled = authorized
+                self.completionSoundCheckbox.isEnabled = authorized
+                self.soundPickerPopup.isEnabled = authorized
+                self.showBannersCheckbox.alphaValue = authorized ? 1.0 : 0.5
+                self.completionSoundCheckbox.alphaValue = authorized ? 1.0 : 0.5
+                self.soundPickerRow.alphaValue = authorized ? 1.0 : 0.5
+            }
+        }
     }
 }
 
