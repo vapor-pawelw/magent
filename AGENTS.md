@@ -48,6 +48,7 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 - **Worktree recovery** is automatic — when a user selects a thread whose worktree directory is missing, `SplitViewController` triggers recovery via `ThreadManager.recoverWorktree()`, showing progress via banners.
 - **Stale tmux cleanup** is centralized in `ThreadManager.cleanupStaleMagentSessions()` and should be used for lifecycle hooks (app restore, thread open, archive/delete) instead of ad hoc `tmux kill-session` sweeps in controllers.
 - **Agent completion attention** is bell-driven: tmux `alert-bell` hook events are consumed by `ThreadManager` to trigger system notifications and to set per-thread attention state (`hasUnreadAgentCompletion`, `lastAgentCompletionAt`) used for sidebar highlight and ordering.
+- **tmux bell monitoring must be re-applied when sessions are created**: tmux can start lazily, so startup-only hook setup is insufficient. Keep bell hook setup in `TmuxService.configureBellMonitoring(...)`, and call it from both startup setup and `createSession(...)`.
 - **Tuist**: Run `mise x -- tuist generate --no-open` after adding/removing Swift files.
 
 ## Important Files

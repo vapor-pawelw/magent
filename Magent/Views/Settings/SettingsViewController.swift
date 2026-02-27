@@ -1,5 +1,19 @@
 import Cocoa
 
+private final class FlippedDocumentView: NSView {
+    override var isFlipped: Bool { true }
+}
+
+private final class NonCapturingScrollView: NSScrollView {
+    override func scrollWheel(with event: NSEvent) {
+        if let nextResponder {
+            nextResponder.scrollWheel(with: event)
+        } else {
+            super.scrollWheel(with: event)
+        }
+    }
+}
+
 // MARK: - Settings Category
 
 enum SettingsCategory: Int, CaseIterable {
@@ -25,6 +39,10 @@ enum SettingsCategory: Int, CaseIterable {
 final class SettingsSplitViewController: NSSplitViewController {
 
     private let sidebarVC = SettingsSidebarViewController()
+    private let detailContainerVC = NSViewController()
+    private let generalVC = SettingsGeneralViewController()
+    private let projectsVC = SettingsProjectsViewController()
+    private var detailSplitItem: NSSplitViewItem!
     private var currentCategory: SettingsCategory = .general
 
     override func viewDidLoad() {
@@ -39,9 +57,13 @@ final class SettingsSplitViewController: NSSplitViewController {
         sidebarItem.canCollapse = false
         addSplitViewItem(sidebarItem)
 
-        let detailVC = detailViewController(for: .general)
-        let contentItem = NSSplitViewItem(viewController: detailVC)
-        addSplitViewItem(contentItem)
+        setupDetailContainer()
+        showCategoryContent(.general)
+
+        detailSplitItem = NSSplitViewItem(viewController: detailContainerVC)
+        detailSplitItem.canCollapse = false
+        detailSplitItem.minimumThickness = 500
+        addSplitViewItem(detailSplitItem)
 
         splitView.dividerStyle = .thin
     }
@@ -54,23 +76,43 @@ final class SettingsSplitViewController: NSSplitViewController {
         }
     }
 
-    private func detailViewController(for category: SettingsCategory) -> NSViewController {
-        switch category {
-        case .general: return SettingsGeneralViewController()
-        case .projects: return SettingsProjectsViewController()
-        }
+    private func setupDetailContainer() {
+        detailContainerVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
+        let container = detailContainerVC.view
+
+        detailContainerVC.addChild(generalVC)
+        detailContainerVC.addChild(projectsVC)
+
+        let generalView = generalVC.view
+        let projectsView = projectsVC.view
+        generalView.translatesAutoresizingMaskIntoConstraints = false
+        projectsView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(generalView)
+        container.addSubview(projectsView)
+
+        NSLayoutConstraint.activate([
+            generalView.topAnchor.constraint(equalTo: container.topAnchor),
+            generalView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            generalView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            generalView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+
+            projectsView.topAnchor.constraint(equalTo: container.topAnchor),
+            projectsView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            projectsView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            projectsView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+    }
+
+    private func showCategoryContent(_ category: SettingsCategory) {
+        generalVC.view.isHidden = category != .general
+        projectsVC.view.isHidden = category != .projects
     }
 
     fileprivate func showCategory(_ category: SettingsCategory) {
         guard category != currentCategory else { return }
         currentCategory = category
 
-        let detailVC = detailViewController(for: category)
-        if splitViewItems.count > 1 {
-            removeSplitViewItem(splitViewItems[1])
-        }
-        let contentItem = NSSplitViewItem(viewController: detailVC)
-        addSplitViewItem(contentItem)
+        showCategoryContent(category)
     }
 }
 
@@ -219,6 +261,8 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     private var customAgentCommandTextView: NSTextView!
     private var terminalInjectionTextView: NSTextView!
     private var agentContextTextView: NSTextView!
+    private var contentScrollView: NSScrollView!
+    private var didInitialScrollToTop = false
 
     // Thread sections
     private var sectionsTableView: NSTableView!
@@ -236,11 +280,11 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         super.viewDidLoad()
         settings = persistence.loadSettings()
 
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = false
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        contentScrollView = NSScrollView()
+        contentScrollView.hasVerticalScroller = true
+        contentScrollView.autohidesScrollers = true
+        contentScrollView.drawsBackground = false
+        contentScrollView.translatesAutoresizingMaskIntoConstraints = false
 
         let stackView = NSStackView()
         stackView.orientation = .vertical
@@ -488,26 +532,48 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         ])
 
         // Document view wrapper
-        let documentView = NSView()
+        let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(stackView)
-        scrollView.documentView = documentView
+        contentScrollView.documentView = documentView
 
-        view.addSubview(scrollView)
+        view.addSubview(contentScrollView)
 
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            contentScrollView.topAnchor.constraint(equalTo: view.topAnchor),
+            contentScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            contentScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            contentScrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             stackView.topAnchor.constraint(equalTo: documentView.topAnchor),
             stackView.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
             stackView.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
             stackView.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
 
-            documentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
+            documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
         ])
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        if !didInitialScrollToTop {
+            scrollToTop()
+            didInitialScrollToTop = true
+        }
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        if !didInitialScrollToTop, view.window != nil {
+            scrollToTop()
+            didInitialScrollToTop = true
+        }
+    }
+
+    private func scrollToTop() {
+        guard let clipView = contentScrollView?.contentView as NSClipView? else { return }
+        clipView.scroll(to: NSPoint(x: 0, y: 0))
+        contentScrollView.reflectScrolledClipView(clipView)
     }
 
     private func createSection(
@@ -543,7 +609,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         textView.isHorizontallyResizable = false
         textView.textContainerInset = NSSize(width: 4, height: 4)
 
-        let textScrollView = NSScrollView()
+        let textScrollView = NonCapturingScrollView()
         textScrollView.documentView = textView
         textScrollView.hasVerticalScroller = true
         textScrollView.autohidesScrollers = true
@@ -1214,7 +1280,7 @@ final class SettingsProjectsViewController: NSViewController {
         )
 
         // Set up the document view for scrolling
-        let documentView = NSView()
+        let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(stack)
 

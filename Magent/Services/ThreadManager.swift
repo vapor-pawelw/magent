@@ -1046,6 +1046,12 @@ final class ThreadManager {
     private var sessionMonitorTimer: Timer?
 
     func startSessionMonitor() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.startSessionMonitor()
+            }
+            return
+        }
         guard sessionMonitorTimer == nil else { return }
         sessionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             guard let self else { return }

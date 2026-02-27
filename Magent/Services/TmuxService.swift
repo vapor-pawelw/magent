@@ -13,6 +13,8 @@ final class TmuxService {
             cmd += " \(shellQuote(command))"
         }
         _ = try await ShellExecutor.run(cmd)
+        // tmux may have been auto-started by new-session; ensure bell monitoring is configured.
+        await configureBellMonitoring(resetEventLog: false)
     }
 
     /// Configures tmux settings needed by Magent (mouse selection behavior, etc.).
@@ -24,10 +26,17 @@ final class TmuxService {
         // Click anywhere to deselect (exit copy-mode)
         _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode MouseDown1Pane send-keys -X cancel")
         _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode-vi MouseDown1Pane send-keys -X cancel")
+        await configureBellMonitoring(resetEventLog: true)
+    }
 
+    private func configureBellMonitoring(resetEventLog: Bool) async {
         // Capture terminal bell events emitted by agent sessions for completion notifications.
         _ = try? await ShellExecutor.run("tmux set-option -g monitor-bell on")
-        _ = try? await ShellExecutor.run(": > \(shellQuote(agentCompletionEventsPath))")
+        if resetEventLog {
+            _ = try? await ShellExecutor.run(": > \(shellQuote(agentCompletionEventsPath))")
+        } else {
+            _ = try? await ShellExecutor.run("touch \(shellQuote(agentCompletionEventsPath))")
+        }
         let bellHook = "run-shell \"echo #{session_name} >> \(agentCompletionEventsPath)\""
         _ = try? await ShellExecutor.run("tmux set-hook -g alert-bell \(shellQuote(bellHook))")
     }
