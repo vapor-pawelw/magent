@@ -18,8 +18,23 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var agentHasRun: Bool
     var isPinned: Bool
     var lastAgentCompletionAt: Date?
-    var hasUnreadAgentCompletion: Bool
+    var unreadCompletionSessions: Set<String>
     var didAutoRenameFromFirstPrompt: Bool
+
+    var hasUnreadAgentCompletion: Bool {
+        !unreadCompletionSessions.isEmpty
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, projectId, name, worktreePath, branchName
+        case tmuxSessionNames, agentTmuxSessions, pinnedTmuxSessions
+        case createdAt, isArchived, sectionId, isMain
+        case selectedAgentType, lastSelectedTmuxSessionName
+        case agentHasRun, isPinned, lastAgentCompletionAt
+        case unreadCompletionSessions
+        case hasUnreadAgentCompletion // migration only
+        case didAutoRenameFromFirstPrompt
+    }
 
     init(
         id: UUID = UUID(),
@@ -39,7 +54,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         agentHasRun: Bool = false,
         isPinned: Bool = false,
         lastAgentCompletionAt: Date? = nil,
-        hasUnreadAgentCompletion: Bool = false,
+        unreadCompletionSessions: Set<String> = [],
         didAutoRenameFromFirstPrompt: Bool = false
     ) {
         self.id = id
@@ -59,7 +74,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.agentHasRun = agentHasRun
         self.isPinned = isPinned
         self.lastAgentCompletionAt = lastAgentCompletionAt
-        self.hasUnreadAgentCompletion = hasUnreadAgentCompletion
+        self.unreadCompletionSessions = unreadCompletionSessions
         self.didAutoRenameFromFirstPrompt = didAutoRenameFromFirstPrompt
     }
 
@@ -82,8 +97,38 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         agentHasRun = try container.decodeIfPresent(Bool.self, forKey: .agentHasRun) ?? false
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         lastAgentCompletionAt = try container.decodeIfPresent(Date.self, forKey: .lastAgentCompletionAt)
-        hasUnreadAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .hasUnreadAgentCompletion) ?? false
         didAutoRenameFromFirstPrompt = try container.decodeIfPresent(Bool.self, forKey: .didAutoRenameFromFirstPrompt) ?? false
+
+        // Decode new set, or migrate from old boolean
+        if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
+            unreadCompletionSessions = sessions
+        } else {
+            let oldBool = try container.decodeIfPresent(Bool.self, forKey: .hasUnreadAgentCompletion) ?? false
+            unreadCompletionSessions = oldBool ? Set(agentTmuxSessions) : []
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(projectId, forKey: .projectId)
+        try container.encode(name, forKey: .name)
+        try container.encode(worktreePath, forKey: .worktreePath)
+        try container.encode(branchName, forKey: .branchName)
+        try container.encode(tmuxSessionNames, forKey: .tmuxSessionNames)
+        try container.encode(agentTmuxSessions, forKey: .agentTmuxSessions)
+        try container.encode(pinnedTmuxSessions, forKey: .pinnedTmuxSessions)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(isArchived, forKey: .isArchived)
+        try container.encodeIfPresent(sectionId, forKey: .sectionId)
+        try container.encode(isMain, forKey: .isMain)
+        try container.encodeIfPresent(selectedAgentType, forKey: .selectedAgentType)
+        try container.encodeIfPresent(lastSelectedTmuxSessionName, forKey: .lastSelectedTmuxSessionName)
+        try container.encode(agentHasRun, forKey: .agentHasRun)
+        try container.encode(isPinned, forKey: .isPinned)
+        try container.encodeIfPresent(lastAgentCompletionAt, forKey: .lastAgentCompletionAt)
+        try container.encode(unreadCompletionSessions, forKey: .unreadCompletionSessions)
+        try container.encode(didAutoRenameFromFirstPrompt, forKey: .didAutoRenameFromFirstPrompt)
     }
 }
 

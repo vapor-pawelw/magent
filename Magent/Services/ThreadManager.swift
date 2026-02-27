@@ -407,15 +407,22 @@ final class ThreadManager {
     @MainActor
     func setActiveThread(_ threadId: UUID?) {
         activeThreadId = threadId
-        guard let threadId else { return }
-        markThreadCompletionSeen(threadId: threadId)
     }
 
     @MainActor
     func markThreadCompletionSeen(threadId: UUID) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[index].hasUnreadAgentCompletion else { return }
-        threads[index].hasUnreadAgentCompletion = false
+        threads[index].unreadCompletionSessions.removeAll()
+        try? persistence.saveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    @MainActor
+    func markSessionCompletionSeen(threadId: UUID, sessionName: String) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard threads[index].unreadCompletionSessions.contains(sessionName) else { return }
+        threads[index].unreadCompletionSessions.remove(sessionName)
         try? persistence.saveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
@@ -593,6 +600,9 @@ final class ThreadManager {
         threads[index].tmuxSessionNames = newSessionNames
         threads[index].agentTmuxSessions = newAgentSessions
         threads[index].pinnedTmuxSessions = newPinnedSessions
+        threads[index].unreadCompletionSessions = Set(
+            threads[index].unreadCompletionSessions.map { sessionRenameMap[$0] ?? $0 }
+        )
         if let selectedName = threads[index].lastSelectedTmuxSessionName {
             threads[index].lastSelectedTmuxSessionName = sessionRenameMap[selectedName] ?? selectedName
         }
@@ -653,9 +663,10 @@ final class ThreadManager {
         let sessionName = threads[index].tmuxSessionNames[tabIndex]
         try? await tmux.killSession(name: sessionName)
 
-        // Also remove from pinned and agent sessions if present
+        // Also remove from pinned, agent, and unread completion sessions if present
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
         threads[index].agentTmuxSessions.removeAll { $0 == sessionName }
+        threads[index].unreadCompletionSessions.remove(sessionName)
         threads[index].tmuxSessionNames.remove(at: tabIndex)
         if threads[index].lastSelectedTmuxSessionName == sessionName {
             threads[index].lastSelectedTmuxSessionName = threads[index].tmuxSessionNames.first
@@ -1241,8 +1252,12 @@ final class ThreadManager {
             }
 
             threads[index].lastAgentCompletionAt = now
+
             let isActiveThread = threads[index].id == activeThreadId
-            threads[index].hasUnreadAgentCompletion = !isActiveThread
+            let isActiveTab = isActiveThread && threads[index].lastSelectedTmuxSessionName == session
+            if !isActiveTab {
+                threads[index].unreadCompletionSessions.insert(session)
+            }
             changed = true
 
             let projectName = settings.projects.first(where: { $0.id == threads[index].projectId })?.name ?? "Project"
@@ -1253,6 +1268,18 @@ final class ThreadManager {
         try? persistence.saveThreads(threads)
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
+            for session in orderedUniqueSessions {
+                if let index = threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }) {
+                    NotificationCenter.default.post(
+                        name: .magentAgentCompletionDetected,
+                        object: self,
+                        userInfo: [
+                            "threadId": threads[index].id,
+                            "unreadSessions": threads[index].unreadCompletionSessions
+                        ]
+                    )
+                }
+            }
         }
     }
 
@@ -1429,6 +1456,7 @@ final class ThreadManager {
 
 extension Notification.Name {
     static let magentDeadSessionsDetected = Notification.Name("magentDeadSessionsDetected")
+    static let magentAgentCompletionDetected = Notification.Name("magentAgentCompletionDetected")
     static let magentSectionsDidChange = Notification.Name("magentSectionsDidChange")
     static let magentOpenSettings = Notification.Name("magentOpenSettings")
 }
