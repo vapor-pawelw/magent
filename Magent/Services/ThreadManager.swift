@@ -558,6 +558,11 @@ final class ThreadManager {
         let afterPrefix = raw[prefixRange.upperBound...]
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // Agent signals "this is a question, not a task" → return sentinel
+        if afterPrefix.uppercased() == "EMPTY" || afterPrefix.isEmpty {
+            return Self.slugQuestionSentinel
+        }
+
         // Take first line only
         let line = afterPrefix.components(separatedBy: .newlines).first ?? afterPrefix
 
@@ -586,12 +591,18 @@ final class ThreadManager {
         return slug
     }
 
+    /// Sentinel returned by `generateSlugViaAgent` when the agent determines
+    /// the prompt is a plain question rather than an actionable task.
+    private static let slugQuestionSentinel = ""
+
     private func generateSlugViaAgent(from prompt: String, agentType: AgentType?) async -> String? {
         let truncated = String(prompt.prefix(500))
         let aiPrompt = """
             Generate a short kebab-case slug (2-4 words) for a git branch name based on this task. \
             Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
-            Example: "Fix auth bug in login" → SLUG: fix-auth-login
+            If the input is a plain question (not an actionable task or job), output exactly: SLUG: EMPTY \
+            Example: "Fix auth bug in login" → SLUG: fix-auth-login \
+            Example: "How does the auth system work?" → SLUG: EMPTY
             Task: \(truncated)
             """
 
@@ -628,6 +639,8 @@ final class ThreadManager {
 
     private func autoRenameCandidates(from prompt: String, agentType: AgentType?) async -> [String] {
         if let slug = await generateSlugViaAgent(from: prompt, agentType: agentType) {
+            // Agent signalled "question, not a task" → skip rename entirely (no fallback)
+            guard slug != Self.slugQuestionSentinel else { return [] }
             var candidates = [slug]
             for i in 2...9 {
                 candidates.append("\(slug)-\(i)")
@@ -753,6 +766,9 @@ final class ThreadManager {
 
         guard !thread.isMain else { return }
         guard !thread.didAutoRenameFromFirstPrompt else { return }
+        // If the thread name no longer matches the worktree directory basename,
+        // it was already renamed (manually or otherwise) — skip auto-rename.
+        guard thread.name == (thread.worktreePath as NSString).lastPathComponent else { return }
         guard thread.agentTmuxSessions.contains(sessionName) else { return }
         guard !autoRenameInProgress.contains(thread.id) else { return }
 
