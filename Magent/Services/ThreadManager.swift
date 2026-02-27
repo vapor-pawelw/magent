@@ -76,6 +76,10 @@ final class ThreadManager {
         // Set up bell detection pipes on all live agent sessions.
         await ensureBellPipes()
 
+        // Sync busy state from actual tmux processes so spinners show immediately
+        // after restart (busySessions is transient and starts empty on launch).
+        await syncBusySessionsFromProcessState()
+
         await MainActor.run {
             updateDockBadge()
             delegate?.threadManager(self, didUpdateThreads: threads)
@@ -1531,21 +1535,26 @@ final class ThreadManager {
         }
         guard sessionMonitorTimer == nil else { return }
         sessionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            Task {
-                await self.checkForMissingWorktrees()
-                await self.checkForDeadSessions()
-                await self.checkForAgentCompletions()
-                await self.syncBusySessionsFromProcessState()
-                await self.ensureBellPipes()
-                await self.checkPendingCwdEnforcements()
-            }
+            self?.runSessionMonitorTick()
         }
+        // Fire once immediately so we don't wait 3 seconds for the first sync.
+        runSessionMonitorTick()
     }
 
     func stopSessionMonitor() {
         sessionMonitorTimer?.invalidate()
         sessionMonitorTimer = nil
+    }
+
+    private func runSessionMonitorTick() {
+        Task {
+            await self.checkForMissingWorktrees()
+            await self.checkForDeadSessions()
+            await self.checkForAgentCompletions()
+            await self.syncBusySessionsFromProcessState()
+            await self.ensureBellPipes()
+            await self.checkPendingCwdEnforcements()
+        }
     }
 
     private func checkForDeadSessions() async {
