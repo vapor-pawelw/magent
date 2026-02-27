@@ -7,13 +7,13 @@ extension ThreadManager {
     // MARK: - IPC Agent Docs
 
     static let ipcAgentDocs = """
-    You have access to Magent IPC. Use `magent-cli` to manage threads:
-      magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>]
-      magent-cli list-projects
-      magent-cli list-threads [--project <name>]
-      magent-cli send-prompt --thread <name> --prompt <text>
-      magent-cli archive-thread --thread <name>
-      magent-cli delete-thread --thread <name>
+    You have access to Magent IPC. Use `/tmp/magent-cli` to manage threads:
+      /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>]
+      /tmp/magent-cli list-projects
+      /tmp/magent-cli list-threads [--project <name>]
+      /tmp/magent-cli send-prompt --thread <name> --prompt <text>
+      /tmp/magent-cli archive-thread --thread <name>
+      /tmp/magent-cli delete-thread --thread <name>
     """
 
     // MARK: - Injection
@@ -243,12 +243,12 @@ extension ThreadManager {
     to manage threads:
 
     ```
-    magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>]
-    magent-cli list-projects
-    magent-cli list-threads [--project <name>]
-    magent-cli send-prompt --thread <name> --prompt <text>
-    magent-cli archive-thread --thread <name>
-    magent-cli delete-thread --thread <name>
+    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>]
+    /tmp/magent-cli list-projects
+    /tmp/magent-cli list-threads [--project <name>]
+    /tmp/magent-cli send-prompt --thread <name> --prompt <text>
+    /tmp/magent-cli archive-thread --thread <name>
+    /tmp/magent-cli delete-thread --thread <name>
     ```
     \(codexIPCMarkerEnd)
     """
