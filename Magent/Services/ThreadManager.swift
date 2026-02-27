@@ -947,6 +947,7 @@ final class ThreadManager {
         let settings = persistence.loadSettings()
         if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
             try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
+            cleanupBrokenSymlinks(in: project.resolvedWorktreesBasePath())
         }
 
         await cleanupStaleMagentSessions()
@@ -986,6 +987,7 @@ final class ThreadManager {
             if !thread.branchName.isEmpty {
                 try? await git.deleteBranch(repoPath: project.repoPath, branchName: thread.branchName)
             }
+            cleanupBrokenSymlinks(in: project.resolvedWorktreesBasePath())
         }
 
         await cleanupStaleMagentSessions()
@@ -1713,6 +1715,24 @@ final class ThreadManager {
                 try? await tmux.renameSession(from: currentNames[i], to: oldNames[i])
             }
             throw error
+        }
+    }
+
+    /// Removes broken symlinks from the worktrees base directory.
+    /// Rename operations leave symlinks (old-name → actual-worktree-dir) that become
+    /// stale once the worktree is archived/removed.
+    private func cleanupBrokenSymlinks(in directory: String) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: directory) else { return }
+        for entry in entries {
+            let fullPath = (directory as NSString).appendingPathComponent(entry)
+            let url = URL(fileURLWithPath: fullPath)
+            guard let values = try? url.resourceValues(forKeys: [.isSymbolicLinkKey]),
+                  values.isSymbolicLink == true else { continue }
+            // Broken symlink: the target no longer exists
+            if !fm.fileExists(atPath: fullPath) {
+                try? fm.removeItem(atPath: fullPath)
+            }
         }
     }
 
