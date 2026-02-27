@@ -221,23 +221,22 @@ final class TmuxService {
         return (command, path)
     }
 
-    /// Updates tmux defaults and live shell panes to a new working directory.
+    /// Updates live shell panes to a new working directory.
     /// Non-shell panes (e.g. running agent binaries) are left untouched.
-    func updateWorkingDirectory(sessionName: String, to path: String) async {
+    /// Returns the set of pane IDs that received the `cd` command.
+    @discardableResult
+    func updateWorkingDirectory(sessionName: String, to path: String) async -> Set<String> {
         let output: String
         do {
             output = try await ShellExecutor.run(
                 "tmux list-panes -t \(shellQuote(sessionName)) -F '#{pane_id}\t#{pane_current_command}'"
             )
         } catch {
-            return
+            return []
         }
 
-        let shellCommands: Set<String> = [
-            "sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh",
-            "-sh", "-bash", "-zsh", "-fish", "-ksh", "-tcsh", "-csh"
-        ]
         let cdCommand = "cd \(shellQuote(path))"
+        var enforcedPanes = Set<String>()
 
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             let parts = line.components(separatedBy: "\t")
@@ -245,7 +244,7 @@ final class TmuxService {
 
             let paneId = parts[0]
             let paneCommand = parts[1]
-            guard shellCommands.contains(paneCommand) else { continue }
+            guard Self.shellCommands.contains(paneCommand) else { continue }
 
             // Clear any partial input before sending cd
             _ = try? await ShellExecutor.run(
@@ -254,8 +253,61 @@ final class TmuxService {
             _ = try? await ShellExecutor.run(
                 "tmux send-keys -t \(shellQuote(paneId)) \(shellQuote(cdCommand)) Enter"
             )
+            enforcedPanes.insert(paneId)
         }
+
+        return enforcedPanes
     }
+
+    /// Sends `cd` to shell panes that haven't been enforced yet.
+    /// Returns the set of newly enforced pane IDs, and whether any non-shell panes remain unenforced.
+    func enforceWorkingDirectoryOnNewPanes(
+        sessionName: String,
+        path: String,
+        alreadyEnforced: Set<String>
+    ) async -> (newlyEnforced: Set<String>, hasUnenforced: Bool) {
+        let output: String
+        do {
+            output = try await ShellExecutor.run(
+                "tmux list-panes -t \(shellQuote(sessionName)) -F '#{pane_id}\t#{pane_current_command}'"
+            )
+        } catch {
+            return ([], false) // session gone
+        }
+
+        let cdCommand = "cd \(shellQuote(path))"
+        var newlyEnforced = Set<String>()
+        var hasUnenforced = false
+
+        for line in output.components(separatedBy: "\n") where !line.isEmpty {
+            let parts = line.components(separatedBy: "\t")
+            guard parts.count >= 2 else { continue }
+
+            let paneId = parts[0]
+            let paneCommand = parts[1]
+
+            if alreadyEnforced.contains(paneId) { continue }
+
+            if Self.shellCommands.contains(paneCommand) {
+                _ = try? await ShellExecutor.run(
+                    "tmux send-keys -t \(shellQuote(paneId)) C-u"
+                )
+                _ = try? await ShellExecutor.run(
+                    "tmux send-keys -t \(shellQuote(paneId)) \(shellQuote(cdCommand)) Enter"
+                )
+                newlyEnforced.insert(paneId)
+            } else {
+                hasUnenforced = true
+            }
+        }
+
+        return (newlyEnforced, hasUnenforced)
+    }
+
+    static let shellCommands: Set<String> = [
+        "sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh",
+        "-sh", "-bash", "-zsh", "-fish", "-ksh", "-tcsh", "-csh"
+    ]
 
     private func shellQuote(_ string: String) -> String {
         "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"

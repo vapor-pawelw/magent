@@ -23,6 +23,7 @@ final class ThreadManager {
     private var activeThreadId: UUID?
     private var recentBellBySession: [String: Date] = [:]
     private var autoRenameInProgress: Set<UUID> = []
+    private var pendingCwdEnforcements: [String: PendingCwdEnforcement] = [:]
 
     // MARK: - Lifecycle
 
@@ -696,14 +697,20 @@ final class ThreadManager {
             await tmux.setupBellPipe(for: agentSession)
         }
 
-        // 5. Update env vars on each session
+        // 5. Update env vars and working directory on each session
         for sessionName in newSessionNames {
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH", value: newWorktreePath)
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: trimmed)
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
-            await tmux.updateWorkingDirectory(sessionName: sessionName, to: newWorktreePath)
-            enforceWorkingDirectoryAfterStartup(sessionName: sessionName, path: newWorktreePath)
+            let enforcedPanes = await tmux.updateWorkingDirectory(sessionName: sessionName, to: newWorktreePath)
+            // Register for ongoing enforcement: non-shell panes (e.g. running agents) will get
+            // cd sent when they return to a shell prompt, checked via the session monitor.
+            pendingCwdEnforcements[sessionName] = PendingCwdEnforcement(
+                path: newWorktreePath,
+                expiresAt: Date().addingTimeInterval(5 * 60),
+                enforcedPaneIds: enforcedPanes
+            )
         }
 
         // 6. Trust new path for the agent if needed
@@ -1294,6 +1301,48 @@ final class ThreadManager {
         }
     }
 
+    // MARK: - Pending CWD Enforcement
+
+    private struct PendingCwdEnforcement {
+        let path: String
+        let expiresAt: Date
+        var enforcedPaneIds: Set<String>
+    }
+
+    /// Checks pending cwd enforcements registered after thread rename.
+    /// For each pending session, sends `cd` to any pane that has returned to a shell
+    /// since the last check. Removes the entry once all panes are enforced or the deadline passes.
+    private func checkPendingCwdEnforcements() async {
+        guard !pendingCwdEnforcements.isEmpty else { return }
+
+        let now = Date()
+        var resolved = [String]()
+
+        for (sessionName, var enforcement) in pendingCwdEnforcements {
+            if now >= enforcement.expiresAt {
+                resolved.append(sessionName)
+                continue
+            }
+
+            let (newlyEnforced, hasUnenforced) = await tmux.enforceWorkingDirectoryOnNewPanes(
+                sessionName: sessionName,
+                path: enforcement.path,
+                alreadyEnforced: enforcement.enforcedPaneIds
+            )
+
+            enforcement.enforcedPaneIds.formUnion(newlyEnforced)
+            pendingCwdEnforcements[sessionName] = enforcement
+
+            if !hasUnenforced {
+                resolved.append(sessionName)
+            }
+        }
+
+        for sessionName in resolved {
+            pendingCwdEnforcements.removeValue(forKey: sessionName)
+        }
+    }
+
     // MARK: - Session Monitor
 
     private var sessionMonitorTimer: Timer?
@@ -1313,6 +1362,7 @@ final class ThreadManager {
                 await self.checkForDeadSessions()
                 await self.checkForAgentCompletions()
                 await self.ensureBellPipes()
+                await self.checkPendingCwdEnforcements()
             }
         }
     }
