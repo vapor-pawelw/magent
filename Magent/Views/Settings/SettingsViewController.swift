@@ -885,6 +885,7 @@ final class SettingsProjectsViewController: NSViewController {
     private var projectTableView: NSTableView!
     private var detailScrollView: NSScrollView!
     private var emptyLabel: NSTextField!
+    private var removeProjectButton: NSButton!
 
     // Detail fields
     private var nameField: NSTextField!
@@ -916,6 +917,7 @@ final class SettingsProjectsViewController: NSViewController {
         setupProjectList()
         setupDetailPane()
         setupLayout()
+        reloadProjectsAndSelect()
     }
 
     private func setupProjectList() {
@@ -953,17 +955,29 @@ final class SettingsProjectsViewController: NSViewController {
         listScrollView.autohidesScrollers = true
         listScrollView.translatesAutoresizingMaskIntoConstraints = false
 
-        let addButton = NSButton(image: NSImage(systemSymbolName: "plus", accessibilityDescription: "Add")!, target: self, action: #selector(addProjectTapped))
-        addButton.bezelStyle = .smallSquare
-        addButton.isBordered = false
+        let addButton = NSButton(
+            image: NSImage(named: NSImage.addTemplateName) ?? NSImage(),
+            target: self,
+            action: #selector(addProjectTapped)
+        )
+        addButton.bezelStyle = .texturedRounded
+        addButton.controlSize = .small
+        addButton.imagePosition = .imageOnly
+        addButton.toolTip = "Add Project"
 
-        let removeButton = NSButton(image: NSImage(systemSymbolName: "minus", accessibilityDescription: "Remove")!, target: self, action: #selector(removeProjectTapped))
-        removeButton.bezelStyle = .smallSquare
-        removeButton.isBordered = false
+        removeProjectButton = NSButton(
+            image: NSImage(named: NSImage.removeTemplateName) ?? NSImage(),
+            target: self,
+            action: #selector(removeProjectTapped)
+        )
+        removeProjectButton.bezelStyle = .texturedRounded
+        removeProjectButton.controlSize = .small
+        removeProjectButton.imagePosition = .imageOnly
+        removeProjectButton.toolTip = "Remove Project"
 
-        let buttonBar = NSStackView(views: [addButton, removeButton])
+        let buttonBar = NSStackView(views: [addButton, removeProjectButton])
         buttonBar.orientation = .horizontal
-        buttonBar.spacing = 0
+        buttonBar.spacing = 6
         buttonBar.translatesAutoresizingMaskIntoConstraints = false
 
         let leftPane = NSView()
@@ -1009,8 +1023,28 @@ final class SettingsProjectsViewController: NSViewController {
             rightPane.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
             rightPane.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
         ])
+        updateRemoveButtonState()
+    }
 
-        showEmptyState()
+    private func updateRemoveButtonState() {
+        removeProjectButton?.isEnabled = selectedProjectIndex != nil
+    }
+
+    private func reloadProjectsAndSelect(row preferredRow: Int? = nil) {
+        let currentRow = selectedProjectIndex
+        projectTableView.reloadData()
+
+        guard !settings.projects.isEmpty else {
+            projectTableView.deselectAll(nil)
+            updateRemoveButtonState()
+            showEmptyState()
+            return
+        }
+
+        let target = max(0, min(preferredRow ?? currentRow ?? 0, settings.projects.count - 1))
+        projectTableView.selectRowIndexes(IndexSet(integer: target), byExtendingSelection: false)
+        showDetailForProject(settings.projects[target])
+        updateRemoveButtonState()
     }
 
     private func showEmptyState() {
@@ -1280,7 +1314,7 @@ final class SettingsProjectsViewController: NSViewController {
                         )
                         self.settings.projects.append(project)
                         try? self.persistence.saveSettings(self.settings)
-                        self.projectTableView.reloadData()
+                        self.reloadProjectsAndSelect(row: self.settings.projects.count - 1)
 
                         Task { try? await ThreadManager.shared.createMainThread(project: project) }
                     } else {
@@ -1312,8 +1346,11 @@ final class SettingsProjectsViewController: NSViewController {
 
         settings.projects.remove(at: index)
         try? persistence.saveSettings(settings)
-        projectTableView.reloadData()
-        showEmptyState()
+        if settings.projects.isEmpty {
+            reloadProjectsAndSelect()
+        } else {
+            reloadProjectsAndSelect(row: min(index, settings.projects.count - 1))
+        }
     }
 
     @objc private func nameFieldChanged() {
@@ -1322,7 +1359,7 @@ final class SettingsProjectsViewController: NSViewController {
         guard !value.isEmpty else { return }
         settings.projects[index].name = value
         try? persistence.saveSettings(settings)
-        projectTableView.reloadData()
+        reloadProjectsAndSelect(row: index)
     }
 
     @objc private func defaultBranchFieldChanged() {
@@ -1366,8 +1403,7 @@ final class SettingsProjectsViewController: NSViewController {
                         self.settings.projects[index].repoPath = path
                         self.settings.projects[index].defaultBranch = defaultBranch
                         try? self.persistence.saveSettings(self.settings)
-                        self.projectTableView.reloadData()
-                        self.showDetailForProject(self.settings.projects[index])
+                        self.reloadProjectsAndSelect(row: index)
                         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
                         Task { await ThreadManager.shared.syncThreadsWithWorktrees(for: self.settings.projects[index]) }
                     } else {
@@ -1433,6 +1469,7 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
+        updateRemoveButtonState()
         guard let project = selectedProject else {
             showEmptyState()
             return
