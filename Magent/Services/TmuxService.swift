@@ -30,15 +30,76 @@ final class TmuxService {
     }
 
     private func configureBellMonitoring(resetEventLog: Bool) async {
-        // Capture terminal bell events emitted by agent sessions for completion notifications.
-        _ = try? await ShellExecutor.run("tmux set-option -g monitor-bell on")
         if resetEventLog {
             _ = try? await ShellExecutor.run(": > \(shellQuote(agentCompletionEventsPath))")
         } else {
             _ = try? await ShellExecutor.run("touch \(shellQuote(agentCompletionEventsPath))")
         }
-        let bellHook = "run-shell \"echo #{session_name} >> \(agentCompletionEventsPath)\""
-        _ = try? await ShellExecutor.run("tmux set-hook -g alert-bell \(shellQuote(bellHook))")
+        // Install the bell-watcher script used by pipe-pane on agent sessions.
+        installBellWatcherScript()
+    }
+
+    /// Sets up `pipe-pane` on a tmux session to detect bell characters (0x07) in pane output.
+    /// This replaces the broken tmux `alert-bell` hook (which does not fire in tmux ≤3.6a).
+    func setupBellPipe(for sessionName: String) async {
+        installBellWatcherScript()
+        _ = try? await ShellExecutor.run(
+            "tmux pipe-pane -o -t \(shellQuote(sessionName)) \(shellQuote("\(bellWatcherScriptPath) \(sessionName)"))"
+        )
+    }
+
+    private var bellWatcherScriptPath: String {
+        "/tmp/magent-bell-watcher.sh"
+    }
+
+    private func installBellWatcherScript() {
+        let path = bellWatcherScriptPath
+        // Only write if missing or outdated
+        let marker = "# magent-bell-watcher-v2"
+        if let existing = try? String(contentsOfFile: path, encoding: .utf8), existing.hasPrefix(marker) {
+            return
+        }
+        // The script reads pane output in chunks via perl, detects BEL (0x07),
+        // and appends the session name to the events log.
+        // perl is used for efficiency — it reads in 8KB chunks instead of byte-by-byte.
+        let script = """
+        \(marker)
+        #!/bin/sh
+        SESSION="$1"
+        LOG="\(agentCompletionEventsPath)"
+        exec perl -e '
+        $| = 1;
+        my $s = $ARGV[0];
+        my $f = $ARGV[1];
+        my $osc = 0;
+        while (sysread(STDIN, my $buf, 8192)) {
+            for my $i (0..length($buf)-1) {
+                my $c = ord(substr($buf, $i, 1));
+                if ($c == 0x1b) {
+                    $osc = 0;
+                } elsif ($c == 0x5d && $osc == 0) {
+                    # Check if previous char was ESC (start of OSC)
+                    $osc = 1 if $i > 0 && ord(substr($buf, $i-1, 1)) == 0x1b;
+                } elsif ($c == 0x07) {
+                    if ($osc) {
+                        $osc = 0;  # BEL terminates OSC — not a real bell
+                    } else {
+                        open(my $fh, ">>", $f);
+                        print $fh "$s\\n";
+                        close($fh);
+                    }
+                } else {
+                    $osc = 0 if $c != 0x3b && ($c < 0x20 || $c > 0x7e) && $osc;
+                }
+            }
+        }
+        ' "$SESSION" "$LOG"
+        """
+        try? script.write(toFile: path, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: path
+        )
     }
 
     func consumeAgentCompletionSessions() async -> [String] {

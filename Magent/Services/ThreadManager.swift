@@ -581,6 +581,11 @@ final class ThreadManager {
         let newPinnedSessions = currentThread.pinnedTmuxSessions.map { sessionRenameMap[$0] ?? $0 }
         let newAgentSessions = currentThread.agentTmuxSessions.map { sessionRenameMap[$0] ?? $0 }
 
+        // Re-setup bell pipe with new session names for agent sessions
+        for agentSession in newAgentSessions {
+            await tmux.setupBellPipe(for: agentSession)
+        }
+
         // 5. Update env vars on each session
         for sessionName in newSessionNames {
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH", value: newWorktreePath)
@@ -1026,6 +1031,9 @@ final class ThreadManager {
                 )
                 await tmux.updateWorkingDirectory(sessionName: sessionName, to: thread.worktreePath)
                 enforceWorkingDirectoryAfterStartup(sessionName: sessionName, path: thread.worktreePath)
+                if isAgentSession {
+                    await tmux.setupBellPipe(for: sessionName)
+                }
                 return false
             }
 
@@ -1066,6 +1074,10 @@ final class ThreadManager {
         )
         await tmux.updateWorkingDirectory(sessionName: sessionName, to: thread.worktreePath)
         enforceWorkingDirectoryAfterStartup(sessionName: sessionName, path: thread.worktreePath)
+
+        if isAgentSession {
+            await tmux.setupBellPipe(for: sessionName)
+        }
 
         // Run normal injection (terminal command + agent context)
         let injection = effectiveInjection(for: thread.projectId)
