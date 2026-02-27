@@ -4,7 +4,7 @@ import Cocoa
 
 /// Row view that always draws its selection in the emphasized (active) style,
 /// even when the outline view is not the first responder.
-private final class AlwaysEmphasizedRowView: NSTableRowView {
+final class AlwaysEmphasizedRowView: NSTableRowView {
     var showsCompletionHighlight = false {
         didSet { needsDisplay = true }
     }
@@ -33,37 +33,37 @@ protocol ThreadListDelegate: AnyObject {
 
 final class ThreadListViewController: NSViewController {
 
-    private static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
-    private static let lastOpenedProjectDefaultsKey = "MagentLastOpenedProjectID"
-    private static let collapsedProjectIdsKey = "MagentCollapsedProjectIds"
-    private static let collapsedSectionIdsKey = "MagentCollapsedSectionIds"
-    private static let projectSeparatorIdentifier = NSUserInterfaceItemIdentifier("ProjectTopSeparator")
-    private static let projectDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectDisclosureButton")
-    private static let sectionDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("SectionDisclosureButton")
-    private static let sidebarHorizontalInset: CGFloat = 6
-    private static let projectDisclosureTrailingInset: CGFloat = 12
-    private static let outlineIndentationPerLevel: CGFloat = 5
-    private static let toolbarPlusTrailingInset: CGFloat = (projectDisclosureTrailingInset - outlineIndentationPerLevel) + 4
-    private static let disclosureButtonSize: CGFloat = 16
+    static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
+    static let lastOpenedProjectDefaultsKey = "MagentLastOpenedProjectID"
+    static let collapsedProjectIdsKey = "MagentCollapsedProjectIds"
+    static let collapsedSectionIdsKey = "MagentCollapsedSectionIds"
+    static let projectSeparatorIdentifier = NSUserInterfaceItemIdentifier("ProjectTopSeparator")
+    static let projectDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectDisclosureButton")
+    static let sectionDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("SectionDisclosureButton")
+    static let sidebarHorizontalInset: CGFloat = 6
+    static let projectDisclosureTrailingInset: CGFloat = 12
+    static let outlineIndentationPerLevel: CGFloat = 5
+    static let toolbarPlusTrailingInset: CGFloat = (projectDisclosureTrailingInset - outlineIndentationPerLevel) + 4
+    static let disclosureButtonSize: CGFloat = 16
 
     weak var delegate: ThreadListDelegate?
 
-    private var outlineView: NSOutlineView!
+    var outlineView: NSOutlineView!
     private var scrollView: NSScrollView!
-    private let threadManager = ThreadManager.shared
-    private let persistence = PersistenceService.shared
+    let threadManager = ThreadManager.shared
+    let persistence = PersistenceService.shared
 
     private var addButton: NSButton!
     private var isCreatingThread = false
-    private var suppressNextSectionRowToggle = false
-    private var suppressNextProjectRowToggle = false
+    var suppressNextSectionRowToggle = false
+    var suppressNextProjectRowToggle = false
 
     // MARK: - Data Model (3-level hierarchy)
     // Level 0: SidebarProject (project name header)
     // Level 1: MagentThread (main) or SidebarSection (section header)
     // Level 2: MagentThread (regular threads under a section)
 
-    private var sidebarProjects: [SidebarProject] = []
+    var sidebarProjects: [SidebarProject] = []
 
     class SidebarProject {
         let projectId: UUID
@@ -200,7 +200,7 @@ final class ThreadListViewController: NSViewController {
 
     // MARK: - Data
 
-    private func reloadData() {
+    func reloadData() {
         // Remember current selection
         let selectedThreadId: UUID? = {
             let row = outlineView.selectedRow
@@ -334,7 +334,7 @@ final class ThreadListViewController: NSViewController {
             .map(\.element)
     }
 
-    private func autoSelectFirst() {
+    func autoSelectFirst() {
         let defaults = UserDefaults.standard
         let persistedThreads = persistence.loadThreads()
 
@@ -422,7 +422,7 @@ final class ThreadListViewController: NSViewController {
         }
     }
 
-    @objc private func toggleSectionExpanded(_ sender: NSButton) {
+    @objc func toggleSectionExpanded(_ sender: NSButton) {
         suppressNextSectionRowToggle = true
         defer {
             DispatchQueue.main.async { [weak self] in
@@ -437,7 +437,7 @@ final class ThreadListViewController: NSViewController {
         toggleSection(section, animatedDisclosureButton: sender)
     }
 
-    @objc private func toggleProjectExpanded(_ sender: NSButton) {
+    @objc func toggleProjectExpanded(_ sender: NSButton) {
         suppressNextProjectRowToggle = true
         defer {
             DispatchQueue.main.async { [weak self] in
@@ -462,7 +462,7 @@ final class ThreadListViewController: NSViewController {
         reloadData()
     }
 
-    private func toggleSection(_ section: SidebarSection, animatedDisclosureButton: NSButton? = nil) {
+    func toggleSection(_ section: SidebarSection, animatedDisclosureButton: NSButton? = nil) {
         let willCollapse = !isSectionCollapsed(section)
         setSectionCollapsed(section, isCollapsed: willCollapse)
 
@@ -472,7 +472,7 @@ final class ThreadListViewController: NSViewController {
         reloadData()
     }
 
-    private func updateSectionDisclosureButton(_ button: NSButton, isExpanded: Bool) {
+    func updateSectionDisclosureButton(_ button: NSButton, isExpanded: Bool) {
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
         button.title = ""
         button.image = NSImage(
@@ -484,7 +484,7 @@ final class ThreadListViewController: NSViewController {
         button.setAccessibilityLabel(isExpanded ? "Collapse section" : "Expand section")
     }
 
-    private func updateProjectDisclosureButton(_ button: NSButton, isExpanded: Bool) {
+    func updateProjectDisclosureButton(_ button: NSButton, isExpanded: Bool) {
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
         button.title = ""
         button.image = NSImage(
@@ -496,7 +496,7 @@ final class ThreadListViewController: NSViewController {
         button.setAccessibilityLabel(isExpanded ? "Collapse project" : "Expand project")
     }
 
-    private func sectionDisclosureButton(for section: SidebarSection) -> NSButton? {
+    func sectionDisclosureButton(for section: SidebarSection) -> NSButton? {
         let row = outlineView.row(forItem: section)
         guard row >= 0,
               let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView else { return nil }
@@ -514,17 +514,17 @@ final class ThreadListViewController: NSViewController {
         UserDefaults.standard.set(Array(collapsed), forKey: Self.collapsedSectionIdsKey)
     }
 
-    private func isSectionCollapsed(_ section: SidebarSection) -> Bool {
+    func isSectionCollapsed(_ section: SidebarSection) -> Bool {
         let collapsed = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedSectionIdsKey) ?? [])
         return collapsed.contains(sectionCollapseStorageKey(section))
     }
 
-    private func isProjectCollapsed(_ project: SidebarProject) -> Bool {
+    func isProjectCollapsed(_ project: SidebarProject) -> Bool {
         let collapsed = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
         return collapsed.contains(project.projectId.uuidString)
     }
 
-    private func setProjectCollapsed(_ project: SidebarProject, isCollapsed: Bool) {
+    func setProjectCollapsed(_ project: SidebarProject, isCollapsed: Bool) {
         var collapsed = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
         if isCollapsed {
             collapsed.insert(project.projectId.uuidString)
@@ -534,7 +534,7 @@ final class ThreadListViewController: NSViewController {
         UserDefaults.standard.set(Array(collapsed), forKey: Self.collapsedProjectIdsKey)
     }
 
-    private func sectionCollapseStorageKey(_ section: SidebarSection) -> String {
+    func sectionCollapseStorageKey(_ section: SidebarSection) -> String {
         "\(section.projectId.uuidString):\(section.sectionId.uuidString)"
     }
 
@@ -659,668 +659,4 @@ final class ThreadListViewController: NSViewController {
         return image
     }
 
-    // MARK: - Context Menu
-
-    private func buildContextMenu(for thread: MagentThread) -> NSMenu {
-        let menu = NSMenu()
-
-        // Main threads: no context menu
-        if thread.isMain { return menu }
-
-        // Pin/Unpin
-        let pinTitle = thread.isPinned ? "Unpin" : "Pin"
-        let pinItem = NSMenuItem(title: pinTitle, action: #selector(toggleThreadPin(_:)), keyEquivalent: "")
-        pinItem.target = self
-        pinItem.image = NSImage(systemSymbolName: thread.isPinned ? "pin.slash" : "pin", accessibilityDescription: nil)
-        pinItem.representedObject = thread.id
-        menu.addItem(pinItem)
-
-        // Move to... submenu
-        let settings = persistence.loadSettings()
-        let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
-
-        let moveSubmenu = NSMenu()
-        for section in visibleSections {
-            let item = NSMenuItem(title: section.name, action: #selector(moveThreadToSection(_:)), keyEquivalent: "")
-            item.target = self
-            item.image = Self.colorDotImage(color: section.color, size: 8)
-            item.representedObject = ["thread": thread, "sectionId": section.id] as [String: Any]
-            moveSubmenu.addItem(item)
-        }
-
-        let moveItem = NSMenuItem(title: "Move to...", action: nil, keyEquivalent: "")
-        moveItem.submenu = moveSubmenu
-        moveItem.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
-        menu.addItem(moveItem)
-
-        // Rename
-        let renameItem = NSMenuItem(title: "Rename...", action: #selector(renameThread(_:)), keyEquivalent: "")
-        renameItem.target = self
-        renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
-        renameItem.representedObject = thread
-        menu.addItem(renameItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // Archive
-        let archiveItem = NSMenuItem(title: "Archive...", action: #selector(archiveThread(_:)), keyEquivalent: "")
-        archiveItem.target = self
-        archiveItem.image = NSImage(systemSymbolName: "archivebox", accessibilityDescription: nil)
-        archiveItem.representedObject = thread
-        menu.addItem(archiveItem)
-
-        // Delete (destructive)
-        let deleteItem = NSMenuItem(title: "Delete...", action: #selector(deleteThread(_:)), keyEquivalent: "")
-        deleteItem.target = self
-        deleteItem.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
-        deleteItem.representedObject = thread
-        menu.addItem(deleteItem)
-
-        return menu
-    }
-
-    private func buildProjectContextMenu(for project: SidebarProject) -> NSMenu {
-        let menu = NSMenu()
-        let pinTitle = project.isPinned ? "Unpin" : "Pin"
-        let pinItem = NSMenuItem(title: pinTitle, action: #selector(toggleProjectPin(_:)), keyEquivalent: "")
-        pinItem.target = self
-        pinItem.image = NSImage(systemSymbolName: project.isPinned ? "pin.slash" : "pin", accessibilityDescription: nil)
-        pinItem.representedObject = project.projectId
-        menu.addItem(pinItem)
-        return menu
-    }
-
-    @objc private func toggleProjectPin(_ sender: NSMenuItem) {
-        guard let projectId = sender.representedObject as? UUID else { return }
-        var settings = persistence.loadSettings()
-        guard let index = settings.projects.firstIndex(where: { $0.id == projectId }) else { return }
-        settings.projects[index].isPinned.toggle()
-        try? persistence.saveSettings(settings)
-        reloadData()
-    }
-
-    @objc private func toggleThreadPin(_ sender: NSMenuItem) {
-        guard let threadId = sender.representedObject as? UUID else { return }
-        threadManager.toggleThreadPin(threadId: threadId)
-    }
-
-    @objc private func moveThreadToSection(_ sender: NSMenuItem) {
-        guard let info = sender.representedObject as? [String: Any],
-              let thread = info["thread"] as? MagentThread,
-              let sectionId = info["sectionId"] as? UUID else { return }
-        threadManager.moveThread(thread, toSection: sectionId)
-        reloadData()
-    }
-
-    @objc private func renameThread(_ sender: NSMenuItem) {
-        guard let thread = sender.representedObject as? MagentThread else { return }
-
-        let alert = NSAlert()
-        alert.messageText = "Rename Thread"
-        alert.informativeText = "Enter new name for the thread"
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-
-        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-        textField.stringValue = thread.name
-        alert.accessoryView = textField
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        let newName = textField.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !newName.isEmpty, newName != thread.name else { return }
-
-        Task {
-            do {
-                try await threadManager.renameThread(thread, to: newName)
-                await MainActor.run {
-                    if let updated = self.threadManager.threads.first(where: { $0.id == thread.id }) {
-                        self.delegate?.threadList(self, didRenameThread: updated)
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    let alert = NSAlert()
-                    alert.messageText = "Rename Failed"
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
-                }
-            }
-        }
-    }
-
-    @objc private func archiveThread(_ sender: NSMenuItem) {
-        guard let thread = sender.representedObject as? MagentThread else { return }
-
-        let settings = persistence.loadSettings()
-        let project = settings.projects.first(where: { $0.id == thread.projectId })
-        let defaultBranch = project?.defaultBranch ?? "main"
-
-        Task {
-            let git = GitService.shared
-            let clean = await git.isClean(worktreePath: thread.worktreePath)
-            let merged = await git.isMergedInto(worktreePath: thread.worktreePath, baseBranch: defaultBranch)
-
-            await MainActor.run {
-                if clean && merged {
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-                        try await self.threadManager.archiveThread(thread)
-                    }
-                } else {
-                    let alert = NSAlert()
-                    alert.messageText = "Archive Thread"
-                    var reasons: [String] = []
-                    if !clean { reasons.append("uncommitted changes") }
-                    if !merged { reasons.append("commits not in \(defaultBranch)") }
-                    alert.informativeText = "The thread \"\(thread.name)\" has \(reasons.joined(separator: " and ")). Archiving will remove its worktree directory but keep the git branch \"\(thread.branchName)\"."
-                    alert.alertStyle = .informational
-                    alert.addButton(withTitle: "Archive")
-                    alert.addButton(withTitle: "Cancel")
-
-                    let response = alert.runModal()
-                    guard response == .alertFirstButtonReturn else { return }
-
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-                        try await self.threadManager.archiveThread(thread)
-                    }
-                }
-            }
-        }
-    }
-
-    @objc private func deleteThread(_ sender: NSMenuItem) {
-        guard let thread = sender.representedObject as? MagentThread else { return }
-
-        let alert = NSAlert()
-        alert.messageText = "Delete Thread"
-        alert.informativeText = "This will permanently delete the thread \"\(thread.name)\", including its worktree directory and git branch \"\(thread.branchName)\". This action cannot be undone."
-        alert.alertStyle = .critical
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        alert.buttons.first?.hasDestructiveAction = true
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        performWithSpinner(message: "Deleting thread...", errorTitle: "Delete Failed") {
-            try await self.threadManager.deleteThread(thread)
-        }
-    }
-
-    private func performWithSpinner(message: String, errorTitle: String, work: @escaping () async throws -> Void) {
-        guard let window = view.window else { return }
-
-        // Build a small sheet with a spinner and label
-        let sheetVC = NSViewController()
-        sheetVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 80))
-
-        let spinner = NSProgressIndicator()
-        spinner.style = .spinning
-        spinner.controlSize = .small
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        spinner.startAnimation(nil)
-
-        let label = NSTextField(labelWithString: message)
-        label.font = .systemFont(ofSize: 13)
-        label.textColor = NSColor(resource: .textSecondary)
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView(views: [spinner, label])
-        stack.orientation = .horizontal
-        stack.spacing = 10
-        stack.alignment = .centerY
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        sheetVC.view.addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: sheetVC.view.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: sheetVC.view.centerYAnchor),
-        ])
-
-        window.contentViewController?.presentAsSheet(sheetVC)
-
-        Task {
-            do {
-                try await work()
-                await MainActor.run {
-                    window.contentViewController?.dismiss(sheetVC)
-                }
-            } catch {
-                await MainActor.run {
-                    window.contentViewController?.dismiss(sheetVC)
-                    let alert = NSAlert()
-                    alert.messageText = errorTitle
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
-                }
-            }
-        }
-    }
-}
-
-// MARK: - NSOutlineViewDataSource
-
-extension ThreadListViewController: NSOutlineViewDataSource {
-
-    func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
-        if item == nil { return sidebarProjects.count }
-        if let project = item as? SidebarProject { return project.children.count }
-        if let section = item as? SidebarSection {
-            return isSectionCollapsed(section) ? 0 : section.threads.count
-        }
-        return 0
-    }
-
-    func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
-        if item == nil { return sidebarProjects[index] }
-        if let project = item as? SidebarProject { return project.children[index] }
-        if let section = item as? SidebarSection { return section.threads[index] }
-        fatalError("Unexpected item")
-    }
-
-    func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
-        if item is SidebarProject { return true }
-        if let section = item as? SidebarSection { return !section.threads.isEmpty }
-        return false
-    }
-
-    // MARK: Drag & Drop
-
-    func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
-        guard let thread = item as? MagentThread, !thread.isMain else { return nil }
-        return thread.id.uuidString as NSString
-    }
-
-    func outlineView(
-        _ outlineView: NSOutlineView,
-        validateDrop info: NSDraggingInfo,
-        proposedItem item: Any?,
-        proposedChildIndex index: Int
-    ) -> NSDragOperation {
-        guard item is SidebarSection else { return [] }
-        return .move
-    }
-
-    func outlineView(
-        _ outlineView: NSOutlineView,
-        acceptDrop info: NSDraggingInfo,
-        item: Any?,
-        childIndex index: Int
-    ) -> Bool {
-        guard let section = item as? SidebarSection,
-              let pasteboardItem = info.draggingPasteboard.pasteboardItems?.first,
-              let uuidString = pasteboardItem.string(forType: .string),
-              let threadId = UUID(uuidString: uuidString),
-              let thread = threadManager.threads.first(where: { $0.id == threadId }) else {
-            return false
-        }
-
-        threadManager.moveThread(thread, toSection: section.sectionId)
-        reloadData()
-        return true
-    }
-}
-
-// MARK: - NSOutlineViewDelegate
-
-extension ThreadListViewController: NSOutlineViewDelegate {
-
-    func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
-        let rowView = AlwaysEmphasizedRowView()
-        if let thread = item as? MagentThread {
-            rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion
-        } else {
-            rowView.showsCompletionHighlight = false
-        }
-        return rowView
-    }
-
-    private func shouldShowTopSeparator(for project: SidebarProject) -> Bool {
-        guard sidebarProjects.count > 1 else { return false }
-        guard let index = sidebarProjects.firstIndex(where: { $0.projectId == project.projectId }) else { return false }
-        return index > 0
-    }
-
-    func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
-        if item is SidebarProject {
-            return 32
-        }
-        return outlineView.rowHeight
-    }
-
-    func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool {
-        false
-    }
-
-    func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool {
-        false
-    }
-
-    func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
-        if let project = item as? SidebarProject {
-            if suppressNextProjectRowToggle {
-                return false
-            }
-            setProjectCollapsed(project, isCollapsed: !isProjectCollapsed(project))
-            reloadData()
-            return false
-        }
-
-        if let section = item as? SidebarSection {
-            if suppressNextSectionRowToggle {
-                return false
-            }
-            guard !section.threads.isEmpty else { return false }
-            toggleSection(section, animatedDisclosureButton: sectionDisclosureButton(for: section))
-            return false
-        }
-        return item is MagentThread
-    }
-
-    func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
-        // Level 0: Project header
-        if let project = item as? SidebarProject {
-            let identifier = NSUserInterfaceItemIdentifier("ProjectCell")
-            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
-                ?? {
-                    let c = NSTableCellView()
-                    c.identifier = identifier
-
-                    let iv = NSImageView()
-                    iv.translatesAutoresizingMaskIntoConstraints = false
-                    c.addSubview(iv)
-                    c.imageView = iv
-
-                    let tf = NSTextField(labelWithString: "")
-                    tf.translatesAutoresizingMaskIntoConstraints = false
-                    c.addSubview(tf)
-                    c.textField = tf
-
-                    let disclosureButton = NSButton()
-                    disclosureButton.identifier = Self.projectDisclosureButtonIdentifier
-                    disclosureButton.translatesAutoresizingMaskIntoConstraints = false
-                    disclosureButton.isBordered = false
-                    disclosureButton.imagePosition = .imageOnly
-                    disclosureButton.focusRingType = .none
-                    disclosureButton.setButtonType(.momentaryChange)
-                    disclosureButton.sendAction(on: [.leftMouseUp])
-                    disclosureButton.target = self
-                    disclosureButton.action = #selector(toggleProjectExpanded(_:))
-                    c.addSubview(disclosureButton)
-
-                    let separator = NSView()
-                    separator.identifier = Self.projectSeparatorIdentifier
-                    separator.translatesAutoresizingMaskIntoConstraints = false
-                    separator.wantsLayer = true
-                    c.addSubview(separator)
-
-                    NSLayoutConstraint.activate([
-                        separator.topAnchor.constraint(equalTo: c.topAnchor, constant: 4),
-                        // AppKit source-list group rows have extra left inset vs content area.
-                        // Compensate so separator appears visually centered in full sidebar width.
-                        separator.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 2),
-                        separator.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -Self.sidebarHorizontalInset),
-                        separator.heightAnchor.constraint(equalToConstant: 1),
-                        tf.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 10),
-                        tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
-                        tf.trailingAnchor.constraint(lessThanOrEqualTo: disclosureButton.leadingAnchor, constant: -6),
-                        iv.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 6),
-                        iv.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
-                        iv.widthAnchor.constraint(equalToConstant: 10),
-                        iv.heightAnchor.constraint(equalToConstant: 10),
-                        disclosureButton.trailingAnchor.constraint(
-                            equalTo: c.trailingAnchor,
-                            constant: -(Self.projectDisclosureTrailingInset - self.outlineView.indentationPerLevel)
-                        ),
-                        disclosureButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
-                        disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
-                        disclosureButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
-                    ])
-                    return c
-                }()
-
-            cell.textField?.stringValue = project.name.uppercased()
-            cell.textField?.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-            cell.textField?.textColor = NSColor(resource: .textSecondary)
-            if let separator = cell.subviews.first(where: { $0.identifier == Self.projectSeparatorIdentifier }) {
-                separator.layer?.backgroundColor = NSColor(resource: .textSecondary).withAlphaComponent(0.4).cgColor
-                separator.isHidden = !shouldShowTopSeparator(for: project)
-            }
-            if let disclosureButton = cell.subviews.first(where: { $0.identifier == Self.projectDisclosureButtonIdentifier }) as? NSButton {
-                let hasChildren = !project.children.isEmpty
-                disclosureButton.objectValue = project.projectId.uuidString
-                updateProjectDisclosureButton(disclosureButton, isExpanded: !isProjectCollapsed(project))
-                disclosureButton.isHidden = !hasChildren
-                disclosureButton.isEnabled = hasChildren
-            }
-            if project.isPinned {
-                cell.imageView?.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
-                cell.imageView?.contentTintColor = NSColor(resource: .textSecondary)
-                cell.imageView?.isHidden = false
-            } else {
-                cell.imageView?.image = nil
-                cell.imageView?.isHidden = true
-            }
-            return cell
-        }
-
-        // Level 1: Section header
-        if let section = item as? SidebarSection {
-            let identifier = NSUserInterfaceItemIdentifier("SectionCell")
-            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
-                ?? {
-                    let c = NSTableCellView()
-                    c.identifier = identifier
-
-                    let iv = NSImageView()
-                    iv.translatesAutoresizingMaskIntoConstraints = false
-                    c.addSubview(iv)
-                    c.imageView = iv
-
-                    let tf = NSTextField(labelWithString: "")
-                    tf.translatesAutoresizingMaskIntoConstraints = false
-                    c.addSubview(tf)
-                    c.textField = tf
-
-                    let disclosureButton = NSButton()
-                    disclosureButton.identifier = Self.sectionDisclosureButtonIdentifier
-                    disclosureButton.translatesAutoresizingMaskIntoConstraints = false
-                    disclosureButton.isBordered = false
-                    disclosureButton.imagePosition = .imageOnly
-                    disclosureButton.focusRingType = .none
-                    disclosureButton.setButtonType(.momentaryChange)
-                    disclosureButton.sendAction(on: [.leftMouseUp])
-                    disclosureButton.target = self
-                    disclosureButton.action = #selector(toggleSectionExpanded(_:))
-                    c.addSubview(disclosureButton)
-
-                    NSLayoutConstraint.activate([
-                        iv.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
-                        iv.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                        iv.widthAnchor.constraint(equalToConstant: 8),
-                        iv.heightAnchor.constraint(equalToConstant: 8),
-                        tf.leadingAnchor.constraint(equalTo: iv.trailingAnchor, constant: 6),
-                        tf.trailingAnchor.constraint(lessThanOrEqualTo: disclosureButton.leadingAnchor, constant: -6),
-                        tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                        disclosureButton.trailingAnchor.constraint(
-                            equalTo: c.trailingAnchor,
-                            constant: -(Self.projectDisclosureTrailingInset - self.outlineView.indentationPerLevel)
-                        ),
-                        disclosureButton.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                        disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
-                        disclosureButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
-                    ])
-                    return c
-                }()
-
-            cell.textField?.stringValue = section.name.uppercased()
-            cell.textField?.font = .systemFont(ofSize: 11, weight: .semibold)
-            cell.textField?.textColor = NSColor(resource: .textSecondary)
-            cell.imageView?.image = Self.colorDotImage(color: section.color, size: 8)
-            if let disclosureButton = cell.subviews.first(where: { $0.identifier == Self.sectionDisclosureButtonIdentifier }) as? NSButton {
-                disclosureButton.objectValue = sectionCollapseStorageKey(section)
-                updateSectionDisclosureButton(disclosureButton, isExpanded: !isSectionCollapsed(section))
-                let hasThreads = !section.threads.isEmpty
-                disclosureButton.isHidden = !hasThreads
-                disclosureButton.isEnabled = hasThreads
-            }
-            return cell
-        }
-
-        // Level 1 or 2: Thread item
-        if let thread = item as? MagentThread {
-            if thread.isMain {
-                let identifier = NSUserInterfaceItemIdentifier("MainThreadCell")
-                let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? ThreadCell
-                    ?? {
-                        let c = ThreadCell()
-                        c.identifier = identifier
-
-                        let tf = NSTextField(labelWithString: "")
-                        tf.translatesAutoresizingMaskIntoConstraints = false
-                        c.addSubview(tf)
-                        c.textField = tf
-
-                        NSLayoutConstraint.activate([
-                            tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
-                            tf.trailingAnchor.constraint(lessThanOrEqualTo: c.trailingAnchor, constant: -Self.sidebarHorizontalInset),
-                            tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                        ])
-
-                        return c
-                    }()
-
-                cell.configureAsMain(isUnreadCompletion: thread.hasUnreadAgentCompletion, isBusy: thread.hasAgentBusy, isWaitingForInput: thread.hasWaitingForInput)
-                return cell
-            }
-
-            // Regular thread: icon on left, name on right
-            let identifier = NSUserInterfaceItemIdentifier("ThreadCell")
-            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? ThreadCell
-                ?? {
-                    let c = ThreadCell()
-                    c.identifier = identifier
-
-                    let iv = NSImageView()
-                    iv.translatesAutoresizingMaskIntoConstraints = false
-                    c.addSubview(iv)
-                    c.imageView = iv
-
-                    let tf = NSTextField(labelWithString: "")
-                    tf.translatesAutoresizingMaskIntoConstraints = false
-                    c.addSubview(tf)
-                    c.textField = tf
-
-                    NSLayoutConstraint.activate([
-                        iv.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
-                        iv.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                        iv.widthAnchor.constraint(equalToConstant: 16),
-                        iv.heightAnchor.constraint(equalToConstant: 16),
-                        tf.leadingAnchor.constraint(equalTo: iv.trailingAnchor, constant: 6),
-                        tf.trailingAnchor.constraint(lessThanOrEqualTo: c.trailingAnchor, constant: -Self.sidebarHorizontalInset),
-                        tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                    ])
-
-                    return c
-                }()
-
-            let settings = persistence.loadSettings()
-            let sections = settings.threadSections
-            let section = sections.first(where: { $0.id == thread.sectionId })
-            cell.configure(with: thread, sectionColor: section?.color)
-            return cell
-        }
-
-        return nil
-    }
-
-    func outlineViewItemDidExpand(_ notification: Notification) {
-        guard let project = notification.userInfo?["NSObject"] as? SidebarProject else { return }
-        var collapsed = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
-        collapsed.remove(project.projectId.uuidString)
-        UserDefaults.standard.set(Array(collapsed), forKey: Self.collapsedProjectIdsKey)
-    }
-
-    func outlineViewItemDidCollapse(_ notification: Notification) {
-        guard let project = notification.userInfo?["NSObject"] as? SidebarProject else { return }
-        var collapsed = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
-        collapsed.insert(project.projectId.uuidString)
-        UserDefaults.standard.set(Array(collapsed), forKey: Self.collapsedProjectIdsKey)
-    }
-
-    func outlineViewSelectionDidChange(_ notification: Notification) {
-        let row = outlineView.selectedRow
-        guard row >= 0,
-              let thread = outlineView.item(atRow: row) as? MagentThread else { return }
-        UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
-        UserDefaults.standard.set(thread.projectId.uuidString, forKey: Self.lastOpenedProjectDefaultsKey)
-        delegate?.threadList(self, didSelectThread: thread)
-    }
-}
-
-// MARK: - NSMenuDelegate
-
-extension ThreadListViewController: NSMenuDelegate {
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-
-        let clickedRow = outlineView.clickedRow
-        guard clickedRow >= 0 else { return }
-
-        let clickedItem = outlineView.item(atRow: clickedRow)
-
-        if let project = clickedItem as? SidebarProject {
-            let contextMenu = buildProjectContextMenu(for: project)
-            for item in contextMenu.items {
-                contextMenu.removeItem(item)
-                menu.addItem(item)
-            }
-            return
-        }
-
-        if let thread = clickedItem as? MagentThread {
-            let contextMenu = buildContextMenu(for: thread)
-            for item in contextMenu.items {
-                contextMenu.removeItem(item)
-                menu.addItem(item)
-            }
-        }
-    }
-}
-
-// MARK: - ThreadManagerDelegate
-
-extension ThreadListViewController: ThreadManagerDelegate {
-    func threadManager(_ manager: ThreadManager, didCreateThread thread: MagentThread) {
-        reloadData()
-        let row = outlineView.row(forItem: thread)
-        if row >= 0 {
-            outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-        }
-    }
-
-    func threadManager(_ manager: ThreadManager, didArchiveThread thread: MagentThread) {
-        reloadData()
-        delegate?.threadList(self, didArchiveThread: thread)
-    }
-
-    func threadManager(_ manager: ThreadManager, didDeleteThread thread: MagentThread) {
-        reloadData()
-        delegate?.threadList(self, didDeleteThread: thread)
-    }
-
-    func threadManager(_ manager: ThreadManager, didUpdateThreads threads: [MagentThread]) {
-        // reloadData() preserves the current selection by thread ID
-        reloadData()
-
-        // If nothing is selected after reload (e.g. first launch), pick the first thread
-        if outlineView.selectedRow < 0 {
-            autoSelectFirst()
-        }
-    }
 }

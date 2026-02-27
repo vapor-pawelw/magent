@@ -1,0 +1,320 @@
+import AppKit
+import Foundation
+import UserNotifications
+
+extension ThreadManager {
+
+    // MARK: - Injection
+
+    func effectiveInjection(for projectId: UUID) -> (terminalCommand: String, agentContext: String) {
+        let settings = persistence.loadSettings()
+        let project = settings.projects.first(where: { $0.id == projectId })
+        let termCmd = (project?.terminalInjectionCommand?.isEmpty == false)
+            ? project!.terminalInjectionCommand! : settings.terminalInjectionCommand
+        let agentCtx = (project?.agentContextInjection?.isEmpty == false)
+            ? project!.agentContextInjection! : settings.agentContextInjection
+        return (termCmd, agentCtx)
+    }
+
+    func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String) {
+        guard !terminalCommand.isEmpty || !agentContext.isEmpty else { return }
+        Task {
+            // Wait for shell/agent to initialize
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if !terminalCommand.isEmpty {
+                try? await tmux.sendKeys(sessionName: sessionName, keys: terminalCommand)
+            }
+            if !agentContext.isEmpty {
+                // Additional delay if we also sent a terminal command
+                if !terminalCommand.isEmpty {
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                }
+                try? await tmux.sendKeys(sessionName: sessionName, keys: agentContext)
+            }
+        }
+    }
+
+    // MARK: - Agent Type
+
+    func effectiveAgentType(for projectId: UUID) -> AgentType? {
+        let settings = persistence.loadSettings()
+        return resolveAgentType(for: projectId, requestedAgentType: nil, settings: settings)
+    }
+
+
+    // MARK: - Helpers
+
+    /// Renames session names produced by Magent without touching unrelated substrings.
+    /// This avoids accidental rewrites when thread names overlap with the "magent" prefix.
+    func renamedSessionName(_ sessionName: String, fromThreadName oldName: String, toThreadName newName: String) -> String {
+        let oldPrefix = "magent-\(oldName)"
+        let newPrefix = "magent-\(newName)"
+
+        if sessionName == oldPrefix {
+            return newPrefix
+        }
+        if sessionName.hasPrefix(oldPrefix + "-") {
+            return newPrefix + String(sessionName.dropFirst(oldPrefix.count))
+        }
+        return sessionName
+    }
+
+    /// Renames tmux sessions in two phases to avoid collisions during rename.
+    /// Dead sessions are skipped; they will be recreated lazily with the new name.
+    func renameTmuxSessions(from oldNames: [String], to newNames: [String]) async throws {
+        precondition(oldNames.count == newNames.count)
+
+        var currentNames = oldNames
+        var liveIndices: [Int] = []
+
+        for i in oldNames.indices where oldNames[i] != newNames[i] {
+            if await tmux.hasSession(name: oldNames[i]) {
+                liveIndices.append(i)
+            }
+        }
+
+        do {
+            for i in liveIndices {
+                let tempName = "magent-rename-\(UUID().uuidString.lowercased())"
+                try await tmux.renameSession(from: oldNames[i], to: tempName)
+                currentNames[i] = tempName
+            }
+
+            for i in liveIndices {
+                try await tmux.renameSession(from: currentNames[i], to: newNames[i])
+                currentNames[i] = newNames[i]
+            }
+        } catch {
+            // Best-effort rollback so the model doesn't diverge from live tmux state.
+            for i in liveIndices.reversed() where currentNames[i] != oldNames[i] {
+                try? await tmux.renameSession(from: currentNames[i], to: oldNames[i])
+            }
+            throw error
+        }
+    }
+
+    /// Removes broken symlinks from all projects' worktrees base directories.
+    func cleanupAllBrokenSymlinks() {
+        let settings = persistence.loadSettings()
+        for project in settings.projects {
+            cleanupBrokenSymlinks(in: project.resolvedWorktreesBasePath())
+        }
+    }
+
+    /// Removes broken symlinks from the worktrees base directory.
+    /// Rename operations leave symlinks (old-name → actual-worktree-dir) that become
+    /// stale once the worktree is archived/removed.
+    private func cleanupBrokenSymlinks(in directory: String) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: directory) else { return }
+        for entry in entries {
+            let fullPath = (directory as NSString).appendingPathComponent(entry)
+            let url = URL(fileURLWithPath: fullPath)
+            guard let values = try? url.resourceValues(forKeys: [.isSymbolicLinkKey]),
+                  values.isSymbolicLink == true else { continue }
+            // Broken symlink: the target no longer exists
+            if !fm.fileExists(atPath: fullPath) {
+                try? fm.removeItem(atPath: fullPath)
+            }
+        }
+    }
+
+    func createCompatibilitySymlink(from oldPath: String, to newPath: String) {
+        let fileManager = FileManager.default
+        let oldURL = URL(fileURLWithPath: oldPath)
+
+        if let values = try? oldURL.resourceValues(forKeys: [.isSymbolicLinkKey]),
+           values.isSymbolicLink == true {
+            try? fileManager.removeItem(atPath: oldPath)
+        }
+
+        guard !fileManager.fileExists(atPath: oldPath) else { return }
+        try? fileManager.createSymbolicLink(atPath: oldPath, withDestinationPath: newPath)
+    }
+
+    /// Path to the Magent-specific Claude Code hooks settings file.
+    private static let claudeHooksSettingsPath = "/tmp/magent-claude-hooks.json"
+
+    /// Writes (or refreshes) the Claude Code hooks JSON that Magent injects via `--settings`.
+    /// The `Stop` hook writes the tmux session name to the agent-completion event log so
+    /// Magent can detect when Claude finishes responding.
+    func installClaudeHooksSettings() {
+        let marker = "magent-hooks-v1"
+        let path = Self.claudeHooksSettingsPath
+        if let existing = try? String(contentsOfFile: path, encoding: .utf8),
+           existing.contains(marker) {
+            return
+        }
+        let eventsPath = "/tmp/magent-agent-completion-events.log"
+        // The Stop hook runs `tmux display-message` to get the session name and
+        // appends it to the event log. Guarded by MAGENT_WORKTREE_NAME so it
+        // only fires inside Magent-managed sessions.
+        let json = """
+        {
+            "_comment": "\(marker)",
+            "hooks": {
+                "Stop": [
+                    {
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": "[ -n \\"$MAGENT_WORKTREE_NAME\\" ] && tmux display-message -p '#{session_name}' >> \(eventsPath) || true",
+                                "timeout": 5
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        """
+        try? json.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
+    /// Ensures the Codex CLI config has `tui.notification_method = "bel"` so the
+    /// pipe-pane bell watcher can detect when Codex finishes a turn.
+    func ensureCodexBellNotification() {
+        let configDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex")
+        let configPath = configDir.appendingPathComponent("config.toml").path
+
+        guard let contents = try? String(contentsOfFile: configPath, encoding: .utf8) else {
+            // No config file — create a minimal one with just the tui section.
+            try? FileManager.default.createDirectory(atPath: configDir.path, withIntermediateDirectories: true)
+            let minimal = "\n[tui]\nnotification_method = \"bel\"\n"
+            try? minimal.write(toFile: configPath, atomically: true, encoding: .utf8)
+            return
+        }
+
+        // Already has the setting — nothing to do.
+        if contents.contains("notification_method") {
+            return
+        }
+
+        // Append [tui] section with the bel setting.
+        var updated = contents
+        if !updated.hasSuffix("\n") { updated += "\n" }
+        if contents.contains("[tui]") {
+            // [tui] section exists but without notification_method — insert after it.
+            updated = updated.replacingOccurrences(
+                of: "[tui]",
+                with: "[tui]\nnotification_method = \"bel\""
+            )
+        } else {
+            updated += "\n[tui]\nnotification_method = \"bel\"\n"
+        }
+        try? updated.write(toFile: configPath, atomically: true, encoding: .utf8)
+    }
+
+    /// Builds the shell command to start the selected agent with any required agent-specific setup.
+    private static let userShell: String = {
+        ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+    }()
+
+    func agentStartCommand(
+        settings: AppSettings,
+        agentType: AgentType?,
+        envExports: String,
+        workingDirectory: String
+    ) -> String {
+        let shell = Self.userShell
+        var parts = [envExports, "cd \(workingDirectory)"]
+        guard let agentType else {
+            parts.append("exec \(shell) -l")
+            return parts.joined(separator: " && ")
+        }
+        if agentType == .claude {
+            parts.append("unset CLAUDECODE")
+        }
+        var command = settings.command(for: agentType)
+        if agentType == .claude {
+            command += " --settings \(Self.claudeHooksSettingsPath)"
+        }
+        // Wrap the agent command in a login shell so user profile files are sourced
+        // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
+        let innerCmd = parts.joined(separator: " && ") + " && " + command + "; exec \(shell) -l"
+        return "exec \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
+    }
+
+    /// Runs agent-specific post-setup (e.g. pre-trusting directories for Claude Code).
+    func trustDirectoryIfNeeded(_ path: String, agentType: AgentType?) {
+        switch agentType {
+        case .claude:
+            ClaudeTrustHelper.trustDirectory(path)
+        case .codex:
+            CodexTrustHelper.trustDirectory(path)
+        case .custom, .none:
+            break
+        }
+    }
+
+    func resolveAgentType(
+        for projectId: UUID,
+        requestedAgentType: AgentType?,
+        settings: AppSettings
+    ) -> AgentType? {
+        let activeAgents = settings.availableActiveAgents
+        guard !activeAgents.isEmpty else { return nil }
+        if activeAgents.count == 1 {
+            return activeAgents[0]
+        }
+        if let requestedAgentType, activeAgents.contains(requestedAgentType) {
+            return requestedAgentType
+        }
+
+        let project = settings.projects.first(where: { $0.id == projectId })
+        if let projectDefault = project?.agentType, activeAgents.contains(projectDefault) {
+            return projectDefault
+        }
+        if let globalDefault = settings.effectiveGlobalDefaultAgentType, activeAgents.contains(globalDefault) {
+            return globalDefault
+        }
+        return activeAgents[0]
+    }
+
+    func isTabNameTaken(_ name: String, existingNames: [String]) async -> Bool {
+        if existingNames.contains(name) { return true }
+        return await tmux.hasSession(name: name)
+    }
+
+    static func sanitizeForTmux(_ name: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        return name.unicodeScalars
+            .map { allowed.contains($0) ? String($0) : "-" }
+            .joined()
+            .lowercased()
+    }
+}
+
+extension Notification.Name {
+    static let magentDeadSessionsDetected = Notification.Name("magentDeadSessionsDetected")
+    static let magentAgentCompletionDetected = Notification.Name("magentAgentCompletionDetected")
+    static let magentAgentWaitingForInput = Notification.Name("magentAgentWaitingForInput")
+    static let magentSectionsDidChange = Notification.Name("magentSectionsDidChange")
+    static let magentOpenSettings = Notification.Name("magentOpenSettings")
+}
+
+enum ThreadManagerError: LocalizedError {
+    case threadNotFound
+    case invalidName
+    case duplicateName
+    case invalidTabIndex
+    case cannotDeleteMainThread
+    case nameGenerationFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .threadNotFound:
+            return "Thread not found"
+        case .invalidName:
+            return "Invalid name. Name must not be empty or contain slashes."
+        case .duplicateName:
+            return "A thread with that name already exists."
+        case .invalidTabIndex:
+            return "Invalid tab index."
+        case .cannotDeleteMainThread:
+            return "Main threads cannot be deleted."
+        case .nameGenerationFailed:
+            return "Could not generate a unique thread name. Try again or clean up unused worktrees/branches."
+        }
+    }
+}
