@@ -330,6 +330,10 @@ final class ThreadManager {
             }
         }
 
+        if useAgentCommand {
+            trustDirectoryIfNeeded(currentThread.worktreePath, agentType: selectedAgentType)
+        }
+
         try await tmux.createSession(
             name: tmuxSessionName,
             workingDirectory: currentThread.worktreePath,
