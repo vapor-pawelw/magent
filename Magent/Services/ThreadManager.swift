@@ -35,6 +35,7 @@ final class ThreadManager {
     func restoreThreads() async {
         loadThreads()
         installClaudeHooksSettings()
+        ensureCodexBellNotification()
 
         // Migrate old threads that have no agentTmuxSessions recorded.
         // Heuristic: the first session was always created as the agent tab.
@@ -1629,6 +1630,41 @@ final class ThreadManager {
         }
         """
         try? json.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
+    /// Ensures the Codex CLI config has `tui.notification_method = "bel"` so the
+    /// pipe-pane bell watcher can detect when Codex finishes a turn.
+    func ensureCodexBellNotification() {
+        let configDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex")
+        let configPath = configDir.appendingPathComponent("config.toml").path
+
+        guard let contents = try? String(contentsOfFile: configPath, encoding: .utf8) else {
+            // No config file — create a minimal one with just the tui section.
+            try? FileManager.default.createDirectory(atPath: configDir.path, withIntermediateDirectories: true)
+            let minimal = "\n[tui]\nnotification_method = \"bel\"\n"
+            try? minimal.write(toFile: configPath, atomically: true, encoding: .utf8)
+            return
+        }
+
+        // Already has the setting — nothing to do.
+        if contents.contains("notification_method") {
+            return
+        }
+
+        // Append [tui] section with the bel setting.
+        var updated = contents
+        if !updated.hasSuffix("\n") { updated += "\n" }
+        if contents.contains("[tui]") {
+            // [tui] section exists but without notification_method — insert after it.
+            updated = updated.replacingOccurrences(
+                of: "[tui]",
+                with: "[tui]\nnotification_method = \"bel\""
+            )
+        } else {
+            updated += "\n[tui]\nnotification_method = \"bel\"\n"
+        }
+        try? updated.write(toFile: configPath, atomically: true, encoding: .utf8)
     }
 
     /// Builds the shell command to start the selected agent with any required agent-specific setup.
