@@ -7,13 +7,16 @@ extension ThreadManager {
     // MARK: - IPC Agent Docs
 
     static let ipcAgentDocs = """
-    You have access to Magent IPC. Use `/tmp/magent-cli` to manage threads:
+    You have access to Magent IPC. Use `/tmp/magent-cli` to manage threads and tabs:
       /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>]
       /tmp/magent-cli list-projects
       /tmp/magent-cli list-threads [--project <name>]
       /tmp/magent-cli send-prompt --thread <name> --prompt <text>
       /tmp/magent-cli archive-thread --thread <name>
       /tmp/magent-cli delete-thread --thread <name>
+      /tmp/magent-cli list-tabs --thread <name>
+      /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
+      /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
     """
 
     // MARK: - Injection
@@ -231,7 +234,7 @@ extension ThreadManager {
 
     private static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     private static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    private static let codexIPCVersion = "<!-- magent-ipc-v1 -->"
+    private static let codexIPCVersion = "<!-- magent-ipc-v2 -->"
 
     private static let codexIPCBlock = """
     \(codexIPCMarkerStart)
@@ -239,8 +242,7 @@ extension ThreadManager {
     # Magent IPC
 
     When the `MAGENT_SOCKET` environment variable is set, you are running inside
-    a Magent-managed terminal. Use `magent-cli` (available at `/tmp/magent-cli`)
-    to manage threads:
+    a Magent-managed terminal. Use `/tmp/magent-cli` to manage threads and tabs:
 
     ```
     /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>]
@@ -249,6 +251,9 @@ extension ThreadManager {
     /tmp/magent-cli send-prompt --thread <name> --prompt <text>
     /tmp/magent-cli archive-thread --thread <name>
     /tmp/magent-cli delete-thread --thread <name>
+    /tmp/magent-cli list-tabs --thread <name>
+    /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
+    /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
     ```
     \(codexIPCMarkerEnd)
     """
