@@ -84,6 +84,11 @@ Each thread is 1:1 with a git worktree:
 - Archiving a thread → `git worktree remove` + `git worktree prune`
 - Thread state stored separately from git (JSON/SQLite)
 
+### 4.1 Worktree Rename Compatibility
+
+Thread rename updates branch/worktree/session names, but running agent processes cannot have their cwd/env rewritten in-place.
+To keep active sessions stable, rename creates a compatibility symlink from the old worktree path to the new path and updates tmux session environment for future shells/panes.
+
 ### 5. Persistence Model
 
 Thread state persisted as JSON in app's Application Support directory:
