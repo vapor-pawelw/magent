@@ -652,8 +652,12 @@ extension ThreadManager {
     private func paneTitleIndicatesBusy(_ title: String) -> Bool {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let scalar = trimmed.unicodeScalars.first else { return false }
-        // Claude/Codex often prefix titles with a braille spinner while processing.
-        return (0x2800...0x28FF).contains(scalar.value)
+        let v = scalar.value
+        // Braille spinner (⠋⠙⠹…) used by Claude Code / Codex while processing.
+        if (0x2800...0x28FF).contains(v) { return true }
+        // ✳ (U+2733 eight-spoked asterisk) — alternate busy prefix used by Claude Code.
+        if v == 0x2733 { return true }
+        return false
     }
 
 
