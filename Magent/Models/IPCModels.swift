@@ -9,6 +9,8 @@ nonisolated struct IPCRequest: Codable, Sendable {
     var prompt: String?
     var threadId: String?
     var threadName: String?
+    var tabIndex: Int?
+    var sessionName: String?
     var id: String?
 }
 
@@ -21,6 +23,8 @@ nonisolated struct IPCResponse: Encodable, Sendable {
     var thread: IPCThreadInfo?
     var threads: [IPCThreadInfo]?
     var projects: [IPCProjectInfo]?
+    var tabs: [IPCTabInfo]?
+    var tab: IPCTabInfo?
 
     static func success(id: String? = nil) -> IPCResponse {
         IPCResponse(ok: true, id: id)
@@ -60,5 +64,19 @@ nonisolated struct IPCProjectInfo: Encodable, Sendable {
     init(project: Project) {
         self.name = project.name
         self.repoPath = project.repoPath
+    }
+}
+
+nonisolated struct IPCTabInfo: Encodable, Sendable {
+    let index: Int
+    let sessionName: String
+    let isAgent: Bool
+    let agentType: String?
+
+    init(index: Int, sessionName: String, isAgent: Bool, agentType: String?) {
+        self.index = index
+        self.sessionName = sessionName
+        self.isAgent = isAgent
+        self.agentType = agentType
     }
 }
