@@ -333,11 +333,11 @@ nonisolated struct GitRemote: Sendable {
 
         switch provider {
         case .github:
-            return URL(string: "https://\(host)/\(repoPath)/pulls?q=is%3Apr+head%3A\(encodedBranch)")
+            return URL(string: "https://\(host)/\(repoPath)/pulls?q=is%3Aopen+is%3Apr+head%3A\(encodedBranch)")
         case .gitlab:
-            return URL(string: "https://\(host)/\(repoPath)/-/merge_requests?source_branch=\(encodedBranch)")
+            return URL(string: "https://\(host)/\(repoPath)/-/merge_requests?state=opened&source_branch=\(encodedBranch)")
         case .bitbucket:
-            return URL(string: "https://\(host)/\(repoPath)/pull-requests?source=\(encodedBranch)")
+            return URL(string: "https://\(host)/\(repoPath)/pull-requests?state=OPEN&source=\(encodedBranch)")
         case .unknown:
             return openPullRequestsURL
         }
