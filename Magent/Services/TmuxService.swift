@@ -93,13 +93,58 @@ final class TmuxService {
         )
     }
 
+    func environmentValue(sessionName: String, key: String) async -> String? {
+        guard let output = try? await ShellExecutor.run(
+            "tmux show-environment -t \(shellQuote(sessionName)) \(shellQuote(key))"
+        ) else {
+            return nil
+        }
+
+        let line = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty, !line.hasPrefix("-") else { return nil }
+
+        let prefix = "\(key)="
+        guard line.hasPrefix(prefix) else { return nil }
+        return String(line.dropFirst(prefix.count))
+    }
+
+    func sessionPath(sessionName: String) async -> String? {
+        guard let output = try? await ShellExecutor.run(
+            "tmux display-message -p -t \(shellQuote(sessionName)) '#{session_path}'"
+        ) else {
+            return nil
+        }
+
+        let path = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return path.isEmpty ? nil : path
+    }
+
+    func activePaneInfo(sessionName: String) async -> (command: String, path: String)? {
+        guard let output = try? await ShellExecutor.run(
+            "tmux list-panes -t \(shellQuote(sessionName)) -F '#{pane_active}\t#{pane_current_command}\t#{pane_current_path}'"
+        ) else {
+            return nil
+        }
+
+        let lines = output
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .filter { !$0.isEmpty }
+        guard !lines.isEmpty else { return nil }
+
+        let selectedLine = lines.first(where: { $0.hasPrefix("1\t") }) ?? lines[0]
+        let parts = selectedLine.components(separatedBy: "\t")
+        guard parts.count >= 3 else { return nil }
+
+        let command = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        let path = parts[2].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !command.isEmpty, !path.isEmpty else { return nil }
+        return (command, path)
+    }
+
     /// Updates tmux defaults and live shell panes to a new working directory.
     /// Non-shell panes (e.g. running agent binaries) are left untouched.
     func updateWorkingDirectory(sessionName: String, to path: String) async {
-        _ = try? await ShellExecutor.run(
-            "tmux set-option -t \(shellQuote(sessionName)) default-path \(shellQuote(path))"
-        )
-
         let output: String
         do {
             output = try await ShellExecutor.run(

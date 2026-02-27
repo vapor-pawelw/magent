@@ -349,6 +349,8 @@ final class ThreadManager {
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: currentThread.name)
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: tabProject?.name ?? "project")
         }
+        await tmux.updateWorkingDirectory(sessionName: tmuxSessionName, to: currentThread.worktreePath)
+        enforceWorkingDirectoryAfterStartup(sessionName: tmuxSessionName, path: currentThread.worktreePath)
 
         threads[index].tmuxSessionNames.append(tmuxSessionName)
         let shouldMarkAsAgentTab = (currentThread.isMain || useAgentCommand) && selectedAgentType != nil
@@ -978,15 +980,15 @@ final class ThreadManager {
         return names
     }
 
-    /// Checks if a tmux session is dead and recreates it if so.
+    /// Ensures a tmux session exists and belongs to the expected thread context.
+    /// Recreates dead or mismatched sessions.
     /// Returns true if the session was recreated.
     func recreateSessionIfNeeded(
         sessionName: String,
         thread: MagentThread
     ) async -> Bool {
-        // Skip if already being recreated or still alive
+        // Skip if already being recreated
         guard !sessionsBeingRecreated.contains(sessionName) else { return false }
-        if await tmux.hasSession(name: sessionName) { return false }
 
         sessionsBeingRecreated.insert(sessionName)
         defer { sessionsBeingRecreated.remove(sessionName) }
@@ -994,11 +996,34 @@ final class ThreadManager {
         let settings = persistence.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let projectPath = project?.repoPath ?? thread.worktreePath
+        let projectName = project?.name ?? "project"
         let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
+
+        if await tmux.hasSession(name: sessionName) {
+            let sessionMatches = await sessionMatchesThreadContext(
+                sessionName: sessionName,
+                thread: thread,
+                projectPath: projectPath,
+                isAgentSession: isAgentSession
+            )
+            if sessionMatches {
+                await setSessionEnvironment(
+                    sessionName: sessionName,
+                    thread: thread,
+                    projectPath: projectPath,
+                    projectName: projectName
+                )
+                await tmux.updateWorkingDirectory(sessionName: sessionName, to: thread.worktreePath)
+                enforceWorkingDirectoryAfterStartup(sessionName: sessionName, path: thread.worktreePath)
+                return false
+            }
+
+            // Session name exists but points at another thread/project context.
+            try? await tmux.killSession(name: sessionName)
+        }
 
         let startCmd: String
         let sessionAgentType = thread.selectedAgentType ?? effectiveAgentType(for: thread.projectId)
-        let projectName = project?.name ?? "project"
         let envExports: String
         if thread.isMain {
             envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName)"
@@ -1022,17 +1047,14 @@ final class ThreadManager {
             command: startCmd
         )
 
-        // Set tmux environment variables
-        if thread.isMain {
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_PATH", value: projectPath)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: projectName)
-        } else {
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH", value: thread.worktreePath)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_PATH", value: projectPath)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: thread.name)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: projectName)
-        }
+        await setSessionEnvironment(
+            sessionName: sessionName,
+            thread: thread,
+            projectPath: projectPath,
+            projectName: projectName
+        )
+        await tmux.updateWorkingDirectory(sessionName: sessionName, to: thread.worktreePath)
+        enforceWorkingDirectoryAfterStartup(sessionName: sessionName, path: thread.worktreePath)
 
         // Run normal injection (terminal command + agent context)
         let injection = effectiveInjection(for: thread.projectId)
@@ -1043,6 +1065,93 @@ final class ThreadManager {
         )
 
         return true
+    }
+
+    private func setSessionEnvironment(
+        sessionName: String,
+        thread: MagentThread,
+        projectPath: String,
+        projectName: String
+    ) async {
+        if thread.isMain {
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_PATH", value: projectPath)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: projectName)
+        } else {
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH", value: thread.worktreePath)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_PATH", value: projectPath)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: thread.name)
+            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: projectName)
+        }
+    }
+
+    private func sessionMatchesThreadContext(
+        sessionName: String,
+        thread: MagentThread,
+        projectPath: String,
+        isAgentSession: Bool
+    ) async -> Bool {
+        let expectedPath = thread.isMain ? projectPath : thread.worktreePath
+
+        if let paneInfo = await tmux.activePaneInfo(sessionName: sessionName),
+           !path(paneInfo.path, isWithin: expectedPath) {
+            if !isAgentSession && isShellCommand(paneInfo.command) {
+                // Existing terminal shell drifted due startup config (e.g. .zshrc cd).
+                // Keep the session and correct cwd in-place.
+                await tmux.updateWorkingDirectory(sessionName: sessionName, to: expectedPath)
+                enforceWorkingDirectoryAfterStartup(sessionName: sessionName, path: expectedPath)
+                return true
+            }
+            // Agent sessions or non-shell commands in the wrong directory should be recreated.
+            return false
+        }
+
+        if thread.isMain {
+            if let envProject = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_PROJECT_PATH"),
+               !envProject.isEmpty {
+                return envProject == projectPath
+            }
+            if let sessionPath = await tmux.sessionPath(sessionName: sessionName) {
+                return path(sessionPath, isWithin: projectPath)
+            }
+            return true
+        }
+
+        if let envWorktree = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH"),
+           !envWorktree.isEmpty {
+            guard envWorktree == thread.worktreePath else { return false }
+            if let envProject = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_PROJECT_PATH"),
+               !envProject.isEmpty {
+                return envProject == projectPath
+            }
+            return true
+        }
+
+        if let sessionPath = await tmux.sessionPath(sessionName: sessionName) {
+            return path(sessionPath, isWithin: thread.worktreePath)
+        }
+        return true
+    }
+
+    private func isShellCommand(_ command: String) -> Bool {
+        let shells: Set<String> = ["sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh"]
+        return shells.contains(command)
+    }
+
+    private func path(_ path: String, isWithin root: String) -> Bool {
+        let normalizedRoot = root.hasSuffix("/") ? String(root.dropLast()) : root
+        return path == normalizedRoot || path.hasPrefix(normalizedRoot + "/")
+    }
+
+    /// Some shell startup configs can change cwd after the session starts.
+    /// Re-apply working directory shortly after startup to keep tabs anchored to the thread worktree.
+    private func enforceWorkingDirectoryAfterStartup(sessionName: String, path: String) {
+        Task {
+            for delayNs in [250_000_000, 900_000_000, 2_000_000_000] {
+                try? await Task.sleep(nanoseconds: UInt64(delayNs))
+                await tmux.updateWorkingDirectory(sessionName: sessionName, to: path)
+            }
+        }
     }
 
     // MARK: - Session Monitor

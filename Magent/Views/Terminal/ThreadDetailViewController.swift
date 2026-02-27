@@ -315,16 +315,11 @@ final class ThreadDetailViewController: NSViewController {
         pinnedCount = pinned.count
 
         for (i, sessionName) in orderedSessions.enumerated() {
-            let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
-
-            // If the session is dead, pre-create it so the terminal just attaches.
-            let sessionExists = await TmuxService.shared.hasSession(name: sessionName)
-            if !sessionExists {
-                _ = await threadManager.recreateSessionIfNeeded(
-                    sessionName: sessionName,
-                    thread: thread
-                )
-            }
+            // Ensure the session exists and matches this thread context.
+            _ = await threadManager.recreateSessionIfNeeded(
+                sessionName: sessionName,
+                thread: thread
+            )
 
             await MainActor.run {
                 let title = i == 0 ? "Main" : "Tab \(i)"
@@ -922,6 +917,11 @@ final class ThreadDetailViewController: NSViewController {
                     to: thread,
                     useAgentCommand: useAgentCommand,
                     requestedAgentType: agentType
+                )
+                let latestThread = self.threadManager.threads.first(where: { $0.id == self.thread.id }) ?? self.thread
+                _ = await self.threadManager.recreateSessionIfNeeded(
+                    sessionName: tab.tmuxSessionName,
+                    thread: latestThread
                 )
                 await MainActor.run {
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {

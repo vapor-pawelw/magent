@@ -34,6 +34,7 @@ protocol ThreadListDelegate: AnyObject {
 final class ThreadListViewController: NSViewController {
 
     private static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
+    private static let lastOpenedProjectDefaultsKey = "MagentLastOpenedProjectID"
     private static let collapsedProjectIdsKey = "MagentCollapsedProjectIds"
 
     weak var delegate: ThreadListDelegate?
@@ -293,10 +294,43 @@ final class ThreadListViewController: NSViewController {
     }
 
     private func autoSelectFirst() {
-        if let threadIdRaw = UserDefaults.standard.string(forKey: Self.lastOpenedThreadDefaultsKey),
-           let threadId = UUID(uuidString: threadIdRaw) {
+        let defaults = UserDefaults.standard
+        let persistedThreads = persistence.loadThreads()
+
+        let lastOpenedThreadId: UUID? = defaults
+            .string(forKey: Self.lastOpenedThreadDefaultsKey)
+            .flatMap(UUID.init(uuidString:))
+        let lastOpenedProjectId: UUID? = defaults
+            .string(forKey: Self.lastOpenedProjectDefaultsKey)
+            .flatMap(UUID.init(uuidString:))
+
+        if let threadId = lastOpenedThreadId {
             for row in 0..<outlineView.numberOfRows {
                 if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
+                    delegate?.threadList(self, didSelectThread: thread)
+                    outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                    return
+                }
+            }
+
+            // If the exact thread is gone (e.g. archived/deleted), restore to the same project.
+            let fallbackProjectId = lastOpenedProjectId
+                ?? threadManager.threads.first(where: { $0.id == threadId })?.projectId
+                ?? persistedThreads.first(where: { $0.id == threadId })?.projectId
+            if let fallbackProjectId {
+                for row in 0..<outlineView.numberOfRows {
+                    if let thread = outlineView.item(atRow: row) as? MagentThread,
+                       thread.projectId == fallbackProjectId {
+                        delegate?.threadList(self, didSelectThread: thread)
+                        outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                        return
+                    }
+                }
+            }
+        } else if let lastOpenedProjectId {
+            for row in 0..<outlineView.numberOfRows {
+                if let thread = outlineView.item(atRow: row) as? MagentThread,
+                   thread.projectId == lastOpenedProjectId {
                     delegate?.threadList(self, didSelectThread: thread)
                     outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                     return
@@ -943,6 +977,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         guard row >= 0,
               let thread = outlineView.item(atRow: row) as? MagentThread else { return }
         UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
+        UserDefaults.standard.set(thread.projectId.uuidString, forKey: Self.lastOpenedProjectDefaultsKey)
         delegate?.threadList(self, didSelectThread: thread)
     }
 }
