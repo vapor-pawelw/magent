@@ -962,7 +962,7 @@ final class ThreadDetailViewController: NSViewController {
             return
         }
 
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
     // MARK: - Add Tab
