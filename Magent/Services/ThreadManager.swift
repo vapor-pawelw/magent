@@ -43,6 +43,7 @@ final class ThreadManager {
         loadThreads()
         installClaudeHooksSettings()
         ensureCodexBellNotification()
+        installCodexIPCInstructions()
 
         // Migrate old threads that have no agentTmuxSessions recorded.
         // Heuristic: the first session was always created as the agent tab.
@@ -112,7 +113,8 @@ final class ThreadManager {
     func createThread(
         project: Project,
         requestedAgentType: AgentType? = nil,
-        useAgentCommand: Bool = true
+        useAgentCommand: Bool = true,
+        initialPrompt: String? = nil
     ) async throws -> MagentThread {
         // Generate a unique name that doesn't conflict with existing worktrees, branches, or tmux sessions.
         // For each random base name, try the bare name first, then numeric suffixes (-2, -3, …).
@@ -176,7 +178,7 @@ final class ThreadManager {
         trustDirectoryIfNeeded(worktreePath, agentType: selectedAgentType)
 
         // Create tmux session with selected agent command (or shell if no active agents)
-        let envExports = "export MAGENT_WORKTREE_PATH=\(worktreePath) && export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=\(name) && export MAGENT_PROJECT_NAME=\(project.name)"
+        let envExports = "export MAGENT_WORKTREE_PATH=\(worktreePath) && export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=\(name) && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
         let startCmd: String
         if useAgentCommand {
             startCmd = agentStartCommand(
@@ -200,6 +202,7 @@ final class ThreadManager {
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: name)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
 
         let thread = MagentThread(
             projectId: project.id,
@@ -221,7 +224,7 @@ final class ThreadManager {
 
         // Inject terminal command and agent context
         let injection = effectiveInjection(for: project.id)
-        injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext)
+        injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext, initialPrompt: initialPrompt)
 
         return thread
     }
@@ -245,7 +248,7 @@ final class ThreadManager {
         let settings = persistence.loadSettings()
         let selectedAgentType = resolveAgentType(for: project.id, requestedAgentType: nil, settings: settings)
         trustDirectoryIfNeeded(project.repoPath, agentType: selectedAgentType)
-        let envExports = "export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(project.name)"
+        let envExports = "export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
         let startCmd = agentStartCommand(
             settings: settings,
             agentType: selectedAgentType,
@@ -262,6 +265,7 @@ final class ThreadManager {
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
 
         let thread = MagentThread(
             projectId: project.id,
@@ -331,7 +335,7 @@ final class ThreadManager {
             tmuxSessionName = candidate
             let projectPath = currentThread.worktreePath
             let projectName = settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
-            let envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName)"
+            let envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
             if useAgentCommand {
                 selectedAgentType = resolveAgentType(
                     for: currentThread.projectId,
@@ -357,7 +361,7 @@ final class ThreadManager {
             tmuxSessionName = candidate
             let project = settings.projects.first(where: { $0.id == currentThread.projectId })
             let projectPath = project?.repoPath ?? currentThread.worktreePath
-            let envExports = "export MAGENT_WORKTREE_PATH=\(currentThread.worktreePath) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(currentThread.name) && export MAGENT_PROJECT_NAME=\(project?.name ?? "project")"
+            let envExports = "export MAGENT_WORKTREE_PATH=\(currentThread.worktreePath) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(currentThread.name) && export MAGENT_PROJECT_NAME=\(project?.name ?? "project") && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
             if useAgentCommand {
                 selectedAgentType = resolveAgentType(
                     for: currentThread.projectId,
@@ -398,6 +402,7 @@ final class ThreadManager {
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: currentThread.name)
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: tabProject?.name ?? "project")
         }
+        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
         await tmux.updateWorkingDirectory(sessionName: tmuxSessionName, to: currentThread.worktreePath)
         enforceWorkingDirectoryAfterStartup(sessionName: tmuxSessionName, path: currentThread.worktreePath)
 

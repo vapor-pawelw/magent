@@ -4,6 +4,18 @@ import UserNotifications
 
 extension ThreadManager {
 
+    // MARK: - IPC Agent Docs
+
+    static let ipcAgentDocs = """
+    You have access to Magent IPC. Use `magent-cli` to manage threads:
+      magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>]
+      magent-cli list-projects
+      magent-cli list-threads [--project <name>]
+      magent-cli send-prompt --thread <name> --prompt <text>
+      magent-cli archive-thread --thread <name>
+      magent-cli delete-thread --thread <name>
+    """
+
     // MARK: - Injection
 
     func effectiveInjection(for projectId: UUID) -> (terminalCommand: String, agentContext: String) {
@@ -16,16 +28,28 @@ extension ThreadManager {
         return (termCmd, agentCtx)
     }
 
-    func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String) {
-        guard !terminalCommand.isEmpty || !agentContext.isEmpty else { return }
+    func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil) {
+        let hasPrompt = initialPrompt != nil && !initialPrompt!.isEmpty
+        guard !terminalCommand.isEmpty || !agentContext.isEmpty || hasPrompt else { return }
         Task {
             // Wait for shell/agent to initialize
             try? await Task.sleep(nanoseconds: 500_000_000)
             if !terminalCommand.isEmpty {
                 try? await tmux.sendKeys(sessionName: sessionName, keys: terminalCommand)
             }
-            if !agentContext.isEmpty {
-                // Additional delay if we also sent a terminal command
+            if hasPrompt {
+                // When an initial prompt is provided, skip the agent context injection
+                // and send only the prompt. The agent context would race with the prompt —
+                // submitting as a first prompt that blocks the real one.
+                // Give the agent extra time to finish initializing its TUI.
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                // Send text and Enter separately — the Enter key gets lost if sent in the
+                // same send-keys call while the TUI is still processing buffered input.
+                try? await tmux.sendText(sessionName: sessionName, text: initialPrompt!)
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                try? await tmux.sendEnter(sessionName: sessionName)
+            } else if !agentContext.isEmpty {
+                // No initial prompt — send agent context as usual
                 if !terminalCommand.isEmpty {
                     try? await Task.sleep(nanoseconds: 300_000_000)
                 }
@@ -205,6 +229,65 @@ extension ThreadManager {
         try? updated.write(toFile: configPath, atomically: true, encoding: .utf8)
     }
 
+    private static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
+    private static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
+    private static let codexIPCVersion = "<!-- magent-ipc-v1 -->"
+
+    private static let codexIPCBlock = """
+    \(codexIPCMarkerStart)
+    \(codexIPCVersion)
+    # Magent IPC
+
+    When the `MAGENT_SOCKET` environment variable is set, you are running inside
+    a Magent-managed terminal. Use `magent-cli` (available at `/tmp/magent-cli`)
+    to manage threads:
+
+    ```
+    magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>]
+    magent-cli list-projects
+    magent-cli list-threads [--project <name>]
+    magent-cli send-prompt --thread <name> --prompt <text>
+    magent-cli archive-thread --thread <name>
+    magent-cli delete-thread --thread <name>
+    ```
+    \(codexIPCMarkerEnd)
+    """
+
+    /// Writes or updates the Magent IPC section in `~/.codex/AGENTS.md` so Codex
+    /// agents auto-discover `magent-cli`. Preserves any existing user content;
+    /// only the delimited Magent section is managed.
+    func installCodexIPCInstructions() {
+        let codexDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex")
+        let filePath = codexDir.appendingPathComponent("AGENTS.md").path
+
+        if let existing = try? String(contentsOfFile: filePath, encoding: .utf8) {
+            // Already up to date
+            if existing.contains(Self.codexIPCVersion) { return }
+
+            // Replace outdated Magent section if present
+            if let startRange = existing.range(of: Self.codexIPCMarkerStart),
+               let endRange = existing.range(of: Self.codexIPCMarkerEnd) {
+                var updated = existing
+                updated.replaceSubrange(startRange.lowerBound...endRange.upperBound, with: Self.codexIPCBlock)
+                try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
+            } else {
+                // Append to existing user content
+                var updated = existing
+                if !updated.hasSuffix("\n") { updated += "\n" }
+                updated += "\n" + Self.codexIPCBlock + "\n"
+                try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
+            }
+        } else {
+            // No file — create with just the IPC section
+            try? FileManager.default.createDirectory(
+                atPath: codexDir.path,
+                withIntermediateDirectories: true
+            )
+            try? Self.codexIPCBlock.write(toFile: filePath, atomically: true, encoding: .utf8)
+        }
+    }
+
     /// Builds the shell command to start the selected agent with any required agent-specific setup.
     private static let userShell: String = {
         ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
@@ -228,6 +311,7 @@ extension ThreadManager {
         var command = settings.command(for: agentType)
         if agentType == .claude {
             command += " --settings \(Self.claudeHooksSettingsPath)"
+            command += " --append-system-prompt \(ShellExecutor.shellQuote(Self.ipcAgentDocs))"
         }
         // Wrap the agent command in a login shell so user profile files are sourced
         // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
