@@ -1341,12 +1341,12 @@ final class SettingsProjectsViewController: NSViewController {
         let lineHeight = font.ascender + abs(font.descender) + font.leading
         let height = max(lineHeight * 3 + 12, 56)
 
+        stackView.addArrangedSubview(textScrollView)
+
         NSLayoutConstraint.activate([
             textScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: height),
             textScrollView.widthAnchor.constraint(equalTo: stackView.widthAnchor),
         ])
-
-        stackView.addArrangedSubview(textScrollView)
 
         textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
