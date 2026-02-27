@@ -520,9 +520,16 @@ final class ThreadManager {
         return candidates
     }
 
+    private static let slugPrefix = "SLUG:"
+
     private func sanitizeSlug(_ raw: String) -> String? {
+        // Require the SLUG: prefix — if absent, the output is an error or unexpected
+        guard let prefixRange = raw.range(of: Self.slugPrefix) else { return nil }
+        let afterPrefix = raw[prefixRange.upperBound...]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
         // Take first line only
-        let line = raw.components(separatedBy: .newlines).first ?? raw
+        let line = afterPrefix.components(separatedBy: .newlines).first ?? afterPrefix
 
         // Strip quotes and backticks
         var slug = line
@@ -541,23 +548,10 @@ final class ThreadManager {
         }
         slug = slug.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
 
-        // Validate: 2–50 chars, must contain at least one letter
+        // Validate: 2–50 chars, must contain at least one letter, at most 5 segments
         guard slug.count >= 2, slug.count <= 50 else { return nil }
         guard slug.contains(where: { $0.isLetter }) else { return nil }
-
-        // Reject if too many segments — a slug should be 2-5 words, not a sentence
-        let segments = slug.split(separator: "-")
-        guard segments.count <= 5 else { return nil }
-
-        // Reject if it looks like an error message rather than a slug
-        let errorWords: Set<String> = [
-            "error", "failed", "failure", "unauthorized", "forbidden",
-            "denied", "invalid", "unavailable", "exceeded", "limit",
-            "timeout", "sorry", "cannot", "unable", "please", "warning",
-            "deprecated", "unknown", "not", "found", "model",
-        ]
-        let segmentSet = Set(segments.map(String.init))
-        guard segmentSet.intersection(errorWords).count <= 1 else { return nil }
+        guard slug.split(separator: "-").count <= 5 else { return nil }
 
         return slug
     }
@@ -566,8 +560,8 @@ final class ThreadManager {
         let truncated = String(prompt.prefix(500))
         let aiPrompt = """
             Generate a short kebab-case slug (2-4 words) for a git branch name based on this task. \
-            Output ONLY the slug, nothing else. No quotes, no explanation. \
-            Example: "Fix auth bug in login" → fix-auth-login
+            Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
+            Example: "Fix auth bug in login" → SLUG: fix-auth-login
             Task: \(truncated)
             """
 
@@ -586,9 +580,6 @@ final class ThreadManager {
             group.addTask {
                 let result = await ShellExecutor.execute(command)
                 guard result.exitCode == 0 else { return nil }
-                // Non-empty stderr alongside stdout suggests error output mixed in
-                let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard stderr.isEmpty else { return nil }
                 return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             group.addTask {
