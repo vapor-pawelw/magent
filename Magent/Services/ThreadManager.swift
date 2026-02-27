@@ -486,18 +486,6 @@ final class ThreadManager {
 
     // MARK: - Rename
 
-    private func isFirstRegularThreadInProject(threadId: UUID, projectId: UUID) -> Bool {
-        let allThreads = persistence.loadThreads().filter { $0.projectId == projectId && !$0.isMain }
-        guard !allThreads.isEmpty else { return false }
-        let first = allThreads.min { a, b in
-            if a.createdAt == b.createdAt {
-                return a.id.uuidString < b.id.uuidString
-            }
-            return a.createdAt < b.createdAt
-        }
-        return first?.id == threadId
-    }
-
     private func naiveAutoRenameCandidates(from prompt: String) -> [String] {
         let words = prompt
             .lowercased()
@@ -745,7 +733,6 @@ final class ThreadManager {
         guard !thread.isMain else { return }
         guard !thread.didAutoRenameFromFirstPrompt else { return }
         guard thread.agentTmuxSessions.contains(sessionName) else { return }
-        guard !isFirstRegularThreadInProject(threadId: thread.id, projectId: thread.projectId) else { return }
         guard !autoRenameInProgress.contains(thread.id) else { return }
 
         let candidates = await autoRenameCandidates(from: prompt, agentType: thread.selectedAgentType)
@@ -947,9 +934,9 @@ final class ThreadManager {
         let settings = persistence.loadSettings()
         if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
             try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
-            cleanupBrokenSymlinks(in: project.resolvedWorktreesBasePath())
         }
 
+        cleanupAllBrokenSymlinks()
         await cleanupStaleMagentSessions()
     }
 
@@ -987,9 +974,9 @@ final class ThreadManager {
             if !thread.branchName.isEmpty {
                 try? await git.deleteBranch(repoPath: project.repoPath, branchName: thread.branchName)
             }
-            cleanupBrokenSymlinks(in: project.resolvedWorktreesBasePath())
         }
 
+        cleanupAllBrokenSymlinks()
         await cleanupStaleMagentSessions()
     }
 
@@ -1715,6 +1702,14 @@ final class ThreadManager {
                 try? await tmux.renameSession(from: currentNames[i], to: oldNames[i])
             }
             throw error
+        }
+    }
+
+    /// Removes broken symlinks from all projects' worktrees base directories.
+    private func cleanupAllBrokenSymlinks() {
+        let settings = persistence.loadSettings()
+        for project in settings.projects {
+            cleanupBrokenSymlinks(in: project.resolvedWorktreesBasePath())
         }
     }
 
