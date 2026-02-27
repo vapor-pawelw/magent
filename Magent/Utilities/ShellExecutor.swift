@@ -135,7 +135,7 @@ enum ShellExecutor {
         return data
     }
 
-    nonisolated private static func shellQuote(_ string: String) -> String {
+    nonisolated static func shellQuote(_ string: String) -> String {
         "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }
