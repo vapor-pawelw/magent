@@ -102,24 +102,34 @@ final class ThreadManager {
         requestedAgentType: AgentType? = nil,
         useAgentCommand: Bool = true
     ) async throws -> MagentThread {
-        // Generate a unique name that doesn't conflict with existing worktrees, branches, or tmux sessions
-        var name = NameGenerator.generate()
+        // Generate a unique name that doesn't conflict with existing worktrees, branches, or tmux sessions.
+        // For each random base name, try the bare name first, then numeric suffixes (-2, -3, …).
+        // If all suffixes are taken, generate a new random base and repeat.
+        var name = ""
         var foundUnique = false
         for _ in 0..<5 {
-            let branchCandidate = name
-            let worktreeCandidate = "\(project.resolvedWorktreesBasePath())/\(name)"
-            let tmuxCandidate = "magent-\(name)"
+            let baseName = NameGenerator.generate()
+            let candidates = [baseName] + (2...9).map { "\(baseName)-\($0)" }
+            for candidate in candidates {
+                // Fast in-memory / filesystem checks first
+                let nameInUse = threads.contains(where: { $0.name == candidate })
+                let dirExists = FileManager.default.fileExists(
+                    atPath: "\(project.resolvedWorktreesBasePath())/\(candidate)"
+                )
+                guard !nameInUse && !dirExists else { continue }
 
-            let nameInUse = threads.contains(where: { $0.name == name })
-            let dirExists = FileManager.default.fileExists(atPath: worktreeCandidate)
-            let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: branchCandidate)
-            let tmuxExists = await tmux.hasSession(name: tmuxCandidate)
-
-            if !nameInUse && !dirExists && !branchExists && !tmuxExists {
-                foundUnique = true
-                break
+                // Expensive checks only when fast checks pass
+                let branchExists = await git.branchExists(
+                    repoPath: project.repoPath, branchName: candidate
+                )
+                let tmuxExists = await tmux.hasSession(name: "magent-\(candidate)")
+                if !branchExists && !tmuxExists {
+                    name = candidate
+                    foundUnique = true
+                    break
+                }
             }
-            name = NameGenerator.generate()
+            if foundUnique { break }
         }
         guard foundUnique else {
             throw ThreadManagerError.nameGenerationFailed
