@@ -17,6 +17,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var lastSelectedTmuxSessionName: String?
     var agentHasRun: Bool
     var isPinned: Bool
+    var didAutoRenameFromFirstPrompt: Bool
 
     init(
         id: UUID = UUID(),
@@ -34,7 +35,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         selectedAgentType: AgentType? = nil,
         lastSelectedTmuxSessionName: String? = nil,
         agentHasRun: Bool = false,
-        isPinned: Bool = false
+        isPinned: Bool = false,
+        didAutoRenameFromFirstPrompt: Bool = false
     ) {
         self.id = id
         self.projectId = projectId
@@ -52,6 +54,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.lastSelectedTmuxSessionName = lastSelectedTmuxSessionName
         self.agentHasRun = agentHasRun
         self.isPinned = isPinned
+        self.didAutoRenameFromFirstPrompt = didAutoRenameFromFirstPrompt
     }
 
     init(from decoder: Decoder) throws {
@@ -72,6 +75,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         lastSelectedTmuxSessionName = try container.decodeIfPresent(String.self, forKey: .lastSelectedTmuxSessionName)
         agentHasRun = try container.decodeIfPresent(Bool.self, forKey: .agentHasRun) ?? false
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        didAutoRenameFromFirstPrompt = try container.decodeIfPresent(Bool.self, forKey: .didAutoRenameFromFirstPrompt) ?? false
     }
 }
 

@@ -43,6 +43,7 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 - tmux session naming: `magent-<project>-<thread-id>[-tab-<n>]`
 - Worktrees default path: `<repo-parent>/<repo-name>-worktrees/`
 - **Agent-specific code must be gated**: Any code specific to a particular agent (e.g. Claude's trust dialog, CLAUDECODE env var) must be gated by selected `AgentType`. Use `ThreadManager.trustDirectoryIfNeeded()` and `agentStartCommand()` — never call trust helpers directly or insert `unset CLAUDECODE` ad hoc.
+- **Auto-rename-on-first-prompt**: For non-main worktrees, auto-rename after the first submitted agent prompt only when eligible (skip the first regular thread in a project). Keep it one-time via persisted state (`didAutoRenameFromFirstPrompt`) and route rename decisions through `ThreadManager.autoRenameThreadAfterFirstPromptIfNeeded(...)`.
 - **Banner notifications** for user-facing status messages: `BannerManager.shared.show(message:style:duration:isDismissible:actions:)`. Styles: `.info`, `.warning`, `.error`. Set `duration: nil` for persistent banners, `isDismissible: false` to block user dismissal.
 - **Worktree recovery** is automatic — when a user selects a thread whose worktree directory is missing, `SplitViewController` triggers recovery via `ThreadManager.recoverWorktree()`, showing progress via banners.
 - **Tuist**: Run `mise x -- tuist generate --no-open` after adding/removing Swift files.
