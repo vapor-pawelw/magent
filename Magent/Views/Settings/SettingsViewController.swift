@@ -252,6 +252,8 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     private let persistence = PersistenceService.shared
     private var settings: AppSettings!
     private var autoRenameCheckbox: NSButton!
+    private var slugPromptTextView: NSTextView!
+    private var slugPromptContainer: NSView!
     private var terminalInjectionTextView: NSTextView!
     private var agentContextTextView: NSTextView!
     private var contentScrollView: NSScrollView!
@@ -311,10 +313,64 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         autoRenameDesc.textColor = NSColor(resource: .textSecondary)
         worktreeSection.addArrangedSubview(autoRenameDesc)
 
+        // Slug prompt customization (shown when auto-rename is enabled)
+        let slugPromptWrapper = NSStackView()
+        slugPromptWrapper.orientation = .vertical
+        slugPromptWrapper.alignment = .leading
+        slugPromptWrapper.spacing = 4
+
+        let slugPromptLabel = NSTextField(labelWithString: "Slug Prompt")
+        slugPromptLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        slugPromptWrapper.addArrangedSubview(slugPromptLabel)
+
+        let slugPromptDesc = NSTextField(
+            wrappingLabelWithString: "Customize the instruction used to generate the branch slug. The SLUG:/EMPTY output format and task text are appended automatically."
+        )
+        slugPromptDesc.font = .systemFont(ofSize: 11)
+        slugPromptDesc.textColor = NSColor(resource: .textSecondary)
+        slugPromptWrapper.addArrangedSubview(slugPromptDesc)
+
+        slugPromptTextView = NSTextView()
+        slugPromptTextView.font = .systemFont(ofSize: 13)
+        slugPromptTextView.string = settings.autoRenameSlugPrompt
+        slugPromptTextView.isRichText = false
+        slugPromptTextView.isAutomaticQuoteSubstitutionEnabled = false
+        slugPromptTextView.isAutomaticDashSubstitutionEnabled = false
+        slugPromptTextView.isAutomaticTextReplacementEnabled = false
+        slugPromptTextView.delegate = self
+        slugPromptTextView.isVerticallyResizable = true
+        slugPromptTextView.isHorizontallyResizable = false
+        slugPromptTextView.textContainerInset = NSSize(width: 4, height: 4)
+
+        let slugPromptScrollView = NonCapturingScrollView()
+        slugPromptScrollView.documentView = slugPromptTextView
+        slugPromptScrollView.hasVerticalScroller = true
+        slugPromptScrollView.autohidesScrollers = true
+        slugPromptScrollView.borderType = .bezelBorder
+        slugPromptScrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        let slugLineHeight = NSFont.systemFont(ofSize: 13).ascender + abs(NSFont.systemFont(ofSize: 13).descender) + NSFont.systemFont(ofSize: 13).leading
+        let slugHeight = max(slugLineHeight * 3 + 12, 56)
+
+        NSLayoutConstraint.activate([
+            slugPromptScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: slugHeight),
+        ])
+
+        slugPromptWrapper.addArrangedSubview(slugPromptScrollView)
+        slugPromptWrapper.translatesAutoresizingMaskIntoConstraints = false
+        worktreeSection.addArrangedSubview(slugPromptWrapper)
+
+        slugPromptTextView.autoresizingMask = [.width]
+        slugPromptTextView.textContainer?.widthTracksTextView = true
+
+        slugPromptContainer = slugPromptWrapper
+        slugPromptContainer.isHidden = !settings.autoRenameWorktrees
+
         worktreeSection.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(worktreeSection)
         NSLayoutConstraint.activate([
             worktreeSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            slugPromptScrollView.widthAnchor.constraint(equalTo: slugPromptWrapper.widthAnchor),
         ])
 
         // Terminal Injection Command
@@ -538,6 +594,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
 
     @objc private func autoRenameToggled() {
         settings.autoRenameWorktrees = autoRenameCheckbox.state == .on
+        slugPromptContainer.isHidden = !settings.autoRenameWorktrees
         try? persistence.saveSettings(settings)
     }
 
@@ -672,6 +729,8 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             settings.terminalInjectionCommand = textView.string
         } else if textView === agentContextTextView {
             settings.agentContextInjection = textView.string
+        } else if textView === slugPromptTextView {
+            settings.autoRenameSlugPrompt = textView.string
         }
 
         try? persistence.saveSettings(settings)
