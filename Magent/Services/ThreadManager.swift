@@ -1756,7 +1756,9 @@ final class ThreadManager {
         }
 
         if changed {
-            delegate?.threadManager(self, didUpdateThreads: threads)
+            await MainActor.run {
+                delegate?.threadManager(self, didUpdateThreads: threads)
+            }
         }
     }
 
