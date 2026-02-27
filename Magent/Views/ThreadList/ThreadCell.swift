@@ -6,6 +6,7 @@ final class ThreadCell: NSTableCellView {
     private var completionImageView: NSImageView?
     private var busySpinner: NSProgressIndicator?
     private var trailingStackView: NSStackView?
+    private var hasInstalledTextTrailingConstraint = false
 
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
@@ -35,7 +36,7 @@ final class ThreadCell: NSTableCellView {
 
         NSLayoutConstraint.activate([
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             pinIV.widthAnchor.constraint(equalToConstant: 12),
             pinIV.heightAnchor.constraint(equalToConstant: 12),
             completionIV.widthAnchor.constraint(equalToConstant: 10),
@@ -47,6 +48,14 @@ final class ThreadCell: NSTableCellView {
         pinImageView = pinIV
         completionImageView = completionIV
         busySpinner = spinner
+
+        if !hasInstalledTextTrailingConstraint, let textField {
+            textField.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                textField.trailingAnchor.constraint(lessThanOrEqualTo: stack.leadingAnchor, constant: -6),
+            ])
+            hasInstalledTextTrailingConstraint = true
+        }
     }
 
     func configure(with thread: MagentThread, sectionColor: NSColor?) {

@@ -2,10 +2,15 @@ import Cocoa
 
 final class SplitViewController: NSSplitViewController {
 
+    private static let sidebarWidthDefaultsKey = "MagentSidebarWidth"
+    private static let defaultSidebarWidth: CGFloat = 280
+
     private let threadListVC = ThreadListViewController()
     private let emptyStateVC = EmptyStateViewController()
     private var currentDetailVC: ThreadDetailViewController?
     private var settingsWindowController: NSWindowController?
+    private var sidebarItem: NSSplitViewItem?
+    private var didApplyInitialSidebarWidth = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -14,13 +19,15 @@ final class SplitViewController: NSSplitViewController {
 
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: threadListVC)
         sidebarItem.minimumThickness = 220
-        sidebarItem.maximumThickness = 350
+        sidebarItem.maximumThickness = 420
+        self.sidebarItem = sidebarItem
         addSplitViewItem(sidebarItem)
 
         let contentItem = NSSplitViewItem(contentListWithViewController: emptyStateVC)
         addSplitViewItem(contentItem)
 
         splitView.dividerStyle = .thin
+        splitView.delegate = self
     }
 
     // MARK: - Keyboard Shortcuts
@@ -28,6 +35,7 @@ final class SplitViewController: NSSplitViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
 
+        applyInitialSidebarWidthIfNeeded()
         setupWindowToolbar()
 
         NotificationCenter.default.addObserver(
@@ -55,6 +63,26 @@ final class SplitViewController: NSSplitViewController {
                 return event
             }
         }
+    }
+
+    private func applyInitialSidebarWidthIfNeeded() {
+        guard !didApplyInitialSidebarWidth else { return }
+        guard let sidebarItem else { return }
+        guard splitViewItems.count >= 2 else { return }
+
+        didApplyInitialSidebarWidth = true
+
+        let savedWidth = UserDefaults.standard.object(forKey: Self.sidebarWidthDefaultsKey) as? Double
+        let targetWidth = CGFloat(savedWidth ?? Double(Self.defaultSidebarWidth))
+        let clampedWidth = min(max(targetWidth, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+        splitView.setPosition(clampedWidth, ofDividerAt: 0)
+    }
+
+    override func splitViewDidResizeSubviews(_ notification: Notification) {
+        guard let sidebarItem else { return }
+        let width = sidebarItem.viewController.view.frame.width
+        guard width.isFinite, width > 0 else { return }
+        UserDefaults.standard.set(Double(width), forKey: Self.sidebarWidthDefaultsKey)
     }
 
     private func newTabShortcut() {
