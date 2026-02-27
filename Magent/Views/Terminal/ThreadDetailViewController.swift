@@ -3,7 +3,7 @@ import GhosttyBridge
 
 // MARK: - TabItemView
 
-private final class TabItemView: NSView, NSMenuDelegate {
+final class TabItemView: NSView, NSMenuDelegate {
 
     let pinIcon: NSImageView
     let completionDot: NSView
@@ -191,24 +191,24 @@ final class ThreadDetailViewController: NSViewController {
     private static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
     private static let lastOpenedSessionDefaultsKey = "MagentLastOpenedSessionName"
 
-    private(set) var thread: MagentThread
-    private let threadManager = ThreadManager.shared
-    private let tabBarStack = NSStackView()
-    private let terminalContainer = NSView()
-    private let openPRButton = NSButton()
-    private let openInXcodeButton = NSButton()
-    private let openInFinderButton = NSButton()
-    private let archiveThreadButton = NSButton()
-    private let addTabButton = NSButton()
+    var thread: MagentThread
+    let threadManager = ThreadManager.shared
+    let tabBarStack = NSStackView()
+    let terminalContainer = NSView()
+    let openPRButton = NSButton()
+    let openInXcodeButton = NSButton()
+    let openInFinderButton = NSButton()
+    let archiveThreadButton = NSButton()
+    let addTabButton = NSButton()
 
-    private var tabItems: [TabItemView] = []
-    private var terminalViews: [TerminalSurfaceView] = []
-    private var currentTabIndex = 0
+    var tabItems: [TabItemView] = []
+    var terminalViews: [TerminalSurfaceView] = []
+    var currentTabIndex = 0
     /// Index of the non-closable "primary" tab. -1 means all tabs are closable (main threads).
-    private var primaryTabIndex = 0
-    private var pinnedCount = 0
-    private var loadingOverlay: NSView?
-    private var loadingPollTimer: Timer?
+    var primaryTabIndex = 0
+    var pinnedCount = 0
+    var loadingOverlay: NSView?
+    var loadingPollTimer: Timer?
 
     private let pinSeparator: NSView = {
         let v = NSView()
@@ -424,7 +424,7 @@ final class ThreadDetailViewController: NSViewController {
         }
     }
 
-    private func makeTerminalView(for sessionName: String) -> TerminalSurfaceView {
+    func makeTerminalView(for sessionName: String) -> TerminalSurfaceView {
         let tmuxCommand = buildTmuxCommand(for: sessionName)
         let view = TerminalSurfaceView(
             workingDirectory: thread.worktreePath,
@@ -543,7 +543,7 @@ final class ThreadDetailViewController: NSViewController {
 
     // MARK: - Tab Bar Layout
 
-    private func rebuildTabBar() {
+    func rebuildTabBar() {
         for sv in tabBarStack.arrangedSubviews {
             tabBarStack.removeArrangedSubview(sv)
             sv.removeFromSuperview()
@@ -573,7 +573,7 @@ final class ThreadDetailViewController: NSViewController {
 
     // MARK: - Tab Management
 
-    private func createTabItem(title: String, closable: Bool, pinned: Bool = false) {
+    func createTabItem(title: String, closable: Bool, pinned: Bool = false) {
         let index = tabItems.count
         let item = TabItemView(title: title)
         item.showCloseButton = closable
@@ -591,7 +591,7 @@ final class ThreadDetailViewController: NSViewController {
         tabItems.append(item)
     }
 
-    private func selectTab(at index: Int) {
+    func selectTab(at index: Int) {
         guard index < terminalViews.count else { return }
 
         for (i, item) in tabItems.enumerated() {
@@ -638,7 +638,7 @@ final class ThreadDetailViewController: NSViewController {
         }
     }
 
-    private func rebindTabActions() {
+    func rebindTabActions() {
         for (i, item) in tabItems.enumerated() {
             item.onSelect = { [weak self] in self?.selectTab(at: i) }
             item.onClose = { [weak self] in self?.closeTab(at: i) }
@@ -759,7 +759,7 @@ final class ThreadDetailViewController: NSViewController {
         tabBarStack.insertArrangedSubview(viewAtMin, at: maxIdx)
     }
 
-    private func moveTab(from source: Int, to dest: Int) {
+    func moveTab(from source: Int, to dest: Int) {
         guard source != dest else { return }
 
         let item = tabItems.remove(at: source)
@@ -796,7 +796,7 @@ final class ThreadDetailViewController: NSViewController {
         }
     }
 
-    private func persistTabOrder() {
+    func persistTabOrder() {
         threadManager.reorderTabs(for: thread.id, newOrder: thread.tmuxSessionNames)
         let pinnedSessions = (0..<pinnedCount).compactMap { i -> String? in
             guard i < thread.tmuxSessionNames.count else { return nil }
@@ -805,755 +805,4 @@ final class ThreadDetailViewController: NSViewController {
         threadManager.updatePinnedTabs(for: thread.id, pinnedSessions: pinnedSessions)
     }
 
-    // MARK: - Pin/Unpin
-
-    private func togglePin(at index: Int) {
-        if index < pinnedCount {
-            unpinTab(at: index)
-        } else {
-            pinTab(at: index)
-        }
-    }
-
-    private func pinTab(at index: Int) {
-        guard index >= pinnedCount else { return }
-        moveTab(from: index, to: pinnedCount)
-        pinnedCount += 1
-        rebindTabActions()
-        rebuildTabBar()
-        persistTabOrder()
-    }
-
-    private func unpinTab(at index: Int) {
-        guard index < pinnedCount else { return }
-        pinnedCount -= 1
-        moveTab(from: index, to: pinnedCount)
-        rebindTabActions()
-        rebuildTabBar()
-        persistTabOrder()
-    }
-
-    // MARK: - Open PR/MR
-
-    @objc private func openPRTapped(_ sender: NSButton) {
-        Task {
-            let settings = PersistenceService.shared.loadSettings()
-            guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else { return }
-
-            let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
-            guard !remotes.isEmpty else {
-                BannerManager.shared.show(message: "No git remotes found", style: .warning)
-                return
-            }
-
-            let branch = thread.branchName
-            let defaultBranch: String?
-            if let projectDefaultBranch = project.defaultBranch {
-                defaultBranch = projectDefaultBranch
-            } else {
-                defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: project.repoPath)
-            }
-
-            if remotes.count == 1 {
-                await MainActor.run {
-                    openRemoteURL(remotes[0], branch: branch, defaultBranch: defaultBranch)
-                }
-            } else {
-                // Find the "primary" remote — prefer origin
-                let origin = remotes.first(where: { $0.name == "origin" })
-                if let origin, remotes.allSatisfy({ $0.host == origin.host && $0.repoPath == origin.repoPath }) {
-                    // All remotes point to the same place
-                    await MainActor.run {
-                        openRemoteURL(origin, branch: branch, defaultBranch: defaultBranch)
-                    }
-                } else {
-                    await MainActor.run {
-                        showRemoteMenu(remotes: remotes, branch: branch, defaultBranch: defaultBranch, relativeTo: sender)
-                    }
-                }
-            }
-        }
-    }
-
-    private func refreshOpenPRButtonIcon() {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-
-            let settings = PersistenceService.shared.loadSettings()
-            guard let project = settings.projects.first(where: { $0.id == self.thread.projectId }) else {
-                self.openPRButton.image = self.openPRButtonImage(for: .unknown)
-                return
-            }
-
-            let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
-            let provider = self.preferredHostingProvider(from: remotes)
-            self.openPRButton.image = self.openPRButtonImage(for: provider)
-            self.openPRButton.toolTip = self.openPRTooltip(for: provider)
-        }
-    }
-
-    private func preferredHostingProvider(from remotes: [GitRemote]) -> GitHostingProvider {
-        guard !remotes.isEmpty else { return .unknown }
-
-        if let first = remotes.first,
-           remotes.allSatisfy({ $0.host == first.host && $0.repoPath == first.repoPath }) {
-            return first.provider
-        }
-
-        if let origin = remotes.first(where: { $0.name == "origin" }) {
-            return origin.provider
-        }
-
-        return remotes.first(where: { $0.provider != .unknown })?.provider ?? .unknown
-    }
-
-    private func openPRButtonImage(for provider: GitHostingProvider) -> NSImage {
-        if let image = hostIcon(for: provider) {
-            return image
-        }
-        return NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: "Open Pull Request") ?? NSImage()
-    }
-
-    private func openPRTooltip(for provider: GitHostingProvider) -> String {
-        switch provider {
-        case .github:
-            return "Open GitHub Pull Request in Browser"
-        case .gitlab:
-            return "Open GitLab Merge Request in Browser"
-        case .bitbucket:
-            return "Open Bitbucket Pull Request in Browser"
-        case .unknown:
-            return "Open Pull Request in Browser"
-        }
-    }
-
-    private func hostIcon(for provider: GitHostingProvider) -> NSImage? {
-        let imageName: String?
-        switch provider {
-        case .github:
-            imageName = "RepoHostGitHub"
-        case .gitlab:
-            imageName = "RepoHostGitLab"
-        case .bitbucket:
-            imageName = "RepoHostBitbucket"
-        case .unknown:
-            imageName = nil
-        }
-
-        guard let imageName, let baseImage = NSImage(named: NSImage.Name(imageName)) else { return nil }
-        let sourceImage = (baseImage.copy() as? NSImage) ?? baseImage
-        sourceImage.size = NSSize(width: 16, height: 16)
-
-        if provider == .github {
-            // GitHub favicon is dark; keep it readable in dark mode with a subtle light badge.
-            let size = NSSize(width: 16, height: 16)
-            let composed = NSImage(size: size, flipped: false) { _ in
-                let rect = NSRect(origin: .zero, size: size)
-                let bgPath = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
-                NSColor.white.setFill()
-                bgPath.fill()
-                NSColor.black.withAlphaComponent(0.16).setStroke()
-                bgPath.lineWidth = 1
-                bgPath.stroke()
-
-                let iconRect = rect.insetBy(dx: 2, dy: 2)
-                sourceImage.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1.0)
-                return true
-            }
-            composed.isTemplate = false
-            return composed
-        }
-
-        sourceImage.isTemplate = false
-        return sourceImage
-    }
-
-    private func showRemoteMenu(remotes: [GitRemote], branch: String, defaultBranch: String?, relativeTo button: NSButton) {
-        let menu = NSMenu(title: "Select Remote")
-        for remote in remotes {
-            let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.openPullRequestsURL ?? remote.repoWebURL
-            guard let url else { continue }
-            let title = "\(remote.name) (\(remote.host)/\(remote.repoPath))"
-            let item = NSMenuItem(title: title, action: #selector(remoteMenuItemTapped(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = url
-            item.image = hostIcon(for: remote.provider)
-            menu.addItem(item)
-        }
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
-    }
-
-    @objc private func remoteMenuItemTapped(_ sender: NSMenuItem) {
-        guard let url = sender.representedObject as? URL else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    private func openRemoteURL(_ remote: GitRemote, branch: String, defaultBranch: String?) {
-        guard let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.openPullRequestsURL ?? remote.repoWebURL else {
-            BannerManager.shared.show(message: "Could not construct URL for remote \(remote.name)", style: .warning)
-            return
-        }
-        NSWorkspace.shared.open(url)
-    }
-
-    private func xcodeButtonImage() -> NSImage {
-        let image = NSWorkspace.shared.icon(forFile: "/Applications/Xcode.app")
-        image.size = NSSize(width: 14, height: 14)
-        return image
-    }
-
-    private func xcodeProjectPath() -> String? {
-        let dirPath = NSString(string: finderTargetPath()).expandingTildeInPath
-        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: dirPath) else { return nil }
-
-        // Look for .xcworkspace first (prefer over .xcodeproj)
-        let workspaces = contents.filter { name in
-            guard name.hasSuffix(".xcworkspace") else { return false }
-            // Filter out Xcode-internal project.xcworkspace
-            if name == "project.xcworkspace" { return false }
-            return true
-        }
-        if let first = workspaces.first {
-            return (dirPath as NSString).appendingPathComponent(first)
-        }
-
-        // Fall back to .xcodeproj
-        let projects = contents.filter { $0.hasSuffix(".xcodeproj") }
-        if let first = projects.first {
-            return (dirPath as NSString).appendingPathComponent(first)
-        }
-
-        return nil
-    }
-
-    private func refreshXcodeButton() {
-        let xcodeExists = FileManager.default.fileExists(atPath: "/Applications/Xcode.app")
-        openInXcodeButton.isHidden = !xcodeExists || xcodeProjectPath() == nil
-    }
-
-    @objc private func openInXcodeTapped() {
-        guard let path = xcodeProjectPath() else { return }
-        NSWorkspace.shared.open(URL(fileURLWithPath: path))
-    }
-
-    private func finderButtonImage() -> NSImage {
-        let image = NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app")
-        image.size = NSSize(width: 14, height: 14)
-        return image
-    }
-
-    private func finderTargetPath() -> String {
-        if thread.isMain {
-            let settings = PersistenceService.shared.loadSettings()
-            if let projectPath = settings.projects.first(where: { $0.id == thread.projectId })?.repoPath {
-                return projectPath
-            }
-        }
-        return thread.worktreePath
-    }
-
-    @objc private func openInFinderTapped() {
-        let path = NSString(string: finderTargetPath()).expandingTildeInPath
-        var isDirectory: ObjCBool = false
-        let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
-
-        guard exists, isDirectory.boolValue else {
-            let targetName = thread.isMain ? "project root" : "worktree"
-            BannerManager.shared.show(message: "Could not open \(targetName) in Finder because the directory is missing.", style: .warning)
-            return
-        }
-
-        NSWorkspace.shared.open(URL(fileURLWithPath: path))
-    }
-
-    // MARK: - Add Tab
-
-    @objc private func archiveThreadTapped() {
-        guard !thread.isMain else { return }
-        let threadToArchive = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
-
-        let settings = PersistenceService.shared.loadSettings()
-        let project = settings.projects.first(where: { $0.id == threadToArchive.projectId })
-        let defaultBranch = project?.defaultBranch ?? "main"
-
-        Task {
-            let git = GitService.shared
-            let clean = await git.isClean(worktreePath: threadToArchive.worktreePath)
-            let merged = await git.isMergedInto(worktreePath: threadToArchive.worktreePath, baseBranch: defaultBranch)
-
-            await MainActor.run {
-                if clean && merged {
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-                        try await self.threadManager.archiveThread(threadToArchive)
-                    }
-                } else {
-                    let alert = NSAlert()
-                    alert.messageText = "Archive Thread"
-                    var reasons: [String] = []
-                    if !clean { reasons.append("uncommitted changes") }
-                    if !merged { reasons.append("commits not in \(defaultBranch)") }
-                    alert.informativeText = "The thread \"\(threadToArchive.name)\" has \(reasons.joined(separator: " and ")). Archiving will remove its worktree directory but keep the git branch \"\(threadToArchive.branchName)\"."
-                    alert.alertStyle = .informational
-                    alert.addButton(withTitle: "Archive")
-                    alert.addButton(withTitle: "Cancel")
-
-                    let response = alert.runModal()
-                    guard response == .alertFirstButtonReturn else { return }
-
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-                        try await self.threadManager.archiveThread(threadToArchive)
-                    }
-                }
-            }
-        }
-    }
-
-    @objc private func addTabTapped() {
-        presentAddTabAgentMenu()
-    }
-
-    private func presentAddTabAgentMenu() {
-        let settings = PersistenceService.shared.loadSettings()
-        let activeAgents = settings.availableActiveAgents
-
-        let menu = NSMenu()
-
-        if let defaultAgent = threadManager.effectiveAgentType(for: thread.projectId) {
-            let defaultItem = NSMenuItem(
-                title: "Use Project Default (\(defaultAgent.displayName))",
-                action: #selector(addTabMenuItemTapped(_:)),
-                keyEquivalent: ""
-            )
-            defaultItem.target = self
-            defaultItem.representedObject = ["mode": "default"] as [String: String]
-            menu.addItem(defaultItem)
-        }
-
-        for agent in activeAgents {
-            let item = NSMenuItem(title: agent.displayName, action: #selector(addTabMenuItemTapped(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = ["mode": "agent", "agentRaw": agent.rawValue] as [String: String]
-            menu.addItem(item)
-        }
-
-        if menu.items.count > 0 {
-            menu.addItem(.separator())
-        }
-
-        let terminalItem = NSMenuItem(
-            title: "Terminal",
-            action: #selector(addTabMenuItemTapped(_:)),
-            keyEquivalent: ""
-        )
-        terminalItem.target = self
-        terminalItem.representedObject = ["mode": "terminal"] as [String: String]
-        menu.addItem(terminalItem)
-
-        menu.popUp(positioning: nil, at: NSPoint(x: addTabButton.bounds.minX, y: addTabButton.bounds.minY), in: addTabButton)
-    }
-
-    @objc private func addTabMenuItemTapped(_ sender: NSMenuItem) {
-        let data = sender.representedObject as? [String: String]
-        let mode = data?["mode"] ?? "default"
-        switch mode {
-        case "terminal":
-            addTab(using: nil, useAgentCommand: false)
-        case "agent":
-            let raw = data?["agentRaw"] ?? ""
-            addTab(using: AgentType(rawValue: raw), useAgentCommand: true)
-        default:
-            addTab(using: nil, useAgentCommand: true)
-        }
-    }
-
-    private func addTab(using agentType: AgentType?, useAgentCommand: Bool) {
-        Task {
-            do {
-                let tab = try await threadManager.addTab(
-                    to: thread,
-                    useAgentCommand: useAgentCommand,
-                    requestedAgentType: agentType
-                )
-                let latestThread = self.threadManager.threads.first(where: { $0.id == self.thread.id }) ?? self.thread
-                _ = await self.threadManager.recreateSessionIfNeeded(
-                    sessionName: tab.tmuxSessionName,
-                    thread: latestThread
-                )
-                await MainActor.run {
-                    if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
-                        self.thread = updated
-                    }
-                    let terminalView = self.makeTerminalView(for: tab.tmuxSessionName)
-                    self.terminalViews.append(terminalView)
-
-                    let index = self.tabItems.count
-                    self.createTabItem(title: "Tab \(index)", closable: true)
-                    self.rebuildTabBar()
-                    self.selectTab(at: index)
-                }
-            } catch {
-                await MainActor.run {
-                    let alert = NSAlert()
-                    alert.messageText = "Error"
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
-                }
-            }
-        }
-    }
-
-    func addTabFromKeyboard() {
-        addTabTapped()
-    }
-
-    // MARK: - Update & Rename
-
-    func updateThread(_ updated: MagentThread) {
-        thread = updated
-    }
-
-    func handleRename(_ updated: MagentThread) {
-        thread = updated
-
-        // Update onCopy closures to use the new (renamed) tmux session names
-        for (i, terminalView) in terminalViews.enumerated() {
-            if i < thread.tmuxSessionNames.count {
-                let newSessionName = thread.tmuxSessionNames[i]
-                terminalView.onCopy = {
-                    Task { await TmuxService.shared.copySelectionToClipboard(sessionName: newSessionName) }
-                }
-                terminalView.onSubmitLine = { [weak self, sessionName = newSessionName] line in
-                    Task { @MainActor [weak self] in
-                        await self?.handleSubmittedLine(line, sessionName: sessionName)
-                    }
-                }
-            }
-        }
-
-        // Refresh tab labels to reflect re-keyed custom names
-        for (i, item) in tabItems.enumerated() where i < thread.tmuxSessionNames.count {
-            item.titleLabel.stringValue = thread.displayName(for: thread.tmuxSessionNames[i], at: i)
-        }
-    }
-
-    @MainActor
-    private func handleSubmittedLine(_ line: String, sessionName: String) async {
-        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        if thread.agentTmuxSessions.contains(sessionName) {
-            threadManager.markSessionBusy(threadId: thread.id, sessionName: sessionName)
-        }
-
-        let previousThread = thread
-        await threadManager.autoRenameThreadAfterFirstPromptIfNeeded(
-            threadId: thread.id,
-            sessionName: sessionName,
-            prompt: trimmed
-        )
-
-        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
-        if updated.name != previousThread.name || updated.worktreePath != previousThread.worktreePath {
-            handleRename(updated)
-        }
-    }
-
-    // MARK: - Close Tab
-
-    func closeCurrentTab() {
-        closeTab(at: currentTabIndex)
-    }
-
-    private func closeTab(at index: Int) {
-        // Cannot close the primary tab
-        if index == primaryTabIndex { return }
-        guard index < thread.tmuxSessionNames.count else { return }
-
-        let sessionName = thread.tmuxSessionNames[index]
-
-        let alert = NSAlert()
-        alert.messageText = "Close Tab"
-        alert.informativeText = "This will close the terminal session. Are you sure?"
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Close")
-        alert.addButton(withTitle: "Cancel")
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        Task {
-            do {
-                // Find the index by session name in the manager's model (may differ from local index)
-                guard let managerThread = self.threadManager.threads.first(where: { $0.id == self.thread.id }),
-                      let managerIndex = managerThread.tmuxSessionNames.firstIndex(of: sessionName) else {
-                    throw ThreadManagerError.invalidTabIndex
-                }
-                try await threadManager.removeTab(from: thread, at: managerIndex)
-                await MainActor.run {
-                    if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
-                        self.thread = updated
-                    }
-
-                    self.terminalViews[index].removeFromSuperview()
-                    self.terminalViews.remove(at: index)
-
-                    self.tabItems.remove(at: index)
-
-                    // Adjust pinnedCount and primaryTabIndex
-                    if index < self.pinnedCount {
-                        self.pinnedCount -= 1
-                    }
-                    if self.primaryTabIndex > index {
-                        self.primaryTabIndex -= 1
-                    }
-
-                    self.rebindTabActions()
-                    self.rebuildTabBar()
-
-                    let newIndex = min(index, self.tabItems.count - 1)
-                    if newIndex >= 0 {
-                        self.selectTab(at: newIndex)
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    let alert = NSAlert()
-                    alert.messageText = "Error"
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
-                }
-            }
-        }
-    }
-
-    // MARK: - Rename Dialog
-
-    private func showTabRenameDialog(at index: Int) {
-        guard index < thread.tmuxSessionNames.count else { return }
-        let sessionName = thread.tmuxSessionNames[index]
-        let currentCustomName = thread.customTabNames[sessionName]
-        let defaultName = index == 0 ? "Main" : "Tab \(index)"
-
-        let alert = NSAlert()
-        alert.messageText = "Rename Tab"
-        alert.informativeText = "Enter a new name for this tab"
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-
-        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-        textField.stringValue = currentCustomName ?? ""
-        textField.placeholderString = defaultName
-        alert.accessoryView = textField
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        let newName = textField.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !newName.isEmpty, newName != currentCustomName else { return }
-
-        Task {
-            do {
-                try await threadManager.renameTab(
-                    threadId: thread.id,
-                    sessionName: sessionName,
-                    newDisplayName: newName
-                )
-                await MainActor.run {
-                    if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
-                        self.thread = updated
-                        // Update tab label
-                        if index < self.tabItems.count {
-                            self.tabItems[index].titleLabel.stringValue = updated.displayName(
-                                for: updated.tmuxSessionNames[index],
-                                at: index
-                            )
-                        }
-                        // Re-bind closures in case session name changed
-                        self.handleRename(updated)
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    let alert = NSAlert()
-                    alert.messageText = "Rename Failed"
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
-                }
-            }
-        }
-    }
-
-    // MARK: - Loading Overlay
-
-    private func setupLoadingOverlay() {
-        let overlay = NSView()
-        overlay.wantsLayer = true
-        overlay.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
-        overlay.translatesAutoresizingMaskIntoConstraints = false
-
-        let spinner = NSProgressIndicator()
-        spinner.style = .spinning
-        spinner.controlSize = .regular
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        spinner.startAnimation(nil)
-
-        let label = NSTextField(labelWithString: "Starting agent...")
-        label.font = .systemFont(ofSize: 13)
-        label.textColor = NSColor(resource: .textSecondary)
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView(views: [spinner, label])
-        stack.orientation = .vertical
-        stack.spacing = 12
-        stack.alignment = .centerX
-        stack.translatesAutoresizingMaskIntoConstraints = false
-
-        overlay.addSubview(stack)
-        view.addSubview(overlay)
-
-        NSLayoutConstraint.activate([
-            overlay.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
-            overlay.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
-            overlay.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
-            overlay.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
-
-            stack.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
-        ])
-
-        loadingOverlay = overlay
-
-        let sessionName: String
-        if thread.isMain {
-            let settings = PersistenceService.shared.loadSettings()
-            let sanitizedName = ThreadManager.sanitizeForTmux(
-                settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
-            )
-            sessionName = thread.tmuxSessionNames.first ?? "magent-main-\(sanitizedName)"
-        } else {
-            sessionName = thread.tmuxSessionNames.first ?? "magent-\(thread.name)"
-        }
-        let startTime = Date()
-        let maxWait: TimeInterval = 15
-
-        loadingPollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
-            guard let self else { timer.invalidate(); return }
-
-            let elapsed = Date().timeIntervalSince(startTime)
-            if elapsed >= maxWait {
-                timer.invalidate()
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.loadingPollTimer = nil
-                    self.dismissLoadingOverlay()
-                }
-                return
-            }
-
-            Task {
-                let ready = await self.isAgentReady(sessionName: sessionName)
-                if ready {
-                    await MainActor.run {
-                        self.loadingPollTimer?.invalidate()
-                        self.loadingPollTimer = nil
-                        self.dismissLoadingOverlay()
-                    }
-                }
-            }
-        }
-    }
-
-    private func isAgentReady(sessionName: String) async -> Bool {
-        let result = await ShellExecutor.execute(
-            "tmux capture-pane -t '\(sessionName)' -p 2>/dev/null"
-        )
-        guard result.exitCode == 0 else { return false }
-        let output = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        return output.contains("╭") || output.contains("Claude") || output.count > 50
-    }
-
-    private func dismissLoadingOverlay() {
-        guard let overlay = loadingOverlay else { return }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.3
-            overlay.animator().alphaValue = 0
-        } completionHandler: { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.loadingOverlay?.removeFromSuperview()
-                self?.loadingOverlay = nil
-            }
-        }
-    }
-
-    private func performWithSpinner(message: String, errorTitle: String, work: @escaping () async throws -> Void) {
-        guard let window = view.window else { return }
-
-        let sheetVC = NSViewController()
-        sheetVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 80))
-
-        let spinner = NSProgressIndicator()
-        spinner.style = .spinning
-        spinner.controlSize = .small
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        spinner.startAnimation(nil)
-
-        let label = NSTextField(labelWithString: message)
-        label.font = .systemFont(ofSize: 13)
-        label.textColor = NSColor(resource: .textSecondary)
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView(views: [spinner, label])
-        stack.orientation = .horizontal
-        stack.spacing = 10
-        stack.alignment = .centerY
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        sheetVC.view.addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: sheetVC.view.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: sheetVC.view.centerYAnchor),
-        ])
-
-        window.contentViewController?.presentAsSheet(sheetVC)
-
-        Task {
-            do {
-                try await work()
-                await MainActor.run {
-                    window.contentViewController?.dismiss(sheetVC)
-                }
-            } catch {
-                await MainActor.run {
-                    window.contentViewController?.dismiss(sheetVC)
-                    let alert = NSAlert()
-                    alert.messageText = errorTitle
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
-                }
-            }
-        }
-    }
-}
-
-// MARK: - NSGestureRecognizerDelegate
-
-extension ThreadDetailViewController: NSGestureRecognizerDelegate {
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: NSGestureRecognizer) -> Bool {
-        guard let pan = gestureRecognizer as? NSPanGestureRecognizer,
-              let tabView = pan.view as? TabItemView else { return true }
-
-        let location = pan.location(in: tabView)
-        let closeBounds = tabView.closeButton.convert(tabView.closeButton.bounds, to: tabView)
-        if closeBounds.contains(location) { return false }
-
-        return true
-    }
 }
