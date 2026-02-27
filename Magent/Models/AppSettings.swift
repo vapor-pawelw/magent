@@ -1,6 +1,8 @@
 import Foundation
 
 nonisolated struct AppSettings: Codable, Sendable {
+    static let defaultSlugPrompt = "Generate a short kebab-case slug (2-4 words) for a git branch name based on this task."
+
     var projects: [Project]
     var activeAgents: [AgentType]
     var defaultAgentType: AgentType?
@@ -9,6 +11,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var playSoundForAgentCompletion: Bool
     var agentCompletionSoundName: String
     var autoRenameWorktrees: Bool
+    var autoRenameSlugPrompt: String
     var isConfigured: Bool
     var threadSections: [ThreadSection]
     var terminalInjectionCommand: String
@@ -23,6 +26,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         playSoundForAgentCompletion: Bool = true,
         agentCompletionSoundName: String = "Ping",
         autoRenameWorktrees: Bool = true,
+        autoRenameSlugPrompt: String = AppSettings.defaultSlugPrompt,
         isConfigured: Bool = false,
         threadSections: [ThreadSection] = ThreadSection.defaults(),
         terminalInjectionCommand: String = "",
@@ -36,6 +40,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.playSoundForAgentCompletion = playSoundForAgentCompletion
         self.agentCompletionSoundName = agentCompletionSoundName
         self.autoRenameWorktrees = autoRenameWorktrees
+        self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.isConfigured = isConfigured
         self.threadSections = threadSections
         self.terminalInjectionCommand = terminalInjectionCommand
@@ -54,6 +59,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         playSoundForAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .playSoundForAgentCompletion) ?? true
         agentCompletionSoundName = try container.decodeIfPresent(String.self, forKey: .agentCompletionSoundName) ?? "Ping"
         autoRenameWorktrees = try container.decodeIfPresent(Bool.self, forKey: .autoRenameWorktrees) ?? true
+        autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt) ?? Self.defaultSlugPrompt
         isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
         threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections) ?? ThreadSection.defaults()
         terminalInjectionCommand = try container.decodeIfPresent(String.self, forKey: .terminalInjectionCommand) ?? ""
@@ -70,6 +76,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(playSoundForAgentCompletion, forKey: .playSoundForAgentCompletion)
         try container.encode(agentCompletionSoundName, forKey: .agentCompletionSoundName)
         try container.encode(autoRenameWorktrees, forKey: .autoRenameWorktrees)
+        try container.encode(autoRenameSlugPrompt, forKey: .autoRenameSlugPrompt)
         try container.encode(isConfigured, forKey: .isConfigured)
         try container.encode(threadSections, forKey: .threadSections)
         try container.encode(terminalInjectionCommand, forKey: .terminalInjectionCommand)
@@ -122,6 +129,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case playSoundForAgentCompletion
         case agentCompletionSoundName
         case autoRenameWorktrees
+        case autoRenameSlugPrompt
         case isConfigured
         case threadSections
         case terminalInjectionCommand

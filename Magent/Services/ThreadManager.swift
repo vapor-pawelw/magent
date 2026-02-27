@@ -605,8 +605,11 @@ final class ThreadManager {
 
     private func generateSlugViaAgent(from prompt: String, agentType: AgentType?) async -> String? {
         let truncated = String(prompt.prefix(500))
+        let customInstruction = persistence.loadSettings().autoRenameSlugPrompt
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let instruction = customInstruction.isEmpty ? AppSettings.defaultSlugPrompt : customInstruction
         let aiPrompt = """
-            Generate a short kebab-case slug (2-4 words) for a git branch name based on this task. \
+            \(instruction) \
             Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
             If the input is a plain question (not an actionable task or job), output exactly: SLUG: EMPTY \
             Example: "Fix auth bug in login" → SLUG: fix-auth-login \
