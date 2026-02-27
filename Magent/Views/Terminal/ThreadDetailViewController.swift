@@ -6,6 +6,7 @@ import GhosttyBridge
 private final class TabItemView: NSView, NSMenuDelegate {
 
     let pinIcon: NSImageView
+    let completionDot: NSView
     let titleLabel: NSTextField
     let closeButton: NSButton
     var isDragging = false
@@ -24,6 +25,11 @@ private final class TabItemView: NSView, NSMenuDelegate {
         set { pinIcon.isHidden = !newValue }
     }
 
+    var hasUnreadCompletion: Bool {
+        get { !completionDot.isHidden }
+        set { completionDot.isHidden = !newValue }
+    }
+
     var onSelect: (() -> Void)?
     var onClose: (() -> Void)?
     var onRename: (() -> Void)?
@@ -31,6 +37,7 @@ private final class TabItemView: NSView, NSMenuDelegate {
 
     init(title: String) {
         pinIcon = NSImageView()
+        completionDot = NSView()
         titleLabel = NSTextField(labelWithString: title)
         closeButton = NSButton()
         super.init(frame: .zero)
@@ -47,6 +54,15 @@ private final class TabItemView: NSView, NSMenuDelegate {
         pinIcon.translatesAutoresizingMaskIntoConstraints = false
         pinIcon.isHidden = true
         pinIcon.setContentHuggingPriority(.required, for: .horizontal)
+
+        // Completion dot (green circle)
+        completionDot.wantsLayer = true
+        completionDot.layer?.backgroundColor = NSColor.systemGreen.cgColor
+        completionDot.layer?.cornerRadius = 4
+        completionDot.translatesAutoresizingMaskIntoConstraints = false
+        completionDot.isHidden = true
+        completionDot.setContentHuggingPriority(.required, for: .horizontal)
+        completionDot.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         // Title
         titleLabel.font = .systemFont(ofSize: 12)
@@ -68,7 +84,7 @@ private final class TabItemView: NSView, NSMenuDelegate {
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
 
         // Layout using an internal stack
-        let contentStack = NSStackView(views: [pinIcon, titleLabel, closeButton])
+        let contentStack = NSStackView(views: [pinIcon, completionDot, titleLabel, closeButton])
         contentStack.orientation = .horizontal
         contentStack.spacing = 4
         contentStack.alignment = .centerY
@@ -82,6 +98,8 @@ private final class TabItemView: NSView, NSMenuDelegate {
             contentStack.centerYAnchor.constraint(equalTo: centerYAnchor),
             pinIcon.widthAnchor.constraint(equalToConstant: 12),
             pinIcon.heightAnchor.constraint(equalToConstant: 12),
+            completionDot.widthAnchor.constraint(equalToConstant: 8),
+            completionDot.heightAnchor.constraint(equalToConstant: 8),
             closeButton.widthAnchor.constraint(equalToConstant: 16),
             closeButton.heightAnchor.constraint(equalToConstant: 16),
         ])
@@ -220,6 +238,14 @@ final class ThreadDetailViewController: NSViewController {
             object: nil
         )
 
+        // Observe agent completion notifications for tab dot indicators
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAgentCompletionNotification(_:)),
+            name: .magentAgentCompletionDetected,
+            object: nil
+        )
+
         Task {
             await setupTabs()
         }
@@ -354,6 +380,12 @@ final class ThreadDetailViewController: NSViewController {
             } else {
                 initialIndex = 0
             }
+
+            // Initialize completion dots from thread model
+            for (i, sessionName) in orderedSessions.enumerated() where i < tabItems.count {
+                tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
+            }
+
             selectTab(at: initialIndex)
         }
     }
@@ -430,6 +462,17 @@ final class ThreadDetailViewController: NSViewController {
             if wasSelected {
                 selectTab(at: i)
             }
+        }
+    }
+
+    @objc private func handleAgentCompletionNotification(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let threadId = userInfo["threadId"] as? UUID,
+              threadId == thread.id,
+              let unreadSessions = userInfo["unreadSessions"] as? Set<String> else { return }
+
+        for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
+            tabItems[i].hasUnreadCompletion = unreadSessions.contains(sessionName)
         }
     }
 
@@ -516,6 +559,10 @@ final class ThreadDetailViewController: NSViewController {
             }
             UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
             UserDefaults.standard.set(sessionName, forKey: Self.lastOpenedSessionDefaultsKey)
+
+            // Clear unread completion dot for this tab
+            tabItems[index].hasUnreadCompletion = false
+            threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: sessionName)
         }
     }
 
