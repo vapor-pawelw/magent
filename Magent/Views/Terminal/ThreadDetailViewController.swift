@@ -163,6 +163,7 @@ final class ThreadDetailViewController: NSViewController {
     private let tabBarStack = NSStackView()
     private let terminalContainer = NSView()
     private let openPRButton = NSButton()
+    private let openInFinderButton = NSButton()
     private let archiveThreadButton = NSButton()
     private let addTabButton = NSButton()
 
@@ -241,6 +242,13 @@ final class ThreadDetailViewController: NSViewController {
         openPRButton.action = #selector(openPRTapped(_:))
         openPRButton.toolTip = "Open Pull Request in Browser"
 
+        openInFinderButton.bezelStyle = .texturedRounded
+        openInFinderButton.image = finderButtonImage()
+        openInFinderButton.imageScaling = .scaleProportionallyDown
+        openInFinderButton.target = self
+        openInFinderButton.action = #selector(openInFinderTapped)
+        openInFinderButton.toolTip = thread.isMain ? "Open Project Root in Finder" : "Open Worktree in Finder"
+
         archiveThreadButton.bezelStyle = .texturedRounded
         archiveThreadButton.image = NSImage(systemSymbolName: "archivebox", accessibilityDescription: "Archive Thread")
         archiveThreadButton.target = self
@@ -252,7 +260,7 @@ final class ThreadDetailViewController: NSViewController {
         addTabButton.target = self
         addTabButton.action = #selector(addTabTapped)
 
-        let topBar = NSStackView(views: [tabBarStack, openPRButton, archiveThreadButton, addTabButton])
+        let topBar = NSStackView(views: [tabBarStack, openPRButton, openInFinderButton, archiveThreadButton, addTabButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
@@ -765,6 +773,36 @@ final class ThreadDetailViewController: NSViewController {
             return
         }
         NSWorkspace.shared.open(url)
+    }
+
+    private func finderButtonImage() -> NSImage {
+        let image = NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app")
+        image.size = NSSize(width: 14, height: 14)
+        return image
+    }
+
+    private func finderTargetPath() -> String {
+        if thread.isMain {
+            let settings = PersistenceService.shared.loadSettings()
+            if let projectPath = settings.projects.first(where: { $0.id == thread.projectId })?.repoPath {
+                return projectPath
+            }
+        }
+        return thread.worktreePath
+    }
+
+    @objc private func openInFinderTapped() {
+        let path = NSString(string: finderTargetPath()).expandingTildeInPath
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+
+        guard exists, isDirectory.boolValue else {
+            let targetName = thread.isMain ? "project root" : "worktree"
+            BannerManager.shared.show(message: "Could not open \(targetName) in Finder because the directory is missing.", style: .warning)
+            return
+        }
+
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
     // MARK: - Add Tab
