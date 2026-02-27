@@ -420,14 +420,18 @@ final class ThreadDetailViewController: NSViewController {
             let startCmd: String
             if isAgentSession, let selectedAgentType {
                 let unset = selectedAgentType == .claude ? " && unset CLAUDECODE" : ""
-                startCmd = "\(envExports) && cd \(projectPath)\(unset) && \(settings.command(for: selectedAgentType))"
+                var command = settings.command(for: selectedAgentType)
+                if selectedAgentType == .claude {
+                    command += " --settings /tmp/magent-claude-hooks.json"
+                }
+                startCmd = "\(envExports) && cd \(projectPath)\(unset) && \(command); exec $SHELL -l"
             } else {
-                startCmd = "\(envExports) && cd \(projectPath) && exec zsh -l"
+                startCmd = "\(envExports) && cd \(projectPath) && exec $SHELL -l"
             }
             if isAgentSession {
-                // Use a plain POSIX shell for tmux bootstrap to avoid user zsh startup side effects
-                // (e.g. login hooks printing text before attach).
-                return "/bin/sh -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
+                // Create session without a command so tmux starts a login shell that sources
+                // the user's profile (PATH, aliases, etc.), then inject the agent command via send-keys.
+                return "/bin/sh -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" && tmux send-keys -t \(sessionName) \"\(startCmd)\" Enter && tmux attach-session -t \(sessionName); }'"
             }
             // Force cwd on every open for terminal tabs, even if shell init changes it.
             return "/bin/sh -c 'tmux send-keys -t \(sessionName) \"cd \(projectPath)\" Enter 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(projectPath)\" Enter && tmux attach-session -t \(sessionName); }'"
@@ -438,14 +442,18 @@ final class ThreadDetailViewController: NSViewController {
             let startCmd: String
             if isAgentSession, let selectedAgentType {
                 let unset = selectedAgentType == .claude ? " && unset CLAUDECODE" : ""
-                startCmd = "\(envExports) && cd \(wd)\(unset) && \(settings.command(for: selectedAgentType))"
+                var command = settings.command(for: selectedAgentType)
+                if selectedAgentType == .claude {
+                    command += " --settings /tmp/magent-claude-hooks.json"
+                }
+                startCmd = "\(envExports) && cd \(wd)\(unset) && \(command); exec $SHELL -l"
             } else {
-                startCmd = "\(envExports) && cd \(wd) && exec zsh -l"
+                startCmd = "\(envExports) && cd \(wd) && exec $SHELL -l"
             }
             if isAgentSession {
-                // Use a plain POSIX shell for tmux bootstrap to avoid user zsh startup side effects
-                // (e.g. login hooks printing text before attach).
-                return "/bin/sh -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
+                // Create session without a command so tmux starts a login shell that sources
+                // the user's profile (PATH, aliases, etc.), then inject the agent command via send-keys.
+                return "/bin/sh -c 'tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" && tmux send-keys -t \(sessionName) \"\(startCmd)\" Enter && tmux attach-session -t \(sessionName); }'"
             }
             // Force cwd on every open for terminal tabs, even if shell init changes it.
             return "/bin/sh -c 'tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter && tmux attach-session -t \(sessionName); }'"

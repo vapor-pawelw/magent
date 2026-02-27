@@ -810,51 +810,81 @@ final class ThreadManager {
             return
         }
 
-        // Check for collisions
-        let otherSessionNames = Set(currentThread.tmuxSessionNames).subtracting([sessionName])
-        guard !otherSessionNames.contains(newSessionName) else {
-            throw ThreadManagerError.duplicateName
-        }
-        if await tmux.hasSession(name: newSessionName) {
+        // Auto-resolve collisions: keep requested base and append numeric suffix as needed.
+        let resolvedSessionName = await resolveUniqueTabSessionName(
+            baseName: newSessionName,
+            replacing: sessionName,
+            in: currentThread
+        )
+        guard let resolvedSessionName else {
             throw ThreadManagerError.duplicateName
         }
 
         // Rename tmux session
-        try await renameTmuxSessions(from: [sessionName], to: [newSessionName])
+        try await renameTmuxSessions(from: [sessionName], to: [resolvedSessionName])
 
         // Update all references
-        threads[index].tmuxSessionNames[sessionIndex] = newSessionName
+        threads[index].tmuxSessionNames[sessionIndex] = resolvedSessionName
         if currentThread.agentTmuxSessions.contains(sessionName) {
             threads[index].agentTmuxSessions = currentThread.agentTmuxSessions.map {
-                $0 == sessionName ? newSessionName : $0
+                $0 == sessionName ? resolvedSessionName : $0
             }
         }
         if currentThread.pinnedTmuxSessions.contains(sessionName) {
             threads[index].pinnedTmuxSessions = currentThread.pinnedTmuxSessions.map {
-                $0 == sessionName ? newSessionName : $0
+                $0 == sessionName ? resolvedSessionName : $0
             }
         }
         if currentThread.lastSelectedTmuxSessionName == sessionName {
-            threads[index].lastSelectedTmuxSessionName = newSessionName
+            threads[index].lastSelectedTmuxSessionName = resolvedSessionName
         }
         if currentThread.unreadCompletionSessions.contains(sessionName) {
             threads[index].unreadCompletionSessions.remove(sessionName)
-            threads[index].unreadCompletionSessions.insert(newSessionName)
+            threads[index].unreadCompletionSessions.insert(resolvedSessionName)
         }
 
         // Update custom tab names: remove old key, store under new key
         threads[index].customTabNames.removeValue(forKey: sessionName)
-        threads[index].customTabNames[newSessionName] = trimmed
+        threads[index].customTabNames[resolvedSessionName] = trimmed
 
         // Re-setup bell monitoring if this was an agent session
-        if threads[index].agentTmuxSessions.contains(newSessionName) {
-            await tmux.setupBellPipe(for: newSessionName)
+        if threads[index].agentTmuxSessions.contains(resolvedSessionName) {
+            await tmux.setupBellPipe(for: resolvedSessionName)
         }
 
         try persistence.saveThreads(threads)
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
         }
+    }
+
+    /// Returns a unique tmux session name for tab rename by keeping the requested base
+    /// and appending "-N" when needed. Returns nil if no unique name is found.
+    private func resolveUniqueTabSessionName(
+        baseName: String,
+        replacing sessionName: String,
+        in thread: MagentThread
+    ) async -> String? {
+        let reservedNames = Set(thread.tmuxSessionNames).subtracting([sessionName])
+
+        func isAvailable(_ candidate: String) async -> Bool {
+            if candidate == sessionName { return true }
+            if reservedNames.contains(candidate) { return false }
+            return !(await tmux.hasSession(name: candidate))
+        }
+
+        if await isAvailable(baseName) {
+            return baseName
+        }
+
+        for suffix in 2...999 {
+            let candidate = "\(baseName)-\(suffix)"
+            if await isAvailable(candidate) {
+                return candidate
+            }
+        }
+
+        return nil
     }
 
     // MARK: - Close Tab
@@ -1773,15 +1803,20 @@ final class ThreadManager {
     }
 
     /// Builds the shell command to start the selected agent with any required agent-specific setup.
+    private static let userShell: String = {
+        ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+    }()
+
     private func agentStartCommand(
         settings: AppSettings,
         agentType: AgentType?,
         envExports: String,
         workingDirectory: String
     ) -> String {
+        let shell = Self.userShell
         var parts = [envExports, "cd \(workingDirectory)"]
         guard let agentType else {
-            parts.append("exec zsh -l")
+            parts.append("exec \(shell) -l")
             return parts.joined(separator: " && ")
         }
         if agentType == .claude {
@@ -1791,8 +1826,10 @@ final class ThreadManager {
         if agentType == .claude {
             command += " --settings \(Self.claudeHooksSettingsPath)"
         }
-        parts.append(command)
-        return parts.joined(separator: " && ")
+        // Wrap the agent command in a login shell so user profile files are sourced
+        // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
+        let innerCmd = parts.joined(separator: " && ") + " && " + command + "; exec \(shell) -l"
+        return "exec \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
     }
 
     /// Runs agent-specific post-setup (e.g. pre-trusting directories for Claude Code).
