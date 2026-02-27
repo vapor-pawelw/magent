@@ -705,8 +705,13 @@ final class ThreadListViewController: NSViewController {
 
         Task {
             let entries = await threadManager.refreshDiffStats(for: thread.id)
+            let baseBranch = threadManager.resolveBaseBranch(for: thread)
             await MainActor.run {
-                self.diffPanelView.update(with: entries)
+                self.diffPanelView.update(
+                    with: entries,
+                    branchName: thread.branchName,
+                    baseBranch: baseBranch
+                )
             }
         }
     }

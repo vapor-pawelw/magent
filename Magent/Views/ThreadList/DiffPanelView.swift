@@ -1,13 +1,39 @@
 import Cocoa
 
+// MARK: - Flipped clip view for top-aligned scroll content
+
+private final class FlippedClipView: NSClipView {
+    override var isFlipped: Bool { true }
+}
+
+// MARK: - Drag handle for resizing
+
+private final class DiffPanelResizeHandle: NSView {
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .resizeUpDown)
+    }
+}
+
 final class DiffPanelView: NSView {
 
+    private let handleView = DiffPanelResizeHandle()
     private let separatorView = NSView()
     private let headerLabel = NSTextField(labelWithString: "")
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
+    private let branchInfoLabel = NSTextField(labelWithString: "")
 
     private var entries: [FileDiffEntry] = []
+
+    private var heightConstraint: NSLayoutConstraint!
+    private static let minHeight: CGFloat = 60
+    private static let maxHeight: CGFloat = 500
+    private static let defaultHeight: CGFloat = 140
+    private static let heightKey = "DiffPanelView.height"
+
+    private var isDragging = false
+    private var dragStartY: CGFloat = 0
+    private var dragStartHeight: CGFloat = 0
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -22,11 +48,16 @@ final class DiffPanelView: NSView {
     private func setupViews() {
         translatesAutoresizingMaskIntoConstraints = false
 
-        // Separator
+        // Resize handle area at top
+        handleView.wantsLayer = true
+        handleView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(handleView)
+
+        // Separator (visual line inside the handle area)
         separatorView.wantsLayer = true
         separatorView.layer?.backgroundColor = NSColor(resource: .textSecondary).withAlphaComponent(0.4).cgColor
         separatorView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(separatorView)
+        handleView.addSubview(separatorView)
 
         // Header
         headerLabel.font = .systemFont(ofSize: 11, weight: .semibold)
@@ -40,6 +71,10 @@ final class DiffPanelView: NSView {
         stackView.spacing = 2
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
+        // Use flipped clip view so content aligns to top
+        let flippedClip = FlippedClipView()
+        flippedClip.drawsBackground = false
+        scrollView.contentView = flippedClip
         scrollView.documentView = stackView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -48,23 +83,43 @@ final class DiffPanelView: NSView {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scrollView)
 
+        // Branch info at the bottom
+        branchInfoLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        branchInfoLabel.textColor = NSColor(resource: .textSecondary).withAlphaComponent(0.7)
+        branchInfoLabel.lineBreakMode = .byTruncatingMiddle
+        branchInfoLabel.translatesAutoresizingMaskIntoConstraints = false
+        branchInfoLabel.isHidden = true
+        addSubview(branchInfoLabel)
+
+        let savedHeight = UserDefaults.standard.object(forKey: Self.heightKey) as? CGFloat ?? Self.defaultHeight
+        let clampedHeight = min(max(savedHeight, Self.minHeight), Self.maxHeight)
+        heightConstraint = heightAnchor.constraint(equalToConstant: clampedHeight)
+
         NSLayoutConstraint.activate([
-            separatorView.topAnchor.constraint(equalTo: topAnchor),
-            separatorView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            separatorView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            handleView.topAnchor.constraint(equalTo: topAnchor),
+            handleView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            handleView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            handleView.heightAnchor.constraint(equalToConstant: 6),
+
+            separatorView.centerYAnchor.constraint(equalTo: handleView.centerYAnchor),
+            separatorView.leadingAnchor.constraint(equalTo: handleView.leadingAnchor, constant: 8),
+            separatorView.trailingAnchor.constraint(equalTo: handleView.trailingAnchor, constant: -8),
             separatorView.heightAnchor.constraint(equalToConstant: 1),
 
-            headerLabel.topAnchor.constraint(equalTo: separatorView.bottomAnchor, constant: 8),
+            headerLabel.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4),
             headerLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             headerLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
 
             scrollView.topAnchor.constraint(equalTo: headerLabel.bottomAnchor, constant: 4),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            scrollView.bottomAnchor.constraint(equalTo: branchInfoLabel.topAnchor, constant: -4),
 
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 60),
-            heightAnchor.constraint(lessThanOrEqualToConstant: 200),
+            branchInfoLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            branchInfoLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            branchInfoLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+
+            heightConstraint,
 
             stackView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
             stackView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
@@ -74,7 +129,37 @@ final class DiffPanelView: NSView {
         clear()
     }
 
-    func update(with newEntries: [FileDiffEntry]) {
+    // MARK: - Drag to resize
+
+    override func mouseDown(with event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
+        if location.y >= bounds.maxY - 6 {
+            isDragging = true
+            dragStartY = NSEvent.mouseLocation.y
+            dragStartHeight = heightConstraint.constant
+        } else {
+            super.mouseDown(with: event)
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard isDragging else { super.mouseDragged(with: event); return }
+        let currentY = NSEvent.mouseLocation.y
+        let delta = dragStartY - currentY
+        let newHeight = min(max(dragStartHeight + delta, Self.minHeight), Self.maxHeight)
+        heightConstraint.constant = newHeight
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if isDragging {
+            isDragging = false
+            UserDefaults.standard.set(heightConstraint.constant, forKey: Self.heightKey)
+        } else {
+            super.mouseUp(with: event)
+        }
+    }
+
+    func update(with newEntries: [FileDiffEntry], branchName: String? = nil, baseBranch: String? = nil) {
         entries = newEntries
 
         // Remove old rows
@@ -82,6 +167,7 @@ final class DiffPanelView: NSView {
 
         if entries.isEmpty {
             headerLabel.stringValue = "CHANGES"
+            branchInfoLabel.isHidden = true
             isHidden = true
             return
         }
@@ -95,12 +181,22 @@ final class DiffPanelView: NSView {
             row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
             row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
         }
+
+        // Branch info
+        if let branch = branchName, !branch.isEmpty, let base = baseBranch, !base.isEmpty {
+            branchInfoLabel.stringValue = "\(branch) ← \(base)"
+            branchInfoLabel.toolTip = "Branch: \(branch)\nBase: \(base)"
+            branchInfoLabel.isHidden = false
+        } else {
+            branchInfoLabel.isHidden = true
+        }
     }
 
     func clear() {
         entries = []
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         headerLabel.stringValue = "CHANGES"
+        branchInfoLabel.isHidden = true
         isHidden = true
     }
 
