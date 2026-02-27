@@ -15,6 +15,81 @@ private final class NonCapturingScrollView: NSScrollView {
     }
 }
 
+// MARK: - Resizable Text Container
+
+private final class ResizableTextContainer: NSView {
+    private static let handleHeight: CGFloat = 10
+
+    init(scrollView: NSScrollView, minHeight: CGFloat) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(scrollView)
+
+        let handle = ResizeHandleView()
+        handle.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(handle)
+
+        let heightConst = scrollView.heightAnchor.constraint(equalToConstant: minHeight)
+        handle.scrollViewHeightConstraint = heightConst
+        handle.minHeight = minHeight
+
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+
+            handle.topAnchor.constraint(equalTo: scrollView.bottomAnchor),
+            handle.leadingAnchor.constraint(equalTo: leadingAnchor),
+            handle.trailingAnchor.constraint(equalTo: trailingAnchor),
+            handle.heightAnchor.constraint(equalToConstant: Self.handleHeight),
+            handle.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            heightConst,
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
+private final class ResizeHandleView: NSView {
+    var scrollViewHeightConstraint: NSLayoutConstraint?
+    var minHeight: CGFloat = 56
+    private var dragStartY: CGFloat = 0
+    private var dragStartHeight: CGFloat = 0
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .resizeUpDown)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let gripWidth: CGFloat = 36
+        let gripHeight: CGFloat = 2
+        let rect = NSRect(
+            x: (bounds.width - gripWidth) / 2,
+            y: (bounds.height - gripHeight) / 2,
+            width: gripWidth,
+            height: gripHeight
+        )
+        NSColor.tertiaryLabelColor.setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 1, yRadius: 1).fill()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        dragStartY = event.locationInWindow.y
+        dragStartHeight = scrollViewHeightConstraint?.constant ?? minHeight
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let delta = dragStartY - event.locationInWindow.y
+        scrollViewHeightConstraint?.constant = max(minHeight, dragStartHeight + delta)
+    }
+}
+
 // MARK: - Settings Category
 
 enum SettingsCategory: Int, CaseIterable {
@@ -517,16 +592,13 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         let lineHeight = font.ascender + abs(font.descender) + font.leading
         let height = max(lineHeight * 3 + 12, 56)
 
-        NSLayoutConstraint.activate([
-            textScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: height),
-        ])
-
-        sectionStack.addArrangedSubview(textScrollView)
+        let container = ResizableTextContainer(scrollView: textScrollView, minHeight: height)
+        sectionStack.addArrangedSubview(container)
         sectionStack.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(sectionStack)
 
         NSLayoutConstraint.activate([
-            textScrollView.widthAnchor.constraint(equalTo: sectionStack.widthAnchor),
+            container.widthAnchor.constraint(equalTo: sectionStack.widthAnchor),
             sectionStack.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
 
@@ -1017,16 +1089,13 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         let lineHeight = font.ascender + abs(font.descender) + font.leading
         let height = max(lineHeight * 3 + 12, 56)
 
-        NSLayoutConstraint.activate([
-            textScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: height),
-        ])
-
-        sectionStack.addArrangedSubview(textScrollView)
+        let container = ResizableTextContainer(scrollView: textScrollView, minHeight: height)
+        sectionStack.addArrangedSubview(container)
         sectionStack.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(sectionStack)
 
         NSLayoutConstraint.activate([
-            textScrollView.widthAnchor.constraint(equalTo: sectionStack.widthAnchor),
+            container.widthAnchor.constraint(equalTo: sectionStack.widthAnchor),
             sectionStack.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
 
@@ -1760,11 +1829,11 @@ final class SettingsProjectsViewController: NSViewController {
         let lineHeight = font.ascender + abs(font.descender) + font.leading
         let height = max(lineHeight * 3 + 12, 56)
 
-        stackView.addArrangedSubview(textScrollView)
+        let container = ResizableTextContainer(scrollView: textScrollView, minHeight: height)
+        stackView.addArrangedSubview(container)
 
         NSLayoutConstraint.activate([
-            textScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: height),
-            textScrollView.widthAnchor.constraint(equalTo: stackView.widthAnchor),
+            container.widthAnchor.constraint(equalTo: stackView.widthAnchor),
         ])
 
         textView.autoresizingMask = [.width]
