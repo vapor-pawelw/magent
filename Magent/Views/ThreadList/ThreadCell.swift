@@ -27,7 +27,7 @@ final class ThreadCell: NSTableCellView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.isHidden = true
 
-        let stack = NSStackView(views: [spinner, completionIV, pinIV])
+        let stack = NSStackView(views: [pinIV, spinner, completionIV])
         stack.orientation = .horizontal
         stack.spacing = 3
         stack.alignment = .centerY
@@ -36,7 +36,7 @@ final class ThreadCell: NSTableCellView {
 
         NSLayoutConstraint.activate([
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             pinIV.widthAnchor.constraint(equalToConstant: 12),
             pinIV.heightAnchor.constraint(equalToConstant: 12),
             completionIV.widthAnchor.constraint(equalToConstant: 10),
