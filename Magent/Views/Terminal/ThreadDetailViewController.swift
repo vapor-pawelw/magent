@@ -209,6 +209,7 @@ final class ThreadDetailViewController: NSViewController {
         GhosttyAppManager.shared.initialize()
 
         setupUI()
+        refreshOpenPRButtonIcon()
         setupLoadingOverlay()
 
         // Observe dead session notifications for mid-use terminal replacement
@@ -237,7 +238,8 @@ final class ThreadDetailViewController: NSViewController {
         tabBarStack.translatesAutoresizingMaskIntoConstraints = false
 
         openPRButton.bezelStyle = .texturedRounded
-        openPRButton.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: "Open Pull Request")
+        openPRButton.image = openPRButtonImage(for: .unknown)
+        openPRButton.imageScaling = .scaleProportionallyDown
         openPRButton.target = self
         openPRButton.action = #selector(openPRTapped(_:))
         openPRButton.toolTip = "Open Pull Request in Browser"
@@ -260,7 +262,7 @@ final class ThreadDetailViewController: NSViewController {
         addTabButton.target = self
         addTabButton.action = #selector(addTabTapped)
 
-        let topBar = NSStackView(views: [tabBarStack, openPRButton, openInFinderButton, archiveThreadButton, addTabButton])
+        let topBar = NSStackView(views: [tabBarStack, openInFinderButton, openPRButton, archiveThreadButton, addTabButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
@@ -758,6 +760,99 @@ final class ThreadDetailViewController: NSViewController {
         }
     }
 
+    private func refreshOpenPRButtonIcon() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            let settings = PersistenceService.shared.loadSettings()
+            guard let project = settings.projects.first(where: { $0.id == self.thread.projectId }) else {
+                self.openPRButton.image = self.openPRButtonImage(for: .unknown)
+                return
+            }
+
+            let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
+            let provider = self.preferredHostingProvider(from: remotes)
+            self.openPRButton.image = self.openPRButtonImage(for: provider)
+            self.openPRButton.toolTip = self.openPRTooltip(for: provider)
+        }
+    }
+
+    private func preferredHostingProvider(from remotes: [GitRemote]) -> GitHostingProvider {
+        guard !remotes.isEmpty else { return .unknown }
+
+        if let first = remotes.first,
+           remotes.allSatisfy({ $0.host == first.host && $0.repoPath == first.repoPath }) {
+            return first.provider
+        }
+
+        if let origin = remotes.first(where: { $0.name == "origin" }) {
+            return origin.provider
+        }
+
+        return remotes.first(where: { $0.provider != .unknown })?.provider ?? .unknown
+    }
+
+    private func openPRButtonImage(for provider: GitHostingProvider) -> NSImage {
+        if let image = hostIcon(for: provider) {
+            return image
+        }
+        return NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: "Open Pull Request") ?? NSImage()
+    }
+
+    private func openPRTooltip(for provider: GitHostingProvider) -> String {
+        switch provider {
+        case .github:
+            return "Open GitHub Pull Request in Browser"
+        case .gitlab:
+            return "Open GitLab Merge Request in Browser"
+        case .bitbucket:
+            return "Open Bitbucket Pull Request in Browser"
+        case .unknown:
+            return "Open Pull Request in Browser"
+        }
+    }
+
+    private func hostIcon(for provider: GitHostingProvider) -> NSImage? {
+        let imageName: String?
+        switch provider {
+        case .github:
+            imageName = "RepoHostGitHub"
+        case .gitlab:
+            imageName = "RepoHostGitLab"
+        case .bitbucket:
+            imageName = "RepoHostBitbucket"
+        case .unknown:
+            imageName = nil
+        }
+
+        guard let imageName, let baseImage = NSImage(named: NSImage.Name(imageName)) else { return nil }
+        let sourceImage = (baseImage.copy() as? NSImage) ?? baseImage
+        sourceImage.size = NSSize(width: 16, height: 16)
+
+        if provider == .github {
+            // GitHub favicon is dark; keep it readable in dark mode with a subtle light badge.
+            let size = NSSize(width: 16, height: 16)
+            let composed = NSImage(size: size, flipped: false) { _ in
+                let rect = NSRect(origin: .zero, size: size)
+                let bgPath = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
+                NSColor.white.setFill()
+                bgPath.fill()
+                NSColor.black.withAlphaComponent(0.16).setStroke()
+                bgPath.lineWidth = 1
+                bgPath.stroke()
+
+                let iconRect = rect.insetBy(dx: 2, dy: 2)
+                sourceImage.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1.0)
+                return true
+            }
+            composed.isTemplate = false
+            return composed
+        }
+
+        sourceImage.isTemplate = false
+        return sourceImage
+    }
+
     private func showRemoteMenu(remotes: [GitRemote], branch: String, defaultBranch: String?, relativeTo button: NSButton) {
         let menu = NSMenu(title: "Select Remote")
         for remote in remotes {
@@ -767,6 +862,7 @@ final class ThreadDetailViewController: NSViewController {
             let item = NSMenuItem(title: title, action: #selector(remoteMenuItemTapped(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = url
+            item.image = hostIcon(for: remote.provider)
             menu.addItem(item)
         }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
