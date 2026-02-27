@@ -80,7 +80,13 @@ final class ThreadCell: NSTableCellView {
             pinImageView?.isHidden = true
         }
 
-        if thread.hasAgentBusy {
+        if thread.hasWaitingForInput {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
+            completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent needs input")
+            completionImageView?.contentTintColor = .systemOrange
+            completionImageView?.isHidden = false
+        } else if thread.hasAgentBusy {
             busySpinner?.startAnimation(nil)
             busySpinner?.isHidden = false
             completionImageView?.image = nil
@@ -99,7 +105,7 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
-    func configureAsMain(isUnreadCompletion: Bool = false, isBusy: Bool = false) {
+    func configureAsMain(isUnreadCompletion: Bool = false, isBusy: Bool = false, isWaitingForInput: Bool = false) {
         textField?.stringValue = "Main"
         textField?.font = .systemFont(
             ofSize: NSFont.systemFontSize,
@@ -112,7 +118,13 @@ final class ThreadCell: NSTableCellView {
         ensureTrailingStack()
         pinImageView?.isHidden = true
 
-        if isBusy {
+        if isWaitingForInput {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
+            completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent needs input")
+            completionImageView?.contentTintColor = .systemOrange
+            completionImageView?.isHidden = false
+        } else if isBusy {
             busySpinner?.startAnimation(nil)
             busySpinner?.isHidden = false
             completionImageView?.image = nil
