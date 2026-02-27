@@ -419,6 +419,7 @@ extension ThreadManager {
             await self.syncBusySessionsFromProcessState()
             await self.ensureBellPipes()
             await self.checkPendingCwdEnforcements()
+            await self.checkTmuxZombieHealth()
         }
     }
 
@@ -760,6 +761,87 @@ extension ThreadManager {
 
         for repoPath in pruneRepos {
             await git.pruneWorktrees(repoPath: repoPath)
+        }
+    }
+
+    // MARK: - Tmux Zombie Health
+
+    func checkTmuxZombieHealth() async {
+        let now = Date()
+        guard now.timeIntervalSince(lastTmuxZombieHealthCheckAt) >= 15 else { return }
+        lastTmuxZombieHealthCheckAt = now
+        guard !isRestartingTmuxForRecovery else { return }
+
+        let summaries = await tmux.zombieParentSummaries()
+        let threshold = 200
+        guard let worst = summaries.max(by: { $0.zombieCount < $1.zombieCount }),
+              worst.zombieCount >= threshold else {
+            didShowTmuxZombieWarning = false
+            return
+        }
+        guard !didShowTmuxZombieWarning else { return }
+        didShowTmuxZombieWarning = true
+
+        await MainActor.run {
+            BannerManager.shared.show(
+                message: "tmux health issue: \(worst.zombieCount) defunct processes on parent \(worst.parentPid). Restart and recover sessions.",
+                style: .warning,
+                duration: nil,
+                actions: [
+                    BannerAction(title: "Restart tmux + Recover") { [weak self] in
+                        Task { await self?.restartTmuxAndRecoverSessions() }
+                    },
+                    BannerAction(title: "Ignore") { [weak self] in
+                        self?.didShowTmuxZombieWarning = false
+                    },
+                ]
+            )
+        }
+    }
+
+    func restartTmuxAndRecoverSessions() async {
+        guard !isRestartingTmuxForRecovery else { return }
+        isRestartingTmuxForRecovery = true
+        didShowTmuxZombieWarning = false
+
+        await MainActor.run {
+            BannerManager.shared.show(
+                message: "Restarting tmux and recovering sessions...",
+                style: .warning,
+                duration: nil,
+                isDismissible: false
+            )
+            stopSessionMonitor()
+        }
+
+        await tmux.killServer()
+
+        var recreatedCount = 0
+        let activeThreads = threads.filter { !$0.isArchived }
+        for thread in activeThreads {
+            for sessionName in thread.tmuxSessionNames {
+                let recreated = await recreateSessionIfNeeded(sessionName: sessionName, thread: thread)
+                if recreated {
+                    recreatedCount += 1
+                }
+            }
+        }
+
+        await ensureBellPipes()
+        await syncBusySessionsFromProcessState()
+        _ = await cleanupStaleMagentSessions()
+        try? persistence.saveThreads(threads)
+
+        isRestartingTmuxForRecovery = false
+
+        await MainActor.run {
+            updateDockBadge()
+            delegate?.threadManager(self, didUpdateThreads: threads)
+            BannerManager.shared.show(
+                message: "tmux restarted. Recovered \(recreatedCount) session\(recreatedCount == 1 ? "" : "s").",
+                style: .info
+            )
+            startSessionMonitor()
         }
     }
 

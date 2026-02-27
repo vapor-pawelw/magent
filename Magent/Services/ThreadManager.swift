@@ -29,6 +29,9 @@ final class ThreadManager {
     var notifiedWaitingSessions: Set<String> = []
     var sessionsBeingRecreated: Set<String> = []
     var sessionMonitorTimer: Timer?
+    var lastTmuxZombieHealthCheckAt: Date = .distantPast
+    var didShowTmuxZombieWarning = false
+    var isRestartingTmuxForRecovery = false
 
     // MARK: - Lifecycle
 

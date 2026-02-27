@@ -4,6 +4,10 @@ final class TmuxService {
 
     static let shared = TmuxService()
     private let agentCompletionEventsPath = "/tmp/magent-agent-completion-events.log"
+    struct ZombieParentSummary {
+        let parentPid: Int
+        let zombieCount: Int
+    }
 
     // MARK: - Session Operations
 
@@ -149,6 +153,10 @@ final class TmuxService {
 
     func killSession(name: String) async throws {
         _ = try await ShellExecutor.run("tmux kill-session -t \(shellQuote(name))")
+    }
+
+    func killServer() async {
+        _ = await ShellExecutor.execute("tmux kill-server")
     }
 
     func hasSession(name: String) async -> Bool {
@@ -354,6 +362,35 @@ final class TmuxService {
         "sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh",
         "-sh", "-bash", "-zsh", "-fish", "-ksh", "-tcsh", "-csh"
     ]
+
+    /// Returns tmux parent processes that currently hold zombie children.
+    func zombieParentSummaries() async -> [ZombieParentSummary] {
+        let command = """
+        ps -axo pid=,ppid=,state=,comm= | awk '
+        $4=="tmux" { tmux[$1]=1 }
+        $3 ~ /^Z/ { z[$2]++ }
+        END {
+          for (pid in z) {
+            if (pid in tmux) print pid " " z[pid]
+          }
+        }'
+        """
+        let result = await ShellExecutor.execute(command)
+        guard result.exitCode == 0 else { return [] }
+
+        return result.stdout
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line in
+                let parts = line.split(whereSeparator: \.isWhitespace)
+                guard parts.count >= 2,
+                      let pid = Int(parts[0]),
+                      let zombies = Int(parts[1]) else {
+                    return nil
+                }
+                return ZombieParentSummary(parentPid: pid, zombieCount: zombies)
+            }
+            .sorted { $0.zombieCount > $1.zombieCount }
+    }
 
     private func shellQuote(_ string: String) -> String {
         "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"

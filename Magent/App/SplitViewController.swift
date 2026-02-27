@@ -72,6 +72,12 @@ final class SplitViewController: NSSplitViewController {
 
         didApplyInitialSidebarWidth = true
 
+        // If the sidebar was persisted as collapsed, force it visible so thread list
+        // state is always discoverable after relaunch.
+        if sidebarItem.isCollapsed {
+            sidebarItem.animator().isCollapsed = false
+        }
+
         let savedWidth = UserDefaults.standard.object(forKey: Self.sidebarWidthDefaultsKey) as? Double
         let targetWidth = CGFloat(savedWidth ?? Double(Self.defaultSidebarWidth))
         let clampedWidth = min(max(targetWidth, sidebarItem.minimumThickness), sidebarItem.maximumThickness)

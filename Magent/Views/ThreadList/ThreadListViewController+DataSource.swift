@@ -403,13 +403,13 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     c.addSubview(separator)
 
                     NSLayoutConstraint.activate([
-                        separator.topAnchor.constraint(equalTo: c.topAnchor),
+                        separator.topAnchor.constraint(equalTo: c.topAnchor, constant: 4),
                         // AppKit source-list group rows have extra left inset vs content area.
                         // Compensate so separator appears visually centered in full sidebar width.
                         separator.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 2),
                         separator.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -Self.sidebarHorizontalInset),
                         separator.heightAnchor.constraint(equalToConstant: 1),
-                        tf.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 14),
+                        tf.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 10),
                         tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
                         tf.trailingAnchor.constraint(lessThanOrEqualTo: disclosureButton.leadingAnchor, constant: -6),
                         iv.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 6),
