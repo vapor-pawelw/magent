@@ -22,6 +22,12 @@ final class IPCCommandHandler {
             return await archiveThread(request)
         case "delete-thread":
             return await deleteThread(request)
+        case "list-tabs":
+            return listTabs(request)
+        case "create-tab":
+            return await createTab(request)
+        case "close-tab":
+            return await closeTab(request)
         default:
             return .failure("Unknown command: \(request.command)", id: request.id)
         }
@@ -170,6 +176,106 @@ final class IPCCommandHandler {
             try await threadManager.deleteThread(thread)
         } catch {
             return .failure("Failed to delete thread: \(error.localizedDescription)", id: request.id)
+        }
+
+        return .success(id: request.id)
+    }
+
+    // MARK: - Tab Commands
+
+    private func listTabs(_ request: IPCRequest) -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        let tabs = thread.tmuxSessionNames.enumerated().map { index, sessionName in
+            let isAgent = thread.agentTmuxSessions.contains(sessionName)
+            let agentType: String? = isAgent ? (thread.selectedAgentType?.rawValue ?? "unknown") : nil
+            return IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent, agentType: agentType)
+        }
+        return IPCResponse(ok: true, id: request.id, tabs: tabs)
+    }
+
+    private func createTab(_ request: IPCRequest) async -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        let useAgent: Bool
+        let requestedAgent: AgentType?
+        if let agentStr = request.agentType {
+            if agentStr == "terminal" {
+                useAgent = false
+                requestedAgent = nil
+            } else if let agent = AgentType(rawValue: agentStr) {
+                useAgent = true
+                requestedAgent = agent
+            } else {
+                return .failure("Unknown agent type: \(agentStr). Valid: claude, codex, custom, terminal", id: request.id)
+            }
+        } else {
+            // Default to thread's agent type
+            useAgent = thread.selectedAgentType != nil
+            requestedAgent = thread.selectedAgentType
+        }
+
+        do {
+            let tab = try await threadManager.addTab(
+                to: thread,
+                useAgentCommand: useAgent,
+                requestedAgentType: requestedAgent
+            )
+            let isAgent = useAgent && requestedAgent != nil
+            let info = IPCTabInfo(
+                index: tab.index,
+                sessionName: tab.tmuxSessionName,
+                isAgent: isAgent,
+                agentType: isAgent ? (requestedAgent?.rawValue ?? thread.selectedAgentType?.rawValue) : nil
+            )
+
+            // Send initial prompt if provided
+            if let prompt = request.prompt, !prompt.isEmpty, isAgent {
+                try? await tmux.sendKeys(sessionName: tab.tmuxSessionName, keys: prompt)
+            }
+
+            return IPCResponse(ok: true, id: request.id, tab: info)
+        } catch {
+            return .failure("Failed to create tab: \(error.localizedDescription)", id: request.id)
+        }
+    }
+
+    private func closeTab(_ request: IPCRequest) async -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        // Resolve tab index from either explicit tabIndex or sessionName
+        let tabIndex: Int
+        if let idx = request.tabIndex {
+            tabIndex = idx
+        } else if let sessionName = request.sessionName {
+            guard let idx = thread.tmuxSessionNames.firstIndex(of: sessionName) else {
+                return .failure("Session not found: \(sessionName)", id: request.id)
+            }
+            tabIndex = idx
+        } else {
+            return .failure("Missing required field: tabIndex or sessionName", id: request.id)
+        }
+
+        guard thread.tmuxSessionNames.count > 1 else {
+            return .failure("Cannot close the last tab — use archive-thread or delete-thread instead", id: request.id)
+        }
+
+        do {
+            try await threadManager.removeTab(from: thread, at: tabIndex)
+        } catch {
+            return .failure("Failed to close tab: \(error.localizedDescription)", id: request.id)
         }
 
         return .success(id: request.id)

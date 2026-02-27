@@ -4,7 +4,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v2"
+    private static let cliVersion = "magent-cli-v3"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -253,6 +253,56 @@ actor IPCSocketServer {
             [ -n "$thread" ] || die "Usage: magent-cli delete-thread --thread <name>"
             send_request "{$(json_kv command delete-thread),$(json_kv threadName "$thread")}"
             ;;
+        list-tabs)
+            thread=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli list-tabs --thread <name>"
+            send_request "{$(json_kv command list-tabs),$(json_kv threadName "$thread")}"
+            ;;
+        create-tab)
+            thread=""; agent=""; prompt=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    --agent)  agent="$2"; shift 2 ;;
+                    --prompt) prompt="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]"
+            json="{$(json_kv command create-tab),$(json_kv threadName "$thread")"
+            [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
+            [ -n "$prompt" ] && json="$json,$(json_kv prompt "$prompt")"
+            json="$json}"
+            send_request "$json"
+            ;;
+        close-tab)
+            thread=""; tab_index=""; session=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread)  thread="$2"; shift 2 ;;
+                    --index)   tab_index="$2"; shift 2 ;;
+                    --session) session="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli close-tab --thread <name> (--index <n> | --session <name>)"
+            json="{$(json_kv command close-tab),$(json_kv threadName "$thread")"
+            if [ -n "$tab_index" ]; then
+                json="$json,\\"tabIndex\\":$tab_index"
+            elif [ -n "$session" ]; then
+                json="$json,$(json_kv sessionName "$session")"
+            else
+                die "Specify --index <n> or --session <name>"
+            fi
+            json="$json}"
+            send_request "$json"
+            ;;
         ""|help|-h|--help)
             echo "Usage: magent-cli <command> [options]"
             echo ""
@@ -263,6 +313,9 @@ actor IPCSocketServer {
             echo "  send-prompt     --thread <name> --prompt <text>"
             echo "  archive-thread  --thread <name>    (removes worktree, keeps branch)"
             echo "  delete-thread   --thread <name>    (removes worktree and branch)"
+            echo "  list-tabs       --thread <name>"
+            echo "  create-tab      --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]"
+            echo "  close-tab       --thread <name> (--index <n> | --session <name>)"
             ;;
         *)
             die "Unknown command: $cmd. Run 'magent-cli help' for usage."
