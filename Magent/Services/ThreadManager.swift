@@ -648,9 +648,9 @@ final class ThreadManager {
 
         let oldName = currentThread.name
         let newBranchName = trimmed
-        let oldWorktreePath = currentThread.worktreePath
-        let parentDir = (oldWorktreePath as NSString).deletingLastPathComponent
-        let newWorktreePath = (parentDir as NSString).appendingPathComponent(trimmed)
+        let worktreePath = currentThread.worktreePath
+        let parentDir = (worktreePath as NSString).deletingLastPathComponent
+        let symlinkPath = (parentDir as NSString).appendingPathComponent(trimmed)
         let sessionRenameMap = Dictionary(uniqueKeysWithValues: currentThread.tmuxSessionNames.map { sessionName in
             (sessionName, renamedSessionName(sessionName, fromThreadName: oldName, toThreadName: trimmed))
         })
@@ -663,10 +663,7 @@ final class ThreadManager {
             throw ThreadManagerError.threadNotFound
         }
 
-        // Check for conflicts with existing worktree directory, git branch, and tmux sessions
-        if FileManager.default.fileExists(atPath: newWorktreePath) {
-            throw ThreadManagerError.duplicateName
-        }
+        // Check for conflicts with git branch and tmux sessions
         if await git.branchExists(repoPath: project.repoPath, branchName: newBranchName) {
             throw ThreadManagerError.duplicateName
         }
@@ -683,10 +680,11 @@ final class ThreadManager {
         // 1. Rename git branch
         try await git.renameBranch(repoPath: project.repoPath, oldName: currentThread.branchName, newName: newBranchName)
 
-        // 2. Move worktree and keep a compatibility symlink at the old path.
-        // Running agent processes keep their original env/cwd, so the alias avoids broken paths.
-        try await git.moveWorktree(repoPath: project.repoPath, oldPath: oldWorktreePath, newPath: newWorktreePath)
-        createCompatibilitySymlink(from: oldWorktreePath, to: newWorktreePath)
+        // 2. Create a symlink from the new name to the actual worktree directory.
+        // The worktree itself is NOT moved — running agents keep their cwd intact.
+        if symlinkPath != worktreePath {
+            createCompatibilitySymlink(from: symlinkPath, to: worktreePath)
+        }
 
         // 3. Rename each tmux session
         try await renameTmuxSessions(from: currentThread.tmuxSessionNames, to: newSessionNames)
@@ -700,29 +698,14 @@ final class ThreadManager {
             await tmux.setupBellPipe(for: agentSession)
         }
 
-        // 5. Update env vars and working directory on each session
+        // 5. Update thread name env var on each session (worktree path unchanged)
         for sessionName in newSessionNames {
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH", value: newWorktreePath)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: trimmed)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
-            let enforcedPanes = await tmux.updateWorkingDirectory(sessionName: sessionName, to: newWorktreePath)
-            // Register for ongoing enforcement: non-shell panes (e.g. running agents) will get
-            // cd sent when they return to a shell prompt, checked via the session monitor.
-            pendingCwdEnforcements[sessionName] = PendingCwdEnforcement(
-                path: newWorktreePath,
-                expiresAt: Date().addingTimeInterval(5 * 60),
-                enforcedPaneIds: enforcedPanes
-            )
         }
 
-        // 6. Trust new path for the agent if needed
-        trustDirectoryIfNeeded(newWorktreePath, agentType: currentThread.selectedAgentType)
-
-        // 7. Update model fields and persist
+        // 6. Update model fields and persist (worktreePath stays the same)
         threads[index].name = trimmed
         threads[index].branchName = newBranchName
-        threads[index].worktreePath = newWorktreePath
         threads[index].tmuxSessionNames = newSessionNames
         threads[index].agentTmuxSessions = newAgentSessions
         threads[index].pinnedTmuxSessions = newPinnedSessions
@@ -958,11 +941,33 @@ final class ThreadManager {
         // Discover directories in the worktrees base path
         guard let contents = try? fm.contentsOfDirectory(atPath: basePath) else { return }
 
+        // Build a map of symlink target → latest symlink name.
+        // Rename creates symlinks from the new name pointing to the original worktree directory,
+        // so the latest symlink name represents the most recent thread name.
+        var latestSymlinkName: [String: (name: String, date: Date)] = [:]
+        for entry in contents {
+            let entryPath = (basePath as NSString).appendingPathComponent(entry)
+            guard let attrs = try? fm.attributesOfItem(atPath: entryPath),
+                  attrs[.type] as? FileAttributeType == .typeSymbolicLink else { continue }
+            guard let dest = try? fm.destinationOfSymbolicLink(atPath: entryPath) else { continue }
+            let resolved = dest.hasPrefix("/") ? dest : (basePath as NSString).appendingPathComponent(dest)
+            let created = attrs[.creationDate] as? Date ?? attrs[.modificationDate] as? Date ?? .distantPast
+            if let existing = latestSymlinkName[resolved], existing.date > created { continue }
+            latestSymlinkName[resolved] = (name: entry, date: created)
+        }
+
         var changed = false
         let existingPaths = Set(threads.filter { $0.projectId == project.id }.map(\.worktreePath))
 
         for dirName in contents {
             let fullPath = (basePath as NSString).appendingPathComponent(dirName)
+
+            // Skip symlinks — these are rename aliases, not real worktrees
+            if let attrs = try? fm.attributesOfItem(atPath: fullPath),
+               attrs[.type] as? FileAttributeType == .typeSymbolicLink {
+                continue
+            }
+
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: fullPath, isDirectory: &isDir), isDir.boolValue else { continue }
 
@@ -975,13 +980,14 @@ final class ThreadManager {
             // Skip if we already have a thread for this path
             guard !existingPaths.contains(fullPath) else { continue }
 
-            // Detect branch name from the worktree
-            let branchName = dirName
+            // If a symlink points here, the worktree was renamed — use the symlink name
+            let threadName = latestSymlinkName[fullPath]?.name ?? dirName
+            let branchName = threadName
 
             let settings = persistence.loadSettings()
             let thread = MagentThread(
                 projectId: project.id,
-                name: dirName,
+                name: threadName,
                 worktreePath: fullPath,
                 branchName: branchName,
                 sectionId: settings.defaultSection?.id
