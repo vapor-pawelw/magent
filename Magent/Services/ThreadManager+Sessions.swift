@@ -420,6 +420,13 @@ extension ThreadManager {
             await self.ensureBellPipes()
             await self.checkPendingCwdEnforcements()
             await self.checkTmuxZombieHealth()
+
+            // Refresh dirty states every 10th tick (~30 seconds)
+            dirtyCheckTickCounter += 1
+            if dirtyCheckTickCounter >= 10 {
+                dirtyCheckTickCounter = 0
+                await refreshDirtyStates()
+            }
         }
     }
 
@@ -500,6 +507,10 @@ extension ThreadManager {
 
         guard changed else { return }
         try? persistence.saveThreads(threads)
+
+        // Agent completed work — refresh dirty states for affected threads
+        await refreshDirtyStates()
+
         await MainActor.run {
             updateDockBadge()
             delegate?.threadManager(self, didUpdateThreads: threads)

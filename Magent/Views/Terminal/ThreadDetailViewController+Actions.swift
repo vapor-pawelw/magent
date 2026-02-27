@@ -9,14 +9,12 @@ extension ThreadDetailViewController {
         guard !thread.isMain else { return }
         let threadToArchive = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
 
-        let settings = PersistenceService.shared.loadSettings()
-        let project = settings.projects.first(where: { $0.id == threadToArchive.projectId })
-        let defaultBranch = project?.defaultBranch ?? "main"
+        let baseBranch = threadManager.resolveBaseBranch(for: threadToArchive)
 
         Task {
             let git = GitService.shared
             let clean = await git.isClean(worktreePath: threadToArchive.worktreePath)
-            let merged = await git.isMergedInto(worktreePath: threadToArchive.worktreePath, baseBranch: defaultBranch)
+            let merged = await git.isMergedInto(worktreePath: threadToArchive.worktreePath, baseBranch: baseBranch)
 
             await MainActor.run {
                 if clean && merged {
@@ -28,7 +26,7 @@ extension ThreadDetailViewController {
                     alert.messageText = "Archive Thread"
                     var reasons: [String] = []
                     if !clean { reasons.append("uncommitted changes") }
-                    if !merged { reasons.append("commits not in \(defaultBranch)") }
+                    if !merged { reasons.append("commits not in \(baseBranch)") }
                     alert.informativeText = "The thread \"\(threadToArchive.name)\" has \(reasons.joined(separator: " and ")). Archiving will remove its worktree directory but keep the git branch \"\(threadToArchive.branchName)\"."
                     alert.alertStyle = .informational
                     alert.addButton(withTitle: "Archive")

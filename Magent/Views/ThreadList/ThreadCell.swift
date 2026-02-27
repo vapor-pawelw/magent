@@ -2,6 +2,7 @@ import Cocoa
 
 final class ThreadCell: NSTableCellView {
 
+    private var dirtyImageView: NSImageView?
     private var pinImageView: NSImageView?
     private var completionImageView: NSImageView?
     private var busySpinner: NSProgressIndicator?
@@ -10,6 +11,11 @@ final class ThreadCell: NSTableCellView {
 
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
+
+        let dirtyIV = NSImageView()
+        dirtyIV.translatesAutoresizingMaskIntoConstraints = false
+        dirtyIV.setContentHuggingPriority(.required, for: .horizontal)
+        dirtyIV.isHidden = true
 
         let pinIV = NSImageView()
         pinIV.translatesAutoresizingMaskIntoConstraints = false
@@ -27,7 +33,7 @@ final class ThreadCell: NSTableCellView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.isHidden = true
 
-        let stack = NSStackView(views: [pinIV, spinner, completionIV])
+        let stack = NSStackView(views: [dirtyIV, pinIV, spinner, completionIV])
         stack.orientation = .horizontal
         stack.spacing = 3
         stack.alignment = .centerY
@@ -37,6 +43,8 @@ final class ThreadCell: NSTableCellView {
         NSLayoutConstraint.activate([
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            dirtyIV.widthAnchor.constraint(equalToConstant: 7),
+            dirtyIV.heightAnchor.constraint(equalToConstant: 7),
             pinIV.widthAnchor.constraint(equalToConstant: 12),
             pinIV.heightAnchor.constraint(equalToConstant: 12),
             completionIV.widthAnchor.constraint(equalToConstant: 10),
@@ -45,6 +53,7 @@ final class ThreadCell: NSTableCellView {
             spinner.heightAnchor.constraint(equalToConstant: 14),
         ])
         trailingStackView = stack
+        dirtyImageView = dirtyIV
         pinImageView = pinIV
         completionImageView = completionIV
         busySpinner = spinner
@@ -70,6 +79,15 @@ final class ThreadCell: NSTableCellView {
             : (sectionColor ?? NSColor(resource: .primaryBrand))
 
         ensureTrailingStack()
+
+        if thread.isDirty {
+            dirtyImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
+            dirtyImageView?.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
+            dirtyImageView?.isHidden = false
+        } else {
+            dirtyImageView?.image = nil
+            dirtyImageView?.isHidden = true
+        }
 
         if thread.isPinned {
             pinImageView?.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
@@ -105,7 +123,7 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
-    func configureAsMain(isUnreadCompletion: Bool = false, isBusy: Bool = false, isWaitingForInput: Bool = false) {
+    func configureAsMain(isUnreadCompletion: Bool = false, isBusy: Bool = false, isWaitingForInput: Bool = false, isDirty: Bool = false) {
         textField?.stringValue = "Main"
         textField?.font = .systemFont(
             ofSize: NSFont.systemFontSize,
@@ -117,6 +135,15 @@ final class ThreadCell: NSTableCellView {
 
         ensureTrailingStack()
         pinImageView?.isHidden = true
+
+        if isDirty {
+            dirtyImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
+            dirtyImageView?.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
+            dirtyImageView?.isHidden = false
+        } else {
+            dirtyImageView?.image = nil
+            dirtyImageView?.isHidden = true
+        }
 
         if isWaitingForInput {
             busySpinner?.stopAnimation(nil)

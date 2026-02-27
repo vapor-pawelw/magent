@@ -32,6 +32,7 @@ final class ThreadManager {
     var lastTmuxZombieHealthCheckAt: Date = .distantPast
     var didShowTmuxZombieWarning = false
     var isRestartingTmuxForRecovery = false
+    var dirtyCheckTickCounter: Int = 0
 
     // MARK: - Lifecycle
 
@@ -210,7 +211,8 @@ final class ThreadManager {
             agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
             sectionId: settings.defaultSection?.id,
             selectedAgentType: selectedAgentType,
-            lastSelectedTmuxSessionName: tmuxSessionName
+            lastSelectedTmuxSessionName: tmuxSessionName,
+            baseBranch: baseBranch
         )
 
         threads.append(thread)
@@ -714,6 +716,42 @@ final class ThreadManager {
         } catch {
             return .failed(error)
         }
+    }
+
+    // MARK: - Base Branch & Dirty State
+
+    func resolveBaseBranch(for thread: MagentThread) -> String {
+        if let base = thread.baseBranch, !base.isEmpty {
+            return base
+        }
+        let settings = persistence.loadSettings()
+        if let project = settings.projects.first(where: { $0.id == thread.projectId }),
+           let defaultBranch = project.defaultBranch, !defaultBranch.isEmpty {
+            return defaultBranch
+        }
+        return "main"
+    }
+
+    func refreshDirtyStates() async {
+        var changed = false
+        for i in threads.indices where !threads[i].isArchived && !threads[i].isMain {
+            let dirty = await git.isDirty(worktreePath: threads[i].worktreePath)
+            if threads[i].isDirty != dirty {
+                threads[i].isDirty = dirty
+                changed = true
+            }
+        }
+        if changed {
+            await MainActor.run {
+                delegate?.threadManager(self, didUpdateThreads: threads)
+            }
+        }
+    }
+
+    func refreshDiffStats(for threadId: UUID) async -> [FileDiffEntry] {
+        guard let thread = threads.first(where: { $0.id == threadId }) else { return [] }
+        let baseBranch = resolveBaseBranch(for: thread)
+        return await git.diffStats(worktreePath: thread.worktreePath, baseBranch: baseBranch)
     }
 
 }
