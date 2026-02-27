@@ -258,6 +258,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     private var defaultAgentPopup: NSPopUpButton!
     private var customAgentSection: NSStackView!
     private var completionSoundCheckbox: NSButton!
+    private var autoRenameCheckbox: NSButton!
     private var customAgentCommandTextView: NSTextView!
     private var terminalInjectionTextView: NSTextView!
     private var agentContextTextView: NSTextView!
@@ -334,6 +335,30 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         stackView.addArrangedSubview(notificationsSection)
         NSLayoutConstraint.activate([
             notificationsSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+        ])
+
+        // Worktree Behavior
+        let worktreeSection = NSStackView()
+        worktreeSection.orientation = .vertical
+        worktreeSection.alignment = .leading
+        worktreeSection.spacing = 6
+
+        let worktreeLabel = NSTextField(labelWithString: "Worktree Behavior")
+        worktreeLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        worktreeSection.addArrangedSubview(worktreeLabel)
+
+        autoRenameCheckbox = NSButton(
+            checkboxWithTitle: "Auto-rename worktrees from the first agent prompt",
+            target: self,
+            action: #selector(autoRenameToggled)
+        )
+        autoRenameCheckbox.state = settings.autoRenameWorktrees ? .on : .off
+        worktreeSection.addArrangedSubview(autoRenameCheckbox)
+
+        worktreeSection.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(worktreeSection)
+        NSLayoutConstraint.activate([
+            worktreeSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
 
         // Active Agents
@@ -642,6 +667,11 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
 
     @objc private func completionSoundToggled() {
         settings.playSoundForAgentCompletion = completionSoundCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func autoRenameToggled() {
+        settings.autoRenameWorktrees = autoRenameCheckbox.state == .on
         try? persistence.saveSettings(settings)
     }
 

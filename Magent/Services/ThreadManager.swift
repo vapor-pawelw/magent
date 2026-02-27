@@ -612,6 +612,7 @@ final class ThreadManager {
         sessionName: String,
         prompt: String
     ) async {
+        guard persistence.loadSettings().autoRenameWorktrees else { return }
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         let thread = threads[index]
 
