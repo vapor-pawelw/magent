@@ -66,6 +66,39 @@ final class TmuxService {
         )
     }
 
+    /// Updates tmux defaults and live shell panes to a new working directory.
+    /// Non-shell panes (e.g. running agent binaries) are left untouched.
+    func updateWorkingDirectory(sessionName: String, to path: String) async {
+        _ = try? await ShellExecutor.run(
+            "tmux set-option -t \(shellQuote(sessionName)) default-path \(shellQuote(path))"
+        )
+
+        let output: String
+        do {
+            output = try await ShellExecutor.run(
+                "tmux list-panes -t \(shellQuote(sessionName)) -F '#{pane_id}\t#{pane_current_command}'"
+            )
+        } catch {
+            return
+        }
+
+        let shellCommands: Set<String> = ["sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh"]
+        let cdCommand = "cd \(shellQuote(path))"
+
+        for line in output.components(separatedBy: "\n") where !line.isEmpty {
+            let parts = line.components(separatedBy: "\t")
+            guard parts.count >= 2 else { continue }
+
+            let paneId = parts[0]
+            let paneCommand = parts[1]
+            guard shellCommands.contains(paneCommand) else { continue }
+
+            _ = try? await ShellExecutor.run(
+                "tmux send-keys -t \(shellQuote(paneId)) \(shellQuote(cdCommand)) Enter"
+            )
+        }
+    }
+
     private func shellQuote(_ string: String) -> String {
         "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
