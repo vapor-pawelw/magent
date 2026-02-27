@@ -1,4 +1,5 @@
 import Cocoa
+import UserNotifications
 
 private final class FlippedDocumentView: NSView {
     override var isFlipped: Bool { true }
@@ -257,9 +258,14 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     private var defaultAgentSection: NSStackView!
     private var defaultAgentPopup: NSPopUpButton!
     private var customAgentSection: NSStackView!
+    private var notificationStatusDot: NSView!
+    private var notificationStatusLabel: NSTextField!
+    private var openNotifSettingsButton: NSButton!
+    private var showBannersCheckbox: NSButton!
     private var completionSoundCheckbox: NSButton!
     private var soundPickerPopup: NSPopUpButton!
     private var soundPickerRow: NSStackView!
+    private var windowObserver: NSObjectProtocol?
     private var soundPreviewPlayer: NSSound?
     private var autoRenameCheckbox: NSButton!
     private var customAgentCommandTextView: NSTextView!
@@ -325,6 +331,48 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         notificationsDesc.font = .systemFont(ofSize: 11)
         notificationsDesc.textColor = NSColor(resource: .textSecondary)
         notificationsSection.addArrangedSubview(notificationsDesc)
+
+        // Permission status row
+        let statusRow = NSStackView()
+        statusRow.orientation = .horizontal
+        statusRow.alignment = .centerY
+        statusRow.spacing = 6
+
+        notificationStatusDot = NSView()
+        notificationStatusDot.wantsLayer = true
+        notificationStatusDot.layer?.cornerRadius = 5
+        notificationStatusDot.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            notificationStatusDot.widthAnchor.constraint(equalToConstant: 10),
+            notificationStatusDot.heightAnchor.constraint(equalToConstant: 10),
+        ])
+        statusRow.addArrangedSubview(notificationStatusDot)
+
+        notificationStatusLabel = NSTextField(labelWithString: "Notifications: Checking...")
+        notificationStatusLabel.font = .systemFont(ofSize: 12)
+        statusRow.addArrangedSubview(notificationStatusLabel)
+
+        notificationsSection.addArrangedSubview(statusRow)
+
+        // Open Notification Settings button
+        openNotifSettingsButton = NSButton(
+            title: "Open Notification Settings",
+            target: self,
+            action: #selector(openSystemNotificationSettings)
+        )
+        openNotifSettingsButton.bezelStyle = .accessoryBarAction
+        openNotifSettingsButton.controlSize = .small
+        openNotifSettingsButton.font = .systemFont(ofSize: 11)
+        notificationsSection.addArrangedSubview(openNotifSettingsButton)
+
+        // Show system banners checkbox
+        showBannersCheckbox = NSButton(
+            checkboxWithTitle: "Show system banners",
+            target: self,
+            action: #selector(showBannersToggled)
+        )
+        showBannersCheckbox.state = settings.showSystemBanners ? .on : .off
+        notificationsSection.addArrangedSubview(showBannersCheckbox)
 
         completionSoundCheckbox = NSButton(
             checkboxWithTitle: "Play sound for completion notifications",
@@ -618,6 +666,14 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             scrollToTop()
             didInitialScrollToTop = true
         }
+        refreshNotificationPermissionStatus()
+        windowObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: view.window,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshNotificationPermissionStatus()
+        }
     }
 
     override func viewDidLayout() {
@@ -702,6 +758,10 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         super.viewWillDisappear()
         soundPreviewPlayer?.stop()
         soundPreviewPlayer = nil
+        if let windowObserver {
+            NotificationCenter.default.removeObserver(windowObserver)
+        }
+        windowObserver = nil
     }
 
     private func populateSoundPicker() {
@@ -748,6 +808,43 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             soundPreviewPlayer = nil
         }
         try? persistence.saveSettings(settings)
+    }
+
+    @objc private func showBannersToggled() {
+        settings.showSystemBanners = showBannersCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func openSystemNotificationSettings() {
+        let bundleId = Bundle.main.bundleIdentifier ?? ""
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleId)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func refreshNotificationPermissionStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] notifSettings in
+            let authorized = notifSettings.authorizationStatus == .authorized
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.notificationStatusDot.layer?.backgroundColor = authorized
+                    ? NSColor.systemGreen.cgColor
+                    : NSColor.systemRed.cgColor
+                self.notificationStatusLabel.stringValue = authorized
+                    ? "Notifications: Enabled"
+                    : "Notifications: Disabled \u{2014} enable in System Settings"
+                self.notificationStatusLabel.textColor = authorized
+                    ? .labelColor
+                    : .systemRed
+
+                self.showBannersCheckbox.isEnabled = authorized
+                self.completionSoundCheckbox.isEnabled = authorized
+                self.soundPickerPopup.isEnabled = authorized
+                self.showBannersCheckbox.alphaValue = authorized ? 1.0 : 0.5
+                self.completionSoundCheckbox.alphaValue = authorized ? 1.0 : 0.5
+                self.soundPickerRow.alphaValue = authorized ? 1.0 : 0.5
+            }
+        }
     }
 
     @objc private func autoRenameToggled() {

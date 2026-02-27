@@ -5,6 +5,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var activeAgents: [AgentType]
     var defaultAgentType: AgentType?
     var customAgentCommand: String
+    var showSystemBanners: Bool
     var playSoundForAgentCompletion: Bool
     var agentCompletionSoundName: String
     var autoRenameWorktrees: Bool
@@ -18,6 +19,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         activeAgents: [AgentType] = [.claude],
         defaultAgentType: AgentType? = nil,
         customAgentCommand: String = "claude",
+        showSystemBanners: Bool = true,
         playSoundForAgentCompletion: Bool = true,
         agentCompletionSoundName: String = "Ping",
         autoRenameWorktrees: Bool = true,
@@ -30,6 +32,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.activeAgents = activeAgents
         self.defaultAgentType = defaultAgentType
         self.customAgentCommand = customAgentCommand
+        self.showSystemBanners = showSystemBanners
         self.playSoundForAgentCompletion = playSoundForAgentCompletion
         self.agentCompletionSoundName = agentCompletionSoundName
         self.autoRenameWorktrees = autoRenameWorktrees
@@ -47,6 +50,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         activeAgents = try container.decodeIfPresent([AgentType].self, forKey: .activeAgents) ?? [legacyAgentType]
         defaultAgentType = try container.decodeIfPresent(AgentType.self, forKey: .defaultAgentType)
         customAgentCommand = try container.decodeIfPresent(String.self, forKey: .customAgentCommand) ?? legacyAgentCommand
+        showSystemBanners = try container.decodeIfPresent(Bool.self, forKey: .showSystemBanners) ?? true
         playSoundForAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .playSoundForAgentCompletion) ?? true
         agentCompletionSoundName = try container.decodeIfPresent(String.self, forKey: .agentCompletionSoundName) ?? "Ping"
         autoRenameWorktrees = try container.decodeIfPresent(Bool.self, forKey: .autoRenameWorktrees) ?? true
@@ -62,6 +66,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(activeAgents, forKey: .activeAgents)
         try container.encodeIfPresent(defaultAgentType, forKey: .defaultAgentType)
         try container.encode(customAgentCommand, forKey: .customAgentCommand)
+        try container.encode(showSystemBanners, forKey: .showSystemBanners)
         try container.encode(playSoundForAgentCompletion, forKey: .playSoundForAgentCompletion)
         try container.encode(agentCompletionSoundName, forKey: .agentCompletionSoundName)
         try container.encode(autoRenameWorktrees, forKey: .autoRenameWorktrees)
@@ -113,6 +118,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case activeAgents
         case defaultAgentType
         case customAgentCommand
+        case showSystemBanners
         case playSoundForAgentCompletion
         case agentCompletionSoundName
         case autoRenameWorktrees

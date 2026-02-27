@@ -77,6 +77,7 @@ final class ThreadManager {
         await ensureBellPipes()
 
         await MainActor.run {
+            updateDockBadge()
             delegate?.threadManager(self, didUpdateThreads: threads)
         }
     }
@@ -442,6 +443,7 @@ final class ThreadManager {
         guard threads[index].hasUnreadAgentCompletion else { return }
         threads[index].unreadCompletionSessions.removeAll()
         try? persistence.saveThreads(threads)
+        updateDockBadge()
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
@@ -451,7 +453,16 @@ final class ThreadManager {
         guard threads[index].unreadCompletionSessions.contains(sessionName) else { return }
         threads[index].unreadCompletionSessions.remove(sessionName)
         try? persistence.saveThreads(threads)
+        updateDockBadge()
         delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    // MARK: - Dock Badge
+
+    @MainActor
+    func updateDockBadge() {
+        let unreadCount = threads.filter({ !$0.isArchived && $0.hasUnreadAgentCompletion }).count
+        NSApp.dockTile.badgeLabel = unreadCount > 0 ? "\(unreadCount)" : nil
     }
 
     // MARK: - Section Management
@@ -1574,6 +1585,7 @@ final class ThreadManager {
         guard changed else { return }
         try? persistence.saveThreads(threads)
         await MainActor.run {
+            updateDockBadge()
             delegate?.threadManager(self, didUpdateThreads: threads)
             for session in orderedUniqueSessions {
                 if let index = threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }) {
@@ -1592,20 +1604,23 @@ final class ThreadManager {
 
     private func sendAgentCompletionNotification(for thread: MagentThread, projectName: String, playSound: Bool) {
         let settings = persistence.loadSettings()
-        let content = UNMutableNotificationContent()
-        content.title = "Agent Finished"
-        content.body = "\(projectName) · \(thread.name)"
-        if playSound {
-            content.sound = UNNotificationSound(named: UNNotificationSoundName(settings.agentCompletionSoundName))
-        }
-        content.userInfo = ["threadId": thread.id.uuidString]
 
-        let request = UNNotificationRequest(
-            identifier: "magent-agent-finished-\(UUID().uuidString)",
-            content: content,
-            trigger: nil
-        )
-        UNUserNotificationCenter.current().add(request)
+        if settings.showSystemBanners {
+            let content = UNMutableNotificationContent()
+            content.title = "Agent Finished"
+            content.body = "\(projectName) · \(thread.name)"
+            if playSound {
+                content.sound = UNNotificationSound(named: UNNotificationSoundName(settings.agentCompletionSoundName))
+            }
+            content.userInfo = ["threadId": thread.id.uuidString]
+
+            let request = UNNotificationRequest(
+                identifier: "magent-agent-finished-\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            )
+            UNUserNotificationCenter.current().add(request)
+        }
 
         // Play sound directly via NSSound as a fallback — UNNotification sound
         // can be throttled by macOS when many notifications are delivered.
