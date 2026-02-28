@@ -272,9 +272,10 @@ extension ThreadManager {
 
             // Replace outdated Magent section if present
             if let startRange = existing.range(of: Self.codexIPCMarkerStart),
-               let endRange = existing.range(of: Self.codexIPCMarkerEnd) {
+               let endRange = existing.range(of: Self.codexIPCMarkerEnd),
+               startRange.lowerBound <= endRange.lowerBound {
                 var updated = existing
-                updated.replaceSubrange(startRange.lowerBound...endRange.upperBound, with: Self.codexIPCBlock)
+                updated.replaceSubrange(startRange.lowerBound..<endRange.upperBound, with: Self.codexIPCBlock)
                 try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
             } else {
                 // Append to existing user content

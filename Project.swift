@@ -24,7 +24,10 @@ let project = Project(
                 "CFBundleIconFile": "AppIcon",
             ]),
             sources: ["Magent/**"],
-            resources: ["Magent/Resources/**"],
+            resources: [
+                "Magent/Resources/Assets.xcassets",
+                "Magent/Resources/AppIcon.icon",
+            ],
             entitlements: .file(path: "Magent/Magent.entitlements"),
             dependencies: [
                 .target(name: "GhosttyBridge"),

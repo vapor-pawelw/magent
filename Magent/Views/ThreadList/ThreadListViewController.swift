@@ -705,20 +705,14 @@ final class ThreadListViewController: NSViewController {
     }
 
     func refreshDiffPanel(for thread: MagentThread) {
-        // Main threads on the default branch don't need diff stats
-        if thread.isMain {
-            diffPanelView.clear()
-            return
-        }
-
         Task {
             let entries = await threadManager.refreshDiffStats(for: thread.id)
             let baseBranch = threadManager.resolveBaseBranch(for: thread)
             await MainActor.run {
                 self.diffPanelView.update(
                     with: entries,
-                    branchName: thread.branchName,
-                    baseBranch: baseBranch
+                    branchName: thread.isMain ? nil : thread.branchName,
+                    baseBranch: thread.isMain ? nil : baseBranch
                 )
             }
         }
