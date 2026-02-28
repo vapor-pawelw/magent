@@ -191,14 +191,7 @@ final class SettingsNotificationsViewController: NSViewController {
     }
 
     static func systemSoundNames() -> [String] {
-        let soundsDir = "/System/Library/Sounds"
-        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: soundsDir) else {
-            return ["Tink"]
-        }
-        return contents
-            .filter { $0.hasSuffix(".aiff") }
-            .map { ($0 as NSString).deletingPathExtension }
-            .sorted()
+        SystemAccessChecker.systemSoundNames()
     }
 
     @objc private func soundPickerChanged() {

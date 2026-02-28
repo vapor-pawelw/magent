@@ -372,13 +372,7 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     }
 
     private static func isFullDiskAccessGranted() -> Bool {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let probePath = home.appendingPathComponent("Library/Containers/com.apple.stocks").path
-        if (try? FileManager.default.contentsOfDirectory(atPath: probePath)) != nil {
-            return true
-        }
-        let safariPath = home.appendingPathComponent("Library/Safari/History.db").path
-        return FileManager.default.isReadableFile(atPath: safariPath)
+        SystemAccessChecker.isFullDiskAccessGranted()
     }
 
     @objc private func permissionsSettingChanged() {

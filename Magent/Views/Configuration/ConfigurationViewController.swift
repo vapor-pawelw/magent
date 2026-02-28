@@ -4,7 +4,6 @@ final class ConfigurationViewController: NSViewController {
 
     var onComplete: (() -> Void)?
 
-    private let scrollView = NSScrollView()
     private let contentStack = NSStackView()
     private let persistence = PersistenceService.shared
     private let dependencyChecker = DependencyChecker.shared
@@ -14,18 +13,27 @@ final class ConfigurationViewController: NSViewController {
 
     // Step views
     private let dependencyCheckView = DependencyCheckView()
+    private let agentSelectionView = OnboardingAgentSelectionView()
+    private let permissionsView = OnboardingPermissionsView()
+    private let notificationsView = OnboardingNotificationsView()
     private let addProjectView = AddProjectView()
-    private let agentConfigView = AgentConfigView()
 
+    private let backButton = NSButton(title: "Back", target: nil, action: nil)
     private let nextButton = NSButton(title: "Next", target: nil, action: nil)
 
+    private let totalSteps = 5
+
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 480))
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Welcome to Magent"
+
+        backButton.target = self
+        backButton.action = #selector(previousStep)
+        backButton.bezelStyle = .rounded
 
         nextButton.target = self
         nextButton.action = #selector(nextStep)
@@ -44,11 +52,13 @@ final class ConfigurationViewController: NSViewController {
         contentStack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
 
         contentStack.addArrangedSubview(dependencyCheckView)
+        contentStack.addArrangedSubview(agentSelectionView)
+        contentStack.addArrangedSubview(permissionsView)
+        contentStack.addArrangedSubview(notificationsView)
         contentStack.addArrangedSubview(addProjectView)
-        contentStack.addArrangedSubview(agentConfigView)
 
         // Button bar at the bottom
-        let buttonBar = NSStackView(views: [NSView(), nextButton])
+        let buttonBar = NSStackView(views: [backButton, NSView(), nextButton])
         buttonBar.orientation = .horizontal
         buttonBar.translatesAutoresizingMaskIntoConstraints = false
 
@@ -75,22 +85,37 @@ final class ConfigurationViewController: NSViewController {
     private func showStep(_ step: Int) {
         currentStep = step
         dependencyCheckView.isHidden = step != 0
-        addProjectView.isHidden = step != 1
-        agentConfigView.isHidden = step != 2
+        agentSelectionView.isHidden = step != 1
+        permissionsView.isHidden = step != 2
+        notificationsView.isHidden = step != 3
+        addProjectView.isHidden = step != 4
+
+        backButton.isHidden = step == 0
 
         switch step {
         case 0:
             title = "Check Dependencies"
             nextButton.title = "Next"
         case 1:
-            title = "Add Project"
+            title = "Select Agents"
             nextButton.title = "Next"
         case 2:
-            title = "Configure Agent"
+            title = "Permissions"
+            nextButton.title = "Next"
+        case 3:
+            title = "Notifications"
+            nextButton.title = "Next"
+        case 4:
+            title = "Add Project"
             nextButton.title = "Done"
         default:
             break
         }
+    }
+
+    @objc private func previousStep() {
+        guard currentStep > 0 else { return }
+        showStep(currentStep - 1)
     }
 
     @objc private func nextStep() {
@@ -98,12 +123,20 @@ final class ConfigurationViewController: NSViewController {
         case 0:
             showStep(1)
         case 1:
-            if settings.projects.isEmpty {
-                showAlert(title: "No Project", message: "Please add at least one git repository.")
+            if agentSelectionView.selectedAgents.isEmpty {
+                showAlert(title: "No Agent Selected", message: "Please enable at least one agent.")
                 return
             }
             showStep(2)
         case 2:
+            showStep(3)
+        case 3:
+            showStep(4)
+        case 4:
+            if settings.projects.isEmpty {
+                showAlert(title: "No Project", message: "Please add at least one git repository.")
+                return
+            }
             finishConfiguration()
         default:
             break
@@ -111,9 +144,20 @@ final class ConfigurationViewController: NSViewController {
     }
 
     private func finishConfiguration() {
-        settings.customAgentCommand = agentConfigView.agentCommand
-        settings.activeAgents = [.claude]
-        settings.defaultAgentType = nil
+        // Agents
+        settings.activeAgents = agentSelectionView.selectedAgents
+        settings.defaultAgentType = agentSelectionView.defaultAgent
+        settings.customAgentCommand = agentSelectionView.customCommand
+
+        // Permissions
+        settings.agentSkipPermissions = permissionsView.skipPermissions
+        settings.agentSandboxEnabled = permissionsView.sandboxEnabled
+
+        // Notifications
+        settings.showSystemBanners = notificationsView.showSystemBanners
+        settings.playSoundForAgentCompletion = notificationsView.playSoundForCompletion
+        settings.agentCompletionSoundName = notificationsView.completionSoundName
+
         settings.isConfigured = true
         try? persistence.saveSettings(settings)
         onComplete?()
@@ -291,47 +335,5 @@ final class AddProjectView: NSView {
         label.font = .preferredFont(forTextStyle: .body)
         label.textColor = NSColor(resource: .textSecondary)
         projectsStack.addArrangedSubview(label)
-    }
-}
-
-final class AgentConfigView: NSView {
-
-    var agentCommand: String {
-        textField.stringValue
-    }
-
-    private let titleLabel = NSTextField(labelWithString: "")
-    private let textField = NSTextField()
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        setupUI()
-    }
-
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-
-    private func setupUI() {
-        titleLabel.stringValue = "Agent command to run in new threads:"
-        titleLabel.font = .preferredFont(forTextStyle: .headline)
-        titleLabel.maximumNumberOfLines = 0
-
-        textField.stringValue = "claude"
-        textField.font = .monospacedSystemFont(ofSize: 16, weight: .regular)
-        textField.placeholderString = "claude"
-
-        let stack = NSStackView(views: [titleLabel, textField])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 12
-        stack.translatesAutoresizingMaskIntoConstraints = false
-
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            textField.widthAnchor.constraint(equalToConstant: 300),
-        ])
     }
 }
