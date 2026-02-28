@@ -157,6 +157,20 @@ final class TmuxService {
 
     func killServer() async {
         _ = await ShellExecutor.execute("tmux kill-server")
+        // Also kill any zombie-heavy tmux processes that kill-server may not reach
+        await killZombieHeavyTmuxProcesses()
+    }
+
+    /// Finds tmux processes that are parents of zombie children and kills them.
+    /// After killing, waits briefly for the OS to reap the zombies.
+    func killZombieHeavyTmuxProcesses() async {
+        let summaries = await zombieParentSummaries()
+        for summary in summaries where summary.zombieCount >= 10 {
+            _ = await ShellExecutor.execute("kill -9 \(summary.parentPid)")
+        }
+        guard !summaries.isEmpty else { return }
+        // Give the OS time to reap zombie processes after their parent dies
+        try? await Task.sleep(for: .seconds(2))
     }
 
     func hasSession(name: String) async -> Bool {
