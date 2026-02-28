@@ -17,6 +17,11 @@ extension ThreadManager {
       /tmp/magent-cli list-tabs --thread <name>
       /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
       /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
+      /tmp/magent-cli current-thread
+      /tmp/magent-cli rename-thread --thread <name> --description <text>
+      /tmp/magent-cli rename-thread-exact --thread <name> --name <text>
+    Use current-thread to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
+    Use rename-thread by default (generates a slug from the description). Only use rename-thread-exact when the user specifies an exact name.
     """
 
     // MARK: - Injection
@@ -234,7 +239,7 @@ extension ThreadManager {
 
     private static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     private static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    private static let codexIPCVersion = "<!-- magent-ipc-v2 -->"
+    private static let codexIPCVersion = "<!-- magent-ipc-v3 -->"
 
     private static let codexIPCBlock = """
     \(codexIPCMarkerStart)
@@ -254,7 +259,14 @@ extension ThreadManager {
     /tmp/magent-cli list-tabs --thread <name>
     /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
     /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
+    /tmp/magent-cli current-thread
+    /tmp/magent-cli rename-thread --thread <name> --description <text>
+    /tmp/magent-cli rename-thread-exact --thread <name> --name <text>
     ```
+
+    Use `current-thread` to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
+    Use `rename-thread` by default (generates a slug from the description).
+    Only use `rename-thread-exact` when the user specifies an exact name.
     \(codexIPCMarkerEnd)
     """
 

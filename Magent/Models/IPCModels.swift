@@ -11,6 +11,7 @@ nonisolated struct IPCRequest: Codable, Sendable {
     var threadName: String?
     var tabIndex: Int?
     var sessionName: String?
+    var newName: String?
     var id: String?
 }
 

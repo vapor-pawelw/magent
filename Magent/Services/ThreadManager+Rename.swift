@@ -140,7 +140,7 @@ extension ThreadManager {
         return sanitizeSlug(raw)
     }
 
-    private func autoRenameCandidates(from prompt: String, agentType: AgentType?) async -> [String] {
+    func autoRenameCandidates(from prompt: String, agentType: AgentType?) async -> [String] {
         if let slug = await generateSlugViaAgent(from: prompt, agentType: agentType) {
             // Agent signalled "question, not a task" → skip rename entirely (no fallback)
             guard slug != Self.slugQuestionSentinel else { return [] }

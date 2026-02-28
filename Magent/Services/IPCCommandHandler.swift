@@ -28,6 +28,12 @@ final class IPCCommandHandler {
             return await createTab(request)
         case "close-tab":
             return await closeTab(request)
+        case "rename-thread":
+            return await renameThread(request)
+        case "rename-thread-exact":
+            return await renameThreadExact(request)
+        case "current-thread":
+            return currentThread(request)
         default:
             return .failure("Unknown command: \(request.command)", id: request.id)
         }
@@ -246,6 +252,84 @@ final class IPCCommandHandler {
         } catch {
             return .failure("Failed to create tab: \(error.localizedDescription)", id: request.id)
         }
+    }
+
+    private func renameThread(_ request: IPCRequest) async -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        guard let description = request.newName, !description.isEmpty else {
+            return .failure("Missing required field: description (pass via newName)", id: request.id)
+        }
+
+        let candidates = await threadManager.autoRenameCandidates(from: description, agentType: thread.selectedAgentType)
+        guard !candidates.isEmpty else {
+            return .failure("Could not generate a name from the given description", id: request.id)
+        }
+
+        for candidate in candidates where candidate != thread.name {
+            do {
+                try await threadManager.renameThread(thread, to: candidate, markFirstPromptRenameHandled: false)
+                let settings = persistence.loadSettings()
+                let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+                // Re-fetch thread after rename
+                guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+                    return .success(id: request.id)
+                }
+                let info = IPCThreadInfo(thread: updated, projectName: projectName)
+                return IPCResponse(ok: true, id: request.id, thread: info)
+            } catch ThreadManagerError.duplicateName {
+                continue
+            } catch {
+                return .failure("Failed to rename thread: \(error.localizedDescription)", id: request.id)
+            }
+        }
+
+        return .failure("All generated name candidates are taken", id: request.id)
+    }
+
+    private func renameThreadExact(_ request: IPCRequest) async -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        guard let newName = request.newName, !newName.isEmpty else {
+            return .failure("Missing required field: name (pass via newName)", id: request.id)
+        }
+
+        do {
+            try await threadManager.renameThread(thread, to: newName, markFirstPromptRenameHandled: false)
+        } catch {
+            return .failure("Failed to rename thread: \(error.localizedDescription)", id: request.id)
+        }
+
+        let settings = persistence.loadSettings()
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            return .success(id: request.id)
+        }
+        let info = IPCThreadInfo(thread: updated, projectName: projectName)
+        return IPCResponse(ok: true, id: request.id, thread: info)
+    }
+
+    private func currentThread(_ request: IPCRequest) -> IPCResponse {
+        guard let sessionName = request.sessionName, !sessionName.isEmpty else {
+            return .failure("Missing required field: sessionName", id: request.id)
+        }
+
+        guard let thread = threadManager.threads.first(where: { $0.tmuxSessionNames.contains(sessionName) }) else {
+            return .failure("No thread found for session: \(sessionName)", id: request.id)
+        }
+
+        let settings = persistence.loadSettings()
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+        let info = IPCThreadInfo(thread: thread, projectName: projectName)
+        return IPCResponse(ok: true, id: request.id, thread: info)
     }
 
     private func closeTab(_ request: IPCRequest) async -> IPCResponse {

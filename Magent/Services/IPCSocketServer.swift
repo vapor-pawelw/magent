@@ -4,7 +4,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v3"
+    private static let cliVersion = "magent-cli-v5"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -303,19 +303,51 @@ actor IPCSocketServer {
             json="$json}"
             send_request "$json"
             ;;
+        current-thread)
+            session=$(tmux display-message -p '#{session_name}' 2>/dev/null)
+            [ -n "$session" ] || die "Not running inside a tmux session"
+            send_request "{$(json_kv command current-thread),$(json_kv sessionName "$session")}"
+            ;;
+        rename-thread)
+            thread=""; description=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread)      thread="$2"; shift 2 ;;
+                    --description) description="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] && [ -n "$description" ] || die "Usage: magent-cli rename-thread --thread <name> --description <text>"
+            send_request "{$(json_kv command rename-thread),$(json_kv threadName "$thread"),$(json_kv newName "$description")}"
+            ;;
+        rename-thread-exact)
+            thread=""; name=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    --name)   name="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] && [ -n "$name" ] || die "Usage: magent-cli rename-thread-exact --thread <name> --name <text>"
+            send_request "{$(json_kv command rename-thread-exact),$(json_kv threadName "$thread"),$(json_kv newName "$name")}"
+            ;;
         ""|help|-h|--help)
             echo "Usage: magent-cli <command> [options]"
             echo ""
             echo "Commands:"
-            echo "  create-thread   --project <name> [--agent claude|codex|custom] [--prompt <text>]"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom] [--prompt <text>]"
             echo "  list-projects"
-            echo "  list-threads    [--project <name>]"
-            echo "  send-prompt     --thread <name> --prompt <text>"
-            echo "  archive-thread  --thread <name>    (removes worktree, keeps branch)"
-            echo "  delete-thread   --thread <name>    (removes worktree and branch)"
-            echo "  list-tabs       --thread <name>"
-            echo "  create-tab      --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]"
-            echo "  close-tab       --thread <name> (--index <n> | --session <name>)"
+            echo "  list-threads         [--project <name>]"
+            echo "  send-prompt          --thread <name> --prompt <text>"
+            echo "  archive-thread       --thread <name>    (removes worktree, keeps branch)"
+            echo "  delete-thread        --thread <name>    (removes worktree and branch)"
+            echo "  list-tabs            --thread <name>"
+            echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]"
+            echo "  close-tab            --thread <name> (--index <n> | --session <name>)"
+            echo "  current-thread                                               (returns current thread info)"
+            echo "  rename-thread        --thread <name> --description <text>  (AI-generated slug)"
+            echo "  rename-thread-exact  --thread <name> --name <text>         (exact name)"
             ;;
         *)
             die "Unknown command: $cmd. Run 'magent-cli help' for usage."
