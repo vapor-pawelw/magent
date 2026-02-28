@@ -124,37 +124,41 @@ final class ThreadManager {
         project: Project,
         requestedAgentType: AgentType? = nil,
         useAgentCommand: Bool = true,
-        initialPrompt: String? = nil
+        initialPrompt: String? = nil,
+        requestedName: String? = nil
     ) async throws -> MagentThread {
-        // Generate a unique name that doesn't conflict with existing worktrees, branches, or tmux sessions.
-        // For each random base name, try the bare name first, then numeric suffixes (-2, -3, …).
-        // If all suffixes are taken, generate a new random base and repeat.
         var name = ""
         var foundUnique = false
-        for _ in 0..<5 {
-            let baseName = NameGenerator.generate()
-            let candidates = [baseName] + (2...9).map { "\(baseName)-\($0)" }
-            for candidate in candidates {
-                // Fast in-memory / filesystem checks first
-                let nameInUse = threads.contains(where: { $0.name == candidate })
-                let dirExists = FileManager.default.fileExists(
-                    atPath: "\(project.resolvedWorktreesBasePath())/\(candidate)"
-                )
-                guard !nameInUse && !dirExists else { continue }
 
-                // Expensive checks only when fast checks pass
-                let branchExists = await git.branchExists(
-                    repoPath: project.repoPath, branchName: candidate
-                )
-                let tmuxExists = await tmux.hasSession(name: "magent-\(candidate)")
-                if !branchExists && !tmuxExists {
+        if let requested = requestedName?.trimmingCharacters(in: .whitespaces), !requested.isEmpty {
+            // Use the requested name, with numeric suffix fallback for conflicts.
+            guard !requested.contains("/") else { throw ThreadManagerError.invalidName }
+            let candidates = [requested] + (2...9).map { "\(requested)-\($0)" }
+            for candidate in candidates {
+                if try await isNameAvailable(candidate, project: project) {
                     name = candidate
                     foundUnique = true
                     break
                 }
             }
-            if foundUnique { break }
+        } else {
+            // Generate a unique name that doesn't conflict with existing worktrees, branches, or tmux sessions.
+            // For each random base name, try the bare name first, then numeric suffixes (-2, -3, …).
+            // If all suffixes are taken, generate a new random base and repeat.
+            for _ in 0..<5 {
+                let baseName = NameGenerator.generate()
+                let candidates = [baseName] + (2...9).map { "\(baseName)-\($0)" }
+                for candidate in candidates {
+                    if try await isNameAvailable(candidate, project: project) {
+                        name = candidate
+                        foundUnique = true
+                        break
+                    }
+                }
+                if foundUnique { break }
+            }
         }
+
         guard foundUnique else {
             throw ThreadManagerError.nameGenerationFailed
         }

@@ -8,7 +8,7 @@ extension ThreadManager {
 
     static let ipcAgentDocs = """
     You have access to Magent IPC. Use `/tmp/magent-cli` to manage threads and tabs:
-      /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>]
+      /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>]
       /tmp/magent-cli list-projects
       /tmp/magent-cli list-threads [--project <name>]
       /tmp/magent-cli send-prompt --thread <name> --prompt <text>
@@ -337,6 +337,19 @@ extension ThreadManager {
         // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
         let innerCmd = parts.joined(separator: " && ") + " && " + command + "; exec \(shell) -l"
         return "exec \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
+    }
+
+    /// Checks if a thread name is available (no conflicts with existing threads, worktrees, branches, or tmux sessions).
+    func isNameAvailable(_ name: String, project: Project) async throws -> Bool {
+        let nameInUse = threads.contains(where: { $0.name == name })
+        let dirExists = FileManager.default.fileExists(
+            atPath: "\(project.resolvedWorktreesBasePath())/\(name)"
+        )
+        guard !nameInUse && !dirExists else { return false }
+
+        let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: name)
+        let tmuxExists = await tmux.hasSession(name: "magent-\(name)")
+        return !branchExists && !tmuxExists
     }
 
     /// Runs agent-specific post-setup (e.g. pre-trusting directories for Claude Code).

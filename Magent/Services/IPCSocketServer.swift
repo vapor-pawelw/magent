@@ -187,19 +187,23 @@ actor IPCSocketServer {
 
         case "$cmd" in
         create-thread)
-            project=""; agent=""; prompt=""
+            project=""; agent=""; prompt=""; name=""; desc=""
             while [ $# -gt 0 ]; do
                 case "$1" in
-                    --project) project="$2"; shift 2 ;;
-                    --agent)   agent="$2"; shift 2 ;;
-                    --prompt)  prompt="$2"; shift 2 ;;
+                    --project)     project="$2"; shift 2 ;;
+                    --agent)       agent="$2"; shift 2 ;;
+                    --prompt)      prompt="$2"; shift 2 ;;
+                    --name)        name="$2"; shift 2 ;;
+                    --description) desc="$2"; shift 2 ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>]"
+            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>]"
             json="{$(json_kv command create-thread),$(json_kv project "$project")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
             [ -n "$prompt" ] && json="$json,$(json_kv prompt "$prompt")"
+            [ -n "$name" ] && json="$json,$(json_kv newName "$name")"
+            [ -n "$desc" ] && json="$json,$(json_kv description "$desc")"
             json="$json}"
             send_request "$json"
             ;;
@@ -336,7 +340,7 @@ actor IPCSocketServer {
             echo "Usage: magent-cli <command> [options]"
             echo ""
             echo "Commands:"
-            echo "  create-thread        --project <name> [--agent claude|codex|custom] [--prompt <text>]"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>]"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
             echo "  send-prompt          --thread <name> --prompt <text>"

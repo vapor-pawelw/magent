@@ -88,12 +88,29 @@ final class IPCCommandHandler {
             requestedAgent = nil
         }
 
+        // Resolve requested name: --name takes precedence, --description generates a slug
+        let requestedName: String?
+        if let exactName = request.newName, !exactName.isEmpty {
+            requestedName = exactName
+        } else if let description = request.description, !description.isEmpty {
+            let resolvedAgent = requestedAgent ?? threadManager.resolveAgentType(
+                for: project.id, requestedAgentType: nil, settings: settings
+            )
+            let candidates = await threadManager.autoRenameCandidates(
+                from: description, agentType: resolvedAgent, projectId: project.id
+            )
+            requestedName = candidates.first
+        } else {
+            requestedName = nil
+        }
+
         let thread: MagentThread
         do {
             thread = try await threadManager.createThread(
                 project: project,
                 requestedAgentType: requestedAgent,
-                initialPrompt: request.prompt
+                initialPrompt: request.prompt,
+                requestedName: requestedName
             )
         } catch {
             return .failure("Failed to create thread: \(error.localizedDescription)", id: request.id)
