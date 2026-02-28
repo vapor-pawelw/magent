@@ -410,7 +410,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         separator.leadingAnchor.constraint(equalTo: c.leadingAnchor),
                         separator.trailingAnchor.constraint(equalTo: c.trailingAnchor),
                         separator.heightAnchor.constraint(equalToConstant: 1),
-                        tf.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -4),
+                        tf.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -8),
                         tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
                         tf.trailingAnchor.constraint(lessThanOrEqualTo: disclosureButton.leadingAnchor, constant: -6),
                         iv.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 6),
