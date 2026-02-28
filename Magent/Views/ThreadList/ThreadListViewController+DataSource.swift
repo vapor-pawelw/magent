@@ -329,9 +329,12 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
         if let project = item as? SidebarProject {
-            return shouldShowTopSeparator(for: project) ? 52 : 28
+            return shouldShowTopSeparator(for: project) ? 60 : 34
         }
-        return outlineView.rowHeight
+        if item is SidebarSection {
+            return 28
+        }
+        return 26
     }
 
     func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool {
@@ -366,7 +369,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         // Level 0: Project header
         if let project = item as? SidebarProject {
-            let identifier = NSUserInterfaceItemIdentifier("ProjectCell")
+            let identifier = NSUserInterfaceItemIdentifier("ProjectCellV2")
             let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
                 ?? {
                     let c = NSTableCellView()
@@ -400,12 +403,14 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     separator.wantsLayer = true
                     c.addSubview(separator)
 
+                    tf.setContentCompressionResistancePriority(.required, for: .horizontal)
+
                     NSLayoutConstraint.activate([
                         separator.topAnchor.constraint(equalTo: c.topAnchor, constant: 16),
                         separator.leadingAnchor.constraint(equalTo: c.leadingAnchor),
                         separator.trailingAnchor.constraint(equalTo: c.trailingAnchor),
                         separator.heightAnchor.constraint(equalToConstant: 1),
-                        tf.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 16),
+                        tf.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -4),
                         tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
                         tf.trailingAnchor.constraint(lessThanOrEqualTo: disclosureButton.leadingAnchor, constant: -6),
                         iv.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 6),
@@ -423,8 +428,10 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     return c
                 }()
 
-            cell.textField?.stringValue = project.name.uppercased()
-            cell.textField?.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+            cell.textField?.font = NSFont(name: "Noteworthy-Bold", size: 16)
+                ?? NSFont.systemFont(ofSize: 16, weight: .medium)
+            cell.textField?.stringValue = project.name
+            cell.textField?.invalidateIntrinsicContentSize()
             cell.textField?.textColor = NSColor(resource: .textSecondary)
             if let separator = cell.subviews.first(where: { $0.identifier == Self.projectSeparatorIdentifier }) {
                 separator.layer?.backgroundColor = NSColor(resource: .textSecondary).withAlphaComponent(0.4).cgColor

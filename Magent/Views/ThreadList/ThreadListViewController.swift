@@ -41,7 +41,7 @@ final class ThreadListViewController: NSViewController {
     static let projectDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectDisclosureButton")
     static let sectionDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("SectionDisclosureButton")
     static let sidebarHorizontalInset: CGFloat = 0
-    static let projectDisclosureTrailingInset: CGFloat = 18
+    static let projectDisclosureTrailingInset: CGFloat = 8
     static let outlineIndentationPerLevel: CGFloat = 16
     static let toolbarPlusTrailingInset: CGFloat = projectDisclosureTrailingInset
     static let disclosureButtonSize: CGFloat = 16
@@ -176,9 +176,10 @@ final class ThreadListViewController: NSViewController {
         outlineView.headerView = nil
         outlineView.floatsGroupRows = true
         outlineView.indentationPerLevel = Self.outlineIndentationPerLevel
-        outlineView.rowSizeStyle = .default
+        outlineView.rowSizeStyle = .custom
         outlineView.backgroundColor = .clear
         outlineView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        outlineView.intercellSpacing = NSSize(width: 0, height: 4)
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("ThreadColumn"))
         column.title = "Threads"
