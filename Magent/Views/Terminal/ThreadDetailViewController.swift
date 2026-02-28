@@ -282,6 +282,7 @@ final class ThreadDetailViewController: NSViewController {
     var pinnedCount = 0
     var loadingOverlay: NSView?
     var loadingPollTimer: Timer?
+    private var emptyStateView: NSView?
 
     private let pinSeparator: NSView = {
         let v = NSView()
@@ -477,8 +478,7 @@ final class ThreadDetailViewController: NSViewController {
 
             await MainActor.run {
                 let title = thread.displayName(for: sessionName, at: i)
-                let closable = orderedSessions.count > 1
-                createTabItem(title: title, closable: closable, pinned: i < pinnedCount)
+                createTabItem(title: title, closable: true, pinned: i < pinnedCount)
 
                 let terminalView = makeTerminalView(for: sessionName)
                 terminalViews.append(terminalView)
@@ -542,50 +542,49 @@ final class ThreadDetailViewController: NSViewController {
 
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let projectName = project?.name ?? "project"
+        let wd = thread.worktreePath
+        let projectPath: String
         if thread.isMain {
-            let projectPath = thread.worktreePath
-            let envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName)"
-            let startCmd: String
-            if isAgentSession, let selectedAgentType {
-                let unset = selectedAgentType == .claude ? " && unset CLAUDECODE" : ""
-                var command = settings.command(for: selectedAgentType)
-                if selectedAgentType == .claude {
-                    command += " --settings /tmp/magent-claude-hooks.json"
-                }
-                startCmd = "\(envExports) && cd \(projectPath)\(unset) && \(command); exec $SHELL -l"
-            } else {
-                startCmd = "\(envExports) && cd \(projectPath) && exec $SHELL -l"
-            }
-            if isAgentSession {
-                // Create session without a command so tmux starts a login shell that sources
-                // the user's profile (PATH, aliases, etc.), then inject the agent command via send-keys.
-                return "/bin/sh -c 'tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" && tmux send-keys -t \(sessionName) \"\(startCmd)\" Enter && tmux attach-session -t \(sessionName); }'"
-            }
-            // Force cwd on every open for terminal tabs, even if shell init changes it.
-            return "/bin/sh -c 'tmux send-keys -t \(sessionName) \"cd \(projectPath)\" Enter 2>/dev/null; tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(projectPath)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(projectPath)\" Enter && tmux attach-session -t \(sessionName); }'"
+            projectPath = wd
         } else {
-            let wd = thread.worktreePath
-            let projectPath = project?.repoPath ?? wd
-            let envExports = "export MAGENT_WORKTREE_PATH=\(wd) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(thread.name) && export MAGENT_PROJECT_NAME=\(projectName)"
-            let startCmd: String
-            if isAgentSession, let selectedAgentType {
-                let unset = selectedAgentType == .claude ? " && unset CLAUDECODE" : ""
-                var command = settings.command(for: selectedAgentType)
-                if selectedAgentType == .claude {
-                    command += " --settings /tmp/magent-claude-hooks.json"
-                }
-                startCmd = "\(envExports) && cd \(wd)\(unset) && \(command); exec $SHELL -l"
-            } else {
-                startCmd = "\(envExports) && cd \(wd) && exec $SHELL -l"
-            }
-            if isAgentSession {
-                // Create session without a command so tmux starts a login shell that sources
-                // the user's profile (PATH, aliases, etc.), then inject the agent command via send-keys.
-                return "/bin/sh -c 'tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" && tmux send-keys -t \(sessionName) \"\(startCmd)\" Enter && tmux attach-session -t \(sessionName); }'"
-            }
-            // Force cwd on every open for terminal tabs, even if shell init changes it.
-            return "/bin/sh -c 'tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter 2>/dev/null; tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter && tmux attach-session -t \(sessionName); }'"
+            projectPath = project?.repoPath ?? wd
         }
+
+        var envParts = [
+            "export MAGENT_PROJECT_PATH=\(projectPath)",
+            "export MAGENT_PROJECT_NAME=\(projectName)",
+        ]
+        if thread.isMain {
+            envParts.append("export MAGENT_WORKTREE_NAME=main")
+        } else {
+            envParts.append("export MAGENT_WORKTREE_PATH=\(wd)")
+            envParts.append("export MAGENT_WORKTREE_NAME=\(thread.name)")
+        }
+        let envExports = envParts.joined(separator: " && ")
+
+        let startCmd: String
+        if isAgentSession, let selectedAgentType {
+            let unset = selectedAgentType == .claude ? " && unset CLAUDECODE" : ""
+            var command = settings.command(for: selectedAgentType)
+            if selectedAgentType == .claude {
+                command += " --settings /tmp/magent-claude-hooks.json"
+            }
+            startCmd = "\(envExports) && cd \(wd)\(unset) && \(command); exec $SHELL -l"
+        } else {
+            startCmd = "\(envExports) && cd \(wd) && exec $SHELL -l"
+        }
+
+        if isAgentSession {
+            // When reattaching to an existing session, unset CLAUDECODE if the pane is
+            // sitting at a shell prompt (agent exited). This prevents "already running"
+            // errors when the user tries to restart the agent manually.
+            let claudeCleanup = selectedAgentType == .claude
+                ? "pane_cmd=$(tmux display-message -t \(sessionName) -p \"#{pane_current_command}\" 2>/dev/null); case \"$pane_cmd\" in *sh) tmux send-keys -t \(sessionName) \" unset CLAUDECODE\" Enter 2>/dev/null;; esac; "
+                : ""
+            return "/bin/sh -c '\(claudeCleanup)tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" && tmux send-keys -t \(sessionName) \"\(startCmd)\" Enter && tmux attach-session -t \(sessionName); }'"
+        }
+        // Force cwd on every open for terminal tabs, even if shell init changes it.
+        return "/bin/sh -c 'tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter 2>/dev/null; tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter && tmux attach-session -t \(sessionName); }'"
     }
 
     @objc private func handleDeadSessionsNotification(_ notification: Notification) {
@@ -750,6 +749,58 @@ final class ThreadDetailViewController: NSViewController {
         }
     }
 
+    func showEmptyState() {
+        guard emptyStateView == nil else { return }
+
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let icon = NSImageView()
+        icon.image = NSImage(systemSymbolName: "plus.message", accessibilityDescription: nil)
+        icon.contentTintColor = .tertiaryLabelColor
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 36, weight: .thin)
+
+        let label = NSTextField(labelWithString: "No open tabs")
+        label.font = .systemFont(ofSize: 15, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        label.alignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let hint = NSTextField(labelWithString: "Press + in the top right to add a tab")
+        hint.font = .systemFont(ofSize: 12)
+        hint.textColor = .tertiaryLabelColor
+        hint.alignment = .center
+        hint.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView(views: [icon, label, hint])
+        stack.orientation = .vertical
+        stack.spacing = 8
+        stack.alignment = .centerX
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+        ])
+
+        terminalContainer.addSubview(container)
+        NSLayoutConstraint.activate([
+            container.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
+            container.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
+            container.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
+        ])
+
+        emptyStateView = container
+    }
+
+    func hideEmptyState() {
+        emptyStateView?.removeFromSuperview()
+        emptyStateView = nil
+    }
+
     func rebindTabActions() {
         let settings = PersistenceService.shared.loadSettings()
         for (i, item) in tabItems.enumerated() {
@@ -760,7 +811,7 @@ final class ThreadDetailViewController: NSViewController {
             item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: i, targetAgent: agent) }
             item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
             item.availableAgentsForContinue = settings.availableActiveAgents
-            item.showCloseButton = tabItems.count > 1
+            item.showCloseButton = true
             item.showPinIcon = (i < pinnedCount)
         }
     }

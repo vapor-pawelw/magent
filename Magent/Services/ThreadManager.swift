@@ -570,6 +570,22 @@ final class ThreadManager {
         }
 
         let sessionName = threads[index].tmuxSessionNames[tabIndex]
+        try await removeTab(threadIndex: index, sessionName: sessionName)
+    }
+
+    func removeTab(from thread: MagentThread, sessionName: String) async throws {
+        guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+
+        guard threads[index].tmuxSessionNames.contains(sessionName) else {
+            throw ThreadManagerError.invalidTabIndex
+        }
+
+        try await removeTab(threadIndex: index, sessionName: sessionName)
+    }
+
+    private func removeTab(threadIndex index: Int, sessionName: String) async throws {
         try? await tmux.killSession(name: sessionName)
 
         // Also remove from pinned, agent, unread completion, waiting, and custom tab names if present
@@ -579,7 +595,7 @@ final class ThreadManager {
         threads[index].waitingForInputSessions.remove(sessionName)
         notifiedWaitingSessions.remove(sessionName)
         threads[index].customTabNames.removeValue(forKey: sessionName)
-        threads[index].tmuxSessionNames.remove(at: tabIndex)
+        threads[index].tmuxSessionNames.removeAll { $0 == sessionName }
         if threads[index].lastSelectedTmuxSessionName == sessionName {
             threads[index].lastSelectedTmuxSessionName = threads[index].tmuxSessionNames.first
         }

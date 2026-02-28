@@ -339,25 +339,21 @@ final class IPCCommandHandler {
         case .error(let err): return err
         }
 
-        // Resolve tab index from either explicit tabIndex or sessionName
-        let tabIndex: Int
-        if let idx = request.tabIndex {
-            tabIndex = idx
-        } else if let sessionName = request.sessionName {
-            guard let idx = thread.tmuxSessionNames.firstIndex(of: sessionName) else {
-                return .failure("Session not found: \(sessionName)", id: request.id)
-            }
-            tabIndex = idx
-        } else {
-            return .failure("Missing required field: tabIndex or sessionName", id: request.id)
-        }
-
         guard thread.tmuxSessionNames.count > 1 else {
             return .failure("Cannot close the last tab — use archive-thread or delete-thread instead", id: request.id)
         }
 
         do {
-            try await threadManager.removeTab(from: thread, at: tabIndex)
+            if let sessionName = request.sessionName {
+                guard thread.tmuxSessionNames.contains(sessionName) else {
+                    return .failure("Session not found: \(sessionName)", id: request.id)
+                }
+                try await threadManager.removeTab(from: thread, sessionName: sessionName)
+            } else if let tabIndex = request.tabIndex {
+                try await threadManager.removeTab(from: thread, at: tabIndex)
+            } else {
+                return .failure("Missing required field: tabIndex or sessionName", id: request.id)
+            }
         } catch {
             return .failure("Failed to close tab: \(error.localizedDescription)", id: request.id)
         }

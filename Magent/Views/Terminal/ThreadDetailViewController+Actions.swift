@@ -116,6 +116,7 @@ extension ThreadDetailViewController {
                     thread: latestThread
                 )
                 await MainActor.run {
+                    self.hideEmptyState()
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated
                     }
@@ -306,8 +307,6 @@ extension ThreadDetailViewController {
     }
 
     func closeTab(at index: Int) {
-        // Cannot close the last remaining tab
-        guard thread.tmuxSessionNames.count > 1 else { return }
         guard index < thread.tmuxSessionNames.count else { return }
 
         let sessionName = thread.tmuxSessionNames[index]
@@ -324,12 +323,7 @@ extension ThreadDetailViewController {
 
         Task {
             do {
-                // Find the index by session name in the manager's model (may differ from local index)
-                guard let managerThread = self.threadManager.threads.first(where: { $0.id == self.thread.id }),
-                      let managerIndex = managerThread.tmuxSessionNames.firstIndex(of: sessionName) else {
-                    throw ThreadManagerError.invalidTabIndex
-                }
-                try await threadManager.removeTab(from: thread, at: managerIndex)
+                try await threadManager.removeTab(from: thread, sessionName: sessionName)
                 await MainActor.run {
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated
@@ -354,8 +348,10 @@ extension ThreadDetailViewController {
                     self.rebindTabActions()
                     self.rebuildTabBar()
 
-                    let newIndex = min(index, self.tabItems.count - 1)
-                    if newIndex >= 0 {
+                    if self.tabItems.isEmpty {
+                        self.showEmptyState()
+                    } else {
+                        let newIndex = min(index, self.tabItems.count - 1)
                         self.selectTab(at: newIndex)
                     }
                 }
