@@ -407,11 +407,12 @@ final class ThreadDetailViewController: NSViewController {
         addTabButton.target = self
         addTabButton.action = #selector(addTabTapped)
 
-        let separator = NSBox()
-        separator.boxType = .separator
+        let separator = VerticalSeparatorView()
         separator.translatesAutoresizingMaskIntoConstraints = false
-        separator.widthAnchor.constraint(equalToConstant: 1).isActive = true
-        separator.heightAnchor.constraint(equalToConstant: 16).isActive = true
+        separator.setContentHuggingPriority(.required, for: .horizontal)
+        separator.setContentCompressionResistancePriority(.required, for: .horizontal)
+        separator.setContentHuggingPriority(.required, for: .vertical)
+        separator.setContentCompressionResistancePriority(.required, for: .vertical)
 
         let topBar = NSStackView(views: [tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, exportContextButton, separator, archiveThreadButton, addTabButton])
         topBar.orientation = .horizontal
@@ -920,4 +921,12 @@ final class ThreadDetailViewController: NSViewController {
         threadManager.updatePinnedTabs(for: thread.id, pinnedSessions: pinnedSessions)
     }
 
+}
+
+private final class VerticalSeparatorView: NSView {
+    override var intrinsicContentSize: NSSize { NSSize(width: 1, height: 18) }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.tertiaryLabelColor.setFill()
+        bounds.fill()
+    }
 }

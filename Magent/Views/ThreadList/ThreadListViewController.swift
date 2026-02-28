@@ -509,7 +509,7 @@ final class ThreadListViewController: NSViewController {
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
         button.title = ""
         button.image = NSImage(
-            systemSymbolName: isExpanded ? "chevron.down" : "chevron.up",
+            systemSymbolName: isExpanded ? "chevron.up" : "chevron.down",
             accessibilityDescription: isExpanded ? "Collapse section" : "Expand section"
         )?.withSymbolConfiguration(symbolConfig)
         button.imageScaling = .scaleNone
@@ -521,7 +521,7 @@ final class ThreadListViewController: NSViewController {
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
         button.title = ""
         button.image = NSImage(
-            systemSymbolName: isExpanded ? "chevron.down" : "chevron.up",
+            systemSymbolName: isExpanded ? "chevron.up" : "chevron.down",
             accessibilityDescription: isExpanded ? "Collapse project" : "Expand project"
         )?.withSymbolConfiguration(symbolConfig)
         button.imageScaling = .scaleNone

@@ -407,8 +407,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
                     NSLayoutConstraint.activate([
                         separator.topAnchor.constraint(equalTo: c.topAnchor, constant: 16),
-                        separator.leadingAnchor.constraint(equalTo: c.leadingAnchor),
-                        separator.trailingAnchor.constraint(equalTo: c.trailingAnchor),
+                        separator.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: -Self.outlineIndentationPerLevel + 12),
+                        separator.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
                         separator.heightAnchor.constraint(equalToConstant: 1),
                         tf.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -8),
                         tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
@@ -434,7 +434,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.textField?.invalidateIntrinsicContentSize()
             cell.textField?.textColor = NSColor(resource: .textSecondary)
             if let separator = cell.subviews.first(where: { $0.identifier == Self.projectSeparatorIdentifier }) {
-                separator.layer?.backgroundColor = NSColor(resource: .textSecondary).withAlphaComponent(0.4).cgColor
+                separator.layer?.backgroundColor = NSColor.tertiaryLabelColor.cgColor
                 separator.isHidden = !shouldShowTopSeparator(for: project)
             }
             if let disclosureButton = cell.subviews.first(where: { $0.identifier == Self.projectDisclosureButtonIdentifier }) as? NSButton {
