@@ -400,6 +400,12 @@ final class IPCCommandHandler {
 
     // MARK: - Section Commands
 
+    private func notifySectionsDidChange() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+        }
+    }
+
     /// Resolves the project for section operations. Returns nil (with no error) when --project is omitted (global mode).
     private func resolveProjectForSection(_ request: IPCRequest, settings: AppSettings) -> (project: Project?, error: IPCResponse?) {
         guard let projectName = request.project else {
@@ -504,6 +510,7 @@ final class IPCCommandHandler {
             sections.append(newSection)
             settings.projects[projectIndex].threadSections = sections
             try? persistence.saveSettings(settings)
+            notifySectionsDidChange()
             return IPCResponse(ok: true, id: request.id, section: IPCSectionInfo(section: newSection, isProjectOverride: true))
         } else {
             // Global: add to global sections
@@ -514,6 +521,7 @@ final class IPCCommandHandler {
             let newSection = ThreadSection(name: sectionName, colorHex: colorHex, sortOrder: maxOrder + 1)
             settings.threadSections.append(newSection)
             try? persistence.saveSettings(settings)
+            notifySectionsDidChange()
             return IPCResponse(ok: true, id: request.id, section: IPCSectionInfo(section: newSection, isProjectOverride: false))
         }
     }
@@ -541,6 +549,7 @@ final class IPCCommandHandler {
             sections.remove(at: sectionIndex)
             settings.projects[projectIndex].threadSections = sections.isEmpty ? nil : sections
             try? persistence.saveSettings(settings)
+            notifySectionsDidChange()
             return .success(id: request.id)
         } else {
             // Global: validate across all projects
@@ -554,6 +563,7 @@ final class IPCCommandHandler {
             }
             settings.threadSections.remove(at: sectionIndex)
             try? persistence.saveSettings(settings)
+            notifySectionsDidChange()
             return .success(id: request.id)
         }
     }
@@ -593,6 +603,7 @@ final class IPCCommandHandler {
             try? persistence.saveSettings(settings)
         }
 
+        notifySectionsDidChange()
         return .success(id: request.id)
     }
 
@@ -621,6 +632,7 @@ final class IPCCommandHandler {
             if let color = request.sectionColor { sections[sectionIndex].colorHex = color }
             settings.projects[projectIndex].threadSections = sections
             try? persistence.saveSettings(settings)
+            notifySectionsDidChange()
             return IPCResponse(ok: true, id: request.id, section: IPCSectionInfo(section: sections[sectionIndex], isProjectOverride: true))
         } else {
             guard let sectionIndex = settings.threadSections.firstIndex(where: { $0.name.caseInsensitiveCompare(sectionName) == .orderedSame }) else {
@@ -632,6 +644,7 @@ final class IPCCommandHandler {
             settings.threadSections[sectionIndex].name = newName
             if let color = request.sectionColor { settings.threadSections[sectionIndex].colorHex = color }
             try? persistence.saveSettings(settings)
+            notifySectionsDidChange()
             return IPCResponse(ok: true, id: request.id, section: IPCSectionInfo(section: settings.threadSections[sectionIndex], isProjectOverride: false))
         }
     }
@@ -672,6 +685,7 @@ final class IPCCommandHandler {
             try? persistence.saveSettings(settings)
         }
 
+        notifySectionsDidChange()
         return .success(id: request.id)
     }
 
@@ -701,6 +715,7 @@ final class IPCCommandHandler {
             try? persistence.saveSettings(settings)
         }
 
+        notifySectionsDidChange()
         return .success(id: request.id)
     }
 

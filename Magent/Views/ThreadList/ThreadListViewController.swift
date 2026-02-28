@@ -242,13 +242,9 @@ final class ThreadListViewController: NSViewController {
         }()
 
         let settings = persistence.loadSettings()
-        let visibleSections = settings.visibleSections
         let allThreads = threadManager.threads
         let mainThreads = allThreads.filter { $0.isMain }
         let regularThreads = allThreads.filter { !$0.isMain }
-
-        let knownSectionIds = Set(settings.threadSections.map(\.id))
-        let defaultSectionId = settings.defaultSection?.id
 
         let sortedValidProjects = settings.projects.filter(\.isValid).sorted { a, b in
             if a.isPinned != b.isPinned { return a.isPinned }
@@ -276,15 +272,19 @@ final class ThreadListViewController: NSViewController {
             let projectMainThreads = mainThreads.filter { $0.projectId == project.id }
             children.append(contentsOf: projectMainThreads)
 
-            // Section groups with regular threads
-            for section in visibleSections {
+            // Section groups with regular threads (per-project or global fallback)
+            let projectSections = settings.visibleSections(for: project.id)
+            let projectKnownSectionIds = Set(settings.sections(for: project.id).map(\.id))
+            let projectDefaultSectionId = projectSections.first?.id
+
+            for section in projectSections {
                 let matchingThreads = regularThreads.filter { thread in
                     guard thread.projectId == project.id else { return false }
                     let effectiveSectionId: UUID?
-                    if let sid = thread.sectionId, knownSectionIds.contains(sid) {
+                    if let sid = thread.sectionId, projectKnownSectionIds.contains(sid) {
                         effectiveSectionId = sid
                     } else {
-                        effectiveSectionId = defaultSectionId
+                        effectiveSectionId = projectDefaultSectionId
                     }
                     return effectiveSectionId == section.id
                 }
