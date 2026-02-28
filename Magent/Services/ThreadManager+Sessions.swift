@@ -598,21 +598,18 @@ extension ThreadManager {
                 let titleIndicatesBusy = paneTitleIndicatesBusy(paneState.title)
                 if isShell {
                     if titleIndicatesBusy && !threads[i].waitingForInputSessions.contains(session) {
-                        // The ✳ prefix persists in the pane title even when the agent is
-                        // idle at its prompt, so it can produce false-positive busy states.
-                        // When the title uses ✳ (not the animated braille spinner), verify
-                        // via pane content that the agent isn't just sitting at an empty prompt.
-                        if paneTitleHasStaticBusyPrefix(paneState.title) {
-                            if let content = await tmux.capturePane(sessionName: session),
-                               isAgentIdleAtPrompt(content) {
-                                // Agent is idle — clear any stale busy state
-                                if threads[i].busySessions.contains(session) {
-                                    threads[i].busySessions.remove(session)
-                                    changed = true
-                                    changedThreadIds.insert(threads[i].id)
-                                }
-                                continue
+                        // Both ✳ and braille spinner characters can persist in the pane
+                        // title after the agent finishes. Always verify via pane content
+                        // that the agent isn't just sitting at an empty prompt.
+                        if let content = await tmux.capturePane(sessionName: session),
+                           isAgentIdleAtPrompt(content) {
+                            // Agent is idle — clear any stale busy state
+                            if threads[i].busySessions.contains(session) {
+                                threads[i].busySessions.remove(session)
+                                changed = true
+                                changedThreadIds.insert(threads[i].id)
                             }
+                            continue
                         }
                         if !threads[i].busySessions.contains(session) {
                             threads[i].busySessions.insert(session)
@@ -674,15 +671,6 @@ extension ThreadManager {
         // ✳ (U+2733 eight-spoked asterisk) — alternate busy prefix used by Claude Code.
         if v == 0x2733 { return true }
         return false
-    }
-
-    /// Returns true when the pane title uses the static ✳ prefix (as opposed to the
-    /// animated braille spinner). The ✳ can persist even when the agent is idle,
-    /// so callers must verify via pane content before treating it as busy.
-    private func paneTitleHasStaticBusyPrefix(_ title: String) -> Bool {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let scalar = trimmed.unicodeScalars.first else { return false }
-        return scalar.value == 0x2733 // ✳
     }
 
     /// Checks whether the agent appears to be idle at its input prompt by looking
