@@ -101,6 +101,20 @@ nonisolated struct AppSettings: Codable, Sendable {
         visibleSections.first
     }
 
+    /// Returns sections for a specific project — project override if set, otherwise global.
+    func sections(for projectId: UUID) -> [ThreadSection] {
+        if let project = projects.first(where: { $0.id == projectId }),
+           let override = project.threadSections {
+            return override
+        }
+        return threadSections
+    }
+
+    /// Returns visible sections for a specific project, sorted by sortOrder.
+    func visibleSections(for projectId: UUID) -> [ThreadSection] {
+        sections(for: projectId).filter(\.isVisible).sorted { $0.sortOrder < $1.sortOrder }
+    }
+
     var availableActiveAgents: [AgentType] {
         var seen = Set<AgentType>()
         return activeAgents.filter { seen.insert($0).inserted }

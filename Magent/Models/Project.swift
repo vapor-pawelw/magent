@@ -11,6 +11,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
     var agentContextInjection: String?
     var autoRenameSlugPrompt: String?
     var isPinned: Bool
+    var threadSections: [ThreadSection]?
 
     init(
         id: UUID = UUID(),
@@ -22,7 +23,8 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         terminalInjectionCommand: String? = nil,
         agentContextInjection: String? = nil,
         autoRenameSlugPrompt: String? = nil,
-        isPinned: Bool = false
+        isPinned: Bool = false,
+        threadSections: [ThreadSection]? = nil
     ) {
         self.id = id
         self.name = name
@@ -34,6 +36,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         self.agentContextInjection = agentContextInjection
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.isPinned = isPinned
+        self.threadSections = threadSections
     }
 
     init(from decoder: Decoder) throws {
@@ -48,6 +51,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         agentContextInjection = try container.decodeIfPresent(String.self, forKey: .agentContextInjection)
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt)
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections)
     }
 
     /// Resolves template variables in `worktreesBasePath` (e.g. `$MAGENT_PROJECT_NAME`).

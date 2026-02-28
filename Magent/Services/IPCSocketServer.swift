@@ -4,7 +4,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v6"
+    private static let cliVersion = "magent-cli-v7"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -336,10 +336,130 @@ actor IPCSocketServer {
             [ -n "$thread" ] && [ -n "$name" ] || die "Usage: magent-cli rename-thread-exact --thread <name> --name <text>"
             send_request "{$(json_kv command rename-thread-exact),$(json_kv threadName "$thread"),$(json_kv newName "$name")}"
             ;;
+        thread-info)
+            thread=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli thread-info --thread <name>"
+            send_request "{$(json_kv command thread-info),$(json_kv threadName "$thread")}"
+            ;;
+        list-sections)
+            project=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --project) project="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            json="{$(json_kv command list-sections)"
+            [ -n "$project" ] && json="$json,$(json_kv project "$project")"
+            json="$json}"
+            send_request "$json"
+            ;;
+        add-section)
+            section_name=""; color=""; project=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --name)    section_name="$2"; shift 2 ;;
+                    --color)   color="$2"; shift 2 ;;
+                    --project) project="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$section_name" ] || die "Usage: magent-cli add-section --name <name> [--color <hex>] [--project <name>]"
+            json="{$(json_kv command add-section),$(json_kv sectionName "$section_name")"
+            [ -n "$color" ] && json="$json,$(json_kv sectionColor "$color")"
+            [ -n "$project" ] && json="$json,$(json_kv project "$project")"
+            json="$json}"
+            send_request "$json"
+            ;;
+        remove-section)
+            section_name=""; project=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --name)    section_name="$2"; shift 2 ;;
+                    --project) project="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$section_name" ] || die "Usage: magent-cli remove-section --name <name> [--project <name>]"
+            json="{$(json_kv command remove-section),$(json_kv sectionName "$section_name")"
+            [ -n "$project" ] && json="$json,$(json_kv project "$project")"
+            json="$json}"
+            send_request "$json"
+            ;;
+        reorder-section)
+            section_name=""; position=""; project=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --name)     section_name="$2"; shift 2 ;;
+                    --position) position="$2"; shift 2 ;;
+                    --project)  project="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$section_name" ] && [ -n "$position" ] || die "Usage: magent-cli reorder-section --name <name> --position <n> [--project <name>]"
+            json="{$(json_kv command reorder-section),$(json_kv sectionName "$section_name"),\\"position\\":$position"
+            [ -n "$project" ] && json="$json,$(json_kv project "$project")"
+            json="$json}"
+            send_request "$json"
+            ;;
+        rename-section)
+            section_name=""; new_name=""; color=""; project=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --name)     section_name="$2"; shift 2 ;;
+                    --new-name) new_name="$2"; shift 2 ;;
+                    --color)    color="$2"; shift 2 ;;
+                    --project)  project="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$section_name" ] && [ -n "$new_name" ] || die "Usage: magent-cli rename-section --name <name> --new-name <text> [--color <hex>] [--project <name>]"
+            json="{$(json_kv command rename-section),$(json_kv sectionName "$section_name"),$(json_kv newName "$new_name")"
+            [ -n "$color" ] && json="$json,$(json_kv sectionColor "$color")"
+            [ -n "$project" ] && json="$json,$(json_kv project "$project")"
+            json="$json}"
+            send_request "$json"
+            ;;
+        hide-section)
+            section_name=""; project=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --name)    section_name="$2"; shift 2 ;;
+                    --project) project="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$section_name" ] || die "Usage: magent-cli hide-section --name <name> [--project <name>]"
+            json="{$(json_kv command hide-section),$(json_kv sectionName "$section_name")"
+            [ -n "$project" ] && json="$json,$(json_kv project "$project")"
+            json="$json}"
+            send_request "$json"
+            ;;
+        show-section)
+            section_name=""; project=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --name)    section_name="$2"; shift 2 ;;
+                    --project) project="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$section_name" ] || die "Usage: magent-cli show-section --name <name> [--project <name>]"
+            json="{$(json_kv command show-section),$(json_kv sectionName "$section_name")"
+            [ -n "$project" ] && json="$json,$(json_kv project "$project")"
+            json="$json}"
+            send_request "$json"
+            ;;
         ""|help|-h|--help)
             echo "Usage: magent-cli <command> [options]"
             echo ""
-            echo "Commands:"
+            echo "Thread commands:"
             echo "  create-thread        --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>]"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
@@ -352,6 +472,16 @@ actor IPCSocketServer {
             echo "  current-thread                                               (returns current thread info)"
             echo "  rename-thread        --thread <name> --description <text>  (AI-generated slug)"
             echo "  rename-thread-exact  --thread <name> --name <text>         (exact name)"
+            echo "  thread-info          --thread <name>                       (full thread details)"
+            echo ""
+            echo "Section commands:"
+            echo "  list-sections        [--project <name>]"
+            echo "  add-section          --name <name> [--color <hex>] [--project <name>]"
+            echo "  remove-section       --name <name> [--project <name>]"
+            echo "  reorder-section      --name <name> --position <n> [--project <name>]"
+            echo "  rename-section       --name <name> --new-name <text> [--color <hex>] [--project <name>]"
+            echo "  hide-section         --name <name> [--project <name>]"
+            echo "  show-section         --name <name> [--project <name>]"
             ;;
         *)
             die "Unknown command: $cmd. Run 'magent-cli help' for usage."

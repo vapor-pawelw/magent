@@ -20,10 +20,19 @@ extension ThreadManager {
       /tmp/magent-cli current-thread
       /tmp/magent-cli rename-thread --thread <name> --description <text>
       /tmp/magent-cli rename-thread-exact --thread <name> --name <text>
+      /tmp/magent-cli thread-info --thread <name>
+      /tmp/magent-cli list-sections [--project <name>]
+      /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
+      /tmp/magent-cli remove-section --name <name> [--project <name>]
+      /tmp/magent-cli reorder-section --name <name> --position <n> [--project <name>]
+      /tmp/magent-cli rename-section --name <name> --new-name <text> [--color <hex>] [--project <name>]
+      /tmp/magent-cli hide-section --name <name> [--project <name>]
+      /tmp/magent-cli show-section --name <name> [--project <name>]
     Use current-thread to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
     When creating threads, use --description to name them upfront (AI generates a slug respecting project naming rules). Only use --name when the user explicitly provides a literal name. Omit both for a random name.
     Use rename-thread by default (generates a slug from the description). Only use rename-thread-exact when the user specifies an exact name.
     rename-thread-exact is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use rename-thread with that description instead.
+    Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
     """
 
     // MARK: - Injection
@@ -241,7 +250,7 @@ extension ThreadManager {
 
     private static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     private static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    private static let codexIPCVersion = "<!-- magent-ipc-v5 -->"
+    private static let codexIPCVersion = "<!-- magent-ipc-v6 -->"
 
     private static let codexIPCBlock = """
     \(codexIPCMarkerStart)
@@ -264,6 +273,14 @@ extension ThreadManager {
     /tmp/magent-cli current-thread
     /tmp/magent-cli rename-thread --thread <name> --description <text>
     /tmp/magent-cli rename-thread-exact --thread <name> --name <text>
+    /tmp/magent-cli thread-info --thread <name>
+    /tmp/magent-cli list-sections [--project <name>]
+    /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
+    /tmp/magent-cli remove-section --name <name> [--project <name>]
+    /tmp/magent-cli reorder-section --name <name> --position <n> [--project <name>]
+    /tmp/magent-cli rename-section --name <name> --new-name <text> [--color <hex>] [--project <name>]
+    /tmp/magent-cli hide-section --name <name> [--project <name>]
+    /tmp/magent-cli show-section --name <name> [--project <name>]
     ```
 
     Use `current-thread` to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
@@ -271,6 +288,7 @@ extension ThreadManager {
     Use `rename-thread` by default (generates a slug from the description).
     Only use `rename-thread-exact` when the user specifies an exact name.
     `rename-thread-exact` is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use `rename-thread` with that description instead.
+    Section commands without `--project` operate on global sections. With `--project`, they operate on project-specific overrides.
     \(codexIPCMarkerEnd)
     """
 

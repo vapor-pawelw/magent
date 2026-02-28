@@ -29,6 +29,15 @@ nonisolated struct ThreadSection: Codable, Identifiable, Hashable, Sendable {
         NSColor(hex: colorHex) ?? .systemGray
     }
 
+    static let colorPalette: [String] = [
+        "#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#007AFF",
+        "#5856D6", "#AF52DE", "#FF2D55", "#A2845E", "#00C7BE",
+    ]
+
+    static func randomColorHex() -> String {
+        colorPalette.randomElement() ?? "#007AFF"
+    }
+
     static func defaults() -> [ThreadSection] {
         [
             ThreadSection(name: "TODO", colorHex: "#007AFF", sortOrder: 0, isDefault: true),
