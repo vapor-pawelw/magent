@@ -265,7 +265,7 @@ final class IPCCommandHandler {
             return .failure("Missing required field: description (pass via newName)", id: request.id)
         }
 
-        let candidates = await threadManager.autoRenameCandidates(from: description, agentType: thread.selectedAgentType)
+        let candidates = await threadManager.autoRenameCandidates(from: description, agentType: thread.selectedAgentType, projectId: thread.projectId)
         guard !candidates.isEmpty else {
             return .failure("Could not generate a name from the given description", id: request.id)
         }

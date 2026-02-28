@@ -92,11 +92,16 @@ extension ThreadManager {
     /// the prompt is a plain question rather than an actionable task.
     private static let slugQuestionSentinel = ""
 
-    private func generateSlugViaAgent(from prompt: String, agentType: AgentType?) async -> String? {
+    private func generateSlugViaAgent(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> String? {
         let truncated = String(prompt.prefix(500))
-        let customInstruction = persistence.loadSettings().autoRenameSlugPrompt
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let instruction = customInstruction.isEmpty ? AppSettings.defaultSlugPrompt : customInstruction
+        let settings = persistence.loadSettings()
+        let projectSlug = projectId.flatMap { pid in
+            settings.projects.first(where: { $0.id == pid })?.autoRenameSlugPrompt
+        }?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let globalSlug = settings.autoRenameSlugPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let customInstruction = (projectSlug?.isEmpty == false ? projectSlug : nil)
+            ?? (globalSlug.isEmpty ? nil : globalSlug)
+        let instruction = customInstruction ?? AppSettings.defaultSlugPrompt
         let aiPrompt = """
             \(instruction) \
             Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
@@ -140,8 +145,8 @@ extension ThreadManager {
         return sanitizeSlug(raw)
     }
 
-    func autoRenameCandidates(from prompt: String, agentType: AgentType?) async -> [String] {
-        if let slug = await generateSlugViaAgent(from: prompt, agentType: agentType) {
+    func autoRenameCandidates(from prompt: String, agentType: AgentType?, projectId: UUID? = nil) async -> [String] {
+        if let slug = await generateSlugViaAgent(from: prompt, agentType: agentType, projectId: projectId) {
             // Agent signalled "question, not a task" → skip rename entirely (no fallback)
             guard slug != Self.slugQuestionSentinel else { return [] }
             var candidates = [slug]
@@ -275,7 +280,7 @@ extension ThreadManager {
         guard thread.agentTmuxSessions.contains(sessionName) else { return }
         guard !autoRenameInProgress.contains(thread.id) else { return }
 
-        let candidates = await autoRenameCandidates(from: prompt, agentType: thread.selectedAgentType)
+        let candidates = await autoRenameCandidates(from: prompt, agentType: thread.selectedAgentType, projectId: thread.projectId)
         guard !candidates.isEmpty else { return }
 
         autoRenameInProgress.insert(thread.id)

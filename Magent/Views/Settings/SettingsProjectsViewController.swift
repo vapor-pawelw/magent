@@ -18,6 +18,9 @@ final class SettingsProjectsViewController: NSViewController {
     private var agentTypePopup: NSPopUpButton!
     private var terminalInjectionTextView: NSTextView!
     private var agentContextTextView: NSTextView!
+    private var slugPromptCheckbox: NSButton!
+    private var slugPromptTextView: NSTextView!
+    private var slugPromptContainer: NSView!
 
     private var selectedProjectIndex: Int? {
         let row = projectTableView.selectedRow
@@ -310,6 +313,67 @@ final class SettingsProjectsViewController: NSViewController {
         agentTypePopup.action = #selector(agentTypeOverrideChanged)
         stack.addArrangedSubview(agentTypePopup)
 
+        // Slug Prompt Override
+        let slugPromptHeader = NSTextField(labelWithString: "Slug Prompt")
+        slugPromptHeader.font = .systemFont(ofSize: 12, weight: .semibold)
+        stack.addArrangedSubview(slugPromptHeader)
+
+        let hasCustomSlug = project.autoRenameSlugPrompt != nil
+        slugPromptCheckbox = NSButton(
+            checkboxWithTitle: "Use custom slug prompt for this project",
+            target: self,
+            action: #selector(slugPromptCheckboxToggled)
+        )
+        slugPromptCheckbox.state = hasCustomSlug ? .on : .off
+        stack.addArrangedSubview(slugPromptCheckbox)
+
+        let slugPromptWrapper = NSStackView()
+        slugPromptWrapper.orientation = .vertical
+        slugPromptWrapper.alignment = .leading
+        slugPromptWrapper.spacing = 4
+
+        slugPromptTextView = NSTextView()
+        slugPromptTextView.font = .systemFont(ofSize: 13)
+        slugPromptTextView.string = project.autoRenameSlugPrompt ?? settings.autoRenameSlugPrompt
+        slugPromptTextView.isRichText = false
+        slugPromptTextView.isAutomaticQuoteSubstitutionEnabled = false
+        slugPromptTextView.isAutomaticDashSubstitutionEnabled = false
+        slugPromptTextView.isAutomaticTextReplacementEnabled = false
+        slugPromptTextView.delegate = self
+        slugPromptTextView.isVerticallyResizable = true
+        slugPromptTextView.isHorizontallyResizable = false
+        slugPromptTextView.textContainerInset = NSSize(width: 4, height: 4)
+        slugPromptTextView.isEditable = hasCustomSlug
+
+        let slugScrollView = NSScrollView()
+        slugScrollView.documentView = slugPromptTextView
+        slugScrollView.hasVerticalScroller = true
+        slugScrollView.autohidesScrollers = true
+        slugScrollView.borderType = .bezelBorder
+        slugScrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        let slugLineHeight = NSFont.systemFont(ofSize: 13).ascender + abs(NSFont.systemFont(ofSize: 13).descender) + NSFont.systemFont(ofSize: 13).leading
+        let slugHeight = max(slugLineHeight * 3 + 12, 56)
+        NSLayoutConstraint.activate([
+            slugScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: slugHeight),
+        ])
+
+        slugPromptWrapper.addArrangedSubview(slugScrollView)
+
+        let resetSlugButton = NSButton(title: "Reset to Global", target: self, action: #selector(resetSlugPromptToGlobal))
+        resetSlugButton.bezelStyle = .rounded
+        resetSlugButton.controlSize = .small
+        slugPromptWrapper.addArrangedSubview(resetSlugButton)
+
+        slugPromptWrapper.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(slugPromptWrapper)
+
+        slugPromptTextView.autoresizingMask = [.width]
+        slugPromptTextView.textContainer?.widthTracksTextView = true
+
+        slugPromptContainer = slugPromptWrapper
+        slugPromptContainer.isHidden = !hasCustomSlug
+
         // Terminal Injection Override
         let globalTerminal = settings.terminalInjectionCommand
         let terminalDesc = globalTerminal.isEmpty
@@ -357,6 +421,8 @@ final class SettingsProjectsViewController: NSViewController {
             defaultBranchField.widthAnchor.constraint(equalTo: stack.widthAnchor),
             overrideSep.widthAnchor.constraint(equalTo: stack.widthAnchor),
             overrideDesc.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            slugPromptWrapper.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            slugScrollView.widthAnchor.constraint(equalTo: slugPromptWrapper.widthAnchor),
         ])
     }
 
@@ -507,6 +573,32 @@ final class SettingsProjectsViewController: NSViewController {
         try? persistence.saveSettings(settings)
     }
 
+    @objc private func slugPromptCheckboxToggled() {
+        guard let index = selectedProjectIndex else { return }
+        let enabled = slugPromptCheckbox.state == .on
+        if enabled {
+            // Initialize with global slug prompt
+            let globalPrompt = settings.autoRenameSlugPrompt
+            settings.projects[index].autoRenameSlugPrompt = globalPrompt
+            slugPromptTextView.string = globalPrompt
+            slugPromptTextView.isEditable = true
+        } else {
+            settings.projects[index].autoRenameSlugPrompt = nil
+            slugPromptTextView.string = settings.autoRenameSlugPrompt
+            slugPromptTextView.isEditable = false
+        }
+        slugPromptContainer.isHidden = !enabled
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func resetSlugPromptToGlobal() {
+        guard let index = selectedProjectIndex else { return }
+        let globalPrompt = settings.autoRenameSlugPrompt
+        slugPromptTextView.string = globalPrompt
+        settings.projects[index].autoRenameSlugPrompt = globalPrompt
+        try? persistence.saveSettings(settings)
+    }
+
     @objc private func browseRepoPath() {
         guard let index = selectedProjectIndex else { return }
         let panel = NSOpenPanel()
@@ -612,6 +704,8 @@ extension SettingsProjectsViewController: NSTextViewDelegate {
         } else if textView === agentContextTextView {
             let value = textView.string
             settings.projects[index].agentContextInjection = value.isEmpty ? nil : value
+        } else if textView === slugPromptTextView {
+            settings.projects[index].autoRenameSlugPrompt = textView.string
         }
 
         try? persistence.saveSettings(settings)

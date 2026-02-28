@@ -9,6 +9,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
     var agentType: AgentType?
     var terminalInjectionCommand: String?
     var agentContextInjection: String?
+    var autoRenameSlugPrompt: String?
     var isPinned: Bool
 
     init(
@@ -20,6 +21,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         agentType: AgentType? = nil,
         terminalInjectionCommand: String? = nil,
         agentContextInjection: String? = nil,
+        autoRenameSlugPrompt: String? = nil,
         isPinned: Bool = false
     ) {
         self.id = id
@@ -30,6 +32,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         self.agentType = agentType
         self.terminalInjectionCommand = terminalInjectionCommand
         self.agentContextInjection = agentContextInjection
+        self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.isPinned = isPinned
     }
 
@@ -43,6 +46,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         agentType = try container.decodeIfPresent(AgentType.self, forKey: .agentType)
         terminalInjectionCommand = try container.decodeIfPresent(String.self, forKey: .terminalInjectionCommand)
         agentContextInjection = try container.decodeIfPresent(String.self, forKey: .agentContextInjection)
+        autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt)
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
     }
 

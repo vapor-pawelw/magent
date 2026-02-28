@@ -6,7 +6,6 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     private var settings: AppSettings!
     private var autoRenameCheckbox: NSButton!
     private var slugPromptTextView: NSTextView!
-    private var slugPromptContainer: NSView!
     private var terminalInjectionTextView: NSTextView!
     private var agentContextTextView: NSTextView!
     private var contentScrollView: NSScrollView!
@@ -66,7 +65,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         autoRenameDesc.textColor = NSColor(resource: .textSecondary)
         worktreeSection.addArrangedSubview(autoRenameDesc)
 
-        // Slug prompt customization (shown when auto-rename is enabled)
+        // Slug prompt customization (always visible)
         let slugPromptWrapper = NSStackView()
         slugPromptWrapper.orientation = .vertical
         slugPromptWrapper.alignment = .leading
@@ -77,7 +76,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         slugPromptWrapper.addArrangedSubview(slugPromptLabel)
 
         let slugPromptDesc = NSTextField(
-            wrappingLabelWithString: "Customize the instruction used to generate the branch slug. The SLUG:/EMPTY output format and task text are appended automatically."
+            wrappingLabelWithString: "Instruction used to generate branch slugs — for auto-rename on first prompt, rename via agent, or CLI rename-thread command."
         )
         slugPromptDesc.font = .systemFont(ofSize: 11)
         slugPromptDesc.textColor = NSColor(resource: .textSecondary)
@@ -110,14 +109,17 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         ])
 
         slugPromptWrapper.addArrangedSubview(slugPromptScrollView)
+
+        let resetSlugButton = NSButton(title: "Reset to Default", target: self, action: #selector(resetSlugPromptToDefault))
+        resetSlugButton.bezelStyle = .rounded
+        resetSlugButton.controlSize = .small
+        slugPromptWrapper.addArrangedSubview(resetSlugButton)
+
         slugPromptWrapper.translatesAutoresizingMaskIntoConstraints = false
         worktreeSection.addArrangedSubview(slugPromptWrapper)
 
         slugPromptTextView.autoresizingMask = [.width]
         slugPromptTextView.textContainer?.widthTracksTextView = true
-
-        slugPromptContainer = slugPromptWrapper
-        slugPromptContainer.isHidden = !settings.autoRenameWorktrees
 
         worktreeSection.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(worktreeSection)
@@ -344,7 +346,12 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
 
     @objc private func autoRenameToggled() {
         settings.autoRenameWorktrees = autoRenameCheckbox.state == .on
-        slugPromptContainer.isHidden = !settings.autoRenameWorktrees
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func resetSlugPromptToDefault() {
+        slugPromptTextView.string = AppSettings.defaultSlugPrompt
+        settings.autoRenameSlugPrompt = AppSettings.defaultSlugPrompt
         try? persistence.saveSettings(settings)
     }
 
