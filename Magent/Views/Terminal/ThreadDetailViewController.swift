@@ -407,7 +407,13 @@ final class ThreadDetailViewController: NSViewController {
         addTabButton.target = self
         addTabButton.action = #selector(addTabTapped)
 
-        let topBar = NSStackView(views: [tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, archiveThreadButton, exportContextButton, addTabButton])
+        let separator = NSBox()
+        separator.boxType = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        separator.widthAnchor.constraint(equalToConstant: 1).isActive = true
+        separator.heightAnchor.constraint(equalToConstant: 16).isActive = true
+
+        let topBar = NSStackView(views: [tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, exportContextButton, separator, archiveThreadButton, addTabButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
