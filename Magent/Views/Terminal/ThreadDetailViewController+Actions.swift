@@ -470,12 +470,18 @@ extension ThreadDetailViewController {
         let sessionName: String
         if thread.isMain {
             let settings = PersistenceService.shared.loadSettings()
-            let sanitizedName = ThreadManager.sanitizeForTmux(
+            let slug = ThreadManager.repoSlug(from:
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
             )
-            sessionName = thread.tmuxSessionNames.first ?? "magent-main-\(sanitizedName)"
+            let firstTabSlug = ThreadManager.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+            sessionName = thread.tmuxSessionNames.first ?? ThreadManager.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
         } else {
-            sessionName = thread.tmuxSessionNames.first ?? "magent-\(thread.name)"
+            let settings = PersistenceService.shared.loadSettings()
+            let slug = ThreadManager.repoSlug(from:
+                settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
+            )
+            let firstTabSlug = ThreadManager.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+            sessionName = thread.tmuxSessionNames.first ?? ThreadManager.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
         }
         let startTime = Date()
         let maxWait: TimeInterval = 15

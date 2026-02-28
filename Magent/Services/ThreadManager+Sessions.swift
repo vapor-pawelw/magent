@@ -123,7 +123,7 @@ extension ThreadManager {
         }
 
         let staleSessions = liveSessions.filter { sessionName in
-            sessionName.hasPrefix("magent") && !referencedSessions.contains(sessionName)
+            Self.isMagentSession(sessionName) && !referencedSessions.contains(sessionName)
         }
 
         guard !staleSessions.isEmpty else { return [] }
@@ -141,16 +141,16 @@ extension ThreadManager {
         // Include both in-memory and persisted threads so cleanup is safe during transitional states.
         let allNonArchivedThreads = threads.filter { !$0.isArchived } + persistence.loadThreads().filter { !$0.isArchived }
         for thread in allNonArchivedThreads {
-            for sessionName in thread.tmuxSessionNames where sessionName.hasPrefix("magent") {
+            for sessionName in thread.tmuxSessionNames where Self.isMagentSession(sessionName) {
                 names.insert(sessionName)
             }
-            for sessionName in thread.agentTmuxSessions where sessionName.hasPrefix("magent") {
+            for sessionName in thread.agentTmuxSessions where Self.isMagentSession(sessionName) {
                 names.insert(sessionName)
             }
-            for sessionName in thread.pinnedTmuxSessions where sessionName.hasPrefix("magent") {
+            for sessionName in thread.pinnedTmuxSessions where Self.isMagentSession(sessionName) {
                 names.insert(sessionName)
             }
-            if let selectedSession = thread.lastSelectedTmuxSessionName, selectedSession.hasPrefix("magent") {
+            if let selectedSession = thread.lastSelectedTmuxSessionName, Self.isMagentSession(selectedSession) {
                 names.insert(selectedSession)
             }
         }

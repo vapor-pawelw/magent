@@ -52,7 +52,11 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         if let custom = customTabNames[sessionName], !custom.isEmpty {
             return custom
         }
-        return index == 0 ? "Main" : "Tab \(index)"
+        return Self.defaultDisplayName(at: index)
+    }
+
+    static func defaultDisplayName(at index: Int) -> String {
+        index == 0 ? "Main" : "Tab \(index)"
     }
 
     enum CodingKeys: String, CodingKey {

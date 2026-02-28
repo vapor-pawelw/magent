@@ -455,13 +455,16 @@ final class ThreadDetailViewController: NSViewController {
         let pinnedSet = Set(thread.pinnedTmuxSessions)
 
         let sessions: [String]
-        if thread.isMain {
-            let sanitizedName = ThreadManager.sanitizeForTmux(
+        do {
+            let slug = ThreadManager.repoSlug(from:
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
             )
-            sessions = thread.tmuxSessionNames.isEmpty ? ["magent-main-\(sanitizedName)"] : thread.tmuxSessionNames
-        } else {
-            sessions = thread.tmuxSessionNames.isEmpty ? ["magent-\(thread.name)"] : thread.tmuxSessionNames
+            let firstTabSlug = ThreadManager.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+            if thread.isMain {
+                sessions = thread.tmuxSessionNames.isEmpty ? [ThreadManager.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)] : thread.tmuxSessionNames
+            } else {
+                sessions = thread.tmuxSessionNames.isEmpty ? [ThreadManager.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)] : thread.tmuxSessionNames
+            }
         }
 
         let pinned = sessions.filter { pinnedSet.contains($0) }

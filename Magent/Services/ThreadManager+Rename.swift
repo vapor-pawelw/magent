@@ -181,17 +181,19 @@ extension ThreadManager {
         let worktreePath = currentThread.worktreePath
         let parentDir = (worktreePath as NSString).deletingLastPathComponent
         let symlinkPath = (parentDir as NSString).appendingPathComponent(trimmed)
-        let sessionRenameMap = Dictionary(uniqueKeysWithValues: currentThread.tmuxSessionNames.map { sessionName in
-            (sessionName, renamedSessionName(sessionName, fromThreadName: oldName, toThreadName: trimmed))
-        })
-        let oldSessionNames = Set(currentThread.tmuxSessionNames)
-        let newSessionNames = currentThread.tmuxSessionNames.map { sessionRenameMap[$0] ?? $0 }
 
-        // Look up project for repo path
+        // Look up project for repo path and repo slug
         let settings = persistence.loadSettings()
         guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else {
             throw ThreadManagerError.threadNotFound
         }
+        let slug = Self.repoSlug(from: project.name)
+
+        let sessionRenameMap = Dictionary(uniqueKeysWithValues: currentThread.tmuxSessionNames.map { sessionName in
+            (sessionName, renamedSessionName(sessionName, fromThreadName: oldName, toThreadName: trimmed, repoSlug: slug))
+        })
+        let oldSessionNames = Set(currentThread.tmuxSessionNames)
+        let newSessionNames = currentThread.tmuxSessionNames.map { sessionRenameMap[$0] ?? $0 }
 
         // Check for conflicts with git branch and tmux sessions
         if await git.branchExists(repoPath: project.repoPath, branchName: newBranchName) {
@@ -316,19 +318,15 @@ extension ThreadManager {
 
         // Compute new tmux session name
         let sanitizedTabName = Self.sanitizeForTmux(trimmed)
+        let settings = persistence.loadSettings()
+        let slug = Self.repoSlug(from:
+            settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
+        )
         let newSessionName: String
         if currentThread.isMain {
-            let settings = persistence.loadSettings()
-            let projectName = Self.sanitizeForTmux(
-                settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
-            )
-            if sessionIndex == 0 {
-                newSessionName = "magent-main-\(projectName)-\(sanitizedTabName)"
-            } else {
-                newSessionName = "magent-main-\(projectName)-\(sanitizedTabName)"
-            }
+            newSessionName = Self.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: sanitizedTabName)
         } else {
-            newSessionName = "magent-\(currentThread.name)-\(sanitizedTabName)"
+            newSessionName = Self.buildSessionName(repoSlug: slug, threadName: currentThread.name, tabSlug: sanitizedTabName)
         }
 
         // Check uniqueness

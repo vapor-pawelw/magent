@@ -89,9 +89,9 @@ extension ThreadManager {
 
     /// Renames session names produced by Magent without touching unrelated substrings.
     /// This avoids accidental rewrites when thread names overlap with the "magent" prefix.
-    func renamedSessionName(_ sessionName: String, fromThreadName oldName: String, toThreadName newName: String) -> String {
-        let oldPrefix = "magent-\(oldName)"
-        let newPrefix = "magent-\(newName)"
+    func renamedSessionName(_ sessionName: String, fromThreadName oldName: String, toThreadName newName: String, repoSlug: String) -> String {
+        let oldPrefix = Self.buildSessionName(repoSlug: repoSlug, threadName: oldName)
+        let newPrefix = Self.buildSessionName(repoSlug: repoSlug, threadName: newName)
 
         if sessionName == oldPrefix {
             return newPrefix
@@ -118,7 +118,7 @@ extension ThreadManager {
 
         do {
             for i in liveIndices {
-                let tempName = "magent-rename-\(UUID().uuidString.lowercased())"
+                let tempName = "ma-rename-\(UUID().uuidString.lowercased())"
                 try await tmux.renameSession(from: oldNames[i], to: tempName)
                 currentNames[i] = tempName
             }
@@ -368,7 +368,9 @@ extension ThreadManager {
         guard !nameInUse && !dirExists else { return false }
 
         let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: name)
-        let tmuxExists = await tmux.hasSession(name: "magent-\(name)")
+        let slug = Self.repoSlug(from: project.name)
+        let firstTabSlug = Self.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+        let tmuxExists = await tmux.hasSession(name: Self.buildSessionName(repoSlug: slug, threadName: name, tabSlug: firstTabSlug))
         return !branchExists && !tmuxExists
     }
 
@@ -419,6 +421,30 @@ extension ThreadManager {
             .map { allowed.contains($0) ? String($0) : "-" }
             .joined()
             .lowercased()
+    }
+
+    static func repoSlug(from projectName: String) -> String {
+        var slug = sanitizeForTmux(projectName)
+        if slug.count > 16 {
+            slug = String(slug.prefix(16))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        }
+        return slug
+    }
+
+    static func buildSessionName(repoSlug: String, threadName: String?, tabSlug: String? = nil) -> String {
+        var parts = ["ma", repoSlug]
+        if let threadName {
+            parts.append(threadName)
+        }
+        if let tabSlug {
+            parts.append(tabSlug)
+        }
+        return parts.joined(separator: "-")
+    }
+
+    static func isMagentSession(_ name: String) -> Bool {
+        name.hasPrefix("ma-") || name.hasPrefix("magent-")
     }
 
     // MARK: - Tmux Zombie Health

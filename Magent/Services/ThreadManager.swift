@@ -77,6 +77,9 @@ final class ThreadManager {
 
         try? persistence.saveThreads(threads)
 
+        // Migrate session names from old magent- prefix to new ma- format
+        await migrateSessionNamesToNewFormat()
+
         // Sync threads with worktrees on disk for each valid project
         for project in settings.projects where project.isValid {
             await syncThreadsWithWorktrees(for: project)
@@ -102,6 +105,87 @@ final class ThreadManager {
         await MainActor.run {
             updateDockBadge()
             delegate?.threadManager(self, didUpdateThreads: threads)
+        }
+    }
+
+    // MARK: - Session Name Migration
+
+    /// One-time migration: renames tmux sessions from the old `magent-` format to the new `ma-` format.
+    private func migrateSessionNamesToNewFormat() async {
+        let needsMigration = threads.contains { thread in
+            thread.tmuxSessionNames.contains { $0.hasPrefix("magent-") }
+        }
+        guard needsMigration else { return }
+
+        let settings = persistence.loadSettings()
+        var changed = false
+
+        for i in threads.indices {
+            let thread = threads[i]
+            guard thread.tmuxSessionNames.contains(where: { $0.hasPrefix("magent-") }) else { continue }
+            guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else { continue }
+
+            let slug = Self.repoSlug(from: project.name)
+            var renameMap: [String: String] = [:]
+            var usedNames = Set<String>()
+
+            for (tabIndex, sessionName) in thread.tmuxSessionNames.enumerated() {
+                guard sessionName.hasPrefix("magent-") else {
+                    usedNames.insert(sessionName)
+                    continue
+                }
+
+                let customName = thread.customTabNames[sessionName]
+                let displayName = (customName?.isEmpty == false)
+                    ? customName!
+                    : MagentThread.defaultDisplayName(at: tabIndex)
+                let tabSlug = Self.sanitizeForTmux(displayName)
+
+                let threadNamePart = thread.isMain ? nil : thread.name
+                let baseName = Self.buildSessionName(repoSlug: slug, threadName: threadNamePart, tabSlug: tabSlug)
+
+                var candidate = baseName
+                if usedNames.contains(candidate) {
+                    var suffix = 2
+                    while usedNames.contains("\(baseName)-\(suffix)") {
+                        suffix += 1
+                    }
+                    candidate = "\(baseName)-\(suffix)"
+                }
+                usedNames.insert(candidate)
+
+                if candidate != sessionName {
+                    renameMap[sessionName] = candidate
+                }
+            }
+
+            guard !renameMap.isEmpty else { continue }
+
+            // Rename live tmux sessions
+            let oldNames = thread.tmuxSessionNames
+            let newNames = oldNames.map { renameMap[$0] ?? $0 }
+            try? await renameTmuxSessions(from: oldNames, to: newNames)
+
+            // Update all references
+            threads[i].tmuxSessionNames = newNames
+            threads[i].agentTmuxSessions = threads[i].agentTmuxSessions.map { renameMap[$0] ?? $0 }
+            threads[i].pinnedTmuxSessions = threads[i].pinnedTmuxSessions.map { renameMap[$0] ?? $0 }
+            threads[i].unreadCompletionSessions = Set(
+                threads[i].unreadCompletionSessions.map { renameMap[$0] ?? $0 }
+            )
+            var newCustomTabNames: [String: String] = [:]
+            for (key, value) in threads[i].customTabNames {
+                newCustomTabNames[renameMap[key] ?? key] = value
+            }
+            threads[i].customTabNames = newCustomTabNames
+            if let selected = threads[i].lastSelectedTmuxSessionName {
+                threads[i].lastSelectedTmuxSessionName = renameMap[selected] ?? selected
+            }
+            changed = true
+        }
+
+        if changed {
+            try? persistence.saveThreads(threads)
         }
     }
 
@@ -166,7 +250,9 @@ final class ThreadManager {
 
         let branchName = name
         let worktreePath = "\(project.resolvedWorktreesBasePath())/\(name)"
-        let tmuxSessionName = "magent-\(name)"
+        let repoSlug = Self.repoSlug(from: project.name)
+        let firstTabSlug = Self.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+        let tmuxSessionName = Self.buildSessionName(repoSlug: repoSlug, threadName: name, tabSlug: firstTabSlug)
 
         // Create git worktree branching off the project's default branch
         let baseBranch = project.defaultBranch?.isEmpty == false ? project.defaultBranch : nil
@@ -253,8 +339,9 @@ final class ThreadManager {
             throw ThreadManagerError.duplicateName
         }
 
-        let sanitizedName = Self.sanitizeForTmux(project.name)
-        let tmuxSessionName = "magent-main-\(sanitizedName)"
+        let repoSlug = Self.repoSlug(from: project.name)
+        let firstTabSlug = Self.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+        let tmuxSessionName = Self.buildSessionName(repoSlug: repoSlug, threadName: nil, tabSlug: firstTabSlug)
 
         // Kill orphaned tmux session if it exists from a previous run
         if await tmux.hasSession(name: tmuxSessionName) {
@@ -333,21 +420,26 @@ final class ThreadManager {
 
         // Find the next unused tab index — check both model and live tmux sessions
         let existingNames = currentThread.tmuxSessionNames
-        var tabIndex = existingNames.count
+        let tabIndex = existingNames.count
         let settings = persistence.loadSettings()
 
         let tmuxSessionName: String
         let startCmd: String
 
         var selectedAgentType = currentThread.selectedAgentType
+        let repoSlug = Self.repoSlug(from:
+            settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
+        )
+        // Derive tab slug from default display name for this tab index
+        let defaultDisplayName = MagentThread.defaultDisplayName(at: tabIndex)
+        let tabSlug = Self.sanitizeForTmux(defaultDisplayName)
         if currentThread.isMain {
-            let sanitizedName = Self.sanitizeForTmux(
-                settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
-            )
-            var candidate = "magent-main-\(sanitizedName)-tab-\(tabIndex)"
+            let baseName = Self.buildSessionName(repoSlug: repoSlug, threadName: nil, tabSlug: tabSlug)
+            var candidate = baseName
+            var suffix = 2
             while await isTabNameTaken(candidate, existingNames: existingNames) {
-                tabIndex += 1
-                candidate = "magent-main-\(sanitizedName)-tab-\(tabIndex)"
+                candidate = "\(baseName)-\(suffix)"
+                suffix += 1
             }
             tmuxSessionName = candidate
             let projectPath = currentThread.worktreePath
@@ -370,10 +462,12 @@ final class ThreadManager {
                 startCmd = "\(envExports) && cd \(projectPath) && exec zsh -l"
             }
         } else {
-            var candidate = "magent-\(currentThread.name)-tab-\(tabIndex)"
+            let baseName = Self.buildSessionName(repoSlug: repoSlug, threadName: currentThread.name, tabSlug: tabSlug)
+            var candidate = baseName
+            var suffix = 2
             while await isTabNameTaken(candidate, existingNames: existingNames) {
-                tabIndex += 1
-                candidate = "magent-\(currentThread.name)-tab-\(tabIndex)"
+                candidate = "\(baseName)-\(suffix)"
+                suffix += 1
             }
             tmuxSessionName = candidate
             let project = settings.projects.first(where: { $0.id == currentThread.projectId })
