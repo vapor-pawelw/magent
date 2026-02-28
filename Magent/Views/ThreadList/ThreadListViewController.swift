@@ -128,6 +128,11 @@ final class ThreadListViewController: NSViewController {
         )
     }
 
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        outlineView.sizeLastColumnToFit()
+    }
+
     @objc private func sectionsDidChange() {
         reloadData()
     }
