@@ -454,16 +454,25 @@ final class ThreadDetailViewController: NSViewController {
         // Determine tab order with pinned tabs first
         let pinnedSet = Set(thread.pinnedTmuxSessions)
 
-        let sessions: [String]
-        do {
+        var sessions: [String] = thread.tmuxSessionNames
+        if sessions.isEmpty {
+            // Thread has no sessions — create a fallback and register it in the manager
+            // so that recreateSessionIfNeeded sees it as an agent session and close-tab works.
             let slug = ThreadManager.repoSlug(from:
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
             )
             let firstTabSlug = ThreadManager.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+            let fallbackName: String
             if thread.isMain {
-                sessions = thread.tmuxSessionNames.isEmpty ? [ThreadManager.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)] : thread.tmuxSessionNames
+                fallbackName = ThreadManager.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
             } else {
-                sessions = thread.tmuxSessionNames.isEmpty ? [ThreadManager.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)] : thread.tmuxSessionNames
+                fallbackName = ThreadManager.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
+            }
+            sessions = [fallbackName]
+            threadManager.registerFallbackSession(fallbackName, for: thread.id, agentType: selectedAgentType)
+            // Refresh local copy after manager update
+            if let latest = threadManager.threads.first(where: { $0.id == thread.id }) {
+                thread = latest
             }
         }
 
@@ -487,8 +496,6 @@ final class ThreadDetailViewController: NSViewController {
                 terminalViews.append(terminalView)
             }
         }
-
-        thread.tmuxSessionNames = orderedSessions
 
         await MainActor.run {
             rebuildTabBar()

@@ -557,6 +557,21 @@ final class ThreadManager {
         try? persistence.saveThreads(threads)
     }
 
+    /// Registers a fallback session name for a thread that had no sessions.
+    /// This ensures the session is tracked in tmuxSessionNames (so close-tab works)
+    /// and in agentTmuxSessions (so recreateSessionIfNeeded creates an agent, not a terminal).
+    func registerFallbackSession(_ sessionName: String, for threadId: UUID, agentType: AgentType?) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard !threads[index].tmuxSessionNames.contains(sessionName) else { return }
+        threads[index].tmuxSessionNames.append(sessionName)
+        if agentType != nil {
+            threads[index].agentTmuxSessions.append(sessionName)
+            threads[index].agentHasRun = true
+        }
+        threads[index].lastSelectedTmuxSessionName = sessionName
+        try? persistence.saveThreads(threads)
+    }
+
     func updatePinnedTabs(for threadId: UUID, pinnedSessions: [String]) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         threads[index].pinnedTmuxSessions = pinnedSessions
