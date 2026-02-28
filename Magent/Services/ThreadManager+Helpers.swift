@@ -21,6 +21,7 @@ extension ThreadManager {
       /tmp/magent-cli rename-thread --thread <name> --description <text>
       /tmp/magent-cli rename-thread-exact --thread <name> --name <text>
     Use current-thread to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
+    When creating threads, prefer --name (exact slug) or --description (AI-generated slug) to name them upfront instead of a separate rename call. Use --description when you know what the thread is for but don't have a specific slug. Omit both for a random name.
     Use rename-thread by default (generates a slug from the description). Only use rename-thread-exact when the user specifies an exact name.
     rename-thread-exact is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use rename-thread with that description instead.
     """
@@ -240,7 +241,7 @@ extension ThreadManager {
 
     private static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     private static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    private static let codexIPCVersion = "<!-- magent-ipc-v3 -->"
+    private static let codexIPCVersion = "<!-- magent-ipc-v4 -->"
 
     private static let codexIPCBlock = """
     \(codexIPCMarkerStart)
@@ -251,7 +252,7 @@ extension ThreadManager {
     a Magent-managed terminal. Use `/tmp/magent-cli` to manage threads and tabs:
 
     ```
-    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>]
+    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>]
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
     /tmp/magent-cli send-prompt --thread <name> --prompt <text>
@@ -266,6 +267,7 @@ extension ThreadManager {
     ```
 
     Use `current-thread` to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
+    When creating threads, prefer `--name` (exact slug) or `--description` (AI-generated slug) to name them upfront instead of a separate rename call. Use `--description` when you know what the thread is for but don't have a specific slug. Omit both for a random name.
     Use `rename-thread` by default (generates a slug from the description).
     Only use `rename-thread-exact` when the user specifies an exact name.
     `rename-thread-exact` is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use `rename-thread` with that description instead.
