@@ -137,7 +137,10 @@ extension ThreadListViewController {
 
     @objc private func archiveThread(_ sender: NSMenuItem) {
         guard let thread = sender.representedObject as? MagentThread else { return }
+        triggerArchive(for: thread)
+    }
 
+    func triggerArchive(for thread: MagentThread) {
         let baseBranch = threadManager.resolveBaseBranch(for: thread)
 
         Task {
@@ -579,6 +582,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             let sections = settings.threadSections
             let section = sections.first(where: { $0.id == thread.sectionId })
             cell.configure(with: thread, sectionColor: section?.color)
+            cell.onArchive = { [weak self] in
+                self?.triggerArchive(for: thread)
+            }
             return cell
         }
 

@@ -234,6 +234,20 @@ final class GitService {
             && result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Returns `true` when every commit on HEAD has been merged or cherry-picked into `baseBranch`.
+    /// Empty branches (no commits beyond base) are also considered fully delivered.
+    func isFullyDelivered(worktreePath: String, baseBranch: String) async -> Bool {
+        let result = await ShellExecutor.execute(
+            "git cherry \(shellQuote(baseBranch)) HEAD",
+            workingDirectory: worktreePath
+        )
+        guard result.exitCode == 0 else { return false }
+        let output = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Empty = no commits beyond base; all lines starting with "-" = all cherry-picked
+        if output.isEmpty { return true }
+        return !output.components(separatedBy: "\n").contains(where: { $0.hasPrefix("+") })
+    }
+
     // MARK: - Diff & Status
 
     /// Returns `true` when the worktree has any uncommitted changes or untracked files.

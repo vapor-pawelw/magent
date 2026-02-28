@@ -4,10 +4,13 @@ final class ThreadCell: NSTableCellView {
 
     private var dirtyImageView: NSImageView?
     private var pinImageView: NSImageView?
+    private var archiveButton: NSButton?
     private var completionImageView: NSImageView?
     private var busySpinner: NSProgressIndicator?
     private var trailingStackView: NSStackView?
     private var hasInstalledTextTrailingConstraint = false
+
+    var onArchive: (() -> Void)?
 
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
@@ -25,6 +28,17 @@ final class ThreadCell: NSTableCellView {
         completionIV.translatesAutoresizingMaskIntoConstraints = false
         completionIV.setContentHuggingPriority(.required, for: .horizontal)
 
+        let archiveBtn = NSButton()
+        archiveBtn.translatesAutoresizingMaskIntoConstraints = false
+        archiveBtn.setContentHuggingPriority(.required, for: .horizontal)
+        archiveBtn.isBordered = false
+        archiveBtn.image = NSImage(systemSymbolName: "archivebox.fill", accessibilityDescription: "Ready to archive")
+        archiveBtn.contentTintColor = .tertiaryLabelColor
+        archiveBtn.toolTip = "Work delivered — ready to archive"
+        archiveBtn.target = self
+        archiveBtn.action = #selector(archiveButtonClicked)
+        archiveBtn.isHidden = true
+
         let spinner = NSProgressIndicator()
         spinner.style = .spinning
         spinner.controlSize = .small
@@ -33,7 +47,7 @@ final class ThreadCell: NSTableCellView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.isHidden = true
 
-        let stack = NSStackView(views: [dirtyIV, pinIV, spinner, completionIV])
+        let stack = NSStackView(views: [dirtyIV, pinIV, archiveBtn, spinner, completionIV])
         stack.orientation = .horizontal
         stack.spacing = 3
         stack.alignment = .centerY
@@ -47,6 +61,8 @@ final class ThreadCell: NSTableCellView {
             dirtyIV.heightAnchor.constraint(equalToConstant: 7),
             pinIV.widthAnchor.constraint(equalToConstant: 12),
             pinIV.heightAnchor.constraint(equalToConstant: 12),
+            archiveBtn.widthAnchor.constraint(equalToConstant: 12),
+            archiveBtn.heightAnchor.constraint(equalToConstant: 12),
             completionIV.widthAnchor.constraint(equalToConstant: 10),
             completionIV.heightAnchor.constraint(equalToConstant: 10),
             spinner.widthAnchor.constraint(equalToConstant: 14),
@@ -55,6 +71,7 @@ final class ThreadCell: NSTableCellView {
         trailingStackView = stack
         dirtyImageView = dirtyIV
         pinImageView = pinIV
+        archiveButton = archiveBtn
         completionImageView = completionIV
         busySpinner = spinner
 
@@ -99,6 +116,8 @@ final class ThreadCell: NSTableCellView {
             pinImageView?.image = nil
             pinImageView?.isHidden = true
         }
+
+        archiveButton?.isHidden = !thread.showArchiveSuggestion
 
         if thread.hasWaitingForInput {
             busySpinner?.stopAnimation(nil)
@@ -145,6 +164,7 @@ final class ThreadCell: NSTableCellView {
 
         ensureTrailingStack()
         pinImageView?.isHidden = true
+        archiveButton?.isHidden = true
 
         if isDirty {
             dirtyImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
@@ -188,5 +208,9 @@ final class ThreadCell: NSTableCellView {
             completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
         }
+    }
+
+    @objc private func archiveButtonClicked() {
+        onArchive?()
     }
 }

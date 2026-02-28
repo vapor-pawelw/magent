@@ -95,8 +95,9 @@ final class ThreadManager {
         // after restart (busySessions is transient and starts empty on launch).
         await syncBusySessionsFromProcessState()
 
-        // Populate dirty states at launch so indicators show immediately.
+        // Populate dirty and delivered states at launch so indicators show immediately.
         await refreshDirtyStates()
+        await refreshDeliveredStates()
 
         await MainActor.run {
             updateDockBadge()
@@ -784,6 +785,35 @@ final class ThreadManager {
                 delegate?.threadManager(self, didUpdateThreads: threads)
             }
         }
+    }
+
+    func refreshDeliveredStates() async {
+        var changed = false
+        for i in threads.indices where !threads[i].isArchived && !threads[i].isMain {
+            let baseBranch = resolveBaseBranch(for: threads[i])
+            let delivered = await git.isFullyDelivered(worktreePath: threads[i].worktreePath, baseBranch: baseBranch)
+            if threads[i].isFullyDelivered != delivered {
+                threads[i].isFullyDelivered = delivered
+                changed = true
+            }
+        }
+        if changed {
+            await MainActor.run {
+                delegate?.threadManager(self, didUpdateThreads: threads)
+            }
+        }
+    }
+
+    /// Refreshes the delivered state for a single thread. Returns true if the value changed.
+    @discardableResult
+    func refreshDeliveredState(for threadId: UUID) async -> Bool {
+        guard let i = threads.firstIndex(where: { $0.id == threadId }),
+              !threads[i].isArchived, !threads[i].isMain else { return false }
+        let baseBranch = resolveBaseBranch(for: threads[i])
+        let delivered = await git.isFullyDelivered(worktreePath: threads[i].worktreePath, baseBranch: baseBranch)
+        guard threads[i].isFullyDelivered != delivered else { return false }
+        threads[i].isFullyDelivered = delivered
+        return true
     }
 
     func refreshDiffStats(for threadId: UUID) async -> [FileDiffEntry] {

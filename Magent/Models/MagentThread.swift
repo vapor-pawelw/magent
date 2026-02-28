@@ -29,6 +29,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var waitingForInputSessions: Set<String> = []
     // Transient (not persisted) — tracks whether worktree has uncommitted/untracked changes
     var isDirty: Bool = false
+    // Transient (not persisted) — tracks whether all commits are in the base branch
+    var isFullyDelivered: Bool = false
 
     var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
@@ -40,6 +42,10 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     var hasWaitingForInput: Bool {
         !waitingForInputSessions.isEmpty
+    }
+
+    var showArchiveSuggestion: Bool {
+        isFullyDelivered && !isDirty && !hasAgentBusy && !hasWaitingForInput
     }
 
     func displayName(for sessionName: String, at index: Int) -> String {
