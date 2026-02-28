@@ -1,7 +1,7 @@
 import Foundation
 
 nonisolated struct AppSettings: Codable, Sendable {
-    static let defaultSlugPrompt = "Generate a short kebab-case slug (2-4 words) for a git branch name. Extract the core concept or feature — ignore filler words like 'I want', 'how do I', 'can you', etc."
+    static let defaultSlugPrompt = "Generate a short kebab-case slug (2-4 words) for a git branch name. Extract the core concept or feature — ignore filler words like 'I want', 'how do I', 'can you', etc. Bug reports, observations about broken behavior, and feature requests are all actionable — generate a slug for them."
 
     var projects: [Project]
     var activeAgents: [AgentType]

@@ -100,9 +100,11 @@ extension ThreadManager {
         let aiPrompt = """
             \(instruction) \
             Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
-            If the input is a plain question (not an actionable task or job), output exactly: SLUG: EMPTY \
+            Only output SLUG: EMPTY for pure knowledge questions with no implied action (e.g. "How does X work?", "What is Y?"). \
+            Bug reports, observations about broken behavior, and feature requests are actionable — always generate a slug for them. \
             Example: "Fix auth bug in login" → SLUG: fix-auth-login \
             Example: "I want to have a way for agents to communicate with the app so it can create threads automatically" → SLUG: agent-app-communication \
+            Example: "I noticed the sidebar chevrons have no padding on app start" → SLUG: fix-sidebar-chevron-padding \
             Example: "How does the auth system work?" → SLUG: EMPTY
             Task: \(truncated)
             """
