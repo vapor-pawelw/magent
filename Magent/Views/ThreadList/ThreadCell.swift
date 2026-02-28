@@ -83,9 +83,11 @@ final class ThreadCell: NSTableCellView {
         if thread.isDirty {
             dirtyImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
             dirtyImageView?.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
+            dirtyImageView?.toolTip = "Uncommitted changes"
             dirtyImageView?.isHidden = false
         } else {
             dirtyImageView?.image = nil
+            dirtyImageView?.toolTip = nil
             dirtyImageView?.isHidden = true
         }
 
@@ -101,24 +103,32 @@ final class ThreadCell: NSTableCellView {
         if thread.hasWaitingForInput {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
-            completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent needs input")
-            completionImageView?.contentTintColor = .systemOrange
+            busySpinner?.toolTip = nil
+            completionImageView?.image = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: "Agent needs input")
+            completionImageView?.contentTintColor = .systemYellow
+            completionImageView?.toolTip = "Agent needs input"
             completionImageView?.isHidden = false
         } else if thread.hasAgentBusy {
             busySpinner?.startAnimation(nil)
             busySpinner?.isHidden = false
+            busySpinner?.toolTip = "Agent working"
             completionImageView?.image = nil
+            completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
         } else if thread.hasUnreadAgentCompletion {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
             completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent finished")
             completionImageView?.contentTintColor = .systemGreen
+            completionImageView?.toolTip = "Agent finished"
             completionImageView?.isHidden = false
         } else {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
             completionImageView?.image = nil
+            completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
         }
     }
@@ -139,33 +149,43 @@ final class ThreadCell: NSTableCellView {
         if isDirty {
             dirtyImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
             dirtyImageView?.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
+            dirtyImageView?.toolTip = "Uncommitted changes"
             dirtyImageView?.isHidden = false
         } else {
             dirtyImageView?.image = nil
+            dirtyImageView?.toolTip = nil
             dirtyImageView?.isHidden = true
         }
 
         if isWaitingForInput {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
-            completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent needs input")
-            completionImageView?.contentTintColor = .systemOrange
+            busySpinner?.toolTip = nil
+            completionImageView?.image = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: "Agent needs input")
+            completionImageView?.contentTintColor = .systemYellow
+            completionImageView?.toolTip = "Agent needs input"
             completionImageView?.isHidden = false
         } else if isBusy {
             busySpinner?.startAnimation(nil)
             busySpinner?.isHidden = false
+            busySpinner?.toolTip = "Agent working"
             completionImageView?.image = nil
+            completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
         } else if isUnreadCompletion {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
             completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent finished")
             completionImageView?.contentTintColor = .systemGreen
+            completionImageView?.toolTip = "Agent finished"
             completionImageView?.isHidden = false
         } else {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
             completionImageView?.image = nil
+            completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
         }
     }
