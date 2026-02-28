@@ -476,7 +476,7 @@ final class ThreadDetailViewController: NSViewController {
 
             await MainActor.run {
                 let title = thread.displayName(for: sessionName, at: i)
-                let closable = thread.isMain ? true : (i != primaryTabIndex)
+                let closable = orderedSessions.count > 1
                 createTabItem(title: title, closable: closable, pinned: i < pinnedCount)
 
                 let terminalView = makeTerminalView(for: sessionName)
@@ -759,7 +759,7 @@ final class ThreadDetailViewController: NSViewController {
             item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: i, targetAgent: agent) }
             item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
             item.availableAgentsForContinue = settings.availableActiveAgents
-            item.showCloseButton = (i != primaryTabIndex)
+            item.showCloseButton = tabItems.count > 1
             item.showPinIcon = (i < pinnedCount)
         }
     }

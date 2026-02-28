@@ -306,8 +306,8 @@ extension ThreadDetailViewController {
     }
 
     func closeTab(at index: Int) {
-        // Cannot close the primary tab
-        if index == primaryTabIndex { return }
+        // Cannot close the last remaining tab
+        guard thread.tmuxSessionNames.count > 1 else { return }
         guard index < thread.tmuxSessionNames.count else { return }
 
         let sessionName = thread.tmuxSessionNames[index]
@@ -344,7 +344,10 @@ extension ThreadDetailViewController {
                     if index < self.pinnedCount {
                         self.pinnedCount -= 1
                     }
-                    if self.primaryTabIndex > index {
+                    if index == self.primaryTabIndex {
+                        // Primary tab was closed — assign to first remaining tab
+                        self.primaryTabIndex = 0
+                    } else if self.primaryTabIndex > index {
                         self.primaryTabIndex -= 1
                     }
 
