@@ -687,8 +687,8 @@ extension ThreadManager {
 
     /// Checks whether the agent appears to be idle at its input prompt by looking
     /// at the pane content. Returns true when the last prompt line (❯) has no
-    /// command text after it, meaning the agent is waiting for user input rather
-    /// than processing a submitted command.
+    /// command text after it AND the agent is not actively processing (no
+    /// "esc to interrupt" indicator below the prompt).
     private func isAgentIdleAtPrompt(_ paneContent: String) -> Bool {
         let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
         let nonEmpty = lines.suffix(10)
@@ -698,9 +698,20 @@ extension ThreadManager {
         guard let promptLine = nonEmpty.last(where: { $0.hasPrefix("\u{276F}") }) else {
             return false
         }
-        // If everything after the ❯ is whitespace, the agent is idle
+        // If everything after the ❯ is whitespace, check further:
+        // Claude Code shows an empty ❯ prompt WHILE processing — the status bar
+        // below the prompt contains "esc to interrupt" when the agent is working.
         let afterPrompt = String(promptLine.dropFirst()).trimmingCharacters(in: .whitespaces)
-        return afterPrompt.isEmpty
+        guard afterPrompt.isEmpty else { return false }
+
+        // Check lines after the ❯ prompt for activity indicators
+        if let promptIndex = nonEmpty.lastIndex(where: { $0.hasPrefix("\u{276F}") }) {
+            let linesAfterPrompt = nonEmpty.suffix(from: nonEmpty.index(after: promptIndex))
+            for line in linesAfterPrompt {
+                if line.contains("esc to interrupt") { return false }
+            }
+        }
+        return true
     }
 
 
