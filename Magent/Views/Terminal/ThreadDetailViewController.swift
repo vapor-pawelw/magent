@@ -575,13 +575,7 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         if isAgentSession {
-            // When reattaching to an existing session, unset CLAUDECODE if the pane is
-            // sitting at a shell prompt (agent exited). This prevents "already running"
-            // errors when the user tries to restart the agent manually.
-            let claudeCleanup = selectedAgentType == .claude
-                ? "pane_cmd=$(tmux display-message -t \(sessionName) -p \"#{pane_current_command}\" 2>/dev/null); case \"$pane_cmd\" in *sh) tmux send-keys -t \(sessionName) \" unset CLAUDECODE\" Enter 2>/dev/null;; esac; "
-                : ""
-            return "/bin/sh -c '\(claudeCleanup)tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" && tmux send-keys -t \(sessionName) \"\(startCmd)\" Enter && tmux attach-session -t \(sessionName); }'"
+            return "/bin/sh -c 'tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
         }
         // Force cwd on every open for terminal tabs, even if shell init changes it.
         return "/bin/sh -c 'tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter 2>/dev/null; tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter && tmux attach-session -t \(sessionName); }'"
