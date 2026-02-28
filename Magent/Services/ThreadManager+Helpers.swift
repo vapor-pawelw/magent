@@ -22,6 +22,7 @@ extension ThreadManager {
       /tmp/magent-cli rename-thread-exact --thread <name> --name <text>
     Use current-thread to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
     Use rename-thread by default (generates a slug from the description). Only use rename-thread-exact when the user specifies an exact name.
+    rename-thread-exact is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use rename-thread with that description instead.
     """
 
     // MARK: - Injection
@@ -267,6 +268,7 @@ extension ThreadManager {
     Use `current-thread` to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
     Use `rename-thread` by default (generates a slug from the description).
     Only use `rename-thread-exact` when the user specifies an exact name.
+    `rename-thread-exact` is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use `rename-thread` with that description instead.
     \(codexIPCMarkerEnd)
     """
 
