@@ -60,6 +60,13 @@ final class TabItemView: NSView, NSMenuDelegate {
         }
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil, !busySpinner.isHidden {
+            busySpinner.startAnimation(nil)
+        }
+    }
+
     var onSelect: (() -> Void)?
     var onClose: (() -> Void)?
     var onRename: (() -> Void)?

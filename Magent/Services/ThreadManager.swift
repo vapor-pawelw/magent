@@ -97,6 +97,13 @@ final class ThreadManager {
         // Set up bell detection pipes on all live agent sessions.
         await ensureBellPipes()
 
+        // Consume bell events that accumulated while the app was not running.
+        // We map them to unread completion state at startup (instead of dropping
+        // them), and intentionally do not touch recentBellBySession here so busy
+        // process re-detection is not suppressed on relaunch.
+        let startupCompletionSessions = await tmux.consumeAgentCompletionSessions()
+        applyStartupCompletionSessions(startupCompletionSessions)
+
         // Sync busy state from actual tmux processes so spinners show immediately
         // after restart (busySessions is transient and starts empty on launch).
         await syncBusySessionsFromProcessState()
@@ -108,6 +115,41 @@ final class ThreadManager {
         await MainActor.run {
             updateDockBadge()
             delegate?.threadManager(self, didUpdateThreads: threads)
+        }
+    }
+
+    /// Applies completion events collected during app downtime.
+    /// This preserves unread completion indicators after relaunch without
+    /// affecting transient busy/waiting state derived from live tmux processes.
+    private func applyStartupCompletionSessions(_ sessions: [String]) {
+        guard !sessions.isEmpty else { return }
+
+        let now = Date()
+        let orderedUniqueSessions = sessions.reduce(into: [String]()) { result, session in
+            if !result.contains(session) {
+                result.append(session)
+            }
+        }
+
+        var changed = false
+        for session in orderedUniqueSessions {
+            guard let index = threads.firstIndex(where: { !$0.isArchived && $0.agentTmuxSessions.contains(session) }) else {
+                continue
+            }
+
+            threads[index].lastAgentCompletionAt = now
+            bumpThreadToTopOfSection(threads[index].id)
+
+            let isActiveThread = threads[index].id == activeThreadId
+            let isActiveTab = isActiveThread && threads[index].lastSelectedTmuxSessionName == session
+            if !isActiveTab {
+                threads[index].unreadCompletionSessions.insert(session)
+            }
+            changed = true
+        }
+
+        if changed {
+            try? persistence.saveThreads(threads)
         }
     }
 

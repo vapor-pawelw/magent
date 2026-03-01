@@ -13,6 +13,16 @@ final class ThreadCell: NSTableCellView {
 
     var onArchive: (() -> Void)?
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // NSProgressIndicator.startAnimation may silently fail when called on a
+        // cell not yet in a window (e.g. during NSOutlineView.reloadData on fresh
+        // launch). Re-apply the animation once the cell enters the hierarchy.
+        if window != nil, let spinner = busySpinner, !spinner.isHidden {
+            spinner.startAnimation(nil)
+        }
+    }
+
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
 
@@ -145,8 +155,8 @@ final class ThreadCell: NSTableCellView {
             completionImageView?.toolTip = "Agent needs input"
             completionImageView?.isHidden = false
         } else if thread.hasAgentBusy {
-            busySpinner?.startAnimation(nil)
             busySpinner?.isHidden = false
+            busySpinner?.startAnimation(nil)
             busySpinner?.toolTip = "Agent working"
             completionImageView?.image = nil
             completionImageView?.toolTip = nil
@@ -203,8 +213,8 @@ final class ThreadCell: NSTableCellView {
             completionImageView?.toolTip = "Agent needs input"
             completionImageView?.isHidden = false
         } else if isBusy {
-            busySpinner?.startAnimation(nil)
             busySpinner?.isHidden = false
+            busySpinner?.startAnimation(nil)
             busySpinner?.toolTip = "Agent working"
             completionImageView?.image = nil
             completionImageView?.toolTip = nil
