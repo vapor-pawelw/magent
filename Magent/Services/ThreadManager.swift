@@ -458,23 +458,14 @@ final class ThreadManager {
 
         let tmuxSessionName: String
         let startCmd: String
+        let tabDisplayName: String
 
         var selectedAgentType = currentThread.selectedAgentType
+        let requestedTabBaseName: String
         let repoSlug = Self.repoSlug(from:
             settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
         )
-        // Derive tab slug from default display name for this tab index
-        let defaultDisplayName = MagentThread.defaultDisplayName(at: tabIndex)
-        let tabSlug = Self.sanitizeForTmux(defaultDisplayName)
         if currentThread.isMain {
-            let baseName = Self.buildSessionName(repoSlug: repoSlug, threadName: nil, tabSlug: tabSlug)
-            var candidate = baseName
-            var suffix = 2
-            while await isTabNameTaken(candidate, existingNames: existingNames) {
-                candidate = "\(baseName)-\(suffix)"
-                suffix += 1
-            }
-            tmuxSessionName = candidate
             let projectPath = currentThread.worktreePath
             let projectName = settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
             let envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
@@ -490,12 +481,19 @@ final class ThreadManager {
                     envExports: envExports,
                     workingDirectory: projectPath
                 )
+                requestedTabBaseName = baseTabDisplayName(for: selectedAgentType)
             } else {
                 selectedAgentType = nil
                 startCmd = "\(envExports) && cd \(projectPath) && exec zsh -l"
+                requestedTabBaseName = "Terminal"
             }
-        } else {
-            let baseName = Self.buildSessionName(repoSlug: repoSlug, threadName: currentThread.name, tabSlug: tabSlug)
+
+            tabDisplayName = uniqueTabDisplayName(
+                baseName: requestedTabBaseName,
+                in: currentThread
+            )
+            let tabSlug = Self.sanitizeForTmux(tabDisplayName)
+            let baseName = Self.buildSessionName(repoSlug: repoSlug, threadName: nil, tabSlug: tabSlug)
             var candidate = baseName
             var suffix = 2
             while await isTabNameTaken(candidate, existingNames: existingNames) {
@@ -503,6 +501,7 @@ final class ThreadManager {
                 suffix += 1
             }
             tmuxSessionName = candidate
+        } else {
             let project = settings.projects.first(where: { $0.id == currentThread.projectId })
             let projectPath = project?.repoPath ?? currentThread.worktreePath
             let envExports = "export MAGENT_WORKTREE_PATH=\(currentThread.worktreePath) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(currentThread.name) && export MAGENT_PROJECT_NAME=\(project?.name ?? "project") && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
@@ -518,9 +517,25 @@ final class ThreadManager {
                     envExports: envExports,
                     workingDirectory: currentThread.worktreePath
                 )
+                requestedTabBaseName = baseTabDisplayName(for: selectedAgentType)
             } else {
                 startCmd = "\(envExports) && cd \(currentThread.worktreePath) && exec zsh -l"
+                requestedTabBaseName = "Terminal"
             }
+
+            tabDisplayName = uniqueTabDisplayName(
+                baseName: requestedTabBaseName,
+                in: currentThread
+            )
+            let tabSlug = Self.sanitizeForTmux(tabDisplayName)
+            let baseName = Self.buildSessionName(repoSlug: repoSlug, threadName: currentThread.name, tabSlug: tabSlug)
+            var candidate = baseName
+            var suffix = 2
+            while await isTabNameTaken(candidate, existingNames: existingNames) {
+                candidate = "\(baseName)-\(suffix)"
+                suffix += 1
+            }
+            tmuxSessionName = candidate
         }
 
         if useAgentCommand {
@@ -551,6 +566,7 @@ final class ThreadManager {
         enforceWorkingDirectoryAfterStartup(sessionName: tmuxSessionName, path: currentThread.worktreePath)
 
         threads[index].tmuxSessionNames.append(tmuxSessionName)
+        threads[index].customTabNames[tmuxSessionName] = tabDisplayName
         let shouldMarkAsAgentTab = (currentThread.isMain || useAgentCommand) && selectedAgentType != nil
         if shouldMarkAsAgentTab {
             threads[index].agentTmuxSessions.append(tmuxSessionName)
@@ -582,6 +598,39 @@ final class ThreadManager {
         )
 
         return tab
+    }
+
+    private func baseTabDisplayName(for agentType: AgentType?) -> String {
+        switch agentType {
+        case .claude:
+            return "Claude"
+        case .codex:
+            return "Codex"
+        case .custom:
+            return "Custom"
+        case .none:
+            return "Terminal"
+        }
+    }
+
+    private func uniqueTabDisplayName(baseName: String, in thread: MagentThread) -> String {
+        let usedNames = Set(
+            thread.tmuxSessionNames.enumerated().map { index, sessionName in
+                thread.displayName(for: sessionName, at: index).lowercased()
+            }
+        )
+        if !usedNames.contains(baseName.lowercased()) {
+            return baseName
+        }
+
+        for suffix in 1...999 {
+            let candidate = "\(baseName)-\(suffix)"
+            if !usedNames.contains(candidate.lowercased()) {
+                return candidate
+            }
+        }
+
+        return "\(baseName)-\(Int(Date().timeIntervalSince1970))"
     }
 
     func reorderTabs(for threadId: UUID, newOrder: [String]) {

@@ -140,7 +140,8 @@ extension ThreadDetailViewController {
                     self.terminalViews.append(terminalView)
 
                     let index = self.tabItems.count
-                    self.createTabItem(title: "Tab \(index)", closable: true)
+                    let title = self.thread.displayName(for: tab.tmuxSessionName, at: index)
+                    self.createTabItem(title: title, closable: true)
                     self.rebuildTabBar()
                     self.selectTab(at: index)
                 }
