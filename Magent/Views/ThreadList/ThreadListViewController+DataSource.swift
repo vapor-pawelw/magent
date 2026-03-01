@@ -45,6 +45,22 @@ extension ThreadListViewController {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Open in Finder
+        let finderItem = NSMenuItem(title: "Open in Finder", action: #selector(openThreadInFinder(_:)), keyEquivalent: "")
+        finderItem.target = self
+        finderItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        finderItem.representedObject = thread
+        menu.addItem(finderItem)
+
+        // Show Pull Request
+        let prItem = NSMenuItem(title: "Show Pull Request", action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
+        prItem.target = self
+        prItem.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: nil)
+        prItem.representedObject = thread
+        menu.addItem(prItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         // Archive
         let archiveItem = NSMenuItem(title: "Archive...", action: #selector(archiveThread(_:)), keyEquivalent: "")
         archiveItem.target = self
@@ -131,6 +147,73 @@ extension ThreadListViewController {
                     alert.addButton(withTitle: "OK")
                     alert.runModal()
                 }
+            }
+        }
+    }
+
+    @objc private func openThreadInFinder(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread else { return }
+
+        let targetPath: String
+        if thread.isMain {
+            let settings = persistence.loadSettings()
+            targetPath = settings.projects.first(where: { $0.id == thread.projectId })?.repoPath ?? thread.worktreePath
+        } else {
+            targetPath = thread.worktreePath
+        }
+
+        let path = NSString(string: targetPath).expandingTildeInPath
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+
+        guard exists, isDirectory.boolValue else {
+            let targetName = thread.isMain ? "project root" : "worktree"
+            BannerManager.shared.show(message: "Could not open \(targetName) in Finder because the directory is missing.", style: .warning)
+            return
+        }
+
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    @objc private func openThreadPullRequest(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread else { return }
+
+        let settings = persistence.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else { return }
+
+        Task {
+            let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
+            guard !remotes.isEmpty else {
+                await MainActor.run {
+                    BannerManager.shared.show(message: "No git remotes found", style: .warning)
+                }
+                return
+            }
+
+            let branch = thread.branchName
+            let defaultBranch: String?
+            if let projectDefaultBranch = project.defaultBranch {
+                defaultBranch = projectDefaultBranch
+            } else {
+                defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: project.repoPath)
+            }
+
+            await MainActor.run {
+                // Find the best remote — prefer origin
+                let remote: GitRemote
+                if remotes.count == 1 {
+                    remote = remotes[0]
+                } else if let origin = remotes.first(where: { $0.name == "origin" }) {
+                    remote = origin
+                } else {
+                    remote = remotes[0]
+                }
+
+                guard let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.openPullRequestsURL ?? remote.repoWebURL else {
+                    BannerManager.shared.show(message: "Could not construct URL for remote \(remote.name)", style: .warning)
+                    return
+                }
+                NSWorkspace.shared.open(url)
             }
         }
     }
