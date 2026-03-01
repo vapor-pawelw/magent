@@ -17,6 +17,8 @@ jobs:
 
       - name: Install mise
         uses: jdx/mise-action@v2
+        with:
+          install: true
 
       - name: Install tmux
         run: brew install tmux
@@ -36,7 +38,7 @@ jobs:
           grep -A1 CFBundle Project.swift
 
       - name: Generate Xcode project
-        run: mise x -- tuist generate --no-open
+        run: tuist generate --no-open
 
       - name: Build
         run: |
@@ -73,17 +75,14 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG#v}"
-          ZIP_URL="https://github.com/vapor-pawelw/magent/releases/download/${TAG}/Magent.zip"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "zip_url=$ZIP_URL" >> "$GITHUB_OUTPUT"
 
       - name: Download zip and compute SHA256
         id: sha
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          ZIP_URL="https://github.com/vapor-pawelw/magent/releases/download/${TAG}/Magent.zip"
-          curl -sL "$ZIP_URL" -o Magent.zip
+          curl -sL "https://github.com/vapor-pawelw/magent/releases/download/${TAG}/Magent.zip" -o Magent.zip
           SHA=$(sha256sum Magent.zip | awk '{print $1}')
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
           echo "SHA256: $SHA"
@@ -97,24 +96,11 @@ jobs:
 
       - name: Update cask formula
         run: |
-          cat > homebrew-magent/Casks/magent.rb << 'CASK_EOF'
-          cask "magent" do
-            version "${{ steps.release.outputs.version }}"
-            sha256 "${{ steps.sha.outputs.sha256 }}"
-
-            url "https://github.com/vapor-pawelw/magent/releases/download/v#{version}/Magent.zip"
-            name "Magent"
-            desc "Native macOS app for managing coding agents as parallel git worktree sessions"
-            homepage "https://github.com/vapor-pawelw/magent"
-
-            app "Magent.app"
-
-            zap trash: [
-              "~/Library/Application Support/Magent",
-              "~/Library/Preferences/com.magent.app.plist",
-            ]
-          end
-          CASK_EOF
+          VERSION="${{ steps.release.outputs.version }}"
+          SHA="${{ steps.sha.outputs.sha256 }}"
+          sed -i "s/version \".*\"/version \"$VERSION\"/" homebrew-magent/Casks/magent.rb
+          sed -i "s/sha256 \".*\"/sha256 \"$SHA\"/" homebrew-magent/Casks/magent.rb
+          cat homebrew-magent/Casks/magent.rb
 
       - name: Commit and push cask update
         working-directory: homebrew-magent
