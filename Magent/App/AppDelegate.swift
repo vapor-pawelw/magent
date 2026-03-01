@@ -101,4 +101,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
         completionHandler(options)
     }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+
+        // Bring existing window to front
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.mainWindow?.makeKeyAndOrderFront(nil)
+
+        // Navigate to the thread/tab that triggered this notification
+        if let threadIdString = userInfo["threadId"] as? String,
+           let threadId = UUID(uuidString: threadIdString) {
+            var info: [String: Any] = ["threadId": threadId]
+            if let sessionName = userInfo["sessionName"] as? String {
+                info["sessionName"] = sessionName
+            }
+            NotificationCenter.default.post(
+                name: .magentNavigateToThread,
+                object: nil,
+                userInfo: info
+            )
+        }
+
+        completionHandler()
+    }
 }

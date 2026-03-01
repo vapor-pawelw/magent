@@ -526,7 +526,7 @@ extension ThreadManager {
             changedThreadIds.insert(threads[index].id)
 
             let projectName = settings.projects.first(where: { $0.id == threads[index].projectId })?.name ?? "Project"
-            sendAgentCompletionNotification(for: threads[index], projectName: projectName, playSound: playSound)
+            sendAgentCompletionNotification(for: threads[index], projectName: projectName, playSound: playSound, sessionName: session)
         }
 
         guard changed else { return }
@@ -561,7 +561,7 @@ extension ThreadManager {
         }
     }
 
-    private func sendAgentCompletionNotification(for thread: MagentThread, projectName: String, playSound: Bool) {
+    private func sendAgentCompletionNotification(for thread: MagentThread, projectName: String, playSound: Bool, sessionName: String) {
         let settings = persistence.loadSettings()
 
         if settings.showSystemBanners {
@@ -571,7 +571,7 @@ extension ThreadManager {
             if playSound {
                 content.sound = UNNotificationSound(named: UNNotificationSoundName(settings.agentCompletionSoundName))
             }
-            content.userInfo = ["threadId": thread.id.uuidString]
+            content.userInfo = ["threadId": thread.id.uuidString, "sessionName": sessionName]
 
             let request = UNNotificationRequest(
                 identifier: "magent-agent-finished-\(UUID().uuidString)",
@@ -1148,9 +1148,9 @@ extension ThreadManager {
         }
 
         guard changed else { return }
-        for (threadIndex, _) in notifyPairs {
+        for (threadIndex, sessionName) in notifyPairs {
             let projectName = settings.projects.first(where: { $0.id == threads[threadIndex].projectId })?.name ?? "Project"
-            sendAgentWaitingNotification(for: threads[threadIndex], projectName: projectName, playSound: playSound)
+            sendAgentWaitingNotification(for: threads[threadIndex], projectName: projectName, playSound: playSound, sessionName: sessionName)
         }
 
         await MainActor.run {
@@ -1215,7 +1215,7 @@ extension ThreadManager {
         )
     }
 
-    private func sendAgentWaitingNotification(for thread: MagentThread, projectName: String, playSound: Bool) {
+    private func sendAgentWaitingNotification(for thread: MagentThread, projectName: String, playSound: Bool, sessionName: String) {
         let settings = persistence.loadSettings()
 
         if settings.showSystemBanners {
@@ -1225,7 +1225,7 @@ extension ThreadManager {
             if playSound {
                 content.sound = UNNotificationSound(named: UNNotificationSoundName(settings.agentCompletionSoundName))
             }
-            content.userInfo = ["threadId": thread.id.uuidString]
+            content.userInfo = ["threadId": thread.id.uuidString, "sessionName": sessionName]
 
             let request = UNNotificationRequest(
                 identifier: "magent-agent-waiting-\(UUID().uuidString)",

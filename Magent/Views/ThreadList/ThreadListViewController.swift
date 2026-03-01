@@ -496,6 +496,16 @@ final class ThreadListViewController: NSViewController {
         }
     }
 
+    func selectThread(byId threadId: UUID) {
+        for row in 0..<outlineView.numberOfRows {
+            if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
+                delegate?.threadList(self, didSelectThread: thread)
+                outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                return
+            }
+        }
+    }
+
     // MARK: - Actions
 
     @objc private func addThreadTapped() {

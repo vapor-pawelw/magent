@@ -45,6 +45,13 @@ final class SplitViewController: NSSplitViewController {
             object: nil
         )
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleNavigateToThread),
+            name: .magentNavigateToThread,
+            object: nil
+        )
+
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             guard event.modifierFlags.contains(.command) else { return event }
@@ -208,6 +215,29 @@ final class SplitViewController: NSSplitViewController {
 
     @objc private func openSettingsFromNotification(_ notification: Notification) {
         settingsTapped()
+    }
+
+    @objc private func handleNavigateToThread(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
+        let sessionName = notification.userInfo?["sessionName"] as? String
+        let alreadyShowing = currentDetailVC?.thread.id == threadId
+
+        // Pre-seed UserDefaults so a newly-created ThreadDetailViewController
+        // opens on the correct tab during its async setup.
+        if let sessionName {
+            UserDefaults.standard.set(threadId.uuidString, forKey: "MagentLastOpenedThreadID")
+            UserDefaults.standard.set(sessionName, forKey: "MagentLastOpenedSessionName")
+        }
+
+        // Select the thread in the sidebar (creates ThreadDetailViewController if needed)
+        threadListVC.selectThread(byId: threadId)
+
+        // If the thread was already showing, tabs are set up — select directly
+        if alreadyShowing, let sessionName, let detailVC = currentDetailVC {
+            if let tabIndex = detailVC.thread.tmuxSessionNames.firstIndex(of: sessionName) {
+                detailVC.selectTab(at: tabIndex)
+            }
+        }
     }
 
     @objc private func settingsTapped() {
