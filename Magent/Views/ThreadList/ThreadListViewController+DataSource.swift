@@ -80,8 +80,14 @@ extension ThreadListViewController {
         // Delete (destructive)
         let deleteItem = NSMenuItem(title: "Delete...", action: #selector(deleteThread(_:)), keyEquivalent: "")
         deleteItem.target = self
-        deleteItem.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
+        deleteItem.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(paletteColors: [.systemRed]))
         deleteItem.representedObject = thread
+        let redAttributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.systemRed,
+            .font: NSFont.menuFont(ofSize: 0)
+        ]
+        deleteItem.attributedTitle = NSAttributedString(string: "Delete...", attributes: redAttributes)
         menu.addItem(deleteItem)
 
         return menu
@@ -372,7 +378,24 @@ extension ThreadListViewController {
             let merged = await git.isMergedInto(worktreePath: thread.worktreePath, baseBranch: baseBranch)
 
             await MainActor.run {
-                if clean && merged {
+                let liveThread = self.threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+                let agentBusy = liveThread.hasAgentBusy
+
+                if agentBusy {
+                    let alert = NSAlert()
+                    alert.messageText = "Archive Thread"
+                    alert.informativeText = "An agent in \"\(thread.name)\" is currently busy. Archiving will terminate the running agent and remove the worktree directory. The git branch \"\(thread.branchName)\" will be kept."
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "Archive Anyway")
+                    alert.addButton(withTitle: "Cancel")
+
+                    let response = alert.runModal()
+                    guard response == .alertFirstButtonReturn else { return }
+
+                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
+                        try await self.threadManager.archiveThread(thread)
+                    }
+                } else if clean && merged {
                     self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
                         try await self.threadManager.archiveThread(thread)
                     }

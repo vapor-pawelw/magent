@@ -600,6 +600,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()
         refreshDefaultSectionPopup()
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
         return true
     }
 

@@ -17,7 +17,23 @@ extension ThreadDetailViewController {
             let merged = await git.isMergedInto(worktreePath: threadToArchive.worktreePath, baseBranch: baseBranch)
 
             await MainActor.run {
-                if clean && merged {
+                let agentBusy = threadToArchive.hasAgentBusy
+
+                if agentBusy {
+                    let alert = NSAlert()
+                    alert.messageText = "Archive Thread"
+                    alert.informativeText = "An agent in \"\(threadToArchive.name)\" is currently busy. Archiving will terminate the running agent and remove the worktree directory. The git branch \"\(threadToArchive.branchName)\" will be kept."
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "Archive Anyway")
+                    alert.addButton(withTitle: "Cancel")
+
+                    let response = alert.runModal()
+                    guard response == .alertFirstButtonReturn else { return }
+
+                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
+                        try await self.threadManager.archiveThread(threadToArchive)
+                    }
+                } else if clean && merged {
                     self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
                         try await self.threadManager.archiveThread(threadToArchive)
                     }
