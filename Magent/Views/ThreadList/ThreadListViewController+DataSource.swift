@@ -436,7 +436,32 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         proposedItem item: Any?,
         proposedChildIndex index: Int
     ) -> NSDragOperation {
-        guard item is SidebarSection else { return [] }
+        guard let section = item as? SidebarSection else { return [] }
+
+        // Read the dragged thread's pin status
+        guard let pasteboardItem = info.draggingPasteboard.pasteboardItems?.first,
+              let uuidString = pasteboardItem.string(forType: .string),
+              let threadId = UUID(uuidString: uuidString),
+              let thread = threadManager.threads.first(where: { $0.id == threadId }) else {
+            return []
+        }
+
+        // Drop "on" section header → cross-section move (always allowed)
+        if index == NSOutlineViewDropOnItemIndex {
+            return .move
+        }
+
+        // Drop at specific index → reorder within section
+        // Enforce pinned/unpinned boundary
+        let pinnedCount = section.threads.filter(\.isPinned).count
+        if thread.isPinned {
+            // Pinned threads can only be placed within 0..<pinnedCount (or at pinnedCount to be last pinned)
+            guard index <= pinnedCount else { return [] }
+        } else {
+            // Unpinned threads can only be placed at pinnedCount...count
+            guard index >= pinnedCount else { return [] }
+        }
+
         return .move
     }
 
@@ -454,7 +479,24 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             return false
         }
 
-        threadManager.moveThread(thread, toSection: section.sectionId)
+        if index == NSOutlineViewDropOnItemIndex {
+            // Cross-section move (drop on section header)
+            threadManager.moveThread(thread, toSection: section.sectionId)
+            reloadData()
+            return true
+        }
+
+        // Reorder within section at specific index
+        let isCrossSection = thread.sectionId != section.sectionId
+        if isCrossSection {
+            // Move to the new section first (this sets displayOrder to bottom)
+            threadManager.moveThread(thread, toSection: section.sectionId)
+        }
+
+        // Calculate group-relative index for the reorder
+        let pinnedCount = section.threads.filter(\.isPinned).count
+        let groupIndex = thread.isPinned ? index : index - pinnedCount
+        threadManager.reorderThread(threadId, toIndex: groupIndex, inSection: section.sectionId)
         reloadData()
         return true
     }

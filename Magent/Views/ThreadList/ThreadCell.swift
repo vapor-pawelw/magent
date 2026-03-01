@@ -4,6 +4,7 @@ final class ThreadCell: NSTableCellView {
 
     private var dirtyImageView: NSImageView?
     private var pinImageView: NSImageView?
+    private var leadingPinImageView: NSImageView?
     private var archiveButton: NSButton?
     private var completionImageView: NSImageView?
     private var busySpinner: NSProgressIndicator?
@@ -84,6 +85,24 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
+    private func ensureLeadingPin() {
+        guard leadingPinImageView == nil, let iv = imageView else { return }
+        let pin = NSImageView()
+        pin.translatesAutoresizingMaskIntoConstraints = false
+        pin.setContentHuggingPriority(.required, for: .horizontal)
+        pin.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
+        pin.contentTintColor = .tertiaryLabelColor
+        pin.isHidden = true
+        addSubview(pin)
+        NSLayoutConstraint.activate([
+            pin.trailingAnchor.constraint(equalTo: iv.leadingAnchor, constant: -2),
+            pin.centerYAnchor.constraint(equalTo: iv.centerYAnchor),
+            pin.widthAnchor.constraint(equalToConstant: 10),
+            pin.heightAnchor.constraint(equalToConstant: 10),
+        ])
+        leadingPinImageView = pin
+    }
+
     func configure(with thread: MagentThread, sectionColor: NSColor?) {
         textField?.stringValue = thread.name
         textField?.font = thread.hasUnreadAgentCompletion
@@ -108,14 +127,12 @@ final class ThreadCell: NSTableCellView {
             dirtyImageView?.isHidden = true
         }
 
-        if thread.isPinned {
-            pinImageView?.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
-            pinImageView?.contentTintColor = .tertiaryLabelColor
-            pinImageView?.isHidden = false
-        } else {
-            pinImageView?.image = nil
-            pinImageView?.isHidden = true
-        }
+        // Trailing pin icon — always hidden (replaced by leading pin)
+        pinImageView?.isHidden = true
+
+        // Leading pin icon — appears to the left of the terminal icon
+        ensureLeadingPin()
+        leadingPinImageView?.isHidden = !thread.isPinned
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 

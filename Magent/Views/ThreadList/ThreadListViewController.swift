@@ -366,10 +366,17 @@ final class ThreadListViewController: NSViewController {
                 let left = lhs.element
                 let right = rhs.element
 
+                // Pinned threads always come first
                 if left.isPinned != right.isPinned {
                     return left.isPinned
                 }
 
+                // Sort by displayOrder (lower first)
+                if left.displayOrder != right.displayOrder {
+                    return left.displayOrder < right.displayOrder
+                }
+
+                // Fallback: most recent agent completion first
                 switch (left.lastAgentCompletionAt, right.lastAgentCompletionAt) {
                 case let (l?, r?) where l != r:
                     return l > r

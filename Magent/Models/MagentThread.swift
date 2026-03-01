@@ -22,6 +22,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var didAutoRenameFromFirstPrompt: Bool
     var customTabNames: [String: String]
     var baseBranch: String?
+    var displayOrder: Int
 
     // Transient (not persisted) — tracks which agent sessions are currently working
     var busySessions: Set<String> = []
@@ -70,6 +71,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case didAutoRenameFromFirstPrompt
         case customTabNames
         case baseBranch
+        case displayOrder
     }
 
     init(
@@ -93,7 +95,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         unreadCompletionSessions: Set<String> = [],
         didAutoRenameFromFirstPrompt: Bool = false,
         customTabNames: [String: String] = [:],
-        baseBranch: String? = nil
+        baseBranch: String? = nil,
+        displayOrder: Int = 0
     ) {
         self.id = id
         self.projectId = projectId
@@ -116,6 +119,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.didAutoRenameFromFirstPrompt = didAutoRenameFromFirstPrompt
         self.customTabNames = customTabNames
         self.baseBranch = baseBranch
+        self.displayOrder = displayOrder
     }
 
     init(from decoder: Decoder) throws {
@@ -140,6 +144,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         didAutoRenameFromFirstPrompt = try container.decodeIfPresent(Bool.self, forKey: .didAutoRenameFromFirstPrompt) ?? false
         customTabNames = try container.decodeIfPresent([String: String].self, forKey: .customTabNames) ?? [:]
         baseBranch = try container.decodeIfPresent(String.self, forKey: .baseBranch)
+        displayOrder = try container.decodeIfPresent(Int.self, forKey: .displayOrder) ?? 0
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -175,6 +180,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             try container.encode(customTabNames, forKey: .customTabNames)
         }
         try container.encodeIfPresent(baseBranch, forKey: .baseBranch)
+        try container.encode(displayOrder, forKey: .displayOrder)
     }
 }
 
