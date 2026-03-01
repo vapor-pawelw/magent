@@ -213,11 +213,52 @@ final class DiffPanelView: NSView {
         }
     }
 
+    // MARK: - Keyboard Navigation
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        guard !entries.isEmpty else {
+            super.keyDown(with: event)
+            return
+        }
+
+        switch Int(event.keyCode) {
+        case 126: // Up arrow
+            let currentIndex = entries.firstIndex(where: { $0.relativePath == selectedFilePath })
+            let newIndex: Int
+            if let idx = currentIndex {
+                newIndex = idx > 0 ? idx - 1 : entries.count - 1
+            } else {
+                newIndex = entries.count - 1
+            }
+            selectFile(entries[newIndex].relativePath)
+
+        case 125: // Down arrow
+            let currentIndex = entries.firstIndex(where: { $0.relativePath == selectedFilePath })
+            let newIndex: Int
+            if let idx = currentIndex {
+                newIndex = idx < entries.count - 1 ? idx + 1 : 0
+            } else {
+                newIndex = 0
+            }
+            selectFile(entries[newIndex].relativePath)
+
+        case 53: // Escape
+            deselectFile()
+            window?.makeFirstResponder(nil)
+
+        default:
+            super.keyDown(with: event)
+        }
+    }
+
     // MARK: - File Selection
 
     private func selectFile(_ filePath: String) {
         selectedFilePath = filePath
         updateRowSelectionAppearance()
+        window?.makeFirstResponder(self)
         NotificationCenter.default.post(
             name: .magentShowDiffViewer,
             object: nil,
