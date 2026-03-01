@@ -103,9 +103,10 @@ final class ThreadManager {
         // after restart (busySessions is transient and starts empty on launch).
         await syncBusySessionsFromProcessState()
 
-        // Populate dirty and delivered states at launch so indicators show immediately.
+        // Populate dirty, delivered, and branch states at launch so indicators show immediately.
         await refreshDirtyStates()
         await refreshDeliveredStates()
+        await refreshBranchStates()
 
         await MainActor.run {
             updateDockBadge()
@@ -1112,7 +1113,83 @@ final class ThreadManager {
             activeNames: activeNames
         )
     }
+    func refreshBranchStates() async {
+        let settings = persistence.loadSettings()
+        var changed = false
+        for i in threads.indices where !threads[i].isArchived {
+            let worktreePath = threads[i].worktreePath
+            guard FileManager.default.fileExists(atPath: worktreePath) else { continue }
 
+            let actual = await git.getCurrentBranch(workingDirectory: worktreePath)
+
+            let expected: String?
+            if threads[i].isMain {
+                if let project = settings.projects.first(where: { $0.id == threads[i].projectId }),
+                   let defaultBranch = project.defaultBranch, !defaultBranch.isEmpty {
+                    expected = defaultBranch
+                } else if let detected = await git.detectDefaultBranch(repoPath: worktreePath) {
+                    expected = detected
+                } else {
+                    expected = nil
+                }
+            } else {
+                expected = threads[i].branchName
+            }
+
+            let mismatch: Bool
+            if let expected, let actual {
+                mismatch = actual != expected
+            } else {
+                mismatch = false
+            }
+            if threads[i].actualBranch != actual || threads[i].expectedBranch != expected || threads[i].hasBranchMismatch != mismatch {
+                threads[i].actualBranch = actual
+                threads[i].expectedBranch = expected
+                threads[i].hasBranchMismatch = mismatch
+                changed = true
+            }
+        }
+        if changed {
+            await MainActor.run {
+                delegate?.threadManager(self, didUpdateThreads: threads)
+            }
+        }
+    }
+
+    func resolveExpectedBranch(for thread: MagentThread) -> String? {
+        // Prefer the cached expected branch from the polling cycle
+        if let cached = thread.expectedBranch, !cached.isEmpty {
+            return cached
+        }
+        if thread.isMain {
+            let settings = persistence.loadSettings()
+            if let project = settings.projects.first(where: { $0.id == thread.projectId }),
+               let defaultBranch = project.defaultBranch, !defaultBranch.isEmpty {
+                return defaultBranch
+            }
+            return nil
+        }
+        return thread.branchName
+    }
+
+    func switchToExpectedBranch(threadId: UUID) async throws {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+        let thread = threads[index]
+        guard let expected = resolveExpectedBranch(for: thread) else {
+            throw ThreadManagerError.noExpectedBranch
+        }
+        try await git.checkoutBranch(workingDirectory: thread.worktreePath, branchName: expected)
+
+        // Refresh branch state immediately
+        let actual = await git.getCurrentBranch(workingDirectory: thread.worktreePath)
+        threads[index].actualBranch = actual
+        threads[index].hasBranchMismatch = actual != nil && actual != expected
+        await MainActor.run {
+            delegate?.threadManager(self, didUpdateThreads: threads)
+        }
+    }
     func refreshDiffStats(for threadId: UUID) async -> [FileDiffEntry] {
         guard let thread = threads.first(where: { $0.id == threadId }) else { return [] }
         let baseBranch = resolveBaseBranch(for: thread)

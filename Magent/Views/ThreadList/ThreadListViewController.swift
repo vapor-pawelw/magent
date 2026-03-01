@@ -55,6 +55,7 @@ final class ThreadListViewController: NSViewController {
 
     private var addButton: NSButton!
     var diffPanelView: DiffPanelView!
+    var branchMismatchView: BranchMismatchView!
     private var isCreatingThread = false
     var suppressNextSectionRowToggle = false
     var suppressNextProjectRowToggle = false
@@ -221,6 +222,10 @@ final class ThreadListViewController: NSViewController {
         diffPanelView = DiffPanelView()
         view.addSubview(diffPanelView)
 
+        // Branch mismatch warning below diff panel
+        branchMismatchView = BranchMismatchView()
+        view.addSubview(branchMismatchView)
+
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.topAnchor, constant: 32),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -229,7 +234,11 @@ final class ThreadListViewController: NSViewController {
 
             diffPanelView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             diffPanelView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            diffPanelView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            diffPanelView.bottomAnchor.constraint(equalTo: branchMismatchView.topAnchor),
+
+            branchMismatchView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            branchMismatchView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            branchMismatchView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
     }
 
@@ -724,6 +733,7 @@ final class ThreadListViewController: NSViewController {
         guard row >= 0,
               let thread = outlineView.item(atRow: row) as? MagentThread else {
             diffPanelView.clear()
+            branchMismatchView.clear()
             return
         }
         refreshDiffPanel(for: thread)
@@ -739,6 +749,54 @@ final class ThreadListViewController: NSViewController {
                     branchName: thread.isMain ? nil : thread.branchName,
                     baseBranch: thread.isMain ? nil : baseBranch
                 )
+            }
+        }
+        refreshBranchMismatchView(for: thread)
+    }
+
+    // MARK: - Branch Mismatch
+
+    func refreshBranchMismatchView(for thread: MagentThread) {
+        // Read the latest transient state from the thread manager
+        guard let current = threadManager.threads.first(where: { $0.id == thread.id }),
+              current.hasBranchMismatch,
+              let actual = current.actualBranch,
+              let expected = current.expectedBranch else {
+            branchMismatchView.clear()
+            return
+        }
+        branchMismatchView.update(
+            actualBranch: actual,
+            expectedBranch: expected,
+            hasMismatch: true
+        )
+        branchMismatchView.onSwitchBranch = { [weak self] in
+            self?.handleSwitchBranch(for: current)
+        }
+    }
+
+    private func handleSwitchBranch(for thread: MagentThread) {
+        Task {
+            do {
+                try await threadManager.switchToExpectedBranch(threadId: thread.id)
+                let expected = threadManager.resolveExpectedBranch(for: thread) ?? thread.branchName
+                await MainActor.run {
+                    BannerManager.shared.show(message: "Switched back to \(expected)", style: .info, duration: 3)
+                    self.branchMismatchView.clear()
+                    self.refreshDiffPanel(for: thread)
+                }
+            } catch {
+                await MainActor.run {
+                    let message: String
+                    if let shellError = error as? ShellError,
+                       case .commandFailed(_, let stderr) = shellError {
+                        let gitMessage = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                        message = gitMessage.isEmpty ? error.localizedDescription : gitMessage
+                    } else {
+                        message = error.localizedDescription
+                    }
+                    BannerManager.shared.show(message: message, style: .error, duration: 5)
+                }
             }
         }
     }

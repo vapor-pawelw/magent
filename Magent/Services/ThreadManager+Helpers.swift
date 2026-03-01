@@ -549,6 +549,7 @@ enum ThreadManagerError: LocalizedError {
     case cannotDeleteMainThread
     case nameGenerationFailed
     case worktreePathConflict([String])
+    case noExpectedBranch
 
     var errorDescription: String? {
         switch self {
@@ -567,6 +568,8 @@ enum ThreadManagerError: LocalizedError {
         case .worktreePathConflict(let names):
             let list = names.joined(separator: ", ")
             return "Cannot move worktrees — the following directories already exist in the destination: \(list)"
+        case .noExpectedBranch:
+            return "No expected branch configured. Set the default branch in project settings."
         }
     }
 }

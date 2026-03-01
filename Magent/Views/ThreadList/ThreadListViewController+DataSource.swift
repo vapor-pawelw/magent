@@ -956,5 +956,11 @@ extension ThreadListViewController: ThreadManagerDelegate {
         if outlineView.selectedRow < 0 {
             autoSelectFirst()
         }
+
+        // Refresh branch mismatch view for currently selected thread
+        let row = outlineView.selectedRow
+        if row >= 0, let selected = outlineView.item(atRow: row) as? MagentThread {
+            refreshBranchMismatchView(for: selected)
+        }
     }
 }

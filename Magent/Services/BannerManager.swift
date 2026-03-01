@@ -45,6 +45,9 @@ final class BannerManager {
         banner.onDismiss = { [weak self] in
             self?.dismissAnimated()
         }
+        banner.onUserInteraction = { [weak self] in
+            self?.resetDismissTimer(duration: config.duration)
+        }
 
         container.addSubview(banner)
 
@@ -100,6 +103,18 @@ final class BannerManager {
                 }
             }
         })
+    }
+
+    private func resetDismissTimer(duration: TimeInterval?) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        dismissTimer?.invalidate()
+        dismissTimer = nil
+        guard let duration else { return }
+        dismissTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.dismissAnimated()
+            }
+        }
     }
 
     private func removeBannerImmediately() {

@@ -68,11 +68,14 @@ final class BannerView: NSView {
 
     private let config: BannerConfig
     var onDismiss: (() -> Void)?
+    /// Called when the user interacts with the banner (hover, click) to delay auto-dismiss.
+    var onUserInteraction: (() -> Void)?
 
     private let iconView = NSImageView()
-    private let messageLabel = NSTextField(labelWithString: "")
+    private let messageLabel = NSTextField(wrappingLabelWithString: "")
     private let closeButton = NSButton()
     private var actionButtons: [NSButton] = []
+    private var trackingArea: NSTrackingArea?
 
     init(config: BannerConfig) {
         self.config = config
@@ -100,14 +103,20 @@ final class BannerView: NSView {
         iconView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(iconView)
 
-        // Message
+        // Message — selectable, multi-line
         messageLabel.stringValue = config.message
         messageLabel.font = .systemFont(ofSize: 13, weight: .medium)
         messageLabel.textColor = NSColor(resource: .textPrimary)
-        messageLabel.lineBreakMode = .byTruncatingTail
-        messageLabel.maximumNumberOfLines = 1
+        messageLabel.lineBreakMode = .byWordWrapping
+        messageLabel.maximumNumberOfLines = 0
+        messageLabel.isSelectable = true
+        messageLabel.isEditable = false
+        messageLabel.drawsBackground = false
+        messageLabel.isBezeled = false
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
         messageLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        messageLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+        messageLabel.setContentHuggingPriority(.required, for: .vertical)
         addSubview(messageLabel)
 
         // Action buttons
@@ -146,18 +155,19 @@ final class BannerView: NSView {
         translatesAutoresizingMaskIntoConstraints = false
 
         var constraints = [
-            heightAnchor.constraint(equalToConstant: 40),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 40),
 
             iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.topAnchor.constraint(equalTo: topAnchor, constant: 11),
             iconView.widthAnchor.constraint(equalToConstant: 18),
             iconView.heightAnchor.constraint(equalToConstant: 18),
 
             messageLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
-            messageLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            messageLabel.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            messageLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
 
             closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            closeButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            closeButton.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             closeButton.widthAnchor.constraint(equalToConstant: 20),
             closeButton.heightAnchor.constraint(equalToConstant: 20),
         ]
@@ -166,12 +176,38 @@ final class BannerView: NSView {
         var previousTrailing = closeButton.leadingAnchor
         for button in actionButtons.reversed() {
             constraints.append(button.trailingAnchor.constraint(equalTo: previousTrailing, constant: -6))
-            constraints.append(button.centerYAnchor.constraint(equalTo: centerYAnchor))
+            constraints.append(button.topAnchor.constraint(equalTo: topAnchor, constant: 8))
             previousTrailing = button.leadingAnchor
         }
         constraints.append(messageLabel.trailingAnchor.constraint(lessThanOrEqualTo: previousTrailing, constant: -8))
 
         NSLayoutConstraint.activate(constraints)
+    }
+
+    // MARK: - Mouse tracking for hover delay
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingArea {
+            removeTrackingArea(existing)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onUserInteraction?()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onUserInteraction?()
+        super.mouseDown(with: event)
     }
 
     @objc private func actionTapped(_ sender: NSButton) {

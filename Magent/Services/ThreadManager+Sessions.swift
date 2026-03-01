@@ -428,6 +428,7 @@ extension ThreadManager {
                 dirtyCheckTickCounter = 0
                 await refreshDirtyStates()
                 await refreshDeliveredStates()
+                await refreshBranchStates()
             }
 
             // Jira sync every 20th tick (~60 seconds)

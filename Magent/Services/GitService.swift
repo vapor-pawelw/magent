@@ -458,6 +458,13 @@ final class GitService {
         return nil
     }
 
+    func checkoutBranch(workingDirectory: String, branchName: String) async throws {
+        _ = try await ShellExecutor.run(
+            "git checkout \(shellQuote(branchName))",
+            workingDirectory: workingDirectory
+        )
+    }
+
     func isGitRepository(at path: String) async -> Bool {
         do {
             _ = try await ShellExecutor.run("git rev-parse --git-dir", workingDirectory: path)
