@@ -375,28 +375,46 @@ final class TmuxService {
         return result
     }
 
-    /// Returns a dictionary mapping session names to the active pane's command and title.
+    /// Returns a dictionary mapping session names to the active pane's command, title, and PID.
     /// Only includes sessions from the given set that are alive.
-    func activePaneStates(forSessions sessionNames: Set<String>) async -> [String: (command: String, title: String)] {
+    func activePaneStates(forSessions sessionNames: Set<String>) async -> [String: (command: String, title: String, pid: pid_t)] {
         guard !sessionNames.isEmpty else { return [:] }
         guard let output = try? await ShellExecutor.run(
-            "tmux list-panes -a -F '#{session_name}\t#{pane_active}\t#{pane_current_command}\t#{pane_title}'"
+            "tmux list-panes -a -F '#{session_name}\t#{pane_active}\t#{pane_current_command}\t#{pane_title}\t#{pane_pid}'"
         ), !output.isEmpty else {
             return [:]
         }
-        var result = [String: (command: String, title: String)]()
+        var result = [String: (command: String, title: String, pid: pid_t)]()
         for line in output.split(whereSeparator: \.isNewline) {
-            let parts = line.split(separator: "\t", maxSplits: 3, omittingEmptySubsequences: false)
-            guard parts.count >= 4 else { continue }
+            let parts = line.split(separator: "\t", maxSplits: 4, omittingEmptySubsequences: false)
+            guard parts.count >= 5 else { continue }
             let session = String(parts[0])
             guard sessionNames.contains(session) else { continue }
             let isActive = parts[1] == "1"
             let command = String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)
             let title = String(parts[3]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let pid = pid_t(parts[4].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
             // Prefer the active pane; fall back to first pane seen.
             if isActive || result[session] == nil {
-                result[session] = (command: command, title: title)
+                result[session] = (command: command, title: title, pid: pid)
             }
+        }
+        return result
+    }
+
+    /// Returns child PIDs for each specified parent PID, in one `ps` call.
+    func childPids(forParents parentPids: Set<pid_t>) async -> [pid_t: [pid_t]] {
+        guard !parentPids.isEmpty else { return [:] }
+        guard let output = try? await ShellExecutor.run("ps -o ppid=,pid= -ax"),
+              !output.isEmpty else { return [:] }
+        var result: [pid_t: [pid_t]] = [:]
+        for line in output.split(whereSeparator: \.isNewline) {
+            let parts = line.split(whereSeparator: \.isWhitespace)
+            guard parts.count >= 2,
+                  let ppid = pid_t(parts[0]),
+                  let cpid = pid_t(parts[1]),
+                  parentPids.contains(ppid) else { continue }
+            result[ppid, default: []].append(cpid)
         }
         return result
     }

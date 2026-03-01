@@ -591,6 +591,21 @@ extension ThreadManager {
         let paneStates = await tmux.activePaneStates(forSessions: allAgentSessions)
         guard !paneStates.isEmpty else { return }
 
+        // Collect pane PIDs for shell sessions where the title doesn't indicate busy.
+        // These need a child-process check to detect agents running inside the shell wrapper.
+        var shellPidsToCheck = Set<pid_t>()
+        for thread in threads where !thread.isArchived {
+            for session in thread.agentTmuxSessions {
+                guard let paneState = paneStates[session] else { continue }
+                let isShell = Self.idleShellCommands.contains(paneState.command)
+                let titleIndicatesBusy = paneTitleIndicatesBusy(paneState.title)
+                if isShell && !titleIndicatesBusy && paneState.pid > 0 {
+                    shellPidsToCheck.insert(paneState.pid)
+                }
+            }
+        }
+        let childrenByPid = await tmux.childPids(forParents: shellPidsToCheck)
+
         var changed = false
         var changedThreadIds = Set<UUID>()
         for i in threads.indices {
@@ -615,6 +630,17 @@ extension ThreadManager {
                             }
                             continue
                         }
+                        if !threads[i].busySessions.contains(session) {
+                            threads[i].busySessions.insert(session)
+                            changed = true
+                            changedThreadIds.insert(threads[i].id)
+                        }
+                        continue
+                    }
+                    // Title doesn't indicate busy — check if the shell has child processes
+                    // (agent running inside the shell wrapper, e.g. zsh -c 'claude ...')
+                    if paneState.pid > 0, !(childrenByPid[paneState.pid]?.isEmpty ?? true) {
+                        // Shell has children → agent still running inside wrapper
                         if !threads[i].busySessions.contains(session) {
                             threads[i].busySessions.insert(session)
                             changed = true
