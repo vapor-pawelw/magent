@@ -65,4 +65,30 @@ final class PersistenceService {
         let data = try encoder.encode(settings)
         try data.write(to: settingsURL, options: .atomic)
     }
+
+    // MARK: - Worktree Metadata Cache
+
+    private func worktreeCacheURL(worktreesBasePath: String) -> URL {
+        URL(fileURLWithPath: worktreesBasePath).appendingPathComponent(".magent-cache.json")
+    }
+
+    func loadWorktreeCache(worktreesBasePath: String) -> WorktreeMetadataCache {
+        let url = worktreeCacheURL(worktreesBasePath: worktreesBasePath)
+        guard let data = try? Data(contentsOf: url) else { return WorktreeMetadataCache() }
+        return (try? decoder.decode(WorktreeMetadataCache.self, from: data)) ?? WorktreeMetadataCache()
+    }
+
+    func saveWorktreeCache(_ cache: WorktreeMetadataCache, worktreesBasePath: String) {
+        let url = worktreeCacheURL(worktreesBasePath: worktreesBasePath)
+        guard let data = try? encoder.encode(cache) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    func pruneWorktreeCache(worktreesBasePath: String, activeNames: Set<String>) {
+        var cache = loadWorktreeCache(worktreesBasePath: worktreesBasePath)
+        let before = cache.worktrees.count
+        cache.worktrees = cache.worktrees.filter { activeNames.contains($0.key) }
+        guard cache.worktrees.count != before else { return }
+        saveWorktreeCache(cache, worktreesBasePath: worktreesBasePath)
+    }
 }

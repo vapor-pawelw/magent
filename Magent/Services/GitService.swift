@@ -236,17 +236,55 @@ final class GitService {
 
     /// Returns `true` when the branch has commits beyond `baseBranch` and all of them
     /// have been merged or cherry-picked into `baseBranch`.
-    func isFullyDelivered(worktreePath: String, baseBranch: String) async -> Bool {
-        let result = await ShellExecutor.execute(
-            "git cherry \(shellQuote(baseBranch)) HEAD",
+    ///
+    /// When `forkPointCommit` is provided, it's used to distinguish "branch was merged"
+    /// from "brand new branch with no commits" in the case where HEAD is an ancestor of baseBranch.
+    func isFullyDelivered(worktreePath: String, baseBranch: String, forkPointCommit: String? = nil) async -> Bool {
+        // First check: does the branch have commits not reachable from baseBranch?
+        let logResult = await ShellExecutor.execute(
+            "git log \(shellQuote(baseBranch))..HEAD --oneline",
             workingDirectory: worktreePath
         )
-        guard result.exitCode == 0 else { return false }
-        let output = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Empty = no commits beyond base — nothing was delivered
-        if output.isEmpty { return false }
-        // All lines starting with "-" = every commit was cherry-picked/merged
-        return !output.components(separatedBy: "\n").contains(where: { $0.hasPrefix("+") })
+        guard logResult.exitCode == 0 else { return false }
+        let hasUnmergedCommits = !logResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        if hasUnmergedCommits {
+            // Branch has commits not yet in baseBranch — check if they were cherry-picked
+            let cherry = await ShellExecutor.execute(
+                "git cherry \(shellQuote(baseBranch)) HEAD",
+                workingDirectory: worktreePath
+            )
+            guard cherry.exitCode == 0 else { return false }
+            let cherryOutput = cherry.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            if cherryOutput.isEmpty { return false }
+            return !cherryOutput.components(separatedBy: "\n").contains(where: { $0.hasPrefix("+") })
+        }
+
+        // baseBranch..HEAD is empty — either the branch was merged, or it has no work.
+        // Check if HEAD is a proper ancestor of baseBranch (merged) vs at the same tip (no work).
+        let isAncestor = await ShellExecutor.execute(
+            "git merge-base --is-ancestor HEAD \(shellQuote(baseBranch))",
+            workingDirectory: worktreePath
+        )
+        guard isAncestor.exitCode == 0 else { return false }
+
+        // HEAD is an ancestor of baseBranch. Use forkPointCommit if available to distinguish
+        // "merged branch" (HEAD differs from fork point) from "no work done" (HEAD == fork point).
+        let headTip = await ShellExecutor.execute("git rev-parse HEAD", workingDirectory: worktreePath)
+        let head = headTip.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !head.isEmpty else { return false }
+
+        if let forkPoint = forkPointCommit, !forkPoint.isEmpty {
+            return head != forkPoint
+        }
+
+        // No fork point — fall back to comparing HEAD vs baseBranch tip.
+        let baseTip = await ShellExecutor.execute(
+            "git rev-parse \(shellQuote(baseBranch))",
+            workingDirectory: worktreePath
+        )
+        let base = baseTip.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !base.isEmpty && base != head
     }
 
     // MARK: - Diff & Status
