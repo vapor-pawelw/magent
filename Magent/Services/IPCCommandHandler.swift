@@ -50,6 +50,8 @@ final class IPCCommandHandler {
             return hideSection(request)
         case "show-section":
             return showSection(request)
+        case "move-thread":
+            return await moveThread(request)
         default:
             return .failure("Unknown command: \(request.command)", id: request.id)
         }
@@ -120,6 +122,18 @@ final class IPCCommandHandler {
             requestedName = nil
         }
 
+        // Resolve requested section
+        let requestedSectionId: UUID?
+        if let sectionName = request.sectionName, !sectionName.isEmpty {
+            let sections = settings.sections(for: project.id)
+            guard let section = findSection(named: sectionName, in: sections) else {
+                return .failure("Section not found: \(sectionName)", id: request.id)
+            }
+            requestedSectionId = section.id
+        } else {
+            requestedSectionId = nil
+        }
+
         let thread: MagentThread
         do {
             thread = try await threadManager.createThread(
@@ -132,8 +146,17 @@ final class IPCCommandHandler {
             return .failure("Failed to create thread: \(error.localizedDescription)", id: request.id)
         }
 
+        // Move to requested section after creation (if specified)
+        if let sectionId = requestedSectionId {
+            await threadManager.moveThread(thread, toSection: sectionId)
+        }
+
         let projectNameResolved = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? projectName
-        let info = IPCThreadInfo(thread: thread, projectName: projectNameResolved)
+        guard let updatedThread = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            let info = IPCThreadInfo(thread: thread, projectName: projectNameResolved)
+            return IPCResponse(ok: true, id: request.id, thread: info)
+        }
+        let info = IPCThreadInfo(thread: updatedThread, projectName: projectNameResolved)
         return IPCResponse(ok: true, id: request.id, thread: info)
     }
 
@@ -717,6 +740,34 @@ final class IPCCommandHandler {
 
         notifySectionsDidChange()
         return .success(id: request.id)
+    }
+
+    private func moveThread(_ request: IPCRequest) async -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        guard let sectionName = request.sectionName, !sectionName.isEmpty else {
+            return .failure("Missing required field: sectionName (pass via --section)", id: request.id)
+        }
+
+        let settings = persistence.loadSettings()
+        let sections = settings.sections(for: thread.projectId)
+        guard let section = findSection(named: sectionName, in: sections) else {
+            return .failure("Section not found: \(sectionName)", id: request.id)
+        }
+
+        await threadManager.moveThread(thread, toSection: section.id)
+
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            return .success(id: request.id)
+        }
+        var info = IPCThreadInfo(thread: updated, projectName: projectName)
+        info.sectionName = sectionName
+        return IPCResponse(ok: true, id: request.id, thread: info)
     }
 
     private func closeTab(_ request: IPCRequest) async -> IPCResponse {
