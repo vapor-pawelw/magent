@@ -8,6 +8,7 @@ final class ThreadCell: NSTableCellView {
     private var leadingPinImageView: NSImageView?
     private var archiveButton: NSButton?
     private var completionImageView: NSImageView?
+    private var rateLimitImageView: NSImageView?
     private var busySpinner: NSProgressIndicator?
     private var trailingStackView: NSStackView?
     private var hasInstalledTextTrailingConstraint = false
@@ -86,6 +87,10 @@ final class ThreadCell: NSTableCellView {
         completionIV.translatesAutoresizingMaskIntoConstraints = false
         completionIV.setContentHuggingPriority(.required, for: .horizontal)
 
+        let rateLimitIV = NSImageView()
+        rateLimitIV.translatesAutoresizingMaskIntoConstraints = false
+        rateLimitIV.setContentHuggingPriority(.required, for: .horizontal)
+
         let archiveBtn = NSButton()
         archiveBtn.translatesAutoresizingMaskIntoConstraints = false
         archiveBtn.setContentHuggingPriority(.required, for: .horizontal)
@@ -105,7 +110,7 @@ final class ThreadCell: NSTableCellView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.isHidden = true
 
-        let stack = NSStackView(views: [jiraIV, pinIV, archiveBtn, spinner, completionIV])
+        let stack = NSStackView(views: [jiraIV, pinIV, archiveBtn, spinner, rateLimitIV, completionIV])
         stack.orientation = .horizontal
         stack.spacing = 4
         stack.distribution = .fill
@@ -132,6 +137,8 @@ final class ThreadCell: NSTableCellView {
             archiveBtn.heightAnchor.constraint(equalToConstant: 12),
             completionIV.widthAnchor.constraint(equalToConstant: completionIndicatorSize),
             completionIV.heightAnchor.constraint(equalToConstant: completionIndicatorSize),
+            rateLimitIV.widthAnchor.constraint(equalToConstant: 10),
+            rateLimitIV.heightAnchor.constraint(equalToConstant: 10),
             spinner.widthAnchor.constraint(equalToConstant: 14),
             spinner.heightAnchor.constraint(equalToConstant: 14),
         ])
@@ -140,6 +147,7 @@ final class ThreadCell: NSTableCellView {
         pinImageView = pinIV
         archiveButton = archiveBtn
         completionImageView = completionIV
+        rateLimitImageView = rateLimitIV
         busySpinner = spinner
 
         if !hasInstalledTextTrailingConstraint {
@@ -226,10 +234,24 @@ final class ThreadCell: NSTableCellView {
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
-        if thread.hasWaitingForInput {
+        if thread.isBlockedByRateLimit {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
+            rateLimitImageView?.image = NSImage(systemSymbolName: "hourglass.circle.fill", accessibilityDescription: "Agent rate limited")
+            rateLimitImageView?.contentTintColor = .systemRed
+            rateLimitImageView?.toolTip = rateLimitTooltip(for: thread)
+            rateLimitImageView?.isHidden = false
+            completionImageView?.image = nil
+            completionImageView?.toolTip = nil
+            completionImageView?.isHidden = true
+        } else if thread.hasWaitingForInput {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
+            rateLimitImageView?.image = nil
+            rateLimitImageView?.toolTip = nil
+            rateLimitImageView?.isHidden = true
             completionImageView?.image = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: "Agent needs input")
             completionImageView?.contentTintColor = .systemYellow
             completionImageView?.toolTip = "Agent needs input"
@@ -238,6 +260,9 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.isHidden = false
             busySpinner?.startAnimation(nil)
             busySpinner?.toolTip = "Agent working"
+            rateLimitImageView?.image = nil
+            rateLimitImageView?.toolTip = nil
+            rateLimitImageView?.isHidden = true
             completionImageView?.image = nil
             completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
@@ -245,6 +270,9 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
+            rateLimitImageView?.image = nil
+            rateLimitImageView?.toolTip = nil
+            rateLimitImageView?.isHidden = true
             completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent finished")
             completionImageView?.contentTintColor = .systemGreen
             completionImageView?.toolTip = "Agent finished"
@@ -253,13 +281,23 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
+            rateLimitImageView?.image = nil
+            rateLimitImageView?.toolTip = nil
+            rateLimitImageView?.isHidden = true
             completionImageView?.image = nil
             completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
         }
     }
 
-    func configureAsMain(isUnreadCompletion: Bool = false, isBusy: Bool = false, isWaitingForInput: Bool = false, isDirty: Bool = false) {
+    func configureAsMain(
+        isUnreadCompletion: Bool = false,
+        isBusy: Bool = false,
+        isWaitingForInput: Bool = false,
+        isDirty: Bool = false,
+        isBlockedByRateLimit: Bool = false,
+        rateLimitTooltip: String? = nil
+    ) {
         textField?.stringValue = "Main"
         textField?.font = .systemFont(
             ofSize: NSFont.systemFontSize,
@@ -285,10 +323,24 @@ final class ThreadCell: NSTableCellView {
             inlineDirtyDot?.isHidden = true
         }
 
-        if isWaitingForInput {
+        if isBlockedByRateLimit {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
+            rateLimitImageView?.image = NSImage(systemSymbolName: "hourglass.circle.fill", accessibilityDescription: "Agent rate limited")
+            rateLimitImageView?.contentTintColor = .systemRed
+            rateLimitImageView?.toolTip = rateLimitTooltip ?? "Rate limit reached"
+            rateLimitImageView?.isHidden = false
+            completionImageView?.image = nil
+            completionImageView?.toolTip = nil
+            completionImageView?.isHidden = true
+        } else if isWaitingForInput {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
+            rateLimitImageView?.image = nil
+            rateLimitImageView?.toolTip = nil
+            rateLimitImageView?.isHidden = true
             completionImageView?.image = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: "Agent needs input")
             completionImageView?.contentTintColor = .systemYellow
             completionImageView?.toolTip = "Agent needs input"
@@ -297,6 +349,9 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.isHidden = false
             busySpinner?.startAnimation(nil)
             busySpinner?.toolTip = "Agent working"
+            rateLimitImageView?.image = nil
+            rateLimitImageView?.toolTip = nil
+            rateLimitImageView?.isHidden = true
             completionImageView?.image = nil
             completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
@@ -304,6 +359,9 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
+            rateLimitImageView?.image = nil
+            rateLimitImageView?.toolTip = nil
+            rateLimitImageView?.isHidden = true
             completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent finished")
             completionImageView?.contentTintColor = .systemGreen
             completionImageView?.toolTip = "Agent finished"
@@ -312,10 +370,20 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
+            rateLimitImageView?.image = nil
+            rateLimitImageView?.toolTip = nil
+            rateLimitImageView?.isHidden = true
             completionImageView?.image = nil
             completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
         }
+    }
+
+    private func rateLimitTooltip(for thread: MagentThread) -> String {
+        if let detail = thread.rateLimitLiftDescription, !detail.isEmpty {
+            return "Rate limit reached. \(detail)"
+        }
+        return "Rate limit reached"
     }
 
     @objc private func archiveButtonClicked() {

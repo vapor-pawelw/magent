@@ -199,6 +199,8 @@ extension ThreadDetailViewController {
             tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
             tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
             tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
+            tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
+            tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
         }
     }
 

@@ -27,6 +27,9 @@ final class ThreadManager {
     var pendingCwdEnforcements: [String: PendingCwdEnforcement] = [:]
     /// Dedup tracker — prevents repeated "waiting for input" notifications for the same session.
     var notifiedWaitingSessions: Set<String> = []
+    /// Global per-agent rate-limit cache (Claude/Codex), shared across all tabs/threads.
+    var globalAgentRateLimits: [AgentType: AgentRateLimitInfo] = [:]
+    var lastPublishedRateLimitSummary: String?
     var sessionsBeingRecreated: Set<String> = []
     var sessionMonitorTimer: Timer?
     var lastTmuxZombieHealthCheckAt: Date = .distantPast
@@ -60,9 +63,11 @@ final class ThreadManager {
         // Migrate old threads that have no agentTmuxSessions recorded.
         // Heuristic: the first session was always created as the agent tab.
         let settings = persistence.loadSettings()
+        var didMigrate = false
         for i in threads.indices {
             if threads[i].agentTmuxSessions.isEmpty && !threads[i].tmuxSessionNames.isEmpty {
                 threads[i].agentTmuxSessions = [threads[i].tmuxSessionNames[0]]
+                didMigrate = true
             }
             if threads[i].selectedAgentType == nil && !threads[i].agentTmuxSessions.isEmpty {
                 threads[i].selectedAgentType = resolveAgentType(
@@ -70,17 +75,37 @@ final class ThreadManager {
                     requestedAgentType: nil,
                     settings: settings
                 )
+                didMigrate = true
             }
             // Migrate: existing threads with agent sessions must have had the agent run.
             if !threads[i].agentHasRun && !threads[i].agentTmuxSessions.isEmpty {
                 threads[i].agentHasRun = true
+                didMigrate = true
+            }
+            // Migrate: record per-session agent type for existing agent tabs.
+            if !threads[i].agentTmuxSessions.isEmpty {
+                let fallbackAgent = threads[i].selectedAgentType
+                    ?? resolveAgentType(
+                        for: threads[i].projectId,
+                        requestedAgentType: nil,
+                        settings: settings
+                    )
+                if let fallbackAgent {
+                    for sessionName in threads[i].agentTmuxSessions
+                    where threads[i].sessionAgentTypes[sessionName] == nil {
+                        threads[i].sessionAgentTypes[sessionName] = fallbackAgent
+                        didMigrate = true
+                    }
+                }
             }
         }
 
         // Do NOT prune dead tmux session names — the attach-or-create pattern
         // in ThreadDetailViewController will recreate them when the user opens the thread.
 
-        try? persistence.saveThreads(threads)
+        if didMigrate {
+            try? persistence.saveThreads(threads)
+        }
 
         // Migrate session names from old magent- prefix to new ma- format
         await migrateSessionNamesToNewFormat()
@@ -220,6 +245,11 @@ final class ThreadManager {
             threads[i].pinnedTmuxSessions = threads[i].pinnedTmuxSessions.map { renameMap[$0] ?? $0 }
             threads[i].unreadCompletionSessions = Set(
                 threads[i].unreadCompletionSessions.map { renameMap[$0] ?? $0 }
+            )
+            threads[i].sessionAgentTypes = Dictionary(
+                uniqueKeysWithValues: threads[i].sessionAgentTypes.map { key, value in
+                    (renameMap[key] ?? key, value)
+                }
             )
             var newCustomTabNames: [String: String] = [:]
             for (key, value) in threads[i].customTabNames {
@@ -362,6 +392,16 @@ final class ThreadManager {
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: name)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
+        if let selectedAgentType {
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
+        }
+
+        let sessionAgentTypes: [String: AgentType]
+        if useAgentCommand, let selectedAgentType {
+            sessionAgentTypes = [tmuxSessionName: selectedAgentType]
+        } else {
+            sessionAgentTypes = [:]
+        }
 
         let firstTabDisplayName = useAgentCommand
             ? baseTabDisplayName(for: selectedAgentType)
@@ -373,6 +413,7 @@ final class ThreadManager {
             branchName: branchName,
             tmuxSessionNames: [tmuxSessionName],
             agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
+            sessionAgentTypes: sessionAgentTypes,
             sectionId: settings.defaultSection(for: project.id)?.id,
             selectedAgentType: selectedAgentType,
             lastSelectedTmuxSessionName: tmuxSessionName,
@@ -448,6 +489,16 @@ final class ThreadManager {
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
+        if let selectedAgentType {
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
+        }
+
+        let mainSessionAgentTypes: [String: AgentType]
+        if let selectedAgentType {
+            mainSessionAgentTypes = [tmuxSessionName: selectedAgentType]
+        } else {
+            mainSessionAgentTypes = [:]
+        }
 
         let thread = MagentThread(
             projectId: project.id,
@@ -456,6 +507,7 @@ final class ThreadManager {
             branchName: "",
             tmuxSessionNames: [tmuxSessionName],
             agentTmuxSessions: selectedAgentType != nil ? [tmuxSessionName] : [],
+            sessionAgentTypes: mainSessionAgentTypes,
             isMain: true,
             selectedAgentType: selectedAgentType,
             lastSelectedTmuxSessionName: tmuxSessionName,
@@ -609,6 +661,9 @@ final class ThreadManager {
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: tabProject?.name ?? "project")
         }
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
+        if useAgentCommand, let selectedAgentType {
+            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
+        }
         await tmux.updateWorkingDirectory(sessionName: tmuxSessionName, to: currentThread.worktreePath)
         enforceWorkingDirectoryAfterStartup(sessionName: tmuxSessionName, path: currentThread.worktreePath)
 
@@ -617,6 +672,9 @@ final class ThreadManager {
         let shouldMarkAsAgentTab = (currentThread.isMain || useAgentCommand) && selectedAgentType != nil
         if shouldMarkAsAgentTab {
             threads[index].agentTmuxSessions.append(tmuxSessionName)
+            if let selectedAgentType {
+                threads[index].sessionAgentTypes[tmuxSessionName] = selectedAgentType
+            }
             threads[index].agentHasRun = true
         }
         if selectedAgentType != nil {
@@ -695,6 +753,7 @@ final class ThreadManager {
         threads[index].tmuxSessionNames.append(sessionName)
         if agentType != nil {
             threads[index].agentTmuxSessions.append(sessionName)
+            threads[index].sessionAgentTypes[sessionName] = agentType
             threads[index].agentHasRun = true
         }
         threads[index].lastSelectedTmuxSessionName = sessionName
@@ -945,8 +1004,10 @@ final class ThreadManager {
         // Also remove from pinned, agent, unread completion, waiting, and custom tab names if present
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
         threads[index].agentTmuxSessions.removeAll { $0 == sessionName }
+        threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
         threads[index].unreadCompletionSessions.remove(sessionName)
         threads[index].waitingForInputSessions.remove(sessionName)
+        threads[index].rateLimitedSessions.removeValue(forKey: sessionName)
         notifiedWaitingSessions.remove(sessionName)
         threads[index].customTabNames.removeValue(forKey: sessionName)
         threads[index].tmuxSessionNames.removeAll { $0 == sessionName }

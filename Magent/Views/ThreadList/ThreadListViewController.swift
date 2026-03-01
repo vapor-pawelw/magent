@@ -54,6 +54,7 @@ final class ThreadListViewController: NSViewController {
     let persistence = PersistenceService.shared
 
     private var addButton: NSButton!
+    private var rateLimitStatusLabel: NSTextField!
     var diffPanelView: DiffPanelView!
     var branchMismatchView: BranchMismatchView!
     private var isCreatingThread = false
@@ -129,6 +130,13 @@ final class ThreadListViewController: NSViewController {
             name: .magentAgentCompletionDetected,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(globalRateLimitSummaryDidChange),
+            name: .magentGlobalRateLimitSummaryChanged,
+            object: nil
+        )
+        updateGlobalRateLimitSummary()
     }
 
     override func viewDidLayout() {
@@ -150,9 +158,20 @@ final class ThreadListViewController: NSViewController {
         refreshDiffPanel(for: selected)
     }
 
+    @objc private func globalRateLimitSummaryDidChange() {
+        updateGlobalRateLimitSummary()
+    }
+
     // MARK: - Toolbar Buttons
 
     private func setupToolbar() {
+        rateLimitStatusLabel = NSTextField(labelWithString: "")
+        rateLimitStatusLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        rateLimitStatusLabel.textColor = NSColor(resource: .textSecondary)
+        rateLimitStatusLabel.lineBreakMode = .byTruncatingTail
+        rateLimitStatusLabel.isHidden = true
+        rateLimitStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+
         let plusImage = NSImage(
             systemSymbolName: "plus",
             accessibilityDescription: "Add Thread"
@@ -166,14 +185,25 @@ final class ThreadListViewController: NSViewController {
         addButton.contentTintColor = .controlAccentColor
         addButton.translatesAutoresizingMaskIntoConstraints = false
 
+        view.addSubview(rateLimitStatusLabel)
         view.addSubview(addButton)
 
         NSLayoutConstraint.activate([
+            rateLimitStatusLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 11),
+            rateLimitStatusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+            rateLimitStatusLabel.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -8),
             addButton.topAnchor.constraint(equalTo: view.topAnchor, constant: 10),
             addButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Self.toolbarPlusTrailingInset),
             addButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
             addButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
         ])
+    }
+
+    private func updateGlobalRateLimitSummary() {
+        let summary = threadManager.globalRateLimitSummaryText()
+        rateLimitStatusLabel.stringValue = summary ?? ""
+        rateLimitStatusLabel.isHidden = (summary == nil)
+        rateLimitStatusLabel.toolTip = summary
     }
 
     // MARK: - Outline View

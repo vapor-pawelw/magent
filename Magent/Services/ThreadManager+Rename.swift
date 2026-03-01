@@ -4,6 +4,30 @@ extension ThreadManager {
 
     // MARK: - Rename
 
+    private func isAgentCurrentlyRateLimited(_ agent: AgentType, now: Date = Date()) -> Bool {
+        guard let info = globalAgentRateLimits[agent] else { return false }
+        if let resetAt = info.resetAt {
+            return resetAt > now
+        }
+        return true
+    }
+
+    private func slugGenerationAgentOrder(preferred preferredAgent: AgentType?, projectId: UUID?) -> (allTrackable: [AgentType], available: [AgentType]) {
+        let settings = persistence.loadSettings()
+        var trackable = settings.availableActiveAgents.filter { $0 == .claude || $0 == .codex }
+
+        // Keep deterministic order with preferred agent first when present.
+        if let preferredAgent,
+           let index = trackable.firstIndex(of: preferredAgent) {
+            let preferred = trackable.remove(at: index)
+            trackable.insert(preferred, at: 0)
+        }
+
+        let now = Date()
+        let available = trackable.filter { !isAgentCurrentlyRateLimited($0, now: now) }
+        return (allTrackable: trackable, available: available)
+    }
+
     private func naiveAutoRenameCandidates(from prompt: String) -> [String] {
         let words = prompt
             .lowercased()
@@ -145,16 +169,30 @@ extension ThreadManager {
         return sanitizeSlug(raw)
     }
 
-    func autoRenameCandidates(from prompt: String, agentType: AgentType?, projectId: UUID? = nil) async -> [String] {
-        if let slug = await generateSlugViaAgent(from: prompt, agentType: agentType, projectId: projectId) {
-            // Agent signalled "question, not a task" → skip rename entirely (no fallback)
-            guard slug != Self.slugQuestionSentinel else { return [] }
-            var candidates = [slug]
-            for i in 2...9 {
-                candidates.append("\(slug)-\(i)")
-            }
-            return candidates
+    func autoRenameCandidates(
+        from prompt: String,
+        agentType: AgentType?,
+        projectId: UUID? = nil,
+        skipWhenAllAgentsRateLimited: Bool = false
+    ) async -> [String] {
+        let agentOrder = slugGenerationAgentOrder(preferred: agentType, projectId: projectId)
+
+        if skipWhenAllAgentsRateLimited && !agentOrder.allTrackable.isEmpty && agentOrder.available.isEmpty {
+            return []
         }
+
+        for candidateAgent in agentOrder.available {
+            if let slug = await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId) {
+                // Agent signalled "question, not a task" → skip rename entirely (no fallback)
+                guard slug != Self.slugQuestionSentinel else { return [] }
+                var candidates = [slug]
+                for i in 2...9 {
+                    candidates.append("\(slug)-\(i)")
+                }
+                return candidates
+            }
+        }
+
         return naiveAutoRenameCandidates(from: prompt)
     }
 
@@ -253,6 +291,16 @@ extension ThreadManager {
         threads[index].unreadCompletionSessions = Set(
             threads[index].unreadCompletionSessions.map { sessionRenameMap[$0] ?? $0 }
         )
+        threads[index].rateLimitedSessions = Dictionary(
+            uniqueKeysWithValues: threads[index].rateLimitedSessions.map { key, value in
+                (sessionRenameMap[key] ?? key, value)
+            }
+        )
+        threads[index].sessionAgentTypes = Dictionary(
+            uniqueKeysWithValues: threads[index].sessionAgentTypes.map { key, value in
+                (sessionRenameMap[key] ?? key, value)
+            }
+        )
         // Re-key custom tab names to reflect new session names
         var newCustomTabNames: [String: String] = [:]
         for (oldKey, value) in threads[index].customTabNames {
@@ -294,7 +342,12 @@ extension ThreadManager {
         guard thread.agentTmuxSessions.contains(sessionName) else { return }
         guard !autoRenameInProgress.contains(thread.id) else { return }
 
-        let candidates = await autoRenameCandidates(from: prompt, agentType: thread.selectedAgentType, projectId: thread.projectId)
+        let candidates = await autoRenameCandidates(
+            from: prompt,
+            agentType: thread.selectedAgentType,
+            projectId: thread.projectId,
+            skipWhenAllAgentsRateLimited: true
+        )
         guard !candidates.isEmpty else { return }
 
         autoRenameInProgress.insert(thread.id)
@@ -383,6 +436,14 @@ extension ThreadManager {
         if currentThread.unreadCompletionSessions.contains(sessionName) {
             threads[index].unreadCompletionSessions.remove(sessionName)
             threads[index].unreadCompletionSessions.insert(resolvedSessionName)
+        }
+        if let info = currentThread.rateLimitedSessions[sessionName] {
+            threads[index].rateLimitedSessions.removeValue(forKey: sessionName)
+            threads[index].rateLimitedSessions[resolvedSessionName] = info
+        }
+        if let agentType = currentThread.sessionAgentTypes[sessionName] {
+            threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
+            threads[index].sessionAgentTypes[resolvedSessionName] = agentType
         }
 
         // Update custom tab names: remove old key, store under new key

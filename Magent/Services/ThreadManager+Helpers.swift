@@ -84,6 +84,45 @@ extension ThreadManager {
         return resolveAgentType(for: projectId, requestedAgentType: nil, settings: settings)
     }
 
+    func agentType(for thread: MagentThread, sessionName: String) -> AgentType? {
+        if let mapped = thread.sessionAgentTypes[sessionName] {
+            return mapped
+        }
+        if thread.agentTmuxSessions.contains(sessionName) {
+            return thread.selectedAgentType
+        }
+        return nil
+    }
+
+    func globalRateLimitSummaryText(now: Date = Date()) -> String? {
+        let ordered: [AgentType] = [.claude, .codex]
+        let entries = ordered.compactMap { agent -> String? in
+            guard let info = globalAgentRateLimits[agent] else { return nil }
+            if let resetAt = info.resetAt {
+                guard resetAt > now else { return nil }
+                return "\(agent.displayName): \(countdownText(until: resetAt, now: now))"
+            }
+            return "\(agent.displayName): limited"
+        }
+
+        guard !entries.isEmpty else { return nil }
+        return "Rate limits: " + entries.joined(separator: "  ·  ")
+    }
+
+    private func countdownText(until resetAt: Date, now: Date) -> String {
+        let remaining = max(0, Int(resetAt.timeIntervalSince(now)))
+        let days = remaining / 86_400
+        let hours = (remaining % 86_400) / 3_600
+        let minutes = (remaining % 3_600) / 60
+        if days > 0 {
+            return "\(days)d \(hours)h"
+        }
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        return "\(max(1, minutes))m"
+    }
+
 
     // MARK: - Helpers
 
@@ -536,6 +575,8 @@ extension Notification.Name {
     static let magentAgentCompletionDetected = Notification.Name("magentAgentCompletionDetected")
     static let magentAgentWaitingForInput = Notification.Name("magentAgentWaitingForInput")
     static let magentAgentBusySessionsChanged = Notification.Name("magentAgentBusySessionsChanged")
+    static let magentAgentRateLimitChanged = Notification.Name("magentAgentRateLimitChanged")
+    static let magentGlobalRateLimitSummaryChanged = Notification.Name("magentGlobalRateLimitSummaryChanged")
     static let magentSectionsDidChange = Notification.Name("magentSectionsDidChange")
     static let magentOpenSettings = Notification.Name("magentOpenSettings")
     static let magentShowDiffViewer = Notification.Name("magentShowDiffViewer")

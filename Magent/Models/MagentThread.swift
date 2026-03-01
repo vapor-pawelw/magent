@@ -1,5 +1,10 @@
 import Foundation
 
+nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
+    var resetAt: Date?
+    var resetDescription: String?
+}
+
 nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     let id: UUID
     let projectId: UUID
@@ -8,6 +13,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var branchName: String
     var tmuxSessionNames: [String]
     var agentTmuxSessions: [String]
+    var sessionAgentTypes: [String: AgentType]
     var pinnedTmuxSessions: [String]
     let createdAt: Date
     var isArchived: Bool
@@ -41,6 +47,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var expectedBranch: String? = nil
     // Transient (not persisted) — whether actual branch != expected branch
     var hasBranchMismatch: Bool = false
+    // Transient (not persisted) — tracks agent rate limit status per session.
+    var rateLimitedSessions: [String: AgentRateLimitInfo] = [:]
 
     var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
@@ -58,6 +66,30 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isFullyDelivered && !isDirty && !hasAgentBusy && !hasWaitingForInput
     }
 
+    /// True only when every tab in the thread currently reports an active rate-limit message.
+    /// This intentionally hides the blocked icon if any tab is terminal or has unknown state.
+    var isBlockedByRateLimit: Bool {
+        guard !agentTmuxSessions.isEmpty else { return false }
+        return agentTmuxSessions.allSatisfy { rateLimitedSessions[$0] != nil }
+    }
+
+    /// When all tabs are rate-limited, the thread is effectively unblocked at the latest reset time.
+    var rateLimitLiftAt: Date? {
+        guard isBlockedByRateLimit else { return nil }
+        return agentTmuxSessions.compactMap { rateLimitedSessions[$0]?.resetAt }.max()
+    }
+
+    var rateLimitLiftDescription: String? {
+        guard isBlockedByRateLimit else { return nil }
+        if let latest = rateLimitLiftAt {
+            return "Resets \(latest.formatted(date: .abbreviated, time: .shortened))"
+        }
+        let descriptions = agentTmuxSessions.compactMap { rateLimitedSessions[$0]?.resetDescription }
+        let cleaned = descriptions.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { return nil }
+        return cleaned.joined(separator: " · ")
+    }
+
     func displayName(for sessionName: String, at index: Int) -> String {
         if let custom = customTabNames[sessionName], !custom.isEmpty {
             return custom
@@ -71,7 +103,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, projectId, name, worktreePath, branchName
-        case tmuxSessionNames, agentTmuxSessions, pinnedTmuxSessions
+        case tmuxSessionNames, agentTmuxSessions, sessionAgentTypes, pinnedTmuxSessions
         case createdAt, isArchived, sectionId, isMain
         case selectedAgentType, lastSelectedTmuxSessionName
         case agentHasRun, isPinned, lastAgentCompletionAt
@@ -92,6 +124,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         branchName: String,
         tmuxSessionNames: [String] = [],
         agentTmuxSessions: [String] = [],
+        sessionAgentTypes: [String: AgentType] = [:],
         pinnedTmuxSessions: [String] = [],
         createdAt: Date = Date(),
         isArchived: Bool = false,
@@ -116,6 +149,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.branchName = branchName
         self.tmuxSessionNames = tmuxSessionNames
         self.agentTmuxSessions = agentTmuxSessions
+        self.sessionAgentTypes = sessionAgentTypes
         self.pinnedTmuxSessions = pinnedTmuxSessions
         self.createdAt = createdAt
         self.isArchived = isArchived
@@ -143,6 +177,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         branchName = try container.decode(String.self, forKey: .branchName)
         tmuxSessionNames = try container.decode([String].self, forKey: .tmuxSessionNames)
         agentTmuxSessions = try container.decodeIfPresent([String].self, forKey: .agentTmuxSessions) ?? []
+        sessionAgentTypes = try container.decodeIfPresent([String: AgentType].self, forKey: .sessionAgentTypes) ?? [:]
         pinnedTmuxSessions = try container.decodeIfPresent([String].self, forKey: .pinnedTmuxSessions) ?? []
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         isArchived = try container.decode(Bool.self, forKey: .isArchived)
@@ -177,6 +212,9 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(branchName, forKey: .branchName)
         try container.encode(tmuxSessionNames, forKey: .tmuxSessionNames)
         try container.encode(agentTmuxSessions, forKey: .agentTmuxSessions)
+        if !sessionAgentTypes.isEmpty {
+            try container.encode(sessionAgentTypes, forKey: .sessionAgentTypes)
+        }
         try container.encode(pinnedTmuxSessions, forKey: .pinnedTmuxSessions)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(isArchived, forKey: .isArchived)

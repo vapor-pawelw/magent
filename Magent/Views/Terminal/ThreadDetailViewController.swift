@@ -8,6 +8,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     let pinIcon: NSImageView
     let busySpinner: NSProgressIndicator
     let completionDot: NSView
+    let rateLimitIcon: NSImageView
     let titleLabel: NSTextField
     let closeButton: NSButton
     var isDragging = false
@@ -38,25 +39,43 @@ final class TabItemView: NSView, NSMenuDelegate {
         didSet { updateIndicator() }
     }
 
+    var hasRateLimit: Bool = false {
+        didSet { updateIndicator() }
+    }
+
+    var rateLimitTooltip: String? {
+        didSet { updateIndicator() }
+    }
+
     private func updateIndicator() {
         if hasWaitingForInput {
             busySpinner.stopAnimation(nil)
             busySpinner.isHidden = true
+            rateLimitIcon.isHidden = true
             completionDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
             completionDot.isHidden = false
         } else if hasBusy {
             completionDot.isHidden = true
+            rateLimitIcon.isHidden = true
             busySpinner.isHidden = false
             busySpinner.startAnimation(nil)
+        } else if hasRateLimit {
+            busySpinner.stopAnimation(nil)
+            busySpinner.isHidden = true
+            completionDot.isHidden = true
+            rateLimitIcon.toolTip = rateLimitTooltip ?? "Rate limit reached"
+            rateLimitIcon.isHidden = false
         } else if hasUnreadCompletion {
             busySpinner.stopAnimation(nil)
             busySpinner.isHidden = true
+            rateLimitIcon.isHidden = true
             completionDot.layer?.backgroundColor = NSColor.systemGreen.cgColor
             completionDot.isHidden = false
         } else {
             busySpinner.stopAnimation(nil)
             busySpinner.isHidden = true
             completionDot.isHidden = true
+            rateLimitIcon.isHidden = true
         }
     }
 
@@ -79,6 +98,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         pinIcon = NSImageView()
         busySpinner = NSProgressIndicator()
         completionDot = NSView()
+        rateLimitIcon = NSImageView()
         titleLabel = NSTextField(labelWithString: title)
         closeButton = NSButton()
         super.init(frame: .zero)
@@ -114,6 +134,14 @@ final class TabItemView: NSView, NSMenuDelegate {
         busySpinner.setContentHuggingPriority(.required, for: .horizontal)
         busySpinner.setContentCompressionResistancePriority(.required, for: .horizontal)
 
+        // Rate-limit icon
+        rateLimitIcon.image = NSImage(systemSymbolName: "hourglass.circle.fill", accessibilityDescription: "Rate limited")
+        rateLimitIcon.contentTintColor = .systemRed
+        rateLimitIcon.translatesAutoresizingMaskIntoConstraints = false
+        rateLimitIcon.isHidden = true
+        rateLimitIcon.setContentHuggingPriority(.required, for: .horizontal)
+        rateLimitIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
+
         // Title
         titleLabel.font = .systemFont(ofSize: 12)
         titleLabel.isEditable = false
@@ -134,7 +162,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
 
         // Layout using an internal stack
-        let contentStack = NSStackView(views: [pinIcon, completionDot, busySpinner, titleLabel, closeButton])
+        let contentStack = NSStackView(views: [pinIcon, completionDot, busySpinner, rateLimitIcon, titleLabel, closeButton])
         contentStack.orientation = .horizontal
         contentStack.spacing = 4
         contentStack.alignment = .centerY
@@ -152,6 +180,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             completionDot.heightAnchor.constraint(equalToConstant: 8),
             busySpinner.widthAnchor.constraint(equalToConstant: 10),
             busySpinner.heightAnchor.constraint(equalToConstant: 10),
+            rateLimitIcon.widthAnchor.constraint(equalToConstant: 10),
+            rateLimitIcon.heightAnchor.constraint(equalToConstant: 10),
             closeButton.widthAnchor.constraint(equalToConstant: 16),
             closeButton.heightAnchor.constraint(equalToConstant: 16),
         ])
@@ -380,6 +410,12 @@ final class ThreadDetailViewController: NSViewController {
             name: .magentAgentBusySessionsChanged,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAgentRateLimitNotification(_:)),
+            name: .magentAgentRateLimitChanged,
+            object: nil
+        )
 
         // Observe diff viewer open requests from sidebar
         NotificationCenter.default.addObserver(
@@ -569,6 +605,8 @@ final class ThreadDetailViewController: NSViewController {
                 tabItems[i].hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
                 tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
                 tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
+                tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
+                tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
             }
 
             selectTab(at: initialIndex)
@@ -700,6 +738,18 @@ final class ThreadDetailViewController: NSViewController {
         }
     }
 
+    @objc private func handleAgentRateLimitNotification(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID,
+              threadId == thread.id,
+              let latest = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
+
+        thread.rateLimitedSessions = latest.rateLimitedSessions
+        for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
+            tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
+            tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
+        }
+    }
+
     @objc private func handleShowDiffViewerNotification(_ notification: Notification) {
         let filePath = notification.userInfo?["filePath"] as? String
         showDiffViewer(scrollToFile: filePath)
@@ -805,6 +855,17 @@ final class ThreadDetailViewController: NSViewController {
             threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: sessionName)
             threadManager.markSessionWaitingSeen(threadId: thread.id, sessionName: sessionName)
         }
+    }
+
+    func rateLimitTooltip(for sessionName: String) -> String? {
+        guard let info = thread.rateLimitedSessions[sessionName] else { return nil }
+        if let resetAt = info.resetAt {
+            return "Rate limit reached. Resets \(resetAt.formatted(date: .abbreviated, time: .shortened))"
+        }
+        if let description = info.resetDescription, !description.isEmpty {
+            return "Rate limit reached. \(description)"
+        }
+        return "Rate limit reached"
     }
 
     func showEmptyState() {

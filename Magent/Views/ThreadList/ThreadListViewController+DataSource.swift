@@ -832,7 +832,14 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         return c
                     }()
 
-                cell.configureAsMain(isUnreadCompletion: thread.hasUnreadAgentCompletion, isBusy: thread.hasAgentBusy, isWaitingForInput: thread.hasWaitingForInput, isDirty: thread.isDirty)
+                cell.configureAsMain(
+                    isUnreadCompletion: thread.hasUnreadAgentCompletion,
+                    isBusy: thread.hasAgentBusy,
+                    isWaitingForInput: thread.hasWaitingForInput,
+                    isDirty: thread.isDirty,
+                    isBlockedByRateLimit: thread.isBlockedByRateLimit,
+                    rateLimitTooltip: thread.rateLimitLiftDescription.map { "Rate limit reached. \($0)" }
+                )
                 return cell
             }
 
