@@ -14,11 +14,34 @@ private final class DiffPanelResizeHandle: NSView {
     }
 }
 
+// MARK: - Clickable file row
+
+private final class DiffFileRowView: NSView {
+    let filePath: String
+    var onDoubleClick: ((String) -> Void)?
+
+    init(filePath: String) {
+        self.filePath = filePath
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 {
+            onDoubleClick?(filePath)
+        } else {
+            super.mouseDown(with: event)
+        }
+    }
+}
+
 final class DiffPanelView: NSView {
 
     private let handleView = DiffPanelResizeHandle()
     private let separatorView = NSView()
-    private let headerLabel = NSTextField(labelWithString: "")
+    private let headerButton = NSButton()
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
     private let branchInfoLabel = NSTextField(labelWithString: "")
@@ -59,11 +82,16 @@ final class DiffPanelView: NSView {
         separatorView.translatesAutoresizingMaskIntoConstraints = false
         handleView.addSubview(separatorView)
 
-        // Header
-        headerLabel.font = .systemFont(ofSize: 11, weight: .semibold)
-        headerLabel.textColor = NSColor(resource: .textSecondary)
-        headerLabel.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(headerLabel)
+        // Header — clickable to open full diff viewer
+        headerButton.title = "CHANGES"
+        headerButton.font = .systemFont(ofSize: 11, weight: .semibold)
+        headerButton.contentTintColor = NSColor(resource: .textSecondary)
+        headerButton.isBordered = false
+        headerButton.alignment = .left
+        headerButton.target = self
+        headerButton.action = #selector(headerTapped)
+        headerButton.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(headerButton)
 
         // Stack view for file entries
         stackView.orientation = .vertical
@@ -106,11 +134,11 @@ final class DiffPanelView: NSView {
             separatorView.trailingAnchor.constraint(equalTo: handleView.trailingAnchor, constant: -8),
             separatorView.heightAnchor.constraint(equalToConstant: 1),
 
-            headerLabel.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4),
-            headerLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            headerLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            headerButton.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4),
+            headerButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            headerButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
 
-            scrollView.topAnchor.constraint(equalTo: headerLabel.bottomAnchor, constant: 4),
+            scrollView.topAnchor.constraint(equalTo: headerButton.bottomAnchor, constant: 4),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: branchInfoLabel.topAnchor, constant: -4),
@@ -166,14 +194,14 @@ final class DiffPanelView: NSView {
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
         if entries.isEmpty {
-            headerLabel.stringValue = "CHANGES"
+            headerButton.title = "CHANGES"
             branchInfoLabel.isHidden = true
             isHidden = true
             return
         }
 
         isHidden = false
-        headerLabel.stringValue = "CHANGES (\(entries.count))"
+        headerButton.title = "CHANGES (\(entries.count))"
 
         for entry in entries {
             let row = makeEntryRow(entry)
@@ -195,14 +223,31 @@ final class DiffPanelView: NSView {
     func clear() {
         entries = []
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        headerLabel.stringValue = "CHANGES"
+        headerButton.title = "CHANGES"
         branchInfoLabel.isHidden = true
         isHidden = true
     }
 
+    @objc private func headerTapped() {
+        guard !entries.isEmpty else { return }
+        NotificationCenter.default.post(
+            name: .magentShowDiffViewer,
+            object: nil,
+            userInfo: nil
+        )
+    }
+
     private func makeEntryRow(_ entry: FileDiffEntry) -> NSView {
-        let container = NSView()
+        let container = DiffFileRowView(filePath: entry.relativePath)
         container.translatesAutoresizingMaskIntoConstraints = false
+        container.onDoubleClick = { [weak self] path in
+            guard self != nil else { return }
+            NotificationCenter.default.post(
+                name: .magentShowDiffViewer,
+                object: nil,
+                userInfo: ["filePath": path]
+            )
+        }
 
         // Filename — show just the last path component for brevity
         let filename = (entry.relativePath as NSString).lastPathComponent

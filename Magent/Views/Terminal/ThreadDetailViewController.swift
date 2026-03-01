@@ -293,6 +293,17 @@ final class ThreadDetailViewController: NSViewController {
     var loadingPollTimer: Timer?
     private var emptyStateView: NSView?
 
+    // MARK: - Inline Diff Viewer
+    private var diffVC: InlineDiffViewController?
+    private var terminalBottomToView: NSLayoutConstraint?
+    private var terminalBottomToDiff: NSLayoutConstraint?
+    private var diffHeightConstraint: NSLayoutConstraint?
+    private var isDiffDragging = false
+    private var diffDragStartHeight: CGFloat = 0
+    private static let diffMinHeight: CGFloat = 100
+    private static let diffDefaultRatio: CGFloat = 0.7
+    private static let diffHeightKey = "InlineDiffViewController.height"
+
     private let pinSeparator: NSView = {
         let v = NSView()
         v.wantsLayer = true
@@ -358,6 +369,14 @@ final class ThreadDetailViewController: NSViewController {
             self,
             selector: #selector(handleAgentBusyNotification(_:)),
             name: .magentAgentBusySessionsChanged,
+            object: nil
+        )
+
+        // Observe diff viewer open requests from sidebar
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleShowDiffViewerNotification(_:)),
+            name: .magentShowDiffViewer,
             object: nil
         )
 
@@ -437,6 +456,8 @@ final class ThreadDetailViewController: NSViewController {
         view.addSubview(topBar)
         view.addSubview(terminalContainer)
 
+        terminalBottomToView = terminalContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+
         NSLayoutConstraint.activate([
             topBar.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
             topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
@@ -446,7 +467,7 @@ final class ThreadDetailViewController: NSViewController {
             terminalContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4),
             terminalContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             terminalContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            terminalContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            terminalBottomToView!,
         ])
     }
 
@@ -635,6 +656,7 @@ final class ThreadDetailViewController: NSViewController {
         for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
             tabItems[i].hasUnreadCompletion = unreadSessions.contains(sessionName)
         }
+        refreshDiffViewerIfVisible()
     }
 
     @objc private func handleAgentWaitingNotification(_ notification: Notification) {
@@ -659,6 +681,11 @@ final class ThreadDetailViewController: NSViewController {
         for (i, sessionName) in thread.tmuxSessionNames.enumerated() where i < tabItems.count {
             tabItems[i].hasBusy = busySessions.contains(sessionName)
         }
+    }
+
+    @objc private func handleShowDiffViewerNotification(_ notification: Notification) {
+        let filePath = notification.userInfo?["filePath"] as? String
+        showDiffViewer(scrollToFile: filePath)
     }
 
     // MARK: - Tab Bar Layout
@@ -986,6 +1013,134 @@ final class ThreadDetailViewController: NSViewController {
         threadManager.updatePinnedTabs(for: thread.id, pinnedSessions: pinnedSessions)
     }
 
+    // MARK: - Inline Diff Viewer
+
+    func showDiffViewer(scrollToFile: String? = nil) {
+        if let existing = diffVC {
+            if let file = scrollToFile {
+                existing.scrollToFile(file)
+            }
+            return
+        }
+
+        let baseBranch = threadManager.resolveBaseBranch(for: thread)
+        Task {
+            guard let diffContent = await GitService.shared.diffContent(
+                worktreePath: thread.worktreePath,
+                baseBranch: baseBranch
+            ) else {
+                return
+            }
+
+            let entries = await threadManager.refreshDiffStats(for: thread.id)
+            let fileCount = entries.count
+
+            await MainActor.run {
+                let vc = InlineDiffViewController()
+                vc.onClose = { [weak self] in
+                    self?.hideDiffViewer()
+                }
+                vc.onResizeDrag = { [weak self] phase, delta in
+                    self?.handleDiffResizeDrag(phase: phase, delta: delta)
+                }
+                addChild(vc)
+
+                let diffView = vc.view
+                diffView.translatesAutoresizingMaskIntoConstraints = false
+                view.addSubview(diffView)
+
+                // Calculate default height (70% of available space)
+                let availableHeight = terminalContainer.frame.height
+                let savedHeight = UserDefaults.standard.object(forKey: Self.diffHeightKey) as? CGFloat
+                let defaultHeight = availableHeight * Self.diffDefaultRatio
+                let height = savedHeight ?? defaultHeight
+                let clampedHeight = max(min(height, availableHeight - 60), Self.diffMinHeight)
+
+                // Deactivate old bottom constraint, create new ones
+                terminalBottomToView?.isActive = false
+                terminalBottomToDiff = terminalContainer.bottomAnchor.constraint(equalTo: diffView.topAnchor)
+                diffHeightConstraint = diffView.heightAnchor.constraint(equalToConstant: clampedHeight)
+
+                NSLayoutConstraint.activate([
+                    terminalBottomToDiff!,
+                    diffView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                    diffView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                    diffView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                    diffHeightConstraint!,
+                ])
+
+                vc.setDiffContent(diffContent, fileCount: fileCount)
+                diffVC = vc
+
+                if let file = scrollToFile {
+                    // Defer scroll to next layout pass so geometry is finalized
+                    DispatchQueue.main.async {
+                        vc.scrollToFile(file)
+                    }
+                }
+            }
+        }
+    }
+
+    func hideDiffViewer() {
+        guard let vc = diffVC else { return }
+        // Save height before removing
+        if let h = diffHeightConstraint?.constant {
+            UserDefaults.standard.set(h, forKey: Self.diffHeightKey)
+        }
+        terminalBottomToDiff?.isActive = false
+        diffHeightConstraint?.isActive = false
+        vc.view.removeFromSuperview()
+        vc.removeFromParent()
+        diffVC = nil
+
+        terminalBottomToView?.isActive = true
+    }
+
+    func refreshDiffViewerIfVisible() {
+        guard diffVC != nil else { return }
+        let baseBranch = threadManager.resolveBaseBranch(for: thread)
+        Task {
+            let diffContent = await GitService.shared.diffContent(
+                worktreePath: thread.worktreePath,
+                baseBranch: baseBranch
+            )
+            let entries = await threadManager.refreshDiffStats(for: thread.id)
+
+            await MainActor.run {
+                if let content = diffContent {
+                    self.diffVC?.setDiffContent(content, fileCount: entries.count)
+                } else {
+                    // No more changes — auto-dismiss
+                    self.hideDiffViewer()
+                }
+            }
+        }
+    }
+
+    private func handleDiffResizeDrag(phase: NSPanGestureRecognizer.State, delta: CGFloat) {
+        switch phase {
+        case .began:
+            isDiffDragging = true
+            diffDragStartHeight = diffHeightConstraint?.constant ?? 200
+
+        case .changed:
+            let currentHeight = diffHeightConstraint?.constant ?? 200
+            let availableHeight = terminalContainer.frame.height + currentHeight
+            let maxHeight = availableHeight - 60
+            let newHeight = max(min(currentHeight + delta, maxHeight), Self.diffMinHeight)
+            diffHeightConstraint?.constant = newHeight
+
+        case .ended, .cancelled:
+            isDiffDragging = false
+            if let h = diffHeightConstraint?.constant {
+                UserDefaults.standard.set(h, forKey: Self.diffHeightKey)
+            }
+
+        default:
+            break
+        }
+    }
 }
 
 private final class VerticalSeparatorView: NSView {
