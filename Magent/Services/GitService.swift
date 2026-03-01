@@ -240,7 +240,16 @@ final class GitService {
     /// When `forkPointCommit` is provided, it's used to distinguish "branch was merged"
     /// from "brand new branch with no commits" in the case where HEAD is an ancestor of baseBranch.
     func isFullyDelivered(worktreePath: String, baseBranch: String, forkPointCommit: String? = nil) async -> Bool {
-        // First check: does the branch have commits not reachable from baseBranch?
+        let headTip = await ShellExecutor.execute("git rev-parse HEAD", workingDirectory: worktreePath)
+        let head = headTip.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !head.isEmpty else { return false }
+
+        // If we know the fork point, use it to short-circuit: no work done → not delivered.
+        if let forkPoint = forkPointCommit, !forkPoint.isEmpty, head == forkPoint {
+            return false
+        }
+
+        // Check if the branch has commits not reachable from baseBranch.
         let logResult = await ShellExecutor.execute(
             "git log \(shellQuote(baseBranch))..HEAD --oneline",
             workingDirectory: worktreePath
@@ -260,31 +269,20 @@ final class GitService {
             return !cherryOutput.components(separatedBy: "\n").contains(where: { $0.hasPrefix("+") })
         }
 
-        // baseBranch..HEAD is empty — either the branch was merged, or it has no work.
-        // Check if HEAD is a proper ancestor of baseBranch (merged) vs at the same tip (no work).
-        let isAncestor = await ShellExecutor.execute(
-            "git merge-base --is-ancestor HEAD \(shellQuote(baseBranch))",
-            workingDirectory: worktreePath
-        )
-        guard isAncestor.exitCode == 0 else { return false }
-
-        // HEAD is an ancestor of baseBranch. Use forkPointCommit if available to distinguish
-        // "merged branch" (HEAD differs from fork point) from "no work done" (HEAD == fork point).
-        let headTip = await ShellExecutor.execute("git rev-parse HEAD", workingDirectory: worktreePath)
-        let head = headTip.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !head.isEmpty else { return false }
-
-        if let forkPoint = forkPointCommit, !forkPoint.isEmpty {
-            return head != forkPoint
+        // baseBranch..HEAD is empty — branch was either merged or has no work.
+        // If we have a fork point and got here, HEAD != forkPoint → branch was merged.
+        if forkPointCommit != nil {
+            return true
         }
 
-        // No fork point — fall back to comparing HEAD vs baseBranch tip.
-        let baseTip = await ShellExecutor.execute(
-            "git rev-parse \(shellQuote(baseBranch))",
+        // No fork point (old thread) — check if HEAD is a parent of a merge commit on baseBranch.
+        // This correctly identifies branches merged via merge commits without
+        // false-positiving on branches created from old base commits with no work.
+        let mergeCheck = await ShellExecutor.execute(
+            "git log --merges --ancestry-path HEAD..\(shellQuote(baseBranch)) --format=%P",
             workingDirectory: worktreePath
         )
-        let base = baseTip.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !base.isEmpty && base != head
+        return mergeCheck.stdout.contains(head)
     }
 
     // MARK: - Diff & Status
