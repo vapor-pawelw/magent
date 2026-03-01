@@ -92,7 +92,11 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onPin: (() -> Void)?
     var onContinueIn: ((AgentType) -> Void)?
     var onExportContext: (() -> Void)?
+    var onCloseTabsToTheRight: (() -> Void)?
+    var onCloseTabsToTheLeft: (() -> Void)?
     var availableAgentsForContinue: [AgentType] = []
+    var tabIndex: Int = 0
+    var totalTabCount: Int = 0
 
     init(title: String) {
         pinIcon = NSImageView()
@@ -217,6 +221,15 @@ final class TabItemView: NSView, NSMenuDelegate {
         onSelect?()
     }
 
+    override func otherMouseDown(with event: NSEvent) {
+        // Middle mouse button (button 2) closes the tab
+        if event.buttonNumber == 2 {
+            onClose?()
+        } else {
+            super.otherMouseDown(with: event)
+        }
+    }
+
     @objc private func closeTapped() {
         onClose?()
     }
@@ -238,6 +251,14 @@ final class TabItemView: NSView, NSMenuDelegate {
         onExportContext?()
     }
 
+    @objc private func closeTabsToTheRightTapped() {
+        onCloseTabsToTheRight?()
+    }
+
+    @objc private func closeTabsToTheLeftTapped() {
+        onCloseTabsToTheLeft?()
+    }
+
     private func updateAppearance() {
         layer?.backgroundColor = isSelected
             ? NSColor(resource: .primaryBrand).withAlphaComponent(0.2).cgColor
@@ -249,12 +270,6 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-
-        if showCloseButton {
-            let closeItem = NSMenuItem(title: "Close Tab", action: #selector(closeTapped), keyEquivalent: "")
-            closeItem.target = self
-            menu.addItem(closeItem)
-        }
 
         let pinTitle = showPinIcon ? "Unpin Tab" : "Pin Tab"
         let pinItem = NSMenuItem(title: pinTitle, action: #selector(pinTapped), keyEquivalent: "")
@@ -299,6 +314,54 @@ final class TabItemView: NSView, NSMenuDelegate {
             exportItem.target = self
             menu.addItem(exportItem)
         }
+
+        // Close tabs section
+        let hasTabsToRight = tabIndex < totalTabCount - 1
+        let hasTabsToLeft = tabIndex > 0
+
+        if hasTabsToRight || hasTabsToLeft {
+            menu.addItem(.separator())
+
+            if hasTabsToRight {
+                let closeRightItem = NSMenuItem(
+                    title: "Close Tabs to the Right",
+                    action: #selector(closeTabsToTheRightTapped),
+                    keyEquivalent: ""
+                )
+                closeRightItem.target = self
+                if hasTabsToLeft {
+                    closeRightItem.isAlternate = false
+                }
+                menu.addItem(closeRightItem)
+            }
+
+            if hasTabsToLeft && hasTabsToRight {
+                // Option-alternate: shows "Close Tabs to the Left" when Option is held
+                let closeLeftItem = NSMenuItem(
+                    title: "Close Tabs to the Left",
+                    action: #selector(closeTabsToTheLeftTapped),
+                    keyEquivalent: ""
+                )
+                closeLeftItem.target = self
+                closeLeftItem.isAlternate = true
+                closeLeftItem.keyEquivalentModifierMask = .option
+                menu.addItem(closeLeftItem)
+            } else if hasTabsToLeft && !hasTabsToRight {
+                let closeLeftItem = NSMenuItem(
+                    title: "Close Tabs to the Left",
+                    action: #selector(closeTabsToTheLeftTapped),
+                    keyEquivalent: ""
+                )
+                closeLeftItem.target = self
+                menu.addItem(closeLeftItem)
+            }
+        }
+
+        // "Close this tab" — always at the bottom
+        menu.addItem(.separator())
+        let closeThisItem = NSMenuItem(title: "Close This Tab", action: #selector(closeTapped), keyEquivalent: "")
+        closeThisItem.target = self
+        menu.addItem(closeThisItem)
     }
 }
 
@@ -496,7 +559,7 @@ final class ThreadDetailViewController: NSViewController {
         separator.setContentHuggingPriority(.required, for: .vertical)
         separator.setContentCompressionResistancePriority(.required, for: .vertical)
 
-        let topBar = NSStackView(views: [tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, exportContextButton, separator, archiveThreadButton, addTabButton])
+        let topBar = NSStackView(views: [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, exportContextButton, separator, archiveThreadButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
@@ -922,6 +985,7 @@ final class ThreadDetailViewController: NSViewController {
 
     func rebindTabActions() {
         let settings = PersistenceService.shared.loadSettings()
+        let count = tabItems.count
         for (i, item) in tabItems.enumerated() {
             item.onSelect = { [weak self] in self?.selectTab(at: i) }
             item.onClose = { [weak self] in self?.closeTab(at: i) }
@@ -929,7 +993,11 @@ final class ThreadDetailViewController: NSViewController {
             item.onPin = { [weak self] in self?.togglePin(at: i) }
             item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: i, targetAgent: agent) }
             item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
+            item.onCloseTabsToTheRight = { [weak self] in self?.closeTabsToTheRight(of: i) }
+            item.onCloseTabsToTheLeft = { [weak self] in self?.closeTabsToTheLeft(of: i) }
             item.availableAgentsForContinue = settings.availableActiveAgents
+            item.tabIndex = i
+            item.totalTabCount = count
             item.showCloseButton = true
             item.showPinIcon = (i < pinnedCount)
         }

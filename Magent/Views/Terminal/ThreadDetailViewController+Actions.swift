@@ -387,6 +387,101 @@ extension ThreadDetailViewController {
         }
     }
 
+    // MARK: - Close Multiple Tabs
+
+    func closeTabsToTheRight(of index: Int) {
+        let count = tabItems.count
+        guard index < count - 1 else { return }
+        let tabCount = count - index - 1
+
+        let alert = NSAlert()
+        alert.messageText = "Close Tabs to the Right"
+        alert.informativeText = "This will close \(tabCount) tab\(tabCount == 1 ? "" : "s") to the right. Are you sure?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Close")
+        alert.addButton(withTitle: "Cancel")
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        // Collect session names for tabs to the right (before mutating)
+        let sessionNames = (index + 1..<count).map { thread.tmuxSessionNames[$0] }
+        batchCloseTabs(sessionNames: sessionNames)
+    }
+
+    func closeTabsToTheLeft(of index: Int) {
+        guard index > 0 else { return }
+        let tabCount = index
+
+        let alert = NSAlert()
+        alert.messageText = "Close Tabs to the Left"
+        alert.informativeText = "This will close \(tabCount) tab\(tabCount == 1 ? "" : "s") to the left. Are you sure?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Close")
+        alert.addButton(withTitle: "Cancel")
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        // Collect session names for tabs to the left (before mutating)
+        let sessionNames = (0..<index).map { thread.tmuxSessionNames[$0] }
+        batchCloseTabs(sessionNames: sessionNames)
+    }
+
+    /// Closes multiple tabs by session name in a single sequential Task.
+    private func batchCloseTabs(sessionNames: [String]) {
+        // Capture old session-name-to-index mapping before async mutation
+        let oldSessionNames = thread.tmuxSessionNames
+        let removedSet = Set(sessionNames)
+
+        Task {
+            for sessionName in sessionNames {
+                do {
+                    try await threadManager.removeTab(from: thread, sessionName: sessionName)
+                } catch {
+                    // Skip tabs that fail to close
+                }
+            }
+            await MainActor.run {
+                if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
+                    self.thread = updated
+                }
+
+                // Determine which old indices were removed
+                let indicesToRemove = oldSessionNames.enumerated()
+                    .filter { removedSet.contains($0.element) }
+                    .map(\.offset)
+
+                // Remove in reverse order to keep indices stable
+                for index in indicesToRemove.reversed() {
+                    guard index < self.terminalViews.count, index < self.tabItems.count else { continue }
+                    self.terminalViews[index].removeFromSuperview()
+                    self.terminalViews.remove(at: index)
+                    self.tabItems.remove(at: index)
+
+                    if index < self.pinnedCount {
+                        self.pinnedCount -= 1
+                    }
+                    if index == self.primaryTabIndex {
+                        self.primaryTabIndex = 0
+                    } else if self.primaryTabIndex > index {
+                        self.primaryTabIndex -= 1
+                    }
+                }
+
+                self.rebindTabActions()
+                self.rebuildTabBar()
+
+                if self.tabItems.isEmpty {
+                    self.showEmptyState()
+                } else {
+                    let newIndex = min(self.currentTabIndex, self.tabItems.count - 1)
+                    self.selectTab(at: newIndex)
+                }
+            }
+        }
+    }
+
     // MARK: - Rename Dialog
 
     func showTabRenameDialog(at index: Int) {
