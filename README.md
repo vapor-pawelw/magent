@@ -96,12 +96,34 @@ brew tap vapor-pawelw/magent
 brew install --cask magent
 ```
 
+To update to the latest release:
+
+```bash
+brew upgrade magent
+```
+
 > Since the app is not signed or notarized, macOS will block it on first launch.
 > Right-click the app and choose **Open**, then click **Open** in the dialog to bypass Gatekeeper.
 
 ### GitHub Releases
 
 Download the latest `.zip` from [Releases](https://github.com/vapor-pawelw/magent/releases), unzip, and move `Magent.app` to `/Applications`.
+
+## Releasing
+
+Releases are driven by git tags. To publish a new version:
+
+```bash
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+This triggers a GitHub Actions workflow that:
+1. Builds `Magent.app` (unsigned)
+2. Creates a GitHub Release with the zipped app
+3. Auto-updates the Homebrew cask formula with the new version and SHA
+
+Commits on `main` without a tag do **not** produce a release.
 
 ## Building from Source
 
