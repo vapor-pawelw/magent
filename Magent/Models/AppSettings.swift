@@ -18,6 +18,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var agentContextInjection: String
     var agentSandboxEnabled: Bool
     var agentSkipPermissions: Bool
+    var ipcPromptInjectionEnabled: Bool
 
     init(
         projects: [Project] = [],
@@ -34,7 +35,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         terminalInjectionCommand: String = "",
         agentContextInjection: String = "",
         agentSandboxEnabled: Bool = false,
-        agentSkipPermissions: Bool = true
+        agentSkipPermissions: Bool = true,
+        ipcPromptInjectionEnabled: Bool = true
     ) {
         self.projects = projects
         self.activeAgents = activeAgents
@@ -51,6 +53,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.agentContextInjection = agentContextInjection
         self.agentSandboxEnabled = agentSandboxEnabled
         self.agentSkipPermissions = agentSkipPermissions
+        self.ipcPromptInjectionEnabled = ipcPromptInjectionEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -72,6 +75,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         agentContextInjection = try container.decodeIfPresent(String.self, forKey: .agentContextInjection) ?? ""
         agentSandboxEnabled = try container.decodeIfPresent(Bool.self, forKey: .agentSandboxEnabled) ?? false
         agentSkipPermissions = try container.decodeIfPresent(Bool.self, forKey: .agentSkipPermissions) ?? true
+        ipcPromptInjectionEnabled = try container.decodeIfPresent(Bool.self, forKey: .ipcPromptInjectionEnabled) ?? true
     }
 
     func encode(to encoder: Encoder) throws {
@@ -91,6 +95,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(agentContextInjection, forKey: .agentContextInjection)
         try container.encode(agentSandboxEnabled, forKey: .agentSandboxEnabled)
         try container.encode(agentSkipPermissions, forKey: .agentSkipPermissions)
+        try container.encode(ipcPromptInjectionEnabled, forKey: .ipcPromptInjectionEnabled)
     }
 
     var visibleSections: [ThreadSection] {
@@ -166,6 +171,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case agentContextInjection
         case agentSandboxEnabled
         case agentSkipPermissions
+        case ipcPromptInjectionEnabled
 
         // Legacy keys kept for migration.
         case agentCommand
