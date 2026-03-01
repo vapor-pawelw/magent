@@ -61,6 +61,7 @@ final class ThreadCell: NSTableCellView {
 
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
+        let completionIndicatorSize: CGFloat = 10
 
         let jiraIV = NSImageView()
         jiraIV.translatesAutoresizingMaskIntoConstraints = false
@@ -98,21 +99,30 @@ final class ThreadCell: NSTableCellView {
         let stack = NSStackView(views: [jiraIV, pinIV, archiveBtn, spinner, completionIV])
         stack.orientation = .horizontal
         stack.spacing = 3
+        stack.distribution = .fill
         stack.alignment = .centerY
         stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.setContentHuggingPriority(.required, for: .horizontal)
+        stack.setContentCompressionResistancePriority(.required, for: .horizontal)
         addSubview(stack)
+
+        // Keep markers hard-aligned to the trailing edge so additional markers grow leftward.
+        // Offset chosen to preserve the previous resting position of a single completion indicator.
+        let trailingAlignmentInset = ThreadListViewController.projectDisclosureTrailingInset
+            + (ThreadListViewController.disclosureButtonSize / 2)
+            - (completionIndicatorSize / 2)
 
         NSLayoutConstraint.activate([
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.centerXAnchor.constraint(equalTo: trailingAnchor, constant: -(ThreadListViewController.projectDisclosureTrailingInset + ThreadListViewController.disclosureButtonSize / 2)),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -trailingAlignmentInset),
             jiraIV.widthAnchor.constraint(equalToConstant: 10),
             jiraIV.heightAnchor.constraint(equalToConstant: 10),
             pinIV.widthAnchor.constraint(equalToConstant: 12),
             pinIV.heightAnchor.constraint(equalToConstant: 12),
             archiveBtn.widthAnchor.constraint(equalToConstant: 12),
             archiveBtn.heightAnchor.constraint(equalToConstant: 12),
-            completionIV.widthAnchor.constraint(equalToConstant: 10),
-            completionIV.heightAnchor.constraint(equalToConstant: 10),
+            completionIV.widthAnchor.constraint(equalToConstant: completionIndicatorSize),
+            completionIV.heightAnchor.constraint(equalToConstant: completionIndicatorSize),
             spinner.widthAnchor.constraint(equalToConstant: 14),
             spinner.heightAnchor.constraint(equalToConstant: 14),
         ])
