@@ -161,13 +161,22 @@ final class TabItemView: NSView, NSMenuDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    override func mouseUp(with event: NSEvent) {
-        guard !isDragging else { return }
-        let loc = convert(event.locationInWindow, from: nil)
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // point is in superview coordinates
+        guard frame.contains(point) else { return nil }
+        let localPoint = convert(point, from: superview)
+        // Let the close button handle its own clicks
         if !closeButton.isHidden {
-            let closeBounds = closeButton.convert(closeButton.bounds, to: self)
-            if closeBounds.contains(loc) { return }
+            let closeLocal = closeButton.convert(localPoint, from: self)
+            if closeButton.bounds.contains(closeLocal) {
+                return closeButton
+            }
         }
+        // Everything else routes to self so mouseDown always fires
+        return self
+    }
+
+    override func mouseDown(with event: NSEvent) {
         onSelect?()
     }
 
@@ -700,6 +709,7 @@ final class ThreadDetailViewController: NSViewController {
 
         // Pan gesture for drag-to-reorder
         let pan = NSPanGestureRecognizer(target: self, action: #selector(handleTabDrag(_:)))
+        pan.delaysPrimaryMouseButtonEvents = false
         pan.delegate = self
         item.addGestureRecognizer(pan)
 
