@@ -50,14 +50,19 @@ extension ThreadDetailViewController {
 
             let settings = PersistenceService.shared.loadSettings()
             guard let project = settings.projects.first(where: { $0.id == self.thread.projectId }) else {
-                self.openPRButton.image = self.openPRButtonImage(for: .unknown)
+                self.openPRButton.isHidden = true
                 return
             }
 
             let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
             let provider = self.preferredHostingProvider(from: remotes)
-            self.openPRButton.image = self.openPRButtonImage(for: provider)
-            self.openPRButton.toolTip = self.openPRTooltip(for: provider)
+            if remotes.isEmpty || provider == .unknown {
+                self.openPRButton.isHidden = true
+            } else {
+                self.openPRButton.isHidden = false
+                self.openPRButton.image = self.openPRButtonImage(for: provider)
+                self.openPRButton.toolTip = self.openPRTooltip(for: provider)
+            }
         }
     }
 

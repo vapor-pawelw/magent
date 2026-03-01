@@ -52,12 +52,14 @@ extension ThreadListViewController {
         finderItem.representedObject = thread
         menu.addItem(finderItem)
 
-        // Show Pull Request
-        let prItem = NSMenuItem(title: "Show Pull Request", action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
-        prItem.target = self
-        prItem.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: nil)
-        prItem.representedObject = thread
-        menu.addItem(prItem)
+        // Show Pull Request (only for projects with a recognized hosting provider)
+        if projectsWithValidRemotes.contains(thread.projectId) {
+            let prItem = NSMenuItem(title: "Show Pull Request", action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
+            prItem.target = self
+            prItem.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: nil)
+            prItem.representedObject = thread
+            menu.addItem(prItem)
+        }
 
         menu.addItem(NSMenuItem.separator())
 

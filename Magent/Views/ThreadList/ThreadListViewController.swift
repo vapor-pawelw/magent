@@ -58,6 +58,8 @@ final class ThreadListViewController: NSViewController {
     private var isCreatingThread = false
     var suppressNextSectionRowToggle = false
     var suppressNextProjectRowToggle = false
+    /// Project IDs that have at least one recognized git hosting remote (GitHub/GitLab/Bitbucket).
+    var projectsWithValidRemotes: Set<UUID> = []
 
     // MARK: - Data Model (3-level hierarchy)
     // Level 0: SidebarProject (project name header)
@@ -335,8 +337,24 @@ final class ThreadListViewController: NSViewController {
             for row in 0..<outlineView.numberOfRows {
                 if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == selectedId {
                     outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-                    return
+                    break
                 }
+            }
+        }
+
+        // Refresh cached remote availability per project (async, non-blocking)
+        let projectIds = sidebarProjects.map(\.projectId)
+        let currentSettings = settings
+        Task { [weak self] in
+            var validIds: Set<UUID> = []
+            for project in currentSettings.projects where projectIds.contains(project.id) {
+                let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
+                if remotes.contains(where: { $0.provider != .unknown }) {
+                    validIds.insert(project.id)
+                }
+            }
+            await MainActor.run {
+                self?.projectsWithValidRemotes = validIds
             }
         }
     }
