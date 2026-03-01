@@ -196,8 +196,11 @@ extension ThreadManager {
         let newSessionNames = currentThread.tmuxSessionNames.map { sessionRenameMap[$0] ?? $0 }
 
         // Check for conflicts with git branch and tmux sessions.
-        // Allow if the target branch is the thread's own branch (renaming back to a previous name).
+        // Allow if the target branch is the thread's own branch (renaming back to a previous name,
+        // or stored branchName is out of sync with the actual worktree branch).
+        let actualWorktreeBranch = await git.getCurrentBranch(workingDirectory: currentThread.worktreePath)
         let branchAlreadyOwned = currentThread.branchName == newBranchName
+            || actualWorktreeBranch == newBranchName
         if !branchAlreadyOwned, await git.branchExists(repoPath: project.repoPath, branchName: newBranchName) {
             throw ThreadManagerError.duplicateName
         }
@@ -213,7 +216,9 @@ extension ThreadManager {
 
         // 1. Rename git branch (skip if already on the target branch)
         if !branchAlreadyOwned {
-            try await git.renameBranch(repoPath: project.repoPath, oldName: currentThread.branchName, newName: newBranchName)
+            // Use the actual worktree branch if stored branchName is stale
+            let oldBranch = actualWorktreeBranch ?? currentThread.branchName
+            try await git.renameBranch(repoPath: project.repoPath, oldName: oldBranch, newName: newBranchName)
         }
 
         // 2. Create a symlink from the new name to the actual worktree directory.
