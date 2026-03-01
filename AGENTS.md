@@ -52,6 +52,31 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 - **tmux zombie overload recovery** is banner-driven: `ThreadManager.checkTmuxZombieHealth()` monitors zombie-heavy tmux parents and offers a one-click `restartTmuxAndRecoverSessions()` action via a persistent warning banner.
 - **Tuist**: Run `mise x -- tuist generate --no-open` after adding/removing Swift files.
 
+## Releasing
+
+When the user asks to "release", "publish", "cut a release", or "bump version":
+
+1. **Determine the version bump** using [Semantic Versioning](https://semver.org/):
+   - **patch** (1.0.0 → 1.0.1): bug fixes, minor tweaks
+   - **minor** (1.0.0 → 1.1.0): new features, non-breaking changes
+   - **major** (1.0.0 → 2.0.0): breaking changes (rare — confirm with user)
+   - If the bump type is ambiguous, ask the user
+2. **Find the current version**: `git tag --sort=-v:refname | head -1`
+3. **Tag and push**:
+   ```bash
+   git tag v<new_version>
+   git push origin v<new_version>
+   ```
+4. **Monitor the workflow**: `gh run list --limit 1` then `gh run watch <id> --exit-status`
+5. **Verify**: `gh release view v<new_version>` — confirm the release has `Magent.zip` attached
+
+The tag push triggers a GitHub Actions workflow (`.github/workflows/release.yml`) that:
+- Builds an unsigned `Magent.app` on `macos-26`
+- Creates a GitHub Release with the zipped app
+- Auto-updates the Homebrew cask in `vapor-pawelw/homebrew-magent`
+
+**Do NOT** manually edit `Project.swift` version strings — the workflow injects them from the git tag automatically.
+
 ## Important Files
 
 - `docs/requirements.md` — full feature requirements
