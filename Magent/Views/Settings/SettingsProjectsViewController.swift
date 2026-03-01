@@ -640,15 +640,73 @@ final class SettingsProjectsViewController: NSViewController {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        let resolved = settings.projects[index].resolvedWorktreesBasePath()
-        panel.directoryURL = URL(fileURLWithPath: resolved)
+        let oldResolved = settings.projects[index].resolvedWorktreesBasePath()
+        panel.directoryURL = URL(fileURLWithPath: oldResolved)
 
         panel.beginSheetModal(for: view.window!) { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
-            self.settings.projects[index].worktreesBasePath = url.path
-            try? self.persistence.saveSettings(self.settings)
-            self.showDetailForProject(self.settings.projects[index])
-            Task { await ThreadManager.shared.syncThreadsWithWorktrees(for: self.settings.projects[index]) }
+            let newPath = url.path
+
+            // No-op if paths are the same
+            guard newPath != oldResolved else { return }
+
+            let project = self.settings.projects[index]
+            let fm = FileManager.default
+            var oldHasWorktrees = false
+            if fm.fileExists(atPath: oldResolved) {
+                let contents = (try? fm.contentsOfDirectory(atPath: oldResolved)) ?? []
+                oldHasWorktrees = contents.contains { entry in
+                    entry != ".magent-cache.json" && !entry.hasPrefix(".")
+                }
+            }
+
+            if oldHasWorktrees {
+                Task {
+                    do {
+                        try await ThreadManager.shared.moveWorktreesBasePath(
+                            for: project, from: oldResolved, to: newPath
+                        )
+                    } catch let error as ThreadManagerError {
+                        await MainActor.run {
+                            let alert = NSAlert()
+                            alert.messageText = "Cannot Change Worktrees Path"
+                            alert.informativeText = error.localizedDescription
+                            alert.alertStyle = .warning
+                            alert.addButton(withTitle: "OK")
+                            if let window = self.view.window {
+                                alert.beginSheetModal(for: window)
+                            }
+                        }
+                        return
+                    } catch {
+                        await MainActor.run {
+                            let alert = NSAlert()
+                            alert.messageText = "Failed to Move Worktrees"
+                            alert.informativeText = error.localizedDescription
+                            alert.alertStyle = .warning
+                            alert.addButton(withTitle: "OK")
+                            if let window = self.view.window {
+                                alert.beginSheetModal(for: window)
+                            }
+                        }
+                        return
+                    }
+
+                    await MainActor.run {
+                        self.settings.projects[index].worktreesBasePath = newPath
+                        try? self.persistence.saveSettings(self.settings)
+                        self.showDetailForProject(self.settings.projects[index])
+                    }
+
+                    await ThreadManager.shared.syncThreadsWithWorktrees(for: self.settings.projects[index])
+                }
+            } else {
+                // No worktrees to move — just update the setting
+                self.settings.projects[index].worktreesBasePath = newPath
+                try? self.persistence.saveSettings(self.settings)
+                self.showDetailForProject(self.settings.projects[index])
+                Task { await ThreadManager.shared.syncThreadsWithWorktrees(for: self.settings.projects[index]) }
+            }
         }
     }
 }
