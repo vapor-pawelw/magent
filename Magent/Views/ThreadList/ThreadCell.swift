@@ -3,7 +3,7 @@ import Cocoa
 final class ThreadCell: NSTableCellView {
 
     private var jiraImageView: NSImageView?
-    private var dirtyImageView: NSImageView?
+    private(set) var inlineDirtyDot: NSImageView?
     private var pinImageView: NSImageView?
     private var leadingPinImageView: NSImageView?
     private var archiveButton: NSButton?
@@ -14,6 +14,51 @@ final class ThreadCell: NSTableCellView {
 
     var onArchive: (() -> Void)?
 
+    /// Reparents imageView and textField into a horizontal stack with a dirty dot in between.
+    /// Safe to call multiple times — only runs once.
+    func ensureLeadingStack() {
+        guard inlineDirtyDot == nil, let iv = imageView, let tf = textField else { return }
+
+        let dot = NSImageView()
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        dot.setContentHuggingPriority(.required, for: .horizontal)
+        dot.setContentCompressionResistancePriority(.required, for: .horizontal)
+        dot.isHidden = true
+        NSLayoutConstraint.activate([
+            dot.widthAnchor.constraint(equalToConstant: 7),
+            dot.heightAnchor.constraint(equalToConstant: 7),
+        ])
+        inlineDirtyDot = dot
+
+        // Remove existing constraints and reparent into a stack
+        iv.removeFromSuperview()
+        tf.removeFromSuperview()
+
+        NSLayoutConstraint.activate([
+            iv.widthAnchor.constraint(equalToConstant: 16),
+            iv.heightAnchor.constraint(equalToConstant: 16),
+        ])
+        tf.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let stack = NSStackView(views: [iv, dot, tf])
+        stack.orientation = .horizontal
+        stack.spacing = 4
+        stack.alignment = .centerY
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        var constraints = [
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: ThreadListViewController.sidebarHorizontalInset),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ]
+        if let trailingStack = trailingStackView {
+            constraints.append(stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingStack.leadingAnchor, constant: -6))
+        } else {
+            constraints.append(stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -ThreadListViewController.sidebarHorizontalInset))
+        }
+        NSLayoutConstraint.activate(constraints)
+    }
+
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
 
@@ -22,10 +67,6 @@ final class ThreadCell: NSTableCellView {
         jiraIV.setContentHuggingPriority(.required, for: .horizontal)
         jiraIV.isHidden = true
 
-        let dirtyIV = NSImageView()
-        dirtyIV.translatesAutoresizingMaskIntoConstraints = false
-        dirtyIV.setContentHuggingPriority(.required, for: .horizontal)
-        dirtyIV.isHidden = true
 
         let pinIV = NSImageView()
         pinIV.translatesAutoresizingMaskIntoConstraints = false
@@ -54,7 +95,7 @@ final class ThreadCell: NSTableCellView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.isHidden = true
 
-        let stack = NSStackView(views: [jiraIV, dirtyIV, pinIV, archiveBtn, spinner, completionIV])
+        let stack = NSStackView(views: [jiraIV, pinIV, archiveBtn, spinner, completionIV])
         stack.orientation = .horizontal
         stack.spacing = 3
         stack.alignment = .centerY
@@ -66,8 +107,6 @@ final class ThreadCell: NSTableCellView {
             stack.centerXAnchor.constraint(equalTo: trailingAnchor, constant: -(ThreadListViewController.projectDisclosureTrailingInset + ThreadListViewController.disclosureButtonSize / 2)),
             jiraIV.widthAnchor.constraint(equalToConstant: 10),
             jiraIV.heightAnchor.constraint(equalToConstant: 10),
-            dirtyIV.widthAnchor.constraint(equalToConstant: 7),
-            dirtyIV.heightAnchor.constraint(equalToConstant: 7),
             pinIV.widthAnchor.constraint(equalToConstant: 12),
             pinIV.heightAnchor.constraint(equalToConstant: 12),
             archiveBtn.widthAnchor.constraint(equalToConstant: 12),
@@ -79,17 +118,12 @@ final class ThreadCell: NSTableCellView {
         ])
         trailingStackView = stack
         jiraImageView = jiraIV
-        dirtyImageView = dirtyIV
         pinImageView = pinIV
         archiveButton = archiveBtn
         completionImageView = completionIV
         busySpinner = spinner
 
-        if !hasInstalledTextTrailingConstraint, let textField {
-            textField.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                textField.trailingAnchor.constraint(lessThanOrEqualTo: stack.leadingAnchor, constant: -6),
-            ])
+        if !hasInstalledTextTrailingConstraint {
             hasInstalledTextTrailingConstraint = true
         }
     }
@@ -125,12 +159,22 @@ final class ThreadCell: NSTableCellView {
             textField?.textColor = .labelColor
         }
 
+        // Show worktree directory name on hover when it differs from thread name
+        let worktreeDirName = (thread.worktreePath as NSString).lastPathComponent
+        if !thread.isMain, worktreeDirName != thread.name {
+            toolTip = "Worktree: \(worktreeDirName)"
+        } else {
+            toolTip = nil
+        }
+
+
         imageView?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
         imageView?.contentTintColor = thread.hasUnreadAgentCompletion
             ? NSColor.controlAccentColor
             : (sectionColor ?? NSColor(resource: .primaryBrand))
 
         ensureTrailingStack()
+        ensureLeadingStack()
 
         if thread.jiraTicketKey != nil {
             jiraImageView?.image = NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira ticket")
@@ -144,14 +188,14 @@ final class ThreadCell: NSTableCellView {
         }
 
         if thread.isDirty {
-            dirtyImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
-            dirtyImageView?.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
-            dirtyImageView?.toolTip = "Uncommitted changes"
-            dirtyImageView?.isHidden = false
+            inlineDirtyDot?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
+            inlineDirtyDot?.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
+            inlineDirtyDot?.toolTip = "Uncommitted changes"
+            inlineDirtyDot?.isHidden = false
         } else {
-            dirtyImageView?.image = nil
-            dirtyImageView?.toolTip = nil
-            dirtyImageView?.isHidden = true
+            inlineDirtyDot?.image = nil
+            inlineDirtyDot?.toolTip = nil
+            inlineDirtyDot?.isHidden = true
         }
 
         // Trailing pin icon — always hidden (replaced by leading pin)
@@ -207,18 +251,19 @@ final class ThreadCell: NSTableCellView {
         imageView?.isHidden = true
 
         ensureTrailingStack()
+        ensureLeadingStack()
         pinImageView?.isHidden = true
         archiveButton?.isHidden = true
 
         if isDirty {
-            dirtyImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
-            dirtyImageView?.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
-            dirtyImageView?.toolTip = "Uncommitted changes"
-            dirtyImageView?.isHidden = false
+            inlineDirtyDot?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
+            inlineDirtyDot?.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
+            inlineDirtyDot?.toolTip = "Uncommitted changes"
+            inlineDirtyDot?.isHidden = false
         } else {
-            dirtyImageView?.image = nil
-            dirtyImageView?.toolTip = nil
-            dirtyImageView?.isHidden = true
+            inlineDirtyDot?.image = nil
+            inlineDirtyDot?.toolTip = nil
+            inlineDirtyDot?.isHidden = true
         }
 
         if isWaitingForInput {

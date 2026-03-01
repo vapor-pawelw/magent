@@ -830,16 +830,6 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     c.addSubview(tf)
                     c.textField = tf
 
-                    NSLayoutConstraint.activate([
-                        iv.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
-                        iv.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                        iv.widthAnchor.constraint(equalToConstant: 16),
-                        iv.heightAnchor.constraint(equalToConstant: 16),
-                        tf.leadingAnchor.constraint(equalTo: iv.trailingAnchor, constant: 6),
-                        tf.trailingAnchor.constraint(lessThanOrEqualTo: c.trailingAnchor, constant: -Self.sidebarHorizontalInset),
-                        tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                    ])
-
                     return c
                 }()
 
