@@ -50,7 +50,10 @@ final class ThreadManager {
         loadThreads()
         installClaudeHooksSettings()
         ensureCodexBellNotification()
-        installCodexIPCInstructions()
+        let preSettings = persistence.loadSettings()
+        if preSettings.ipcPromptInjectionEnabled {
+            installCodexIPCInstructions()
+        }
 
         // Migrate old threads that have no agentTmuxSessions recorded.
         // Heuristic: the first session was always created as the agent tab.

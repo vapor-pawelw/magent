@@ -13,6 +13,7 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     private var customAgentCommandTextView: NSTextView!
     private var skipPermissionsCheckbox: NSButton!
     private var sandboxCheckbox: NSButton!
+    private var ipcInjectionCheckbox: NSButton!
     private var fdaStatusLabel: NSTextField!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
@@ -149,6 +150,20 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         sandboxDesc.textColor = NSColor(resource: .textSecondary)
         permissionsSection.addArrangedSubview(sandboxCheckbox)
         permissionsSection.addArrangedSubview(sandboxDesc)
+
+        ipcInjectionCheckbox = NSButton(
+            checkboxWithTitle: "Inject Magent IPC instructions into agent prompts",
+            target: self,
+            action: #selector(permissionsSettingChanged)
+        )
+        ipcInjectionCheckbox.state = settings.ipcPromptInjectionEnabled ? .on : .off
+        let ipcDesc = NSTextField(
+            wrappingLabelWithString: "Appends magent-cli documentation to the agent's system prompt (Claude) or AGENTS.md (Codex), enabling the agent to manage threads, tabs, and sections on your behalf. Disable to save tokens if you don't need agents to control Magent."
+        )
+        ipcDesc.font = .systemFont(ofSize: 11)
+        ipcDesc.textColor = NSColor(resource: .textSecondary)
+        permissionsSection.addArrangedSubview(ipcInjectionCheckbox)
+        permissionsSection.addArrangedSubview(ipcDesc)
 
         permissionsSection.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(permissionsSection)
@@ -378,6 +393,7 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     @objc private func permissionsSettingChanged() {
         settings.agentSkipPermissions = skipPermissionsCheckbox.state == .on
         settings.agentSandboxEnabled = sandboxCheckbox.state == .on
+        settings.ipcPromptInjectionEnabled = ipcInjectionCheckbox.state == .on
         try? persistence.saveSettings(settings)
     }
 

@@ -351,7 +351,9 @@ extension ThreadManager {
         var command = settings.command(for: agentType)
         if agentType == .claude {
             command += " --settings \(Self.claudeHooksSettingsPath)"
-            command += " --append-system-prompt \(ShellExecutor.shellQuote(Self.ipcAgentDocs))"
+            if settings.ipcPromptInjectionEnabled {
+                command += " --append-system-prompt \(ShellExecutor.shellQuote(Self.ipcAgentDocs))"
+            }
         }
         // Wrap the agent command in a login shell so user profile files are sourced
         // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
