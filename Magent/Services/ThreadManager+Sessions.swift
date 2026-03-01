@@ -501,7 +501,9 @@ extension ThreadManager {
             }
 
             threads[index].lastAgentCompletionAt = now
-            bumpThreadToTopOfSection(threads[index].id)
+            if settings.autoReorderThreadsOnAgentCompletion {
+                bumpThreadToTopOfSection(threads[index].id)
+            }
             threads[index].busySessions.remove(session)
             threads[index].waitingForInputSessions.remove(session)
             notifiedWaitingSessions.remove(session)

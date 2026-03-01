@@ -299,7 +299,10 @@ final class ThreadListViewController: NSViewController {
                     }
                     return effectiveSectionId == section.id
                 }
-                let sortedThreads = sortThreadsForDisplay(matchingThreads)
+                let sortedThreads = sortThreadsForDisplay(
+                    matchingThreads,
+                    preferRecentCompletions: settings.autoReorderThreadsOnAgentCompletion
+                )
                 children.append(SidebarSection(
                     projectId: project.id,
                     sectionId: section.id,
@@ -368,7 +371,10 @@ final class ThreadListViewController: NSViewController {
         }
     }
 
-    private func sortThreadsForDisplay(_ threads: [MagentThread]) -> [MagentThread] {
+    private func sortThreadsForDisplay(
+        _ threads: [MagentThread],
+        preferRecentCompletions: Bool
+    ) -> [MagentThread] {
         threads
             .enumerated()
             .sorted { lhs, rhs in
@@ -385,18 +391,22 @@ final class ThreadListViewController: NSViewController {
                     return left.displayOrder < right.displayOrder
                 }
 
-                // Fallback: most recent agent completion first
-                switch (left.lastAgentCompletionAt, right.lastAgentCompletionAt) {
-                case let (l?, r?) where l != r:
-                    return l > r
-                case (.some, .none):
-                    return true
-                case (.none, .some):
-                    return false
-                default:
-                    // Preserve input order when priority keys tie.
-                    return lhs.offset < rhs.offset
+                if preferRecentCompletions {
+                    // Fallback: most recent agent completion first
+                    switch (left.lastAgentCompletionAt, right.lastAgentCompletionAt) {
+                    case let (l?, r?) where l != r:
+                        return l > r
+                    case (.some, .none):
+                        return true
+                    case (.none, .some):
+                        return false
+                    default:
+                        // Preserve input order when priority keys tie.
+                        return lhs.offset < rhs.offset
+                    }
                 }
+                // Preserve input order when priority keys tie.
+                return lhs.offset < rhs.offset
             }
             .map(\.element)
     }

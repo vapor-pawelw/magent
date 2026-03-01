@@ -10,6 +10,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var showSystemBanners: Bool
     var playSoundForAgentCompletion: Bool
     var agentCompletionSoundName: String
+    var autoReorderThreadsOnAgentCompletion: Bool
     var autoRenameWorktrees: Bool
     var autoRenameSlugPrompt: String
     var isConfigured: Bool
@@ -30,6 +31,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         showSystemBanners: Bool = true,
         playSoundForAgentCompletion: Bool = true,
         agentCompletionSoundName: String = "Ping",
+        autoReorderThreadsOnAgentCompletion: Bool = true,
         autoRenameWorktrees: Bool = true,
         autoRenameSlugPrompt: String = AppSettings.defaultSlugPrompt,
         isConfigured: Bool = false,
@@ -49,6 +51,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.showSystemBanners = showSystemBanners
         self.playSoundForAgentCompletion = playSoundForAgentCompletion
         self.agentCompletionSoundName = agentCompletionSoundName
+        self.autoReorderThreadsOnAgentCompletion = autoReorderThreadsOnAgentCompletion
         self.autoRenameWorktrees = autoRenameWorktrees
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.isConfigured = isConfigured
@@ -73,6 +76,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         showSystemBanners = try container.decodeIfPresent(Bool.self, forKey: .showSystemBanners) ?? true
         playSoundForAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .playSoundForAgentCompletion) ?? true
         agentCompletionSoundName = try container.decodeIfPresent(String.self, forKey: .agentCompletionSoundName) ?? "Ping"
+        autoReorderThreadsOnAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .autoReorderThreadsOnAgentCompletion) ?? true
         autoRenameWorktrees = try container.decodeIfPresent(Bool.self, forKey: .autoRenameWorktrees) ?? true
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt) ?? Self.defaultSlugPrompt
         isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
@@ -95,6 +99,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(showSystemBanners, forKey: .showSystemBanners)
         try container.encode(playSoundForAgentCompletion, forKey: .playSoundForAgentCompletion)
         try container.encode(agentCompletionSoundName, forKey: .agentCompletionSoundName)
+        try container.encode(autoReorderThreadsOnAgentCompletion, forKey: .autoReorderThreadsOnAgentCompletion)
         try container.encode(autoRenameWorktrees, forKey: .autoRenameWorktrees)
         try container.encode(autoRenameSlugPrompt, forKey: .autoRenameSlugPrompt)
         try container.encode(isConfigured, forKey: .isConfigured)
@@ -190,6 +195,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case showSystemBanners
         case playSoundForAgentCompletion
         case agentCompletionSoundName
+        case autoReorderThreadsOnAgentCompletion
         case autoRenameWorktrees
         case autoRenameSlugPrompt
         case isConfigured

@@ -9,6 +9,7 @@ final class SettingsNotificationsViewController: NSViewController {
     private var notificationStatusLabel: NSTextField!
     private var showBannersCheckbox: NSButton!
     private var completionSoundCheckbox: NSButton!
+    private var autoReorderOnCompletionCheckbox: NSButton!
     private var soundPickerPopup: NSPopUpButton!
     private var soundPickerRow: NSStackView!
     private var appActiveObserver: NSObjectProtocol?
@@ -31,7 +32,7 @@ final class SettingsNotificationsViewController: NSViewController {
 
         // Description
         let notificationsDesc = NSTextField(
-            wrappingLabelWithString: "When an agent finishes a command, Magent sends a system notification and moves the thread to the top of its section."
+            wrappingLabelWithString: "When an agent finishes a command, Magent can send a system notification, play a sound, and optionally move the thread to the top of its section."
         )
         notificationsDesc.font = .systemFont(ofSize: 11)
         notificationsDesc.textColor = NSColor(resource: .textSecondary)
@@ -116,6 +117,14 @@ final class SettingsNotificationsViewController: NSViewController {
         )
         completionSoundCheckbox.state = settings.playSoundForAgentCompletion ? .on : .off
         behaviorSection.addArrangedSubview(completionSoundCheckbox)
+
+        autoReorderOnCompletionCheckbox = NSButton(
+            checkboxWithTitle: "Move completed threads to top automatically",
+            target: self,
+            action: #selector(autoReorderOnCompletionToggled)
+        )
+        autoReorderOnCompletionCheckbox.state = settings.autoReorderThreadsOnAgentCompletion ? .on : .off
+        behaviorSection.addArrangedSubview(autoReorderOnCompletionCheckbox)
 
         // Sound picker row
         soundPickerRow = NSStackView()
@@ -220,6 +229,11 @@ final class SettingsNotificationsViewController: NSViewController {
 
     @objc private func showBannersToggled() {
         settings.showSystemBanners = showBannersCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func autoReorderOnCompletionToggled() {
+        settings.autoReorderThreadsOnAgentCompletion = autoReorderOnCompletionCheckbox.state == .on
         try? persistence.saveSettings(settings)
     }
 

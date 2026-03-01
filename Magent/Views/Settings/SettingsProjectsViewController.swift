@@ -1,5 +1,31 @@
 import Cocoa
 
+private final class SettingsSectionCardView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.cornerRadius = 10
+        layer?.borderWidth = 1
+        updateColors()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateColors()
+    }
+
+    private func updateColors() {
+        let blended = NSColor(resource: .surface).blended(withFraction: 0.2, of: NSColor(resource: .appBackground))
+        layer?.backgroundColor = (blended ?? NSColor(resource: .surface)).cgColor
+        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+    }
+}
+
 final class SettingsProjectsViewController: NSViewController {
 
     private let persistence = PersistenceService.shared
@@ -196,26 +222,29 @@ final class SettingsProjectsViewController: NSViewController {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 12
+        stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 20, right: 0)
+        stack.edgeInsets = NSEdgeInsets(top: 8, left: 0, bottom: 20, right: 0)
+
+        let (detailsCard, detailsStack) = createSectionCard(title: "Project Details")
+        stack.addArrangedSubview(detailsCard)
 
         // Name
         let nameHeader = NSTextField(labelWithString: "Name")
         nameHeader.font = .systemFont(ofSize: 12, weight: .semibold)
-        stack.addArrangedSubview(nameHeader)
+        detailsStack.addArrangedSubview(nameHeader)
 
         nameField = NSTextField(string: project.name)
         nameField.font = .systemFont(ofSize: 13)
         nameField.translatesAutoresizingMaskIntoConstraints = false
         nameField.target = self
         nameField.action = #selector(nameFieldChanged)
-        stack.addArrangedSubview(nameField)
+        detailsStack.addArrangedSubview(nameField)
 
         // Repo path
         let repoHeader = NSTextField(labelWithString: "Repository Path")
         repoHeader.font = .systemFont(ofSize: 12, weight: .semibold)
-        stack.addArrangedSubview(repoHeader)
+        detailsStack.addArrangedSubview(repoHeader)
 
         let repoRow = NSStackView()
         repoRow.orientation = .horizontal
@@ -229,19 +258,19 @@ final class SettingsProjectsViewController: NSViewController {
         browseRepoBtn.bezelStyle = .rounded
         browseRepoBtn.controlSize = .small
         repoRow.addArrangedSubview(browseRepoBtn)
-        stack.addArrangedSubview(repoRow)
+        detailsStack.addArrangedSubview(repoRow)
 
         if !project.isValid {
             let warningLabel = NSTextField(labelWithString: "Path does not exist. Update the repository path.")
             warningLabel.font = .systemFont(ofSize: 11)
             warningLabel.textColor = .systemRed
-            stack.addArrangedSubview(warningLabel)
+            detailsStack.addArrangedSubview(warningLabel)
         }
 
         // Worktrees path
         let wtHeader = NSTextField(labelWithString: "Worktrees Path")
         wtHeader.font = .systemFont(ofSize: 12, weight: .semibold)
-        stack.addArrangedSubview(wtHeader)
+        detailsStack.addArrangedSubview(wtHeader)
 
         let wtRow = NSStackView()
         wtRow.orientation = .horizontal
@@ -255,7 +284,7 @@ final class SettingsProjectsViewController: NSViewController {
         browseWtBtn.bezelStyle = .rounded
         browseWtBtn.controlSize = .small
         wtRow.addArrangedSubview(browseWtBtn)
-        stack.addArrangedSubview(wtRow)
+        detailsStack.addArrangedSubview(wtRow)
 
         let resolved = project.resolvedWorktreesBasePath()
         if resolved != project.worktreesBasePath {
@@ -263,18 +292,18 @@ final class SettingsProjectsViewController: NSViewController {
             resolvedLabel.font = .systemFont(ofSize: 11)
             resolvedLabel.textColor = NSColor(resource: .textSecondary)
             resolvedLabel.lineBreakMode = .byTruncatingMiddle
-            stack.addArrangedSubview(resolvedLabel)
+            detailsStack.addArrangedSubview(resolvedLabel)
         }
 
         // Default branch
         let branchHeader = NSTextField(labelWithString: "Default Branch")
         branchHeader.font = .systemFont(ofSize: 12, weight: .semibold)
-        stack.addArrangedSubview(branchHeader)
+        detailsStack.addArrangedSubview(branchHeader)
 
         let branchDesc = NSTextField(labelWithString: "Base branch for new worktrees (empty = repo HEAD)")
         branchDesc.font = .systemFont(ofSize: 11)
         branchDesc.textColor = NSColor(resource: .textSecondary)
-        stack.addArrangedSubview(branchDesc)
+        detailsStack.addArrangedSubview(branchDesc)
 
         defaultBranchField = NSTextField(string: project.defaultBranch ?? "")
         defaultBranchField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
@@ -282,22 +311,34 @@ final class SettingsProjectsViewController: NSViewController {
         defaultBranchField.translatesAutoresizingMaskIntoConstraints = false
         defaultBranchField.target = self
         defaultBranchField.action = #selector(defaultBranchFieldChanged)
-        stack.addArrangedSubview(defaultBranchField)
+        detailsStack.addArrangedSubview(defaultBranchField)
 
-        // Separator: Jira Integration
-        let jiraSep = NSBox()
-        jiraSep.boxType = .separator
-        jiraSep.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(jiraSep)
+        // Default Section popup
+        let defaultSectionHeader = NSTextField(labelWithString: "Default Section")
+        defaultSectionHeader.font = .systemFont(ofSize: 12, weight: .semibold)
+        detailsStack.addArrangedSubview(defaultSectionHeader)
 
-        let jiraHeader = NSTextField(labelWithString: "Jira Integration")
-        jiraHeader.font = .systemFont(ofSize: 13, weight: .semibold)
-        stack.addArrangedSubview(jiraHeader)
+        let defaultSectionDesc = NSTextField(wrappingLabelWithString: "Section for new threads without an explicit section. \"Inherit global\" uses the global default.")
+        defaultSectionDesc.font = .systemFont(ofSize: 11)
+        defaultSectionDesc.textColor = NSColor(resource: .textSecondary)
+        detailsStack.addArrangedSubview(defaultSectionDesc)
+
+        defaultSectionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        defaultSectionPopup.target = self
+        defaultSectionPopup.action = #selector(defaultSectionChanged)
+        refreshDefaultSectionPopup(for: project)
+        detailsStack.addArrangedSubview(defaultSectionPopup)
+
+        let (jiraCard, jiraStack) = createSectionCard(
+            title: "Jira Integration",
+            description: "Project-specific Jira settings for ticket sync and section mapping."
+        )
+        stack.addArrangedSubview(jiraCard)
 
         // Project Key
         let projectKeyLabel = NSTextField(labelWithString: "Project Key")
         projectKeyLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        stack.addArrangedSubview(projectKeyLabel)
+        jiraStack.addArrangedSubview(projectKeyLabel)
 
         jiraProjectKeyField = NSTextField(string: project.jiraProjectKey ?? "")
         jiraProjectKeyField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
@@ -305,12 +346,12 @@ final class SettingsProjectsViewController: NSViewController {
         jiraProjectKeyField.translatesAutoresizingMaskIntoConstraints = false
         jiraProjectKeyField.target = self
         jiraProjectKeyField.action = #selector(jiraProjectKeyChanged)
-        stack.addArrangedSubview(jiraProjectKeyField)
+        jiraStack.addArrangedSubview(jiraProjectKeyField)
 
         // Board
         let boardLabel = NSTextField(labelWithString: "Board")
         boardLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        stack.addArrangedSubview(boardLabel)
+        jiraStack.addArrangedSubview(boardLabel)
 
         let boardRow = NSStackView()
         boardRow.orientation = .horizontal
@@ -330,17 +371,17 @@ final class SettingsProjectsViewController: NSViewController {
         refreshBoardsBtn.bezelStyle = .rounded
         refreshBoardsBtn.controlSize = .small
         boardRow.addArrangedSubview(refreshBoardsBtn)
-        stack.addArrangedSubview(boardRow)
+        jiraStack.addArrangedSubview(boardRow)
 
         // Assignee Account ID
         let assigneeLabel = NSTextField(labelWithString: "Assignee Account ID")
         assigneeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        stack.addArrangedSubview(assigneeLabel)
+        jiraStack.addArrangedSubview(assigneeLabel)
 
         let assigneeDesc = NSTextField(wrappingLabelWithString: "Your Jira account ID for filtering tickets.")
         assigneeDesc.font = .systemFont(ofSize: 11)
         assigneeDesc.textColor = NSColor(resource: .textSecondary)
-        stack.addArrangedSubview(assigneeDesc)
+        jiraStack.addArrangedSubview(assigneeDesc)
 
         jiraAssigneeField = NSTextField(string: project.jiraAssigneeAccountId ?? "")
         jiraAssigneeField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
@@ -348,17 +389,17 @@ final class SettingsProjectsViewController: NSViewController {
         jiraAssigneeField.translatesAutoresizingMaskIntoConstraints = false
         jiraAssigneeField.target = self
         jiraAssigneeField.action = #selector(jiraAssigneeChanged)
-        stack.addArrangedSubview(jiraAssigneeField)
+        jiraStack.addArrangedSubview(jiraAssigneeField)
 
         // Sync Sections button
         jiraSyncButton = NSButton(title: "Sync Sections from Jira", target: self, action: #selector(syncSectionsFromJiraTapped))
         jiraSyncButton.bezelStyle = .rounded
-        stack.addArrangedSubview(jiraSyncButton)
+        jiraStack.addArrangedSubview(jiraSyncButton)
 
         let syncDesc = NSTextField(wrappingLabelWithString: "Fetches statuses from project tickets and replaces this project's sections to match.")
         syncDesc.font = .systemFont(ofSize: 11)
         syncDesc.textColor = NSColor(resource: .textSecondary)
-        stack.addArrangedSubview(syncDesc)
+        jiraStack.addArrangedSubview(syncDesc)
 
         // Auto-sync checkbox
         jiraAutoSyncCheckbox = NSButton(
@@ -367,50 +408,27 @@ final class SettingsProjectsViewController: NSViewController {
             action: #selector(jiraAutoSyncToggled)
         )
         jiraAutoSyncCheckbox.state = project.jiraSyncEnabled ? .on : .off
-        stack.addArrangedSubview(jiraAutoSyncCheckbox)
+        jiraStack.addArrangedSubview(jiraAutoSyncCheckbox)
 
         let autoSyncDesc = NSTextField(wrappingLabelWithString: "Polls Jira and moves threads to matching sections. Creates threads for new tickets.")
         autoSyncDesc.font = .systemFont(ofSize: 11)
         autoSyncDesc.textColor = NSColor(resource: .textSecondary)
-        stack.addArrangedSubview(autoSyncDesc)
+        jiraStack.addArrangedSubview(autoSyncDesc)
 
-        // Default Section popup
-        let defaultSectionHeader = NSTextField(labelWithString: "Default Section")
-        defaultSectionHeader.font = .systemFont(ofSize: 12, weight: .semibold)
-        stack.addArrangedSubview(defaultSectionHeader)
-
-        let defaultSectionDesc = NSTextField(wrappingLabelWithString: "Section for new threads without an explicit section. \"Inherit global\" uses the global default.")
-        defaultSectionDesc.font = .systemFont(ofSize: 11)
-        defaultSectionDesc.textColor = NSColor(resource: .textSecondary)
-        stack.addArrangedSubview(defaultSectionDesc)
-
-        defaultSectionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        defaultSectionPopup.target = self
-        defaultSectionPopup.action = #selector(defaultSectionChanged)
-        refreshDefaultSectionPopup(for: project)
-        stack.addArrangedSubview(defaultSectionPopup)
-
-        // Separator: Project Overrides
-        let overrideSep = NSBox()
-        overrideSep.boxType = .separator
-        overrideSep.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(overrideSep)
-
-        let overrideHeader = NSTextField(labelWithString: "Project Overrides")
-        overrideHeader.font = .systemFont(ofSize: 13, weight: .semibold)
-        stack.addArrangedSubview(overrideHeader)
+        let (overridesCard, overridesStack) = createSectionCard(title: "Project Overrides")
+        stack.addArrangedSubview(overridesCard)
 
         let overrideDesc = NSTextField(
             wrappingLabelWithString: "Override global defaults for this project. \"Use Default\" inherits the value from General settings."
         )
         overrideDesc.font = .systemFont(ofSize: 11)
         overrideDesc.textColor = NSColor(resource: .textSecondary)
-        stack.addArrangedSubview(overrideDesc)
+        overridesStack.addArrangedSubview(overrideDesc)
 
         // Agent type override
         let agentTypeHeader = NSTextField(labelWithString: "Default Agent")
         agentTypeHeader.font = .systemFont(ofSize: 12, weight: .semibold)
-        stack.addArrangedSubview(agentTypeHeader)
+        overridesStack.addArrangedSubview(agentTypeHeader)
 
         agentTypePopup = NSPopUpButton(frame: .zero, pullsDown: false)
         let globalDefault = settings.effectiveGlobalDefaultAgentType
@@ -428,12 +446,12 @@ final class SettingsProjectsViewController: NSViewController {
         }
         agentTypePopup.target = self
         agentTypePopup.action = #selector(agentTypeOverrideChanged)
-        stack.addArrangedSubview(agentTypePopup)
+        overridesStack.addArrangedSubview(agentTypePopup)
 
         // Slug Prompt Override
         let slugPromptHeader = NSTextField(labelWithString: "Slug Prompt")
         slugPromptHeader.font = .systemFont(ofSize: 12, weight: .semibold)
-        stack.addArrangedSubview(slugPromptHeader)
+        overridesStack.addArrangedSubview(slugPromptHeader)
 
         let hasCustomSlug = project.autoRenameSlugPrompt != nil
         slugPromptCheckbox = NSButton(
@@ -442,7 +460,7 @@ final class SettingsProjectsViewController: NSViewController {
             action: #selector(slugPromptCheckboxToggled)
         )
         slugPromptCheckbox.state = hasCustomSlug ? .on : .off
-        stack.addArrangedSubview(slugPromptCheckbox)
+        overridesStack.addArrangedSubview(slugPromptCheckbox)
 
         let slugPromptWrapper = NSStackView()
         slugPromptWrapper.orientation = .vertical
@@ -483,7 +501,7 @@ final class SettingsProjectsViewController: NSViewController {
         slugPromptWrapper.addArrangedSubview(resetSlugButton)
 
         slugPromptWrapper.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(slugPromptWrapper)
+        overridesStack.addArrangedSubview(slugPromptWrapper)
 
         slugPromptTextView.autoresizingMask = [.width]
         slugPromptTextView.textContainer?.widthTracksTextView = true
@@ -497,7 +515,7 @@ final class SettingsProjectsViewController: NSViewController {
             ? "No global default set"
             : "Global default: \(globalTerminal.prefix(60))\(globalTerminal.count > 60 ? "..." : "")"
         terminalInjectionTextView = createOverrideSection(
-            in: stack,
+            in: overridesStack,
             title: "Terminal Injection",
             description: "Empty = use global default. \(terminalDesc)",
             value: project.terminalInjectionCommand ?? "",
@@ -510,7 +528,7 @@ final class SettingsProjectsViewController: NSViewController {
             ? "No global default set"
             : "Global default: \(globalContext.prefix(60))\(globalContext.count > 60 ? "..." : "")"
         agentContextTextView = createOverrideSection(
-            in: stack,
+            in: overridesStack,
             title: "Agent Context",
             description: "Empty = use global default. \(contextDesc)",
             value: project.agentContextInjection ?? "",
@@ -532,21 +550,58 @@ final class SettingsProjectsViewController: NSViewController {
 
             documentView.widthAnchor.constraint(equalTo: detailScrollView.widthAnchor),
 
-            nameField.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            repoRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            wtRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            defaultBranchField.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            jiraSep.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            jiraProjectKeyField.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            boardRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            jiraAssigneeField.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            syncDesc.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            autoSyncDesc.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            overrideSep.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            overrideDesc.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            slugPromptWrapper.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            detailsCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            jiraCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            overridesCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            nameField.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
+            repoRow.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
+            wtRow.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
+            defaultBranchField.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
+            defaultSectionDesc.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
+            defaultSectionPopup.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
+            jiraProjectKeyField.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
+            boardRow.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
+            jiraAssigneeField.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
+            syncDesc.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
+            autoSyncDesc.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
+            overrideDesc.widthAnchor.constraint(equalTo: overridesStack.widthAnchor),
+            slugPromptWrapper.widthAnchor.constraint(equalTo: overridesStack.widthAnchor),
             slugScrollView.widthAnchor.constraint(equalTo: slugPromptWrapper.widthAnchor),
         ])
+    }
+
+    private func createSectionCard(title: String, description: String? = nil) -> (container: NSView, content: NSStackView) {
+        let container = SettingsSectionCardView()
+
+        let content = NSStackView()
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 8
+        content.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(content)
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        content.addArrangedSubview(titleLabel)
+
+        if let description, !description.isEmpty {
+            let descriptionLabel = NSTextField(wrappingLabelWithString: description)
+            descriptionLabel.font = .systemFont(ofSize: 11)
+            descriptionLabel.textColor = NSColor(resource: .textSecondary)
+            content.addArrangedSubview(descriptionLabel)
+            NSLayoutConstraint.activate([
+                descriptionLabel.widthAnchor.constraint(equalTo: content.widthAnchor),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+        ])
+
+        return (container, content)
     }
 
     private func createOverrideSection(

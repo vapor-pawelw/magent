@@ -44,7 +44,7 @@ final class OnboardingNotificationsView: NSView {
         titleLabel.font = .preferredFont(forTextStyle: .headline)
 
         let descLabel = NSTextField(
-            wrappingLabelWithString: "When an agent finishes a command, Magent sends a system notification and moves the thread to the top of its section."
+            wrappingLabelWithString: "When an agent finishes a command, Magent sends a system notification and can move the thread to the top of its section."
         )
         descLabel.font = .systemFont(ofSize: 11)
         descLabel.textColor = NSColor(resource: .textSecondary)
