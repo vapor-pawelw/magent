@@ -48,7 +48,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         worktreeSection.spacing = 6
 
         let worktreeLabel = NSTextField(labelWithString: "Worktree Behavior")
-        worktreeLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        worktreeLabel.font = .systemFont(ofSize: 14, weight: .semibold)
         worktreeSection.addArrangedSubview(worktreeLabel)
 
         autoRenameCheckbox = NSButton(
@@ -129,6 +129,8 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             slugPromptScrollView.widthAnchor.constraint(equalTo: slugPromptWrapper.widthAnchor),
         ])
 
+        stackView.addArrangedSubview(makeSectionSeparator(in: stackView))
+
         // Terminal Injection Command
         terminalInjectionTextView = createSection(
             in: stackView,
@@ -137,6 +139,8 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             value: settings.terminalInjectionCommand,
             font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
+
+        stackView.addArrangedSubview(makeSectionSeparator(in: stackView))
 
         // Agent Context Injection
         agentContextTextView = createSection(
@@ -147,9 +151,11 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             font: .systemFont(ofSize: 13)
         )
 
+        stackView.addArrangedSubview(makeSectionSeparator(in: stackView))
+
         // Environment Variables reference
         let envHeader = NSTextField(labelWithString: "Environment Variables")
-        envHeader.font = .systemFont(ofSize: 13, weight: .semibold)
+        envHeader.font = .systemFont(ofSize: 14, weight: .semibold)
 
         let envDesc = NSTextField(wrappingLabelWithString: "Available in injection commands:")
         envDesc.font = .systemFont(ofSize: 11)
@@ -201,7 +207,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
 
         // Thread Sections
         let sectionsHeader = NSTextField(labelWithString: "Thread Sections")
-        sectionsHeader.font = .systemFont(ofSize: 13, weight: .semibold)
+        sectionsHeader.font = .systemFont(ofSize: 14, weight: .semibold)
         sectionsHeader.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(sectionsHeader)
 
@@ -308,6 +314,14 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         contentScrollView.reflectScrolledClipView(clipView)
     }
 
+    private func makeSectionSeparator(in stackView: NSStackView) -> NSBox {
+        let sep = NSBox()
+        sep.boxType = .separator
+        sep.translatesAutoresizingMaskIntoConstraints = false
+        sep.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40).isActive = true
+        return sep
+    }
+
     private func createSection(
         in stackView: NSStackView,
         title: String,
@@ -321,7 +335,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         sectionStack.spacing = 4
 
         let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
         sectionStack.addArrangedSubview(titleLabel)
 
         let descLabel = NSTextField(wrappingLabelWithString: description)

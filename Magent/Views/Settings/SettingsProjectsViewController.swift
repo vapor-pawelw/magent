@@ -576,12 +576,12 @@ final class SettingsProjectsViewController: NSViewController {
         let content = NSStackView()
         content.orientation = .vertical
         content.alignment = .leading
-        content.spacing = 8
+        content.spacing = 12
         content.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(content)
 
         let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
         content.addArrangedSubview(titleLabel)
 
         if let description, !description.isEmpty {
