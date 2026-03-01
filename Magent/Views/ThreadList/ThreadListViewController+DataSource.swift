@@ -7,8 +7,10 @@ extension ThreadListViewController {
     private func buildContextMenu(for thread: MagentThread) -> NSMenu {
         let menu = NSMenu()
 
-        // Main threads: no context menu
-        if thread.isMain { return menu }
+        // Main threads: limited context menu
+        if thread.isMain {
+            return buildMainThreadContextMenu(for: thread)
+        }
 
         // Pin/Unpin
         let pinTitle = thread.isPinned ? "Unpin" : "Pin"
@@ -78,6 +80,69 @@ extension ThreadListViewController {
         menu.addItem(deleteItem)
 
         return menu
+    }
+
+    private func buildMainThreadContextMenu(for thread: MagentThread) -> NSMenu {
+        let menu = NSMenu()
+
+        // Open in Finder
+        let finderItem = NSMenuItem(title: "Open in Finder", action: #selector(openThreadInFinder(_:)), keyEquivalent: "")
+        finderItem.target = self
+        finderItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        finderItem.representedObject = thread
+        menu.addItem(finderItem)
+
+        // Open in Xcode (if Xcode is installed and project has xcworkspace/xcodeproj)
+        if xcodeProjectPath(for: thread) != nil {
+            let xcodeItem = NSMenuItem(title: "Open in Xcode", action: #selector(openThreadInXcode(_:)), keyEquivalent: "")
+            xcodeItem.target = self
+            let xcodeIcon = NSWorkspace.shared.icon(forFile: "/Applications/Xcode.app")
+            xcodeIcon.size = NSSize(width: 16, height: 16)
+            xcodeItem.image = xcodeIcon
+            xcodeItem.representedObject = thread
+            menu.addItem(xcodeItem)
+        }
+
+        // Show open pull requests (only for projects with a recognized hosting provider)
+        if projectsWithValidRemotes.contains(thread.projectId) {
+            let prItem = NSMenuItem(title: "Show Open Pull Requests", action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
+            prItem.target = self
+            prItem.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: nil)
+            prItem.representedObject = thread
+            menu.addItem(prItem)
+        }
+
+        return menu
+    }
+
+    private func projectRootPath(for thread: MagentThread) -> String {
+        if thread.isMain {
+            let settings = persistence.loadSettings()
+            return settings.projects.first(where: { $0.id == thread.projectId })?.repoPath ?? thread.worktreePath
+        }
+        return thread.worktreePath
+    }
+
+    private func xcodeProjectPath(for thread: MagentThread) -> String? {
+        guard FileManager.default.fileExists(atPath: "/Applications/Xcode.app") else { return nil }
+        let dirPath = NSString(string: projectRootPath(for: thread)).expandingTildeInPath
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: dirPath) else { return nil }
+
+        let workspaces = contents.filter { $0.hasSuffix(".xcworkspace") && $0 != "project.xcworkspace" }
+        if let first = workspaces.first {
+            return (dirPath as NSString).appendingPathComponent(first)
+        }
+        let projects = contents.filter { $0.hasSuffix(".xcodeproj") }
+        if let first = projects.first {
+            return (dirPath as NSString).appendingPathComponent(first)
+        }
+        return nil
+    }
+
+    @objc private func openThreadInXcode(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread,
+              let path = xcodeProjectPath(for: thread) else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
     private func buildProjectContextMenu(for project: SidebarProject) -> NSMenu {
