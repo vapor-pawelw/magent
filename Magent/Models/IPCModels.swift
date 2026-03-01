@@ -44,6 +44,24 @@ nonisolated struct IPCResponse: Encodable, Sendable {
 
 // MARK: - DTOs
 
+nonisolated struct IPCThreadStatus: Encodable, Sendable {
+    let isBusy: Bool
+    let isWaitingForInput: Bool
+    let hasUnreadCompletion: Bool
+    let isDirty: Bool
+    let isFullyDelivered: Bool
+    let showArchiveSuggestion: Bool
+    let isPinned: Bool
+    let isArchived: Bool
+    let isBlockedByRateLimit: Bool
+    let hasBranchMismatch: Bool
+    let jiraTicketKey: String?
+    let jiraUnassigned: Bool
+    let branchName: String
+    let baseBranch: String?
+    let rateLimitDescription: String?
+}
+
 nonisolated struct IPCThreadInfo: Encodable, Sendable {
     let id: String
     let name: String
@@ -55,6 +73,7 @@ nonisolated struct IPCThreadInfo: Encodable, Sendable {
     var sectionName: String?
     var sectionId: String?
     var tabs: [IPCTabInfo]?
+    var status: IPCThreadStatus?
 
     init(thread: MagentThread, projectName: String) {
         self.id = thread.id.uuidString
@@ -66,7 +85,7 @@ nonisolated struct IPCThreadInfo: Encodable, Sendable {
         self.isMain = thread.isMain
     }
 
-    init(thread: MagentThread, projectName: String, sectionName: String?, tabs: [IPCTabInfo]) {
+    init(thread: MagentThread, projectName: String, sectionName: String?, tabs: [IPCTabInfo], status: IPCThreadStatus? = nil) {
         self.id = thread.id.uuidString
         self.name = thread.name
         self.projectName = projectName
@@ -77,6 +96,7 @@ nonisolated struct IPCThreadInfo: Encodable, Sendable {
         self.sectionName = sectionName
         self.sectionId = thread.sectionId?.uuidString
         self.tabs = tabs
+        self.status = status
     }
 }
 

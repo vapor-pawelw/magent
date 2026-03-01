@@ -1,93 +1,15 @@
-# Magent
+<p align="center">
+  <img src="docs/icon.jpg" alt="Magent" width="128" height="128" style="border-radius: 22px;">
+</p>
 
-A native macOS app for managing coding agents as parallel work sessions — each thread is a git worktree with embedded terminals, agent tabs, and full lifecycle management.
+<h1 align="center">Magent</h1>
 
-<!-- ![Magent Screenshot](docs/screenshot.png) -->
+<p align="center">
+  A native macOS app for managing coding agents as parallel work sessions.<br>
+  Each thread is a git worktree with embedded terminals, agent tabs, and full lifecycle management.
+</p>
 
-## Features
-
-### Thread Management
-
-Every thread maps 1:1 to a git worktree. Create a thread, get a fresh branch and workspace instantly.
-
-- **Auto-naming** — threads start with random names (e.g. `swift-falcon`) and auto-rename based on the first agent prompt
-- **Sections** — organize threads into color-coded Kanban columns (TODO, In Progress, Reviewing, Done) with per-project overrides
-- **Archive & delete** — archive removes the worktree but keeps the branch; delete removes both
-- **Pinning** — pin important threads to the top of the list
-- **Status indicators** — see at a glance which threads are busy, waiting for input, have unread completions, or have uncommitted changes
-- **Delivery tracking** — threads show when all commits have been cherry-picked to the base branch
-
-### Multi-Agent Support
-
-Run Claude Code, Codex, or any custom command as your coding agent.
-
-- **Claude Code** — full support including `--dangerously-skip-permissions` mode and `/resume` for session restoration
-- **Codex** — supports standard, `--yolo`, and `--full-auto` modes
-- **Custom agents** — use any CLI tool as your agent
-- **Per-project defaults** — set different default agents for different repositories
-- **Auto-trust** — automatically configures trust settings for new worktree directories
-- **Context transfer** — hand off conversation context between agent tabs via `.magent-context.md` export
-
-### Terminal
-
-GPU-accelerated embedded terminal powered by libghostty, with tmux for session persistence.
-
-- **Ghostty rendering** — native GPU-accelerated terminal emulation via libghostty (Zig-built C library)
-- **tmux multiplexing** — every tab runs in a tmux session, surviving app restarts and enabling remote SSH attachment
-- **Multiple tabs** — open agent tabs, plain terminal tabs, or mixed configurations per thread
-- **Tab management** — rename, reorder, pin, close tabs within a thread
-- **Bell detection** — smart agent completion detection via tmux pipe-pane with BEL character monitoring
-
-### Git Integration
-
-Deep git awareness without getting in the way.
-
-- **Worktree lifecycle** — create, rename, archive, delete worktrees with automatic branch management
-- **Branch tracking** — see branch names, dirty state, and merge status at a glance
-- **PR/MR links** — open pull requests directly from the toolbar (GitHub, GitLab, Bitbucket)
-- **Default branch detection** — auto-detects `main`, `master`, or `develop` from `origin/HEAD`
-- **Diff stats** — per-file additions/deletions with staged/unstaged/untracked breakdown
-- **Worktree recovery** — if a worktree directory goes missing, it's recreated from the branch
-
-### CLI Automation
-
-Script everything via `magent-cli` over a Unix domain socket.
-
-```bash
-# Thread operations
-magent-cli create-thread --project myapp --agent claude --prompt "Add auth"
-magent-cli list-threads --project myapp
-magent-cli send-prompt --thread swift-falcon --prompt "Now add tests"
-magent-cli archive-thread --thread swift-falcon
-
-# Tab operations
-magent-cli create-tab --thread swift-falcon --agent terminal
-magent-cli list-tabs --thread swift-falcon
-magent-cli close-tab --thread swift-falcon --index 2
-
-# Section management
-magent-cli list-sections
-magent-cli add-section --name "Blocked" --color "#FF3B30"
-```
-
-Environment variables injected into every session: `MAGENT_WORKTREE_PATH`, `MAGENT_PROJECT_PATH`, `MAGENT_WORKTREE_NAME`, `MAGENT_PROJECT_NAME`, `MAGENT_SOCKET`.
-
-### Notifications
-
-Stay aware without context-switching.
-
-- **Dock badge** — shows count of threads with unread completions or waiting for input
-- **System notifications** — native macOS notifications for agent events
-- **Completion sounds** — configurable system sound on agent completion (default: Ping)
-- **In-app banners** — slide-down notifications for status messages with optional action buttons
-
-## Requirements
-
-- **macOS 14.0+** (Sonoma or later)
-- **tmux** — `brew install tmux`
-- **git** — included with Xcode Command Line Tools
-
-## Installation
+## 📦 Installation
 
 ### Homebrew
 
@@ -96,64 +18,98 @@ brew tap vapor-pawelw/magent
 brew install --cask magent
 ```
 
-To update to the latest release:
-
-```bash
-brew upgrade magent
-```
+To update: `brew upgrade magent`
 
 > Since the app is not signed or notarized, macOS will block it on first launch.
-> Right-click the app and choose **Open**, then click **Open** in the dialog to bypass Gatekeeper.
+> Right-click the app → **Open** → click **Open** in the dialog to bypass Gatekeeper.
 
 ### GitHub Releases
 
 Download the latest `.zip` from [Releases](https://github.com/vapor-pawelw/magent/releases), unzip, and move `Magent.app` to `/Applications`.
 
-## Releasing
+## ✨ Features
 
-Releases are driven by git tags. To publish a new version:
+### 🧵 Thread Management
+
+Every thread maps 1:1 to a git worktree. Create a thread, get a fresh branch and workspace instantly.
+
+- **Auto-naming** — random names (e.g. `swift-falcon`) that auto-rename based on the first agent prompt
+- **Sections** — color-coded Kanban columns (TODO, In Progress, Reviewing, Done) with per-project overrides
+- **Archive & delete** — archive removes the worktree but keeps the branch; delete removes both
+- **Pinning** — pin important threads to the top
+- **Status indicators** — busy, waiting for input, unread completions, uncommitted changes — all at a glance
+- **Delivery tracking** — see when all commits have been cherry-picked to the base branch
+
+### 🤖 Multi-Agent Support
+
+Run Claude Code, Codex, or any custom command as your coding agent.
+
+- **Claude Code** — `--dangerously-skip-permissions` mode and `/resume` for session restoration
+- **Codex** — standard, `--yolo`, and `--full-auto` modes
+- **Custom agents** — any CLI tool works
+- **Per-project defaults** — different agents for different repos
+- **Auto-trust** — trust settings auto-configured for new worktrees
+- **Context transfer** — hand off context between agent tabs via `.magent-context.md`
+
+### 🖥️ Terminal
+
+GPU-accelerated embedded terminal powered by libghostty, with tmux for session persistence.
+
+- **Ghostty rendering** — native GPU-accelerated terminal via libghostty
+- **tmux multiplexing** — sessions survive app restarts and support remote SSH attachment
+- **Multiple tabs** — agent tabs, terminal tabs, or mixed per thread
+- **Tab management** — rename, reorder, pin, close
+- **Bell detection** — agent completion detection via BEL character monitoring
+
+### 🔀 Git Integration
+
+Deep git awareness without getting in the way.
+
+- **Worktree lifecycle** — create, rename, archive, delete with automatic branch management
+- **Branch tracking** — branch names, dirty state, merge status at a glance
+- **PR/MR links** — open pull requests from the toolbar (GitHub, GitLab, Bitbucket)
+- **Diff stats** — per-file additions/deletions with staged/unstaged/untracked breakdown
+- **Worktree recovery** — missing worktrees are auto-recreated from the branch
+
+### 🎫 Jira Integration
+
+Link threads to Jira tickets for project tracking.
+
+- **Ticket association** — attach a Jira ticket key to any thread
+- **Assignment tracking** — visual indicator when a ticket becomes unassigned
+- **Sidebar display** — ticket keys shown alongside thread names
+
+### ⚡ CLI Automation
+
+Full programmatic control via `magent-cli` over a Unix domain socket. Manage threads, tabs, and sections from scripts or other agents.
 
 ```bash
-git tag v1.2.0
-git push origin v1.2.0
+magent-cli create-thread --project myapp --agent claude --prompt "Add auth"
+magent-cli thread-info --thread swift-falcon
+magent-cli send-prompt --thread swift-falcon --prompt "Now add tests"
+magent-cli move-thread --thread swift-falcon --section "In Progress"
+magent-cli archive-thread --thread swift-falcon
 ```
 
-This triggers a GitHub Actions workflow that:
-1. Builds `Magent.app` (unsigned)
-2. Creates a GitHub Release with the zipped app
-3. Auto-updates the Homebrew cask formula with the new version and SHA
+See the full command reference in [docs/cli.md](docs/cli.md).
 
-Commits on `main` without a tag do **not** produce a release.
+### 🔔 Notifications
 
-## Building from Source
+- **Dock badge** — count of threads with unread completions or waiting for input
+- **System notifications** — native macOS notifications for agent events
+- **Completion sounds** — configurable sound on agent completion
+- **In-app banners** — slide-down status messages with action buttons
 
-### Prerequisites
+## 🛠️ Requirements
 
-- **Xcode 26+**
-- **[mise](https://mise.jdx.dev/)** — tool version manager (installs Tuist)
+- **macOS 14.0+** (Sonoma or later)
+- **tmux** — `brew install tmux`
+- **git** — included with Xcode Command Line Tools
 
-### Build
+## 🏗️ Building from Source
 
-```bash
-git clone https://github.com/vapor-pawelw/magent.git
-cd magent
+See [docs/building.md](docs/building.md) for prerequisites and build instructions.
 
-# Generate the Xcode project
-mise x -- tuist generate --no-open
-
-# Build via Xcode
-open Magent.xcworkspace
-# Or build from command line:
-xcodebuild build -workspace Magent.xcworkspace -scheme Magent -configuration Release
-```
-
-### First Run
-
-1. Launch Magent
-2. Add your repositories in Settings
-3. Choose your default agent (Claude, Codex, or custom)
-4. Create your first thread
-
-## License
+## 📄 License
 
 [PolyForm Shield 1.0.0](./LICENSE)

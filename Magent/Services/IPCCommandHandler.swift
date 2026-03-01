@@ -424,7 +424,25 @@ final class IPCCommandHandler {
             return IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent, agentType: agentType)
         }
 
-        let info = IPCThreadInfo(thread: thread, projectName: projectName, sectionName: sectionName, tabs: tabs)
+        let status = IPCThreadStatus(
+            isBusy: thread.hasAgentBusy,
+            isWaitingForInput: thread.hasWaitingForInput,
+            hasUnreadCompletion: thread.hasUnreadAgentCompletion,
+            isDirty: thread.isDirty,
+            isFullyDelivered: thread.isFullyDelivered,
+            showArchiveSuggestion: thread.showArchiveSuggestion,
+            isPinned: thread.isPinned,
+            isArchived: thread.isArchived,
+            isBlockedByRateLimit: thread.isBlockedByRateLimit,
+            hasBranchMismatch: thread.hasBranchMismatch,
+            jiraTicketKey: thread.jiraTicketKey,
+            jiraUnassigned: thread.jiraUnassigned,
+            branchName: thread.branchName,
+            baseBranch: thread.baseBranch,
+            rateLimitDescription: thread.isBlockedByRateLimit ? thread.rateLimitLiftDescription : nil
+        )
+
+        let info = IPCThreadInfo(thread: thread, projectName: projectName, sectionName: sectionName, tabs: tabs, status: status)
         return IPCResponse(ok: true, id: request.id, thread: info)
     }
 

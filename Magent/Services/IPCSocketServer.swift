@@ -4,7 +4,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v8"
+    private static let cliVersion = "magent-cli-v9"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
