@@ -291,6 +291,13 @@ final class IPCCommandHandler {
                 useAgentCommand: useAgent,
                 requestedAgentType: requestedAgent
             )
+            // Finalize session context (bell monitoring, cwd enforcement) — same as UI path
+            let latestThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+            _ = await threadManager.recreateSessionIfNeeded(
+                sessionName: tab.tmuxSessionName,
+                thread: latestThread
+            )
+
             let isAgent = useAgent && requestedAgent != nil
             let info = IPCTabInfo(
                 index: tab.index,
