@@ -338,6 +338,90 @@ final class GitService {
         return entries
     }
 
+    /// Returns the full unified diff output comparing the worktree to its base branch.
+    func diffContent(worktreePath: String, baseBranch: String) async -> String? {
+        let mergeBaseResult = await ShellExecutor.execute(
+            "git merge-base \(shellQuote(baseBranch)) HEAD",
+            workingDirectory: worktreePath
+        )
+        let mergeBase = mergeBaseResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard mergeBaseResult.exitCode == 0, !mergeBase.isEmpty else { return nil }
+
+        let diffResult = await ShellExecutor.execute(
+            "git diff --no-color \(shellQuote(mergeBase))",
+            workingDirectory: worktreePath
+        )
+        guard diffResult.exitCode == 0 else { return nil }
+
+        // Also get content of untracked files as pseudo-diffs
+        let statusResult = await ShellExecutor.execute(
+            "git status --porcelain",
+            workingDirectory: worktreePath
+        )
+        var untrackedDiff = ""
+        if statusResult.exitCode == 0 {
+            for line in statusResult.stdout.components(separatedBy: "\n") where line.hasPrefix("?? ") {
+                let path = String(line.dropFirst(3))
+                guard !path.isEmpty, !path.hasSuffix("/") else { continue }
+                let catResult = await ShellExecutor.execute(
+                    "cat \(shellQuote(path))",
+                    workingDirectory: worktreePath
+                )
+                if catResult.exitCode == 0 {
+                    let lines = catResult.stdout.components(separatedBy: "\n")
+                    untrackedDiff += "\ndiff --git a/\(path) b/\(path)\nnew file mode 100644\n--- /dev/null\n+++ b/\(path)\n@@ -0,0 +1,\(lines.count) @@\n"
+                    for l in lines {
+                        untrackedDiff += "+\(l)\n"
+                    }
+                }
+            }
+        }
+
+        let combined = diffResult.stdout + untrackedDiff
+        return combined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : combined
+    }
+
+    /// Returns the unified diff for a single file comparing the worktree to its base branch.
+    func diffContentForFile(worktreePath: String, baseBranch: String, relativePath: String) async -> String? {
+        let mergeBaseResult = await ShellExecutor.execute(
+            "git merge-base \(shellQuote(baseBranch)) HEAD",
+            workingDirectory: worktreePath
+        )
+        let mergeBase = mergeBaseResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard mergeBaseResult.exitCode == 0, !mergeBase.isEmpty else { return nil }
+
+        let diffResult = await ShellExecutor.execute(
+            "git diff --no-color \(shellQuote(mergeBase)) -- \(shellQuote(relativePath))",
+            workingDirectory: worktreePath
+        )
+        let output = diffResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        if diffResult.exitCode == 0 && !output.isEmpty {
+            return diffResult.stdout
+        }
+
+        // Check if it's an untracked file
+        let statusResult = await ShellExecutor.execute(
+            "git status --porcelain -- \(shellQuote(relativePath))",
+            workingDirectory: worktreePath
+        )
+        if statusResult.exitCode == 0 && statusResult.stdout.hasPrefix("?? ") {
+            let catResult = await ShellExecutor.execute(
+                "cat \(shellQuote(relativePath))",
+                workingDirectory: worktreePath
+            )
+            if catResult.exitCode == 0 {
+                let lines = catResult.stdout.components(separatedBy: "\n")
+                var result = "diff --git a/\(relativePath) b/\(relativePath)\nnew file mode 100644\n--- /dev/null\n+++ b/\(relativePath)\n@@ -0,0 +1,\(lines.count) @@\n"
+                for l in lines {
+                    result += "+\(l)\n"
+                }
+                return result
+            }
+        }
+
+        return nil
+    }
+
     func isGitRepository(at path: String) async -> Bool {
         do {
             _ = try await ShellExecutor.run("git rev-parse --git-dir", workingDirectory: path)

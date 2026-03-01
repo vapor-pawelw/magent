@@ -536,6 +536,7 @@ extension Notification.Name {
     static let magentAgentBusySessionsChanged = Notification.Name("magentAgentBusySessionsChanged")
     static let magentSectionsDidChange = Notification.Name("magentSectionsDidChange")
     static let magentOpenSettings = Notification.Name("magentOpenSettings")
+    static let magentShowDiffViewer = Notification.Name("magentShowDiffViewer")
 }
 
 enum ThreadManagerError: LocalizedError {
