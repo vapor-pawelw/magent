@@ -150,6 +150,7 @@ extension ThreadDetailViewController {
     func updateThread(_ updated: MagentThread) {
         thread = updated
         refreshTabStatusIndicators()
+        refreshReviewButtonVisibility()
     }
 
     func handleRename(_ updated: MagentThread) {
@@ -205,6 +206,14 @@ extension ThreadDetailViewController {
         if updated.name != previousThread.name || updated.worktreePath != previousThread.worktreePath {
             handleRename(updated)
         }
+    }
+
+    // MARK: - Review
+
+    @objc func reviewButtonTapped() {
+        let baseBranch = threadManager.resolveBaseBranch(for: thread)
+        let prompt = "Review the changes on this branch compared to \(baseBranch). Run `git diff \(baseBranch)...HEAD` to see the changes, then provide a thorough code review covering correctness, potential bugs, code style, and any suggestions for improvement."
+        addTab(using: nil, useAgentCommand: true, initialPrompt: prompt)
     }
 
     // MARK: - Context Transfer

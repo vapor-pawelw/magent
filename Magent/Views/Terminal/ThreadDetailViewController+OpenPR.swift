@@ -239,4 +239,17 @@ extension ThreadDetailViewController {
 
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
+
+    // MARK: - Review Button
+
+    func refreshReviewButtonVisibility() {
+        reviewButton.isHidden = thread.isMain || thread.isFullyDelivered
+    }
+
+    func syncTransientState() {
+        guard let latest = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
+        thread.isFullyDelivered = latest.isFullyDelivered
+        thread.isDirty = latest.isDirty
+        refreshReviewButtonVisibility()
+    }
 }
