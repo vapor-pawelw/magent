@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install mise
+        uses: jdx/mise-action@v2
+
+      - name: Install tmux
+        run: brew install tmux
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Building version $TAG"
+
+      - name: Inject version into Project.swift
+        run: |
+          sed -i '' 's/"CFBundleShortVersionString": "1.0"/"CFBundleShortVersionString": "${{ steps.version.outputs.version }}"/' Project.swift
+          sed -i '' 's/"CFBundleVersion": "1"/"CFBundleVersion": "${{ github.run_number }}"/' Project.swift
+          echo "Project.swift after version injection:"
+          grep -A1 CFBundle Project.swift
+
+      - name: Generate Xcode project
+        run: mise x -- tuist generate --no-open
+
+      - name: Build
+        run: |
+          xcodebuild build \
+            -workspace Magent.xcworkspace \
+            -scheme Magent \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package app
+        run: |
+          APP_PATH=$(find build -name "Magent.app" -type d | head -1)
+          echo "Found app at: $APP_PATH"
+          ditto -c -k --keepParent "$APP_PATH" Magent.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Magent.zip
+          generate_release_notes: true
+
+  update-cask:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for release assets
+        run: sleep 10
+
+      - name: Get release info
+        id: release
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          ZIP_URL="https://github.com/vapor-pawelw/magent/releases/download/${TAG}/Magent.zip"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "zip_url=$ZIP_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Download zip and compute SHA256
+        id: sha
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          ZIP_URL="https://github.com/vapor-pawelw/magent/releases/download/${TAG}/Magent.zip"
+          curl -sL "$ZIP_URL" -o Magent.zip
+          SHA=$(sha256sum Magent.zip | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "SHA256: $SHA"
+
+      - name: Checkout homebrew-magent
+        uses: actions/checkout@v4
+        with:
+          repository: vapor-pawelw/homebrew-magent
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-magent
+
+      - name: Update cask formula
+        run: |
+          cat > homebrew-magent/Casks/magent.rb << 'CASK_EOF'
+          cask "magent" do
+            version "${{ steps.release.outputs.version }}"
+            sha256 "${{ steps.sha.outputs.sha256 }}"
+
+            url "https://github.com/vapor-pawelw/magent/releases/download/v#{version}/Magent.zip"
+            name "Magent"
+            desc "Native macOS app for managing coding agents as parallel git worktree sessions"
+            homepage "https://github.com/vapor-pawelw/magent"
+
+            app "Magent.app"
+
+            zap trash: [
+              "~/Library/Application Support/Magent",
+              "~/Library/Preferences/com.magent.app.plist",
+            ]
+          end
+          CASK_EOF
+
+      - name: Commit and push cask update
+        working-directory: homebrew-magent
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/magent.rb
+          git commit -m "Update magent to ${{ steps.release.outputs.version }}"
+          git push
