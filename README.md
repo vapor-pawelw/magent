@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/icon.jpg" alt="Magent" width="128" height="128" style="border-radius: 22px;">
+  <img src="docs/icon.png" alt="Magent" width="128" height="128">
 </p>
 
 <h1 align="center">Magent</h1>
