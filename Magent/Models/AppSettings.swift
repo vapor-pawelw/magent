@@ -2,6 +2,7 @@ import Foundation
 
 nonisolated struct AppSettings: Codable, Sendable {
     static let defaultSlugPrompt = "Generate a short kebab-case slug (2-4 words) for a git branch name. Extract the core concept or feature — ignore filler words like 'I want', 'how do I', 'can you', etc. Bug reports, observations about broken behavior, and feature requests are all actionable — generate a slug for them."
+    static let defaultReviewPrompt = "Review the changes on this branch compared to {baseBranch}. Run `git diff $(git merge-base {baseBranch} HEAD)` to see all changes (committed and uncommitted) since this branch diverged. Also run `git log HEAD..{baseBranch} --oneline` to check if {baseBranch} has moved ahead, and flag any likely merge conflicts. Provide a thorough code review covering correctness, potential bugs, code style, and any suggestions for improvement."
 
     var projects: [Project]
     var activeAgents: [AgentType]
@@ -21,6 +22,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var agentSandboxEnabled: Bool
     var agentSkipPermissions: Bool
     var ipcPromptInjectionEnabled: Bool
+    var reviewPrompt: String
     var jiraSiteURL: String
 
     init(
@@ -42,6 +44,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         agentSandboxEnabled: Bool = false,
         agentSkipPermissions: Bool = true,
         ipcPromptInjectionEnabled: Bool = true,
+        reviewPrompt: String = AppSettings.defaultReviewPrompt,
         jiraSiteURL: String = ""
     ) {
         self.projects = projects
@@ -62,6 +65,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.agentSandboxEnabled = agentSandboxEnabled
         self.agentSkipPermissions = agentSkipPermissions
         self.ipcPromptInjectionEnabled = ipcPromptInjectionEnabled
+        self.reviewPrompt = reviewPrompt
         self.jiraSiteURL = jiraSiteURL
     }
 
@@ -87,6 +91,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         agentSandboxEnabled = try container.decodeIfPresent(Bool.self, forKey: .agentSandboxEnabled) ?? false
         agentSkipPermissions = try container.decodeIfPresent(Bool.self, forKey: .agentSkipPermissions) ?? true
         ipcPromptInjectionEnabled = try container.decodeIfPresent(Bool.self, forKey: .ipcPromptInjectionEnabled) ?? true
+        reviewPrompt = try container.decodeIfPresent(String.self, forKey: .reviewPrompt) ?? Self.defaultReviewPrompt
         jiraSiteURL = try container.decodeIfPresent(String.self, forKey: .jiraSiteURL) ?? ""
     }
 
@@ -110,6 +115,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(agentSandboxEnabled, forKey: .agentSandboxEnabled)
         try container.encode(agentSkipPermissions, forKey: .agentSkipPermissions)
         try container.encode(ipcPromptInjectionEnabled, forKey: .ipcPromptInjectionEnabled)
+        try container.encode(reviewPrompt, forKey: .reviewPrompt)
         try container.encode(jiraSiteURL, forKey: .jiraSiteURL)
     }
 
@@ -206,6 +212,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case agentSandboxEnabled
         case agentSkipPermissions
         case ipcPromptInjectionEnabled
+        case reviewPrompt
         case jiraSiteURL
 
         // Legacy keys kept for migration.

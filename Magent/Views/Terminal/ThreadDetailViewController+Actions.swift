@@ -231,7 +231,8 @@ extension ThreadDetailViewController {
 
     @objc func reviewButtonTapped() {
         let baseBranch = threadManager.resolveBaseBranch(for: thread)
-        let prompt = "Review the changes on this branch compared to \(baseBranch). Run `git diff \(baseBranch)...HEAD` to see the changes, then provide a thorough code review covering correctness, potential bugs, code style, and any suggestions for improvement."
+        let settings = PersistenceService.shared.loadSettings()
+        let prompt = settings.reviewPrompt.replacingOccurrences(of: "{baseBranch}", with: baseBranch)
         addTab(using: nil, useAgentCommand: true, initialPrompt: prompt)
     }
 

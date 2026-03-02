@@ -8,6 +8,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     private var slugPromptTextView: NSTextView!
     private var terminalInjectionTextView: NSTextView!
     private var agentContextTextView: NSTextView!
+    private var reviewPromptTextView: NSTextView!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
 
@@ -150,6 +151,22 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             value: settings.agentContextInjection,
             font: .systemFont(ofSize: 13)
         )
+
+        addSectionSeparator(to: stackView)
+
+        // Review Prompt
+        reviewPromptTextView = createSection(
+            in: stackView,
+            title: "Review Prompt",
+            description: "Prompt sent to the agent when clicking the review button. Use {baseBranch} as a placeholder for the target branch.",
+            value: settings.reviewPrompt,
+            font: .systemFont(ofSize: 13)
+        )
+
+        let resetReviewButton = NSButton(title: "Reset to Default", target: self, action: #selector(resetReviewPromptToDefault))
+        resetReviewButton.bezelStyle = .rounded
+        resetReviewButton.controlSize = .small
+        stackView.addArrangedSubview(resetReviewButton)
 
         addSectionSeparator(to: stackView)
 
@@ -392,6 +409,12 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         try? persistence.saveSettings(settings)
     }
 
+    @objc private func resetReviewPromptToDefault() {
+        reviewPromptTextView.string = AppSettings.defaultReviewPrompt
+        settings.reviewPrompt = AppSettings.defaultReviewPrompt
+        try? persistence.saveSettings(settings)
+    }
+
     // MARK: - Default Section
 
     private func refreshDefaultSectionPopup() {
@@ -584,6 +607,8 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             settings.agentContextInjection = textView.string
         } else if textView === slugPromptTextView {
             settings.autoRenameSlugPrompt = textView.string
+        } else if textView === reviewPromptTextView {
+            settings.reviewPrompt = textView.string
         }
 
         try? persistence.saveSettings(settings)
