@@ -473,9 +473,6 @@ final class TmuxService {
             .sorted { $0.zombieCount > $1.zombieCount }
     }
 
-    private func shellQuote(_ string: String) -> String {
-        "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
 }
 
 enum TmuxError: LocalizedError {

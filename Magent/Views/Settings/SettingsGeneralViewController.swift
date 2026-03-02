@@ -132,23 +132,25 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         addSectionSeparator(to: stackView)
 
         // Terminal Injection Command
-        terminalInjectionTextView = createSection(
+        terminalInjectionTextView = createSettingsSection(
             in: stackView,
             title: "Terminal Injection Command",
             description: "Shell command auto-sent to every new terminal tab after creation.",
             value: settings.terminalInjectionCommand,
-            font: .monospacedSystemFont(ofSize: 13, weight: .regular)
+            font: .monospacedSystemFont(ofSize: 13, weight: .regular),
+            delegate: self
         )
 
         addSectionSeparator(to: stackView)
 
         // Agent Context Injection
-        agentContextTextView = createSection(
+        agentContextTextView = createSettingsSection(
             in: stackView,
             title: "Agent Context Injection",
             description: "Text auto-typed into every new agent prompt after startup.",
             value: settings.agentContextInjection,
-            font: .systemFont(ofSize: 13)
+            font: .systemFont(ofSize: 13),
+            delegate: self
         )
 
         addSectionSeparator(to: stackView)
@@ -322,64 +324,6 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         sep.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40).isActive = true
     }
 
-    private func createSection(
-        in stackView: NSStackView,
-        title: String,
-        description: String,
-        value: String,
-        font: NSFont
-    ) -> NSTextView {
-        let sectionStack = NSStackView()
-        sectionStack.orientation = .vertical
-        sectionStack.alignment = .leading
-        sectionStack.spacing = 4
-
-        let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
-        sectionStack.addArrangedSubview(titleLabel)
-
-        let descLabel = NSTextField(wrappingLabelWithString: description)
-        descLabel.font = .systemFont(ofSize: 11)
-        descLabel.textColor = NSColor(resource: .textSecondary)
-        sectionStack.addArrangedSubview(descLabel)
-
-        let textView = NSTextView()
-        textView.font = font
-        textView.string = value
-        textView.isRichText = false
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
-        textView.delegate = self
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.textContainerInset = NSSize(width: 4, height: 4)
-
-        let textScrollView = NonCapturingScrollView()
-        textScrollView.documentView = textView
-        textScrollView.hasVerticalScroller = true
-        textScrollView.autohidesScrollers = true
-        textScrollView.borderType = .bezelBorder
-        textScrollView.translatesAutoresizingMaskIntoConstraints = false
-
-        let lineHeight = font.ascender + abs(font.descender) + font.leading
-        let height = max(lineHeight * 3 + 12, 56)
-
-        let container = ResizableTextContainer(scrollView: textScrollView, minHeight: height)
-        sectionStack.addArrangedSubview(container)
-        sectionStack.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(sectionStack)
-
-        NSLayoutConstraint.activate([
-            container.widthAnchor.constraint(equalTo: sectionStack.widthAnchor),
-            sectionStack.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
-
-        textView.autoresizingMask = [.width]
-        textView.textContainer?.widthTracksTextView = true
-
-        return textView
-    }
 
     @objc private func autoRenameToggled() {
         settings.autoRenameWorktrees = autoRenameCheckbox.state == .on
@@ -564,14 +508,6 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         sectionsTableView.reloadData()
     }
 
-    static func colorDotImage(color: NSColor, size: CGFloat) -> NSImage {
-        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-            color.setFill()
-            NSBezierPath(ovalIn: rect).fill()
-            return true
-        }
-        return image
-    }
 
     // MARK: - NSTextViewDelegate
 
@@ -681,7 +617,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         cell.textField?.stringValue = section.name
 
         if let colorBtn = cell.viewWithTag(100) as? NSButton {
-            colorBtn.image = Self.colorDotImage(color: section.color, size: 12)
+            colorBtn.image = colorDotImage(color: section.color, size: 12)
             colorBtn.target = self
             colorBtn.action = #selector(colorDotClicked(_:))
         }

@@ -28,7 +28,7 @@ extension ThreadListViewController {
         for section in visibleSections {
             let item = NSMenuItem(title: section.name, action: #selector(moveThreadToSection(_:)), keyEquivalent: "")
             item.target = self
-            item.image = Self.colorDotImage(color: section.color, size: 8)
+            item.image = colorDotImage(color: section.color, size: 8)
             item.representedObject = ["thread": thread, "sectionId": section.id] as [String: Any]
             moveSubmenu.addItem(item)
         }
@@ -440,57 +440,6 @@ extension ThreadListViewController {
         }
     }
 
-    func performWithSpinner(message: String, errorTitle: String, work: @escaping () async throws -> Void) {
-        guard let window = view.window else { return }
-
-        // Build a small sheet with a spinner and label
-        let sheetVC = NSViewController()
-        sheetVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 80))
-
-        let spinner = NSProgressIndicator()
-        spinner.style = .spinning
-        spinner.controlSize = .small
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        spinner.startAnimation(nil)
-
-        let label = NSTextField(labelWithString: message)
-        label.font = .systemFont(ofSize: 13)
-        label.textColor = NSColor(resource: .textSecondary)
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView(views: [spinner, label])
-        stack.orientation = .horizontal
-        stack.spacing = 10
-        stack.alignment = .centerY
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        sheetVC.view.addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: sheetVC.view.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: sheetVC.view.centerYAnchor),
-        ])
-
-        window.contentViewController?.presentAsSheet(sheetVC)
-
-        Task {
-            do {
-                try await work()
-                await MainActor.run {
-                    window.contentViewController?.dismiss(sheetVC)
-                }
-            } catch {
-                await MainActor.run {
-                    window.contentViewController?.dismiss(sheetVC)
-                    let alert = NSAlert()
-                    alert.messageText = errorTitle
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
-                }
-            }
-        }
-    }
 }
 
 // MARK: - NSOutlineViewDataSource
@@ -798,7 +747,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             cell.textField?.stringValue = section.name.uppercased()
             cell.textField?.font = .systemFont(ofSize: 11, weight: .semibold)
             cell.textField?.textColor = NSColor(resource: .textSecondary)
-            cell.imageView?.image = Self.colorDotImage(color: section.color, size: 8)
+            cell.imageView?.image = colorDotImage(color: section.color, size: 8)
             if let disclosureButton = cell.subviews.first(where: { $0.identifier == Self.sectionDisclosureButtonIdentifier }) as? NSButton {
                 disclosureButton.objectValue = sectionCollapseStorageKey(section)
                 updateSectionDisclosureButton(disclosureButton, isExpanded: !isSectionCollapsed(section))

@@ -6,34 +6,7 @@ extension ThreadManager {
 
     // MARK: - IPC Agent Docs
 
-    static let ipcAgentDocs = """
-    You have access to Magent IPC. Use `/tmp/magent-cli` to manage threads and tabs:
-      /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>]
-      /tmp/magent-cli list-projects
-      /tmp/magent-cli list-threads [--project <name>]
-      /tmp/magent-cli send-prompt --thread <name> --prompt <text>
-      /tmp/magent-cli archive-thread --thread <name>
-      /tmp/magent-cli delete-thread --thread <name>
-      /tmp/magent-cli list-tabs --thread <name>
-      /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
-      /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
-      /tmp/magent-cli current-thread
-      /tmp/magent-cli rename-thread --thread <name> --description <text>
-      /tmp/magent-cli rename-thread-exact --thread <name> --name <text>
-      /tmp/magent-cli thread-info --thread <name>
-      /tmp/magent-cli list-sections [--project <name>]
-      /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
-      /tmp/magent-cli remove-section --name <name> [--project <name>]
-      /tmp/magent-cli reorder-section --name <name> --position <n> [--project <name>]
-      /tmp/magent-cli rename-section --name <name> --new-name <text> [--color <hex>] [--project <name>]
-      /tmp/magent-cli hide-section --name <name> [--project <name>]
-      /tmp/magent-cli show-section --name <name> [--project <name>]
-    Use current-thread to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
-    When creating threads, use --description to name them upfront (AI generates a slug respecting project naming rules). Only use --name when the user explicitly provides a literal name. Omit both for a random name.
-    Use rename-thread by default (generates a slug from the description). Only use rename-thread-exact when the user specifies an exact name.
-    rename-thread-exact is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use rename-thread with that description instead.
-    Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
-    """
+    static let ipcAgentDocs: String = IPCAgentDocs.claudeSystemPrompt
 
     // MARK: - Agent Readiness
 
@@ -323,49 +296,6 @@ extension ThreadManager {
         try? updated.write(toFile: configPath, atomically: true, encoding: .utf8)
     }
 
-    private static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
-    private static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    private static let codexIPCVersion = "<!-- magent-ipc-v6 -->"
-
-    private static let codexIPCBlock = """
-    \(codexIPCMarkerStart)
-    \(codexIPCVersion)
-    # Magent IPC
-
-    When the `MAGENT_SOCKET` environment variable is set, you are running inside
-    a Magent-managed terminal. Use `/tmp/magent-cli` to manage threads and tabs:
-
-    ```
-    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>]
-    /tmp/magent-cli list-projects
-    /tmp/magent-cli list-threads [--project <name>]
-    /tmp/magent-cli send-prompt --thread <name> --prompt <text>
-    /tmp/magent-cli archive-thread --thread <name>
-    /tmp/magent-cli delete-thread --thread <name>
-    /tmp/magent-cli list-tabs --thread <name>
-    /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
-    /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
-    /tmp/magent-cli current-thread
-    /tmp/magent-cli rename-thread --thread <name> --description <text>
-    /tmp/magent-cli rename-thread-exact --thread <name> --name <text>
-    /tmp/magent-cli thread-info --thread <name>
-    /tmp/magent-cli list-sections [--project <name>]
-    /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
-    /tmp/magent-cli remove-section --name <name> [--project <name>]
-    /tmp/magent-cli reorder-section --name <name> --position <n> [--project <name>]
-    /tmp/magent-cli rename-section --name <name> --new-name <text> [--color <hex>] [--project <name>]
-    /tmp/magent-cli hide-section --name <name> [--project <name>]
-    /tmp/magent-cli show-section --name <name> [--project <name>]
-    ```
-
-    Use `current-thread` to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
-    When creating threads, use `--description` to name them upfront (AI generates a slug respecting project naming rules). Only use `--name` when the user explicitly provides a literal name. Omit both for a random name.
-    Use `rename-thread` by default (generates a slug from the description).
-    Only use `rename-thread-exact` when the user specifies an exact name.
-    `rename-thread-exact` is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use `rename-thread` with that description instead.
-    Section commands without `--project` operate on global sections. With `--project`, they operate on project-specific overrides.
-    \(codexIPCMarkerEnd)
-    """
 
     /// Writes or updates the Magent IPC section in `~/.codex/AGENTS.md` so Codex
     /// agents auto-discover `magent-cli`. Preserves any existing user content;
@@ -377,20 +307,20 @@ extension ThreadManager {
 
         if let existing = try? String(contentsOfFile: filePath, encoding: .utf8) {
             // Already up to date
-            if existing.contains(Self.codexIPCVersion) { return }
+            if existing.contains(IPCAgentDocs.codexIPCVersion) { return }
 
             // Replace outdated Magent section if present
-            if let startRange = existing.range(of: Self.codexIPCMarkerStart),
-               let endRange = existing.range(of: Self.codexIPCMarkerEnd),
+            if let startRange = existing.range(of: IPCAgentDocs.codexIPCMarkerStart),
+               let endRange = existing.range(of: IPCAgentDocs.codexIPCMarkerEnd),
                startRange.lowerBound <= endRange.lowerBound {
                 var updated = existing
-                updated.replaceSubrange(startRange.lowerBound..<endRange.upperBound, with: Self.codexIPCBlock)
+                updated.replaceSubrange(startRange.lowerBound..<endRange.upperBound, with: IPCAgentDocs.codexAgentsMdBlock)
                 try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
             } else {
                 // Append to existing user content
                 var updated = existing
                 if !updated.hasSuffix("\n") { updated += "\n" }
-                updated += "\n" + Self.codexIPCBlock + "\n"
+                updated += "\n" + IPCAgentDocs.codexAgentsMdBlock + "\n"
                 try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
             }
         } else {
@@ -399,7 +329,7 @@ extension ThreadManager {
                 atPath: codexDir.path,
                 withIntermediateDirectories: true
             )
-            try? Self.codexIPCBlock.write(toFile: filePath, atomically: true, encoding: .utf8)
+            try? IPCAgentDocs.codexAgentsMdBlock.write(toFile: filePath, atomically: true, encoding: .utf8)
         }
     }
 

@@ -1463,7 +1463,7 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
         cell.textField?.stringValue = section.name
 
         if let colorBtn = cell.viewWithTag(200) as? NSButton {
-            colorBtn.image = SettingsGeneralViewController.colorDotImage(color: section.color, size: 12)
+            colorBtn.image = colorDotImage(color: section.color, size: 12)
             colorBtn.target = self
             colorBtn.action = #selector(projectSectionColorDotClicked(_:))
         }

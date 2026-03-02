@@ -679,53 +679,31 @@ final class ThreadListViewController: NSViewController {
 
     private func buildAgentSubmenu(for project: Project, activeAgents: [AgentType]) -> NSMenu {
         let submenu = NSMenu()
-
-        if let defaultAgent = threadManager.effectiveAgentType(for: project.id) {
-            let defaultItem = NSMenuItem(
-                title: "Use Project Default (\(defaultAgent.displayName))",
-                action: #selector(projectAgentMenuItemSelected(_:)),
-                keyEquivalent: ""
-            )
-            defaultItem.target = self
-            defaultItem.representedObject = ["projectId": project.id.uuidString, "mode": "default"] as [String: String]
-            submenu.addItem(defaultItem)
-        }
-
-        for agent in activeAgents {
-            let item = NSMenuItem(title: agent.displayName, action: #selector(projectAgentMenuItemSelected(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = ["projectId": project.id.uuidString, "mode": "agent", "agentRaw": agent.rawValue] as [String: String]
-            submenu.addItem(item)
-        }
-
-        if submenu.items.count > 0 {
-            submenu.addItem(.separator())
-        }
-
-        let terminalItem = NSMenuItem(title: "Terminal", action: #selector(projectAgentMenuItemSelected(_:)), keyEquivalent: "")
-        terminalItem.target = self
-        terminalItem.representedObject = ["projectId": project.id.uuidString, "mode": "terminal"] as [String: String]
-        submenu.addItem(terminalItem)
-
+        AgentMenuBuilder.populate(
+            menu: submenu,
+            defaultAgentName: threadManager.effectiveAgentType(for: project.id)?.displayName,
+            activeAgents: activeAgents,
+            target: self,
+            action: #selector(projectAgentMenuItemSelected(_:)),
+            extraData: ["projectId": project.id.uuidString]
+        )
         return submenu
     }
 
     @objc private func projectAgentMenuItemSelected(_ sender: NSMenuItem) {
-        guard let data = sender.representedObject as? [String: String],
-              let projectIdRaw = data["projectId"],
+        guard let selection = AgentMenuBuilder.parseSelection(from: sender),
+              let projectIdRaw = selection.data["projectId"],
               let projectId = UUID(uuidString: projectIdRaw) else { return }
 
         let settings = persistence.loadSettings()
         guard let project = settings.projects.first(where: { $0.id == projectId }) else { return }
 
-        let mode = data["mode"] ?? "default"
-        switch mode {
-        case "terminal":
+        switch selection.mode {
+        case .terminal:
             createThread(for: project, requestedAgentType: nil, useAgentCommand: false)
-        case "agent":
-            let agentRaw = data["agentRaw"] ?? ""
-            createThread(for: project, requestedAgentType: AgentType(rawValue: agentRaw), useAgentCommand: true)
-        default:
+        case .agent(let agentType):
+            createThread(for: project, requestedAgentType: agentType, useAgentCommand: true)
+        case .projectDefault:
             createThread(for: project, requestedAgentType: nil, useAgentCommand: true)
         }
     }
@@ -767,14 +745,6 @@ final class ThreadListViewController: NSViewController {
 
     // MARK: - Helpers
 
-    static func colorDotImage(color: NSColor, size: CGFloat) -> NSImage {
-        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-            color.setFill()
-            NSBezierPath(ovalIn: rect).fill()
-            return true
-        }
-        return image
-    }
 
     // MARK: - Diff Panel
 

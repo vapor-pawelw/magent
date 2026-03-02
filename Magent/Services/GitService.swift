@@ -497,9 +497,6 @@ final class GitService {
         }
     }
 
-    private func shellQuote(_ string: String) -> String {
-        "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
 
     /// Ensures worktree creation completed with a checked-out commit when the source repo has commits.
     private func validateWorktreeCheckout(

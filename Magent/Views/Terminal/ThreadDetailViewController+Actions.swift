@@ -65,54 +65,25 @@ extension ThreadDetailViewController {
 
     private func presentAddTabAgentMenu() {
         let settings = PersistenceService.shared.loadSettings()
-        let activeAgents = settings.availableActiveAgents
-
         let menu = NSMenu()
-
-        if let defaultAgent = threadManager.effectiveAgentType(for: thread.projectId) {
-            let defaultItem = NSMenuItem(
-                title: "Use Project Default (\(defaultAgent.displayName))",
-                action: #selector(addTabMenuItemTapped(_:)),
-                keyEquivalent: ""
-            )
-            defaultItem.target = self
-            defaultItem.representedObject = ["mode": "default"] as [String: String]
-            menu.addItem(defaultItem)
-        }
-
-        for agent in activeAgents {
-            let item = NSMenuItem(title: agent.displayName, action: #selector(addTabMenuItemTapped(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = ["mode": "agent", "agentRaw": agent.rawValue] as [String: String]
-            menu.addItem(item)
-        }
-
-        if menu.items.count > 0 {
-            menu.addItem(.separator())
-        }
-
-        let terminalItem = NSMenuItem(
-            title: "Terminal",
-            action: #selector(addTabMenuItemTapped(_:)),
-            keyEquivalent: ""
+        AgentMenuBuilder.populate(
+            menu: menu,
+            defaultAgentName: threadManager.effectiveAgentType(for: thread.projectId)?.displayName,
+            activeAgents: settings.availableActiveAgents,
+            target: self,
+            action: #selector(addTabMenuItemTapped(_:))
         )
-        terminalItem.target = self
-        terminalItem.representedObject = ["mode": "terminal"] as [String: String]
-        menu.addItem(terminalItem)
-
         menu.popUp(positioning: nil, at: NSPoint(x: addTabButton.bounds.minX, y: addTabButton.bounds.minY), in: addTabButton)
     }
 
     @objc private func addTabMenuItemTapped(_ sender: NSMenuItem) {
-        let data = sender.representedObject as? [String: String]
-        let mode = data?["mode"] ?? "default"
-        switch mode {
-        case "terminal":
+        guard let selection = AgentMenuBuilder.parseSelection(from: sender) else { return }
+        switch selection.mode {
+        case .terminal:
             addTab(using: nil, useAgentCommand: false)
-        case "agent":
-            let raw = data?["agentRaw"] ?? ""
-            addTab(using: AgentType(rawValue: raw), useAgentCommand: true)
-        default:
+        case .agent(let agentType):
+            addTab(using: agentType, useAgentCommand: true)
+        case .projectDefault:
             addTab(using: nil, useAgentCommand: true)
         }
     }
@@ -655,57 +626,6 @@ extension ThreadDetailViewController {
             Task { @MainActor [weak self] in
                 self?.loadingOverlay?.removeFromSuperview()
                 self?.loadingOverlay = nil
-            }
-        }
-    }
-
-    private func performWithSpinner(message: String, errorTitle: String, work: @escaping () async throws -> Void) {
-        guard let window = view.window else { return }
-
-        let sheetVC = NSViewController()
-        sheetVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 80))
-
-        let spinner = NSProgressIndicator()
-        spinner.style = .spinning
-        spinner.controlSize = .small
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        spinner.startAnimation(nil)
-
-        let label = NSTextField(labelWithString: message)
-        label.font = .systemFont(ofSize: 13)
-        label.textColor = NSColor(resource: .textSecondary)
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView(views: [spinner, label])
-        stack.orientation = .horizontal
-        stack.spacing = 10
-        stack.alignment = .centerY
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        sheetVC.view.addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: sheetVC.view.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: sheetVC.view.centerYAnchor),
-        ])
-
-        window.contentViewController?.presentAsSheet(sheetVC)
-
-        Task {
-            do {
-                try await work()
-                await MainActor.run {
-                    window.contentViewController?.dismiss(sheetVC)
-                }
-            } catch {
-                await MainActor.run {
-                    window.contentViewController?.dismiss(sheetVC)
-                    let alert = NSAlert()
-                    alert.messageText = errorTitle
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
-                }
             }
         }
     }

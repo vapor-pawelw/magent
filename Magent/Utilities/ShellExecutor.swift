@@ -157,6 +157,6 @@ enum ShellExecutor {
     }
 
     nonisolated static func shellQuote(_ string: String) -> String {
-        "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        Magent.shellQuote(string)
     }
 }

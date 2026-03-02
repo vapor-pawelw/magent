@@ -329,7 +329,4 @@ final class JiraService {
         )
     }
 
-    private func shellQuote(_ string: String) -> String {
-        "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
 }
