@@ -29,6 +29,9 @@ final class ThreadManager {
     var notifiedWaitingSessions: Set<String> = []
     /// Global per-agent rate-limit cache (Claude/Codex), shared across all tabs/threads.
     var globalAgentRateLimits: [AgentType: AgentRateLimitInfo] = [:]
+    /// Suppresses re-detecting stale relative rate-limit text after its original reset window elapsed.
+    /// Keyed by tmux session name.
+    var suppressedExpiredRateLimitFingerprints: [String: String] = [:]
     var lastPublishedRateLimitSummary: String?
     var sessionsBeingRecreated: Set<String> = []
     var sessionMonitorTimer: Timer?

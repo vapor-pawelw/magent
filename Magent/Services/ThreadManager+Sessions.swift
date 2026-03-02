@@ -820,6 +820,12 @@ extension ThreadManager {
 
     // MARK: - Rate-Limit Detection
 
+    private struct RateLimitDetection {
+        var info: AgentRateLimitInfo
+        var fingerprint: String
+        var hasRelativeReset: Bool
+    }
+
     private func checkForRateLimitedSessions() async {
         let now = Date()
         var changedThreadIds = Set<UUID>()
@@ -833,6 +839,7 @@ extension ThreadManager {
 
             for sessionName in thread.tmuxSessionNames {
                 guard thread.agentTmuxSessions.contains(sessionName) else {
+                    suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                     if updatedRateLimits.removeValue(forKey: sessionName) != nil {
                         changedThreadIds.insert(thread.id)
                     }
@@ -841,6 +848,7 @@ extension ThreadManager {
 
                 guard let sessionAgent = agentType(for: thread, sessionName: sessionName),
                       isRateLimitTrackable(agent: sessionAgent) else {
+                    suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                     if updatedRateLimits.removeValue(forKey: sessionName) != nil {
                         changedThreadIds.insert(thread.id)
                     }
@@ -854,23 +862,46 @@ extension ThreadManager {
                 }
 
                 guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
-                      var info = rateLimitInfo(from: paneContent, now: now) else {
+                      let detection = rateLimitDetection(from: paneContent, now: now) else {
+                    suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                     if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
                         changedThreadIds.insert(thread.id)
                     }
                     continue
                 }
 
+                if let suppressedFingerprint = suppressedExpiredRateLimitFingerprints[sessionName] {
+                    if suppressedFingerprint == detection.fingerprint {
+                        if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                            changedThreadIds.insert(thread.id)
+                        }
+                        continue
+                    }
+                    suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
+                }
+
+                var info = detection.info
+
                 // If the visible message hasn't changed, keep the previously parsed reset date.
                 // This avoids drifting reset times for static phrases like "try again in 35m".
                 if let existing = updatedRateLimits[sessionName],
                    existing.resetDescription == info.resetDescription,
-                   let existingResetAt = existing.resetAt,
-                   existingResetAt > now {
-                    info.resetAt = existingResetAt
+                   let existingResetAt = existing.resetAt {
+                    if existingResetAt > now {
+                        info.resetAt = existingResetAt
+                    } else if detection.hasRelativeReset {
+                        // Static relative text can remain visible after expiry (e.g. "try again in 35m").
+                        // Suppress re-detecting the same stale message until pane content changes.
+                        suppressedExpiredRateLimitFingerprints[sessionName] = detection.fingerprint
+                        if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                            changedThreadIds.insert(thread.id)
+                        }
+                        continue
+                    }
                 }
 
                 if info.resetAt.map({ $0 <= now }) ?? false {
+                    suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                     if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
                         changedThreadIds.insert(thread.id)
                     }
@@ -889,6 +920,7 @@ extension ThreadManager {
 
             for sessionName in Array(updatedRateLimits.keys) where !validSessions.contains(sessionName) {
                 updatedRateLimits.removeValue(forKey: sessionName)
+                suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                 changedThreadIds.insert(thread.id)
             }
 
@@ -995,7 +1027,7 @@ extension ThreadManager {
         return changedThreadIds
     }
 
-    private func rateLimitInfo(from paneContent: String, now: Date) -> AgentRateLimitInfo? {
+    private func rateLimitDetection(from paneContent: String, now: Date) -> RateLimitDetection? {
         let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
         let tail = lines.suffix(80).map(String.init)
         let normalizedRecentTail = tail.suffix(20).joined(separator: "\n").lowercased()
@@ -1028,6 +1060,20 @@ extension ThreadManager {
             guard hasWeakKeyword && hasBlockingContext else { return nil }
         }
 
+        let focusText = rateLimitFocusText(from: tail)
+        let relativeResetAt = parseRelativeResetDate(from: focusText, now: now)
+        let resetAt = relativeResetAt ?? parseAbsoluteResetDate(from: focusText, now: now)
+
+        let resetDescription = extractRateLimitResetDescription(from: focusText)
+        let fingerprint = rateLimitFingerprint(from: focusText, fallback: resetDescription)
+        return RateLimitDetection(
+            info: AgentRateLimitInfo(resetAt: resetAt, resetDescription: resetDescription),
+            fingerprint: fingerprint,
+            hasRelativeReset: relativeResetAt != nil
+        )
+    }
+
+    private func rateLimitFocusText(from tail: [String]) -> String {
         let focusLines = tail.filter { line in
             let normalized = line.lowercased()
             return normalized.contains("rate")
@@ -1039,16 +1085,26 @@ extension ThreadManager {
                 || normalized.contains("available")
                 || normalized.contains("until")
         }
-        let focusText = (focusLines.isEmpty ? tail.suffix(20) : focusLines.suffix(12))
+        return (focusLines.isEmpty ? tail.suffix(20) : focusLines.suffix(12))
             .joined(separator: "\n")
+    }
 
-        var resetAt = parseRelativeResetDate(from: focusText, now: now)
-        if resetAt == nil {
-            resetAt = parseAbsoluteResetDate(from: focusText, now: now)
+    private func rateLimitFingerprint(from focusText: String, fallback: String?) -> String {
+        let normalizedFocus = focusText
+            .lowercased()
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedFocus.isEmpty {
+            return normalizedFocus
         }
-
-        let resetDescription = extractRateLimitResetDescription(from: focusText)
-        return AgentRateLimitInfo(resetAt: resetAt, resetDescription: resetDescription)
+        let normalizedFallback = fallback?
+            .lowercased()
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let normalizedFallback, !normalizedFallback.isEmpty {
+            return normalizedFallback
+        }
+        return "__empty_rate_limit_fingerprint__"
     }
 
     private func parseRelativeResetDate(from text: String, now: Date) -> Date? {
