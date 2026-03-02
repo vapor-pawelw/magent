@@ -446,7 +446,9 @@ extension ThreadManager {
 
         let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: name)
         let slug = Self.repoSlug(from: project.name)
-        let firstTabSlug = Self.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+        let settings = persistence.loadSettings()
+        let agentType = resolveAgentType(for: project.id, requestedAgentType: nil, settings: settings)
+        let firstTabSlug = Self.sanitizeForTmux(TmuxSessionNaming.defaultTabDisplayName(for: agentType))
         let tmuxExists = await tmux.hasSession(name: Self.buildSessionName(repoSlug: slug, threadName: name, tabSlug: firstTabSlug))
         return !branchExists && !tmuxExists
     }

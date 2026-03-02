@@ -268,7 +268,7 @@ final class ThreadDetailViewController: NSViewController {
             let slug = TmuxSessionNaming.repoSlug(from:
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
             )
-            let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+            let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType))
             let fallbackName: String
             if thread.isMain {
                 fallbackName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
