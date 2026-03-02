@@ -959,15 +959,33 @@ extension ThreadManager {
         let tail = lines.suffix(80).map(String.init)
         let normalizedRecentTail = tail.suffix(20).joined(separator: "\n").lowercased()
 
-        let hasRateLimitKeyword = normalizedRecentTail.contains("rate limit")
-            || normalizedRecentTail.contains("usage limit")
-            || normalizedRecentTail.contains("too many requests")
+        // Strong indicators — unambiguously mean the agent is blocked.
+        let hasStrongIndicator = normalizedRecentTail.contains("too many requests")
             || normalizedRecentTail.contains("quota exceeded")
             || normalizedRecentTail.contains("retry after")
             || normalizedRecentTail.contains("try again in")
             || normalizedRecentTail.contains("limit reached")
             || normalizedRecentTail.contains("limit exceeded")
-        guard hasRateLimitKeyword else { return nil }
+            || normalizedRecentTail.contains("rate limited")
+            || normalizedRecentTail.contains("hit your usage limit")
+            || normalizedRecentTail.contains("hit your rate limit")
+            || normalizedRecentTail.contains("you've been rate")
+
+        // Weak indicators — "rate limit" / "usage limit" can appear in informational
+        // displays (e.g. Claude Code status line, or agent output discussing rate limits).
+        // Require additional blocking context to avoid false positives.
+        if !hasStrongIndicator {
+            let hasWeakKeyword = normalizedRecentTail.contains("rate limit")
+                || normalizedRecentTail.contains("usage limit")
+            let hasBlockingContext = normalizedRecentTail.contains("exceeded")
+                || normalizedRecentTail.contains("reached")
+                || normalizedRecentTail.contains("throttl")
+                || normalizedRecentTail.contains("blocked")
+                || normalizedRecentTail.contains("paused")
+                || normalizedRecentTail.contains("wait")
+                    && normalizedRecentTail.contains("until")
+            guard hasWeakKeyword && hasBlockingContext else { return nil }
+        }
 
         let focusLines = tail.filter { line in
             let normalized = line.lowercased()
