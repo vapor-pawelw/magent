@@ -2,61 +2,6 @@ import AppKit
 
 extension NSViewController {
 
-    /// Checks git state and presents the appropriate confirmation dialog before archiving a thread.
-    /// Handles agent-busy, dirty worktree, and clean-and-merged cases.
-    func confirmAndArchiveThread(_ thread: MagentThread) {
-        let threadManager = ThreadManager.shared
-        let baseBranch = threadManager.resolveBaseBranch(for: thread)
-
-        Task {
-            let git = GitService.shared
-            let clean = await git.isClean(worktreePath: thread.worktreePath)
-            let merged = await git.isMergedInto(worktreePath: thread.worktreePath, baseBranch: baseBranch)
-
-            await MainActor.run {
-                let liveThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
-                let agentBusy = liveThread.hasAgentBusy
-
-                if agentBusy {
-                    let alert = NSAlert()
-                    alert.messageText = "Archive Thread"
-                    alert.informativeText = "An agent in \"\(thread.name)\" is currently busy. Archiving will terminate the running agent and remove the worktree directory. The git branch \"\(thread.branchName)\" will be kept."
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "Archive Anyway")
-                    alert.addButton(withTitle: "Cancel")
-
-                    let response = alert.runModal()
-                    guard response == .alertFirstButtonReturn else { return }
-
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-                        try await threadManager.archiveThread(thread)
-                    }
-                } else if clean && merged {
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-                        try await threadManager.archiveThread(thread)
-                    }
-                } else {
-                    let alert = NSAlert()
-                    alert.messageText = "Archive Thread"
-                    var reasons: [String] = []
-                    if !clean { reasons.append("uncommitted changes") }
-                    if !merged { reasons.append("commits not in \(baseBranch)") }
-                    alert.informativeText = "The thread \"\(thread.name)\" has \(reasons.joined(separator: " and ")). Archiving will remove its worktree directory but keep the git branch \"\(thread.branchName)\"."
-                    alert.alertStyle = .informational
-                    alert.addButton(withTitle: "Archive")
-                    alert.addButton(withTitle: "Cancel")
-
-                    let response = alert.runModal()
-                    guard response == .alertFirstButtonReturn else { return }
-
-                    self.performWithSpinner(message: "Archiving thread...", errorTitle: "Archive Failed") {
-                        try await threadManager.archiveThread(thread)
-                    }
-                }
-            }
-        }
-    }
-
     /// Presents a modal sheet with a spinner and label, runs the async work block,
     /// then dismisses the sheet. Shows an alert on failure.
     func performWithSpinner(message: String, errorTitle: String, work: @escaping () async throws -> Void) {

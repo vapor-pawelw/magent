@@ -269,14 +269,39 @@ final class GitService {
             return true
         }
 
-        // No fork point (old thread) — check if HEAD is a parent of a merge commit on baseBranch.
-        // This correctly identifies branches merged via merge commits without
-        // false-positiving on branches created from old base commits with no work.
+        // No fork point (old thread) — two checks:
+
+        // 1. FF-merged: HEAD is at baseBranch tip (or baseBranch has no commits beyond HEAD).
+        //    This detects fast-forward merges where no merge commit exists.
+        let aheadResult = await ShellExecutor.execute(
+            "git log HEAD..\(shellQuote(baseBranch)) --oneline",
+            workingDirectory: worktreePath
+        )
+        if aheadResult.exitCode == 0,
+           aheadResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+
+        // 2. Merge-commit: HEAD is a non-first parent of a merge commit on baseBranch.
+        //    Only check 2nd+ parents (the merged branch tips), not the first parent
+        //    (the main-line commit), to avoid false-positives when the branch was
+        //    created from a commit that happens to be the main-side parent of a merge.
         let mergeCheck = await ShellExecutor.execute(
             "git log --merges --ancestry-path HEAD..\(shellQuote(baseBranch)) --format=%P",
             workingDirectory: worktreePath
         )
-        return mergeCheck.stdout.contains(head)
+        guard mergeCheck.exitCode == 0 else { return false }
+        let parentLines = mergeCheck.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: "\n")
+            .filter { !$0.isEmpty }
+        for line in parentLines {
+            let parents = line.components(separatedBy: " ")
+            // Skip first parent (main-line); check 2nd+ parents (merged branches)
+            if parents.dropFirst().contains(head) {
+                return true
+            }
+        }
+        return false
     }
 
     // MARK: - Merge Base & File Data

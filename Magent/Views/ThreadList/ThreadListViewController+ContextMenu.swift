@@ -370,7 +370,60 @@ extension ThreadListViewController {
     }
 
     func triggerArchive(for thread: MagentThread) {
-        confirmAndArchiveThread(thread)
+        let threadManager = self.threadManager
+        let baseBranch = threadManager.resolveBaseBranch(for: thread)
+
+        Task {
+            let git = GitService.shared
+            let clean = await git.isClean(worktreePath: thread.worktreePath)
+            let merged = await git.isMergedInto(worktreePath: thread.worktreePath, baseBranch: baseBranch)
+
+            await MainActor.run {
+                let liveThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+                let agentBusy = liveThread.hasAgentBusy
+
+                if agentBusy {
+                    let alert = NSAlert()
+                    alert.messageText = "Archive Thread"
+                    alert.informativeText = "An agent in \"\(thread.name)\" is currently busy. Archiving will terminate the running agent and remove the worktree directory. The git branch \"\(thread.branchName)\" will be kept."
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "Archive Anyway")
+                    alert.addButton(withTitle: "Cancel")
+
+                    let response = alert.runModal()
+                    guard response == .alertFirstButtonReturn else { return }
+                } else if !clean || !merged {
+                    let alert = NSAlert()
+                    alert.messageText = "Archive Thread"
+                    var reasons: [String] = []
+                    if !clean { reasons.append("uncommitted changes") }
+                    if !merged { reasons.append("commits not in \(baseBranch)") }
+                    alert.informativeText = "The thread \"\(thread.name)\" has \(reasons.joined(separator: " and ")). Archiving will remove its worktree directory but keep the git branch \"\(thread.branchName)\"."
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: "Archive")
+                    alert.addButton(withTitle: "Cancel")
+
+                    let response = alert.runModal()
+                    guard response == .alertFirstButtonReturn else { return }
+                }
+
+                // Archive directly without a spinner sheet. The delegate-driven
+                // reloadData()/showEmptyState() modifies split view items, which
+                // crashes if a sheet is being presented on the same window.
+                Task {
+                    do {
+                        try await threadManager.archiveThread(thread)
+                    } catch {
+                        await MainActor.run {
+                            BannerManager.shared.show(
+                                message: "Archive failed: \(error.localizedDescription)",
+                                style: .error
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @objc private func deleteThread(_ sender: NSMenuItem) {
@@ -387,8 +440,17 @@ extension ThreadListViewController {
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
 
-        performWithSpinner(message: "Deleting thread...", errorTitle: "Delete Failed") {
-            try await self.threadManager.deleteThread(thread)
+        Task {
+            do {
+                try await self.threadManager.deleteThread(thread)
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: "Delete failed: \(error.localizedDescription)",
+                        style: .error
+                    )
+                }
+            }
         }
     }
 

@@ -8,7 +8,59 @@ extension ThreadDetailViewController {
     @objc func archiveThreadTapped() {
         guard !thread.isMain else { return }
         let threadToArchive = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
-        confirmAndArchiveThread(threadToArchive)
+
+        let baseBranch = threadManager.resolveBaseBranch(for: threadToArchive)
+
+        Task {
+            let git = GitService.shared
+            let clean = await git.isClean(worktreePath: threadToArchive.worktreePath)
+            let merged = await git.isMergedInto(worktreePath: threadToArchive.worktreePath, baseBranch: baseBranch)
+
+            await MainActor.run {
+                let agentBusy = threadToArchive.hasAgentBusy
+
+                if agentBusy {
+                    let alert = NSAlert()
+                    alert.messageText = "Archive Thread"
+                    alert.informativeText = "An agent in \"\(threadToArchive.name)\" is currently busy. Archiving will terminate the running agent and remove the worktree directory. The git branch \"\(threadToArchive.branchName)\" will be kept."
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "Archive Anyway")
+                    alert.addButton(withTitle: "Cancel")
+
+                    let response = alert.runModal()
+                    guard response == .alertFirstButtonReturn else { return }
+                } else if !clean || !merged {
+                    let alert = NSAlert()
+                    alert.messageText = "Archive Thread"
+                    var reasons: [String] = []
+                    if !clean { reasons.append("uncommitted changes") }
+                    if !merged { reasons.append("commits not in \(baseBranch)") }
+                    alert.informativeText = "The thread \"\(threadToArchive.name)\" has \(reasons.joined(separator: " and ")). Archiving will remove its worktree directory but keep the git branch \"\(threadToArchive.branchName)\"."
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: "Archive")
+                    alert.addButton(withTitle: "Cancel")
+
+                    let response = alert.runModal()
+                    guard response == .alertFirstButtonReturn else { return }
+                }
+
+                // Archive directly without a spinner sheet. The delegate-driven
+                // reloadData()/showEmptyState() modifies split view items, which
+                // crashes if a sheet is being presented on the same window.
+                Task {
+                    do {
+                        try await self.threadManager.archiveThread(threadToArchive)
+                    } catch {
+                        await MainActor.run {
+                            BannerManager.shared.show(
+                                message: "Archive failed: \(error.localizedDescription)",
+                                style: .error
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @objc func addTabTapped() {

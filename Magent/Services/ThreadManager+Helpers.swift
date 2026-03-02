@@ -6,7 +6,34 @@ extension ThreadManager {
 
     // MARK: - IPC Agent Docs
 
-    static let ipcAgentDocs: String = IPCAgentDocs.claudeSystemPrompt
+    static let ipcAgentDocs = """
+    You have access to Magent IPC. Use `/tmp/magent-cli` to manage threads and tabs:
+      /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>]
+      /tmp/magent-cli list-projects
+      /tmp/magent-cli list-threads [--project <name>]
+      /tmp/magent-cli send-prompt --thread <name> --prompt <text>
+      /tmp/magent-cli archive-thread --thread <name>
+      /tmp/magent-cli delete-thread --thread <name>
+      /tmp/magent-cli list-tabs --thread <name>
+      /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
+      /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
+      /tmp/magent-cli current-thread
+      /tmp/magent-cli rename-thread --thread <name> --description <text>
+      /tmp/magent-cli rename-thread-exact --thread <name> --name <text>
+      /tmp/magent-cli thread-info --thread <name>
+      /tmp/magent-cli list-sections [--project <name>]
+      /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
+      /tmp/magent-cli remove-section --name <name> [--project <name>]
+      /tmp/magent-cli reorder-section --name <name> --position <n> [--project <name>]
+      /tmp/magent-cli rename-section --name <name> --new-name <text> [--color <hex>] [--project <name>]
+      /tmp/magent-cli hide-section --name <name> [--project <name>]
+      /tmp/magent-cli show-section --name <name> [--project <name>]
+    Use current-thread to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
+    When creating threads, use --description to name them upfront (AI generates a slug respecting project naming rules). Only use --name when the user explicitly provides a literal name. Omit both for a random name.
+    Use rename-thread by default (generates a slug from the description). Only use rename-thread-exact when the user specifies an exact name.
+    rename-thread-exact is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use rename-thread with that description instead.
+    Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
+    """
 
     // MARK: - Agent Readiness
 
@@ -135,6 +162,21 @@ extension ThreadManager {
 
     // MARK: - Helpers
 
+    /// Renames session names produced by Magent without touching unrelated substrings.
+    /// This avoids accidental rewrites when thread names overlap with the "magent" prefix.
+    func renamedSessionName(_ sessionName: String, fromThreadName oldName: String, toThreadName newName: String, repoSlug: String) -> String {
+        let oldPrefix = Self.buildSessionName(repoSlug: repoSlug, threadName: oldName)
+        let newPrefix = Self.buildSessionName(repoSlug: repoSlug, threadName: newName)
+
+        if sessionName == oldPrefix {
+            return newPrefix
+        }
+        if sessionName.hasPrefix(oldPrefix + "-") {
+            return newPrefix + String(sessionName.dropFirst(oldPrefix.count))
+        }
+        return sessionName
+    }
+
     /// Renames tmux sessions in two phases to avoid collisions during rename.
     /// Dead sessions are skipped; they will be recreated lazily with the new name.
     func renameTmuxSessions(from oldNames: [String], to newNames: [String]) async throws {
@@ -167,6 +209,45 @@ extension ThreadManager {
             }
             throw error
         }
+    }
+
+    /// Removes broken symlinks from all projects' worktrees base directories.
+    func cleanupAllBrokenSymlinks() {
+        let settings = persistence.loadSettings()
+        for project in settings.projects {
+            cleanupBrokenSymlinks(in: project.resolvedWorktreesBasePath())
+        }
+    }
+
+    /// Removes broken symlinks from the worktrees base directory.
+    /// Rename operations leave symlinks (old-name → actual-worktree-dir) that become
+    /// stale once the worktree is archived/removed.
+    private func cleanupBrokenSymlinks(in directory: String) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: directory) else { return }
+        for entry in entries {
+            let fullPath = (directory as NSString).appendingPathComponent(entry)
+            let url = URL(fileURLWithPath: fullPath)
+            guard let values = try? url.resourceValues(forKeys: [.isSymbolicLinkKey]),
+                  values.isSymbolicLink == true else { continue }
+            // Broken symlink: the target no longer exists
+            if !fm.fileExists(atPath: fullPath) {
+                try? fm.removeItem(atPath: fullPath)
+            }
+        }
+    }
+
+    func createCompatibilitySymlink(from oldPath: String, to newPath: String) {
+        let fileManager = FileManager.default
+        let oldURL = URL(fileURLWithPath: oldPath)
+
+        if let values = try? oldURL.resourceValues(forKeys: [.isSymbolicLinkKey]),
+           values.isSymbolicLink == true {
+            try? fileManager.removeItem(atPath: oldPath)
+        }
+
+        guard !fileManager.fileExists(atPath: oldPath) else { return }
+        try? fileManager.createSymbolicLink(atPath: oldPath, withDestinationPath: newPath)
     }
 
     /// Path to the Magent-specific Claude Code hooks settings file.
@@ -242,6 +323,49 @@ extension ThreadManager {
         try? updated.write(toFile: configPath, atomically: true, encoding: .utf8)
     }
 
+    private static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
+    private static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
+    private static let codexIPCVersion = "<!-- magent-ipc-v6 -->"
+
+    private static let codexIPCBlock = """
+    \(codexIPCMarkerStart)
+    \(codexIPCVersion)
+    # Magent IPC
+
+    When the `MAGENT_SOCKET` environment variable is set, you are running inside
+    a Magent-managed terminal. Use `/tmp/magent-cli` to manage threads and tabs:
+
+    ```
+    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>]
+    /tmp/magent-cli list-projects
+    /tmp/magent-cli list-threads [--project <name>]
+    /tmp/magent-cli send-prompt --thread <name> --prompt <text>
+    /tmp/magent-cli archive-thread --thread <name>
+    /tmp/magent-cli delete-thread --thread <name>
+    /tmp/magent-cli list-tabs --thread <name>
+    /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
+    /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
+    /tmp/magent-cli current-thread
+    /tmp/magent-cli rename-thread --thread <name> --description <text>
+    /tmp/magent-cli rename-thread-exact --thread <name> --name <text>
+    /tmp/magent-cli thread-info --thread <name>
+    /tmp/magent-cli list-sections [--project <name>]
+    /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
+    /tmp/magent-cli remove-section --name <name> [--project <name>]
+    /tmp/magent-cli reorder-section --name <name> --position <n> [--project <name>]
+    /tmp/magent-cli rename-section --name <name> --new-name <text> [--color <hex>] [--project <name>]
+    /tmp/magent-cli hide-section --name <name> [--project <name>]
+    /tmp/magent-cli show-section --name <name> [--project <name>]
+    ```
+
+    Use `current-thread` to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
+    When creating threads, use `--description` to name them upfront (AI generates a slug respecting project naming rules). Only use `--name` when the user explicitly provides a literal name. Omit both for a random name.
+    Use `rename-thread` by default (generates a slug from the description).
+    Only use `rename-thread-exact` when the user specifies an exact name.
+    `rename-thread-exact` is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use `rename-thread` with that description instead.
+    Section commands without `--project` operate on global sections. With `--project`, they operate on project-specific overrides.
+    \(codexIPCMarkerEnd)
+    """
 
     /// Writes or updates the Magent IPC section in `~/.codex/AGENTS.md` so Codex
     /// agents auto-discover `magent-cli`. Preserves any existing user content;
@@ -253,20 +377,20 @@ extension ThreadManager {
 
         if let existing = try? String(contentsOfFile: filePath, encoding: .utf8) {
             // Already up to date
-            if existing.contains(IPCAgentDocs.codexIPCVersion) { return }
+            if existing.contains(Self.codexIPCVersion) { return }
 
             // Replace outdated Magent section if present
-            if let startRange = existing.range(of: IPCAgentDocs.codexIPCMarkerStart),
-               let endRange = existing.range(of: IPCAgentDocs.codexIPCMarkerEnd),
+            if let startRange = existing.range(of: Self.codexIPCMarkerStart),
+               let endRange = existing.range(of: Self.codexIPCMarkerEnd),
                startRange.lowerBound <= endRange.lowerBound {
                 var updated = existing
-                updated.replaceSubrange(startRange.lowerBound..<endRange.upperBound, with: IPCAgentDocs.codexAgentsMdBlock)
+                updated.replaceSubrange(startRange.lowerBound..<endRange.upperBound, with: Self.codexIPCBlock)
                 try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
             } else {
                 // Append to existing user content
                 var updated = existing
                 if !updated.hasSuffix("\n") { updated += "\n" }
-                updated += "\n" + IPCAgentDocs.codexAgentsMdBlock + "\n"
+                updated += "\n" + Self.codexIPCBlock + "\n"
                 try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
             }
         } else {
@@ -275,7 +399,7 @@ extension ThreadManager {
                 atPath: codexDir.path,
                 withIntermediateDirectories: true
             )
-            try? IPCAgentDocs.codexAgentsMdBlock.write(toFile: filePath, atomically: true, encoding: .utf8)
+            try? Self.codexIPCBlock.write(toFile: filePath, atomically: true, encoding: .utf8)
         }
     }
 
@@ -321,9 +445,9 @@ extension ThreadManager {
         guard !nameInUse && !dirExists else { return false }
 
         let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: name)
-        let slug = TmuxSessionNaming.repoSlug(from: project.name)
-        let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
-        let tmuxExists = await tmux.hasSession(name: TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: name, tabSlug: firstTabSlug))
+        let slug = Self.repoSlug(from: project.name)
+        let firstTabSlug = Self.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+        let tmuxExists = await tmux.hasSession(name: Self.buildSessionName(repoSlug: slug, threadName: name, tabSlug: firstTabSlug))
         return !branchExists && !tmuxExists
     }
 
@@ -366,6 +490,38 @@ extension ThreadManager {
     func isTabNameTaken(_ name: String, existingNames: [String]) async -> Bool {
         if existingNames.contains(name) { return true }
         return await tmux.hasSession(name: name)
+    }
+
+    static func sanitizeForTmux(_ name: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        return name.unicodeScalars
+            .map { allowed.contains($0) ? String($0) : "-" }
+            .joined()
+            .lowercased()
+    }
+
+    static func repoSlug(from projectName: String) -> String {
+        var slug = sanitizeForTmux(projectName)
+        if slug.count > 16 {
+            slug = String(slug.prefix(16))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        }
+        return slug
+    }
+
+    static func buildSessionName(repoSlug: String, threadName: String?, tabSlug: String? = nil) -> String {
+        var parts = ["ma", repoSlug]
+        if let threadName {
+            parts.append(threadName)
+        }
+        if let tabSlug {
+            parts.append(tabSlug)
+        }
+        return parts.joined(separator: "-")
+    }
+
+    static func isMagentSession(_ name: String) -> Bool {
+        name.hasPrefix("ma-") || name.hasPrefix("magent-")
     }
 
     // MARK: - Tmux Zombie Health
@@ -450,3 +606,49 @@ extension ThreadManager {
     }
 }
 
+extension Notification.Name {
+    static let magentDeadSessionsDetected = Notification.Name("magentDeadSessionsDetected")
+    static let magentAgentCompletionDetected = Notification.Name("magentAgentCompletionDetected")
+    static let magentAgentWaitingForInput = Notification.Name("magentAgentWaitingForInput")
+    static let magentAgentBusySessionsChanged = Notification.Name("magentAgentBusySessionsChanged")
+    static let magentAgentRateLimitChanged = Notification.Name("magentAgentRateLimitChanged")
+    static let magentGlobalRateLimitSummaryChanged = Notification.Name("magentGlobalRateLimitSummaryChanged")
+    static let magentSectionsDidChange = Notification.Name("magentSectionsDidChange")
+    static let magentOpenSettings = Notification.Name("magentOpenSettings")
+    static let magentShowDiffViewer = Notification.Name("magentShowDiffViewer")
+    static let magentHideDiffViewer = Notification.Name("magentHideDiffViewer")
+    static let magentNavigateToThread = Notification.Name("magentNavigateToThread")
+}
+
+enum ThreadManagerError: LocalizedError {
+    case threadNotFound
+    case invalidName
+    case duplicateName
+    case invalidTabIndex
+    case cannotDeleteMainThread
+    case nameGenerationFailed
+    case worktreePathConflict([String])
+    case noExpectedBranch
+
+    var errorDescription: String? {
+        switch self {
+        case .threadNotFound:
+            return "Thread not found"
+        case .invalidName:
+            return "Invalid name. Name must not be empty or contain slashes."
+        case .duplicateName:
+            return "A thread with that name already exists."
+        case .invalidTabIndex:
+            return "Invalid tab index."
+        case .cannotDeleteMainThread:
+            return "Main threads cannot be deleted."
+        case .nameGenerationFailed:
+            return "Could not generate a unique thread name. Try again or clean up unused worktrees/branches."
+        case .worktreePathConflict(let names):
+            let list = names.joined(separator: ", ")
+            return "Cannot move worktrees — the following directories already exist in the destination: \(list)"
+        case .noExpectedBranch:
+            return "No expected branch configured. Set the default branch in project settings."
+        }
+    }
+}

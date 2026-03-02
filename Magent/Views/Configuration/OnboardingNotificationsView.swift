@@ -15,6 +15,14 @@ final class OnboardingNotificationsView: NSView {
         soundPickerPopup.selectedItem?.title ?? "Ping"
     }
 
+    var notifyOnRateLimitLifted: Bool {
+        rateLimitNotifyCheckbox.state == .on
+    }
+
+    var rateLimitLiftedSoundName: String {
+        rateLimitSoundPickerPopup.selectedItem?.title ?? "Glass"
+    }
+
     private let notificationStatusDot = NSView()
     private let notificationStatusLabel = NSTextField(labelWithString: "Notifications: Checking...")
     private let showBannersCheckbox = NSButton(
@@ -29,6 +37,13 @@ final class OnboardingNotificationsView: NSView {
     )
     private let soundPickerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private var soundPickerRow: NSStackView!
+    private let rateLimitNotifyCheckbox = NSButton(
+        checkboxWithTitle: "Notify when rate limit is lifted",
+        target: nil,
+        action: nil
+    )
+    private let rateLimitSoundPickerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private var rateLimitSoundPickerRow: NSStackView!
     private var appActiveObserver: NSObjectProtocol?
     private var soundPreviewPlayer: NSSound?
 
@@ -110,6 +125,28 @@ final class OnboardingNotificationsView: NSView {
         populateSoundPicker()
         soundPickerRow.addArrangedSubview(soundPickerPopup)
 
+        // Rate limit lifted notification
+        rateLimitNotifyCheckbox.state = .on
+        rateLimitNotifyCheckbox.target = self
+        rateLimitNotifyCheckbox.action = #selector(rateLimitNotifyToggled)
+
+        rateLimitSoundPickerRow = NSStackView()
+        rateLimitSoundPickerRow.orientation = .horizontal
+        rateLimitSoundPickerRow.alignment = .centerY
+        rateLimitSoundPickerRow.spacing = 8
+        rateLimitSoundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
+
+        let rateLimitSoundLabel = NSTextField(labelWithString: "Sound:")
+        rateLimitSoundLabel.font = .systemFont(ofSize: 12)
+        rateLimitSoundPickerRow.addArrangedSubview(rateLimitSoundLabel)
+
+        rateLimitSoundPickerPopup.controlSize = .small
+        rateLimitSoundPickerPopup.font = .systemFont(ofSize: 12)
+        rateLimitSoundPickerPopup.target = self
+        rateLimitSoundPickerPopup.action = #selector(rateLimitSoundPickerChanged)
+        populateRateLimitSoundPicker()
+        rateLimitSoundPickerRow.addArrangedSubview(rateLimitSoundPickerPopup)
+
         let stack = NSStackView(views: [
             titleLabel, descLabel,
             statusRow, openNotifButton,
@@ -117,6 +154,8 @@ final class OnboardingNotificationsView: NSView {
             showBannersCheckbox,
             completionSoundCheckbox,
             soundPickerRow,
+            rateLimitNotifyCheckbox,
+            rateLimitSoundPickerRow,
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -182,10 +221,42 @@ final class OnboardingNotificationsView: NSView {
                 self.showBannersCheckbox.isEnabled = authorized
                 self.completionSoundCheckbox.isEnabled = authorized
                 self.soundPickerPopup.isEnabled = authorized
+                self.rateLimitNotifyCheckbox.isEnabled = authorized
+                self.rateLimitSoundPickerPopup.isEnabled = authorized
                 self.showBannersCheckbox.alphaValue = authorized ? 1.0 : 0.5
                 self.completionSoundCheckbox.alphaValue = authorized ? 1.0 : 0.5
                 self.soundPickerRow.alphaValue = authorized ? 1.0 : 0.5
+                self.rateLimitNotifyCheckbox.alphaValue = authorized ? 1.0 : 0.5
+                self.rateLimitSoundPickerRow.alphaValue = authorized ? 1.0 : 0.5
             }
+        }
+    }
+
+    private func populateRateLimitSoundPicker() {
+        rateLimitSoundPickerPopup.removeAllItems()
+        let soundNames = SystemAccessChecker.systemSoundNames()
+        for name in soundNames {
+            rateLimitSoundPickerPopup.addItem(withTitle: name)
+        }
+        if let index = soundNames.firstIndex(of: "Glass") {
+            rateLimitSoundPickerPopup.selectItem(at: index)
+        }
+    }
+
+    @objc private func rateLimitNotifyToggled() {
+        rateLimitSoundPickerRow.isHidden = rateLimitNotifyCheckbox.state != .on
+        if rateLimitNotifyCheckbox.state != .on {
+            soundPreviewPlayer?.stop()
+            soundPreviewPlayer = nil
+        }
+    }
+
+    @objc private func rateLimitSoundPickerChanged() {
+        guard let selectedName = rateLimitSoundPickerPopup.selectedItem?.title else { return }
+        soundPreviewPlayer?.stop()
+        if let sound = NSSound(named: NSSound.Name(selectedName)) {
+            soundPreviewPlayer = sound
+            sound.play()
         }
     }
 

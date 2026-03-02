@@ -157,6 +157,8 @@ final class ConfigurationViewController: NSViewController {
         settings.showSystemBanners = notificationsView.showSystemBanners
         settings.playSoundForAgentCompletion = notificationsView.playSoundForCompletion
         settings.agentCompletionSoundName = notificationsView.completionSoundName
+        settings.notifyOnRateLimitLifted = notificationsView.notifyOnRateLimitLifted
+        settings.rateLimitLiftedSoundName = notificationsView.rateLimitLiftedSoundName
 
         settings.isConfigured = true
         try? persistence.saveSettings(settings)

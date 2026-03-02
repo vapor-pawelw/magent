@@ -22,6 +22,8 @@ nonisolated struct AppSettings: Codable, Sendable {
     var agentSkipPermissions: Bool
     var ipcPromptInjectionEnabled: Bool
     var jiraSiteURL: String
+    var notifyOnRateLimitLifted: Bool
+    var rateLimitLiftedSoundName: String
 
     init(
         projects: [Project] = [],
@@ -42,7 +44,9 @@ nonisolated struct AppSettings: Codable, Sendable {
         agentSandboxEnabled: Bool = false,
         agentSkipPermissions: Bool = true,
         ipcPromptInjectionEnabled: Bool = true,
-        jiraSiteURL: String = ""
+        jiraSiteURL: String = "",
+        notifyOnRateLimitLifted: Bool = true,
+        rateLimitLiftedSoundName: String = "Glass"
     ) {
         self.projects = projects
         self.activeAgents = activeAgents
@@ -63,6 +67,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.agentSkipPermissions = agentSkipPermissions
         self.ipcPromptInjectionEnabled = ipcPromptInjectionEnabled
         self.jiraSiteURL = jiraSiteURL
+        self.notifyOnRateLimitLifted = notifyOnRateLimitLifted
+        self.rateLimitLiftedSoundName = rateLimitLiftedSoundName
     }
 
     init(from decoder: Decoder) throws {
@@ -88,6 +94,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         agentSkipPermissions = try container.decodeIfPresent(Bool.self, forKey: .agentSkipPermissions) ?? true
         ipcPromptInjectionEnabled = try container.decodeIfPresent(Bool.self, forKey: .ipcPromptInjectionEnabled) ?? true
         jiraSiteURL = try container.decodeIfPresent(String.self, forKey: .jiraSiteURL) ?? ""
+        notifyOnRateLimitLifted = try container.decodeIfPresent(Bool.self, forKey: .notifyOnRateLimitLifted) ?? true
+        rateLimitLiftedSoundName = try container.decodeIfPresent(String.self, forKey: .rateLimitLiftedSoundName) ?? "Glass"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -111,6 +119,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(agentSkipPermissions, forKey: .agentSkipPermissions)
         try container.encode(ipcPromptInjectionEnabled, forKey: .ipcPromptInjectionEnabled)
         try container.encode(jiraSiteURL, forKey: .jiraSiteURL)
+        try container.encode(notifyOnRateLimitLifted, forKey: .notifyOnRateLimitLifted)
+        try container.encode(rateLimitLiftedSoundName, forKey: .rateLimitLiftedSoundName)
     }
 
     var visibleSections: [ThreadSection] {
@@ -207,6 +217,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         case agentSkipPermissions
         case ipcPromptInjectionEnabled
         case jiraSiteURL
+        case notifyOnRateLimitLifted
+        case rateLimitLiftedSoundName
 
         // Legacy keys kept for migration.
         case agentCommand
