@@ -570,6 +570,7 @@ final class ThreadDetailViewController: NSViewController {
 
         let separator = VerticalSeparatorView()
         separator.translatesAutoresizingMaskIntoConstraints = false
+        separator.isHidden = thread.isMain
         separator.setContentHuggingPriority(.required, for: .horizontal)
         separator.setContentCompressionResistancePriority(.required, for: .horizontal)
         separator.setContentHuggingPriority(.required, for: .vertical)
