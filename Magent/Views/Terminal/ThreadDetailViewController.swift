@@ -751,11 +751,18 @@ final class ThreadDetailViewController: NSViewController {
             startCmd = "\(envExportsWithSocket) && cd \(wd) && exec $SHELL -l"
         }
 
+        let sq = ShellExecutor.shellQuote
+        let quotedWd = sq(wd)
+        let quotedStartCmd = sq(startCmd)
+
         if isAgentSession {
-            return "/bin/sh -c 'tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux attach-session -t \(sessionName); }'"
+            let tmuxInner = "tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \(quotedWd) \(quotedStartCmd) && tmux attach-session -t \(sessionName); }"
+            return "/bin/sh -c \(sq(tmuxInner))"
         }
         // Force cwd on every open for terminal tabs, even if shell init changes it.
-        return "/bin/sh -c 'tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter 2>/dev/null; tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \"\(wd)\" \"\(startCmd)\" && tmux send-keys -t \(sessionName) \"cd \(wd)\" Enter && tmux attach-session -t \(sessionName); }'"
+        let quotedCdWd = sq("cd \(wd)")
+        let tmuxInner = "tmux send-keys -t \(sessionName) \(quotedCdWd) Enter 2>/dev/null; tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \(quotedWd) \(quotedStartCmd) && tmux send-keys -t \(sessionName) \(quotedCdWd) Enter && tmux attach-session -t \(sessionName); }"
+        return "/bin/sh -c \(sq(tmuxInner))"
     }
 
     @objc private func handleDeadSessionsNotification(_ notification: Notification) {
