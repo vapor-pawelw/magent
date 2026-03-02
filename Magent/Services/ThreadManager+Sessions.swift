@@ -1012,7 +1012,40 @@ extension ThreadManager {
             globalAgentRateLimits.removeValue(forKey: agent)
             clearRateLimitMarkers(for: agent, changedThreadIds: &changedThreadIds)
         }
+        sendRateLimitLiftedNotification(for: expiredAgents)
         return true
+    }
+
+    private func sendRateLimitLiftedNotification(for agents: [AgentType]) {
+        let settings = persistence.loadSettings()
+        guard settings.notifyOnRateLimitLifted else { return }
+
+        let agentNames = agents.map(\.rawValue).joined(separator: ", ")
+
+        if settings.showSystemBanners {
+            let content = UNMutableNotificationContent()
+            content.title = "Rate Limit Lifted"
+            content.body = agents.count == 1
+                ? "\(agents[0].rawValue.capitalized) is ready to use again"
+                : "\(agentNames) are ready to use again"
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(settings.rateLimitLiftedSoundName))
+
+            let request = UNNotificationRequest(
+                identifier: "magent-rate-limit-lifted-\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            )
+            UNUserNotificationCenter.current().add(request)
+        }
+
+        let soundName = settings.rateLimitLiftedSoundName
+        DispatchQueue.main.async {
+            if let sound = NSSound(named: NSSound.Name(soundName)) {
+                sound.play()
+            } else {
+                NSSound.beep()
+            }
+        }
     }
 
     private func publishRateLimitSummaryIfNeeded() async {
