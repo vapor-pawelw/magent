@@ -20,12 +20,15 @@ brew install --cask magent
 
 To update: `brew upgrade magent`
 
-> Since the app is not signed or notarized, macOS will block it on first launch.
-> Right-click the app → **Open** → click **Open** in the dialog to bypass Gatekeeper.
-
 ### GitHub Releases
 
 Download the latest `.zip` from [Releases](https://github.com/vapor-pawelw/magent/releases), unzip, and move `Magent.app` to `/Applications`.
+
+Since the app is unsigned, strip the quarantine attribute before launching:
+
+```bash
+xattr -cr /Applications/Magent.app
+```
 
 ## ✨ Features
 
