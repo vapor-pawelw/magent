@@ -31,6 +31,15 @@ enum TmuxSessionNaming {
         return parts.joined(separator: "-")
     }
 
+    static func defaultTabDisplayName(for agentType: AgentType?) -> String {
+        switch agentType {
+        case .claude: return "Claude"
+        case .codex: return "Codex"
+        case .custom: return "Custom"
+        case .none: return "Terminal"
+        }
+    }
+
     static func isMagentSession(_ name: String) -> Bool {
         name.hasPrefix("ma-") || name.hasPrefix("magent-")
     }

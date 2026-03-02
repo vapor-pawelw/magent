@@ -266,19 +266,15 @@ extension ThreadDetailViewController {
         loadingOverlay = overlay
 
         let sessionName: String
+        let settings = PersistenceService.shared.loadSettings()
+        let slug = TmuxSessionNaming.repoSlug(from:
+            settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
+        )
+        let overlaySelectedAgentType = thread.selectedAgentType ?? threadManager.effectiveAgentType(for: thread.projectId)
+        let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(TmuxSessionNaming.defaultTabDisplayName(for: overlaySelectedAgentType))
         if thread.isMain {
-            let settings = PersistenceService.shared.loadSettings()
-            let slug = TmuxSessionNaming.repoSlug(from:
-                settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
-            )
-            let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
             sessionName = thread.tmuxSessionNames.first ?? TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
         } else {
-            let settings = PersistenceService.shared.loadSettings()
-            let slug = TmuxSessionNaming.repoSlug(from:
-                settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
-            )
-            let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
             sessionName = thread.tmuxSessionNames.first ?? TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
         }
         let startTime = Date()

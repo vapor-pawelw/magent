@@ -354,8 +354,6 @@ final class ThreadManager {
         let branchName = name
         let worktreePath = "\(project.resolvedWorktreesBasePath())/\(name)"
         let repoSlug = Self.repoSlug(from: project.name)
-        let firstTabSlug = Self.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
-        let tmuxSessionName = Self.buildSessionName(repoSlug: repoSlug, threadName: name, tabSlug: firstTabSlug)
 
         // Create git worktree branching off the project's default branch
         let baseBranch = project.defaultBranch?.isEmpty == false ? project.defaultBranch : nil
@@ -387,6 +385,12 @@ final class ThreadManager {
         } else {
             selectedAgentType = nil
         }
+
+        let firstTabDisplayName = useAgentCommand
+            ? baseTabDisplayName(for: selectedAgentType)
+            : "Terminal"
+        let firstTabSlug = Self.sanitizeForTmux(firstTabDisplayName)
+        let tmuxSessionName = Self.buildSessionName(repoSlug: repoSlug, threadName: name, tabSlug: firstTabSlug)
 
         // Pre-trust the worktree directory so the selected agent doesn't show a trust dialog
         trustDirectoryIfNeeded(worktreePath, agentType: selectedAgentType)
@@ -428,9 +432,6 @@ final class ThreadManager {
             sessionAgentTypes = [:]
         }
 
-        let firstTabDisplayName = useAgentCommand
-            ? baseTabDisplayName(for: selectedAgentType)
-            : "Terminal"
         let thread = MagentThread(
             projectId: project.id,
             name: name,
@@ -484,8 +485,12 @@ final class ThreadManager {
             throw ThreadManagerError.duplicateName
         }
 
+        let settings = persistence.loadSettings()
+        let selectedAgentType = resolveAgentType(for: project.id, requestedAgentType: nil, settings: settings)
+
         let repoSlug = Self.repoSlug(from: project.name)
-        let firstTabSlug = Self.sanitizeForTmux(MagentThread.defaultDisplayName(at: 0))
+        let firstTabDisplayName = baseTabDisplayName(for: selectedAgentType)
+        let firstTabSlug = Self.sanitizeForTmux(firstTabDisplayName)
         let tmuxSessionName = Self.buildSessionName(repoSlug: repoSlug, threadName: nil, tabSlug: firstTabSlug)
 
         // Kill orphaned tmux session if it exists from a previous run
@@ -493,8 +498,6 @@ final class ThreadManager {
             try? await tmux.killSession(name: tmuxSessionName)
         }
 
-        let settings = persistence.loadSettings()
-        let selectedAgentType = resolveAgentType(for: project.id, requestedAgentType: nil, settings: settings)
         trustDirectoryIfNeeded(project.repoPath, agentType: selectedAgentType)
         let envExports = "export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
         let startCmd = agentStartCommand(
@@ -536,7 +539,7 @@ final class ThreadManager {
             isMain: true,
             selectedAgentType: selectedAgentType,
             lastSelectedTmuxSessionName: tmuxSessionName,
-            customTabNames: [tmuxSessionName: baseTabDisplayName(for: selectedAgentType)]
+            customTabNames: [tmuxSessionName: firstTabDisplayName]
         )
 
         // Insert main threads at front
@@ -732,16 +735,7 @@ final class ThreadManager {
     }
 
     private func baseTabDisplayName(for agentType: AgentType?) -> String {
-        switch agentType {
-        case .claude:
-            return "Claude"
-        case .codex:
-            return "Codex"
-        case .custom:
-            return "Custom"
-        case .none:
-            return "Terminal"
-        }
+        TmuxSessionNaming.defaultTabDisplayName(for: agentType)
     }
 
     private func uniqueTabDisplayName(baseName: String, in thread: MagentThread) -> String {
