@@ -22,6 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             return
         }
 
+        CrashReportingService.initialize()
         setupMainMenu()
         GhosttyAppManager.shared.initialize()
         let notificationCenter = UNUserNotificationCenter.current()

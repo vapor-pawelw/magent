@@ -31,6 +31,7 @@ let project = Project(
             entitlements: .file(path: "Magent/Magent.entitlements"),
             dependencies: [
                 .target(name: "GhosttyBridge"),
+                .external(name: "Sentry"),
             ],
             settings: .settings(
                 base: [
