@@ -9,6 +9,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private var ipcServer: IPCSocketServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Install crash diagnostics handler
+        NSSetUncaughtExceptionHandler { exception in
+            NSLog("[CRASH] Uncaught exception: %@", exception)
+            NSLog("[CRASH] Reason: %@", exception.reason ?? "unknown")
+            NSLog("[CRASH] Stack: %@", exception.callStackSymbols.joined(separator: "\n"))
+        }
+
         // Enforce single instance — activate existing and terminate this one
         let runningInstances = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier!)
         if let existing = runningInstances.first(where: { $0 != .current }) {

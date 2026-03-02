@@ -743,12 +743,16 @@ final class InlineDiffViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        NSLog("[DiffVC] viewDidLoad start")
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
+        NSLog("[DiffVC] calling setupUI")
         setupUI()
+        NSLog("[DiffVC] viewDidLoad done")
     }
 
     private func setupUI() {
+        NSLog("[DiffVC] setupUI: creating views")
         // Resize handle at the top (6px drag area)
         resizeHandle.wantsLayer = true
         resizeHandle.translatesAutoresizingMaskIntoConstraints = false
@@ -813,14 +817,16 @@ final class InlineDiffViewController: NSViewController {
         let panGesture = NSPanGestureRecognizer(target: self, action: #selector(handleResizeDrag(_:)))
         resizeHandle.addGestureRecognizer(panGesture)
 
-        // Setup sticky header
-        setupStickyHeader()
-
-        // Add subviews — z-order: scrollView (bottom), stickyHeader, headerBar, resizeHandle (top)
+        NSLog("[DiffVC] setupUI: adding subviews to hierarchy")
+        // Add subviews FIRST (before any cross-view constraints)
         view.addSubview(scrollView)
         view.addSubview(stickyHeader)
         view.addSubview(headerBar)
         view.addSubview(resizeHandle)
+
+        NSLog("[DiffVC] setupUI: setting up sticky header")
+        // Setup sticky header (AFTER views are in hierarchy so constraints have common ancestor)
+        setupStickyHeader()
 
         // Enable scroll observation for sticky header
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -831,6 +837,7 @@ final class InlineDiffViewController: NSViewController {
             object: scrollView.contentView
         )
 
+        NSLog("[DiffVC] setupUI: activating main constraints")
         NSLayoutConstraint.activate([
             resizeHandle.topAnchor.constraint(equalTo: view.topAnchor),
             resizeHandle.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -869,11 +876,13 @@ final class InlineDiffViewController: NSViewController {
             sectionsStackView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
             sectionsStackView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
         ])
+        NSLog("[DiffVC] setupUI: done")
     }
 
     // MARK: - Sticky Header
 
     private func setupStickyHeader() {
+        NSLog("[DiffVC] setupStickyHeader: configuring views")
         stickyHeader.wantsLayer = true
         stickyHeader.layer?.backgroundColor = NSColor(resource: .textSecondary).withAlphaComponent(0.08).cgColor
         stickyHeader.translatesAutoresizingMaskIntoConstraints = false
@@ -905,8 +914,11 @@ final class InlineDiffViewController: NSViewController {
         stickyStatsStack.setContentCompressionResistancePriority(.required, for: .horizontal)
         stickyHeader.addSubview(stickyStatsStack)
 
+        NSLog("[DiffVC] setupStickyHeader: creating constraints (stickyHeader.superview=%@, scrollView.superview=%@)",
+              String(describing: stickyHeader.superview), String(describing: scrollView.superview))
         stickyTopConstraint = stickyHeader.topAnchor.constraint(equalTo: scrollView.topAnchor)
 
+        NSLog("[DiffVC] setupStickyHeader: activating constraints")
         NSLayoutConstraint.activate([
             stickyTopConstraint,
             stickyHeader.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
