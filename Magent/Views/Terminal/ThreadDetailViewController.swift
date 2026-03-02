@@ -397,6 +397,7 @@ final class ThreadDetailViewController: NSViewController {
 
     // MARK: - Inline Diff Viewer
     private var diffVC: InlineDiffViewController?
+    private var isLoadingDiffViewer = false
     private var terminalBottomToView: NSLayoutConstraint?
     private var terminalBottomToDiff: NSLayoutConstraint?
     private var diffHeightConstraint: NSLayoutConstraint?
@@ -1191,6 +1192,10 @@ final class ThreadDetailViewController: NSViewController {
             return
         }
 
+        // Prevent duplicate creation if async load is already in progress
+        guard !isLoadingDiffViewer else { return }
+        isLoadingDiffViewer = true
+
         let baseBranch = threadManager.resolveBaseBranch(for: thread)
         let worktreePath = thread.worktreePath
         Task {
@@ -1203,13 +1208,25 @@ final class ThreadDetailViewController: NSViewController {
                 baseBranch: baseBranch
             )
 
-            guard let diffContent = await diffContentTask else { return }
+            guard let diffContent = await diffContentTask else {
+                isLoadingDiffViewer = false
+                return
+            }
             let mergeBase = await mergeBaseTask
 
             let entries = await threadManager.refreshDiffStats(for: thread.id)
             let fileCount = entries.count
 
             await MainActor.run {
+                // Double-check diffVC wasn't created while we were loading
+                guard diffVC == nil else {
+                    isLoadingDiffViewer = false
+                    if let file = scrollToFile {
+                        diffVC?.expandFile(file, collapseOthers: true)
+                    }
+                    return
+                }
+
                 let vc = InlineDiffViewController()
                 vc.onClose = { [weak self] in
                     self?.hideDiffViewer()
@@ -1245,6 +1262,7 @@ final class ThreadDetailViewController: NSViewController {
 
                 vc.setDiffContent(diffContent, fileCount: fileCount, worktreePath: worktreePath, mergeBase: mergeBase)
                 diffVC = vc
+                isLoadingDiffViewer = false
 
                 if let file = scrollToFile {
                     DispatchQueue.main.async {
@@ -1268,6 +1286,7 @@ final class ThreadDetailViewController: NSViewController {
         vc.view.removeFromSuperview()
         vc.removeFromParent()
         diffVC = nil
+        isLoadingDiffViewer = false
 
         terminalBottomToView?.isActive = true
     }

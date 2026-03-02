@@ -327,9 +327,16 @@ private final class HunkView: NSView {
     var isExpanded: Bool = true {
         didSet {
             contentTextView.isHidden = !isExpanded
-            contentHeightConstraint.isActive = isExpanded
-            expandedBottomConstraint.isActive = isExpanded
-            collapsedBottomConstraint.isActive = !isExpanded
+            // Deactivate first, then activate to avoid momentary constraint conflicts
+            if isExpanded {
+                collapsedBottomConstraint.isActive = false
+                expandedBottomConstraint.isActive = true
+                contentHeightConstraint.isActive = true
+            } else {
+                expandedBottomConstraint.isActive = false
+                contentHeightConstraint.isActive = false
+                collapsedBottomConstraint.isActive = true
+            }
             chevronImage.image = NSImage(
                 systemSymbolName: isExpanded ? "chevron.down" : "chevron.right",
                 accessibilityDescription: nil
@@ -463,8 +470,14 @@ private final class DiffSectionView: NSView {
             } else {
                 hunksStackView.isHidden = !isExpanded
             }
-            expandedBottomConstraint.isActive = isExpanded
-            collapsedBottomConstraint.isActive = !isExpanded
+            // Deactivate first, then activate to avoid momentary constraint conflicts
+            if isExpanded {
+                collapsedBottomConstraint.isActive = false
+                expandedBottomConstraint.isActive = true
+            } else {
+                expandedBottomConstraint.isActive = false
+                collapsedBottomConstraint.isActive = true
+            }
             chevronImage.image = NSImage(
                 systemSymbolName: isExpanded ? "chevron.down" : "chevron.right",
                 accessibilityDescription: nil
@@ -972,7 +985,7 @@ final class InlineDiffViewController: NSViewController {
 
     @objc private func stickyHeaderClicked() {
         guard let section = currentStickySection else { return }
-        section.isExpanded.toggle()
+        // onToggle already toggles isExpanded — don't toggle it here too
         section.onToggle?()
     }
 
