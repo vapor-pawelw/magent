@@ -308,21 +308,41 @@ final class ThreadManager {
                 }
             }
         } else {
-            // Generate a unique name that doesn't conflict with existing worktrees, branches, or tmux sessions.
-            // For each random base name, try the bare name first, then numeric suffixes (-2, -3, …).
-            // If all suffixes are taken, generate a new random base and repeat.
-            for _ in 0..<5 {
-                let baseName = NameGenerator.generate()
-                let candidates = [baseName] + (2...9).map { "\(baseName)-\($0)" }
-                for candidate in candidates {
+            // Generate a sequential Pokemon name from a persisted counter.
+            // On conflict, skip to the next Pokemon (up to 3 tries).
+            // If all 3 fail, add a numeric suffix to the last tried name.
+            let basePath = project.resolvedWorktreesBasePath()
+            var cache = persistence.loadWorktreeCache(worktreesBasePath: basePath)
+            var counter = cache.nameCounter
+            let pokemonCount = NameGenerator.pokemonNames.count
+            var conflictStreak = 0
+
+            for _ in 0..<3 {
+                let candidate = NameGenerator.generate(counter: counter)
+                counter = (counter + 1) % pokemonCount
+                if try await isNameAvailable(candidate, project: project) {
+                    name = candidate
+                    foundUnique = true
+                    break
+                }
+                conflictStreak += 1
+            }
+
+            // All 3 sequential names conflicted — use the last name with a numeric suffix.
+            if !foundUnique {
+                let lastBase = NameGenerator.generate(counter: (counter - 1 + pokemonCount) % pokemonCount)
+                for suffix in 2...99 {
+                    let candidate = "\(lastBase)-\(suffix)"
                     if try await isNameAvailable(candidate, project: project) {
                         name = candidate
                         foundUnique = true
                         break
                     }
                 }
-                if foundUnique { break }
             }
+
+            cache.nameCounter = counter
+            persistence.saveWorktreeCache(cache, worktreesBasePath: basePath)
         }
 
         guard foundUnique else {

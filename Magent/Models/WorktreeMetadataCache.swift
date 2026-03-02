@@ -7,8 +7,10 @@ struct WorktreeMetadata: Codable {
 
 struct WorktreeMetadataCache: Codable {
     var worktrees: [String: WorktreeMetadata]
+    var nameCounter: Int
 
-    init(worktrees: [String: WorktreeMetadata] = [:]) {
+    init(worktrees: [String: WorktreeMetadata] = [:], nameCounter: Int = 0) {
         self.worktrees = worktrees
+        self.nameCounter = nameCounter
     }
 }
