@@ -1080,6 +1080,9 @@ extension ThreadManager {
             || normalizedRecentTail.contains("rate limited")
             || normalizedRecentTail.contains("hit your usage limit")
             || normalizedRecentTail.contains("hit your rate limit")
+            || normalizedRecentTail.contains("you've hit your limit")
+            || normalizedRecentTail.contains("you’ve hit your limit")
+            || (normalizedRecentTail.contains("hit your limit") && normalizedRecentTail.contains("reset"))
             || normalizedRecentTail.contains("you've been rate")
 
         // Weak indicators — "rate limit" / "usage limit" can appear in informational
@@ -1100,7 +1103,8 @@ extension ThreadManager {
 
         let focusText = rateLimitFocusText(from: tail)
         let relativeResetAt = parseRelativeResetDate(from: focusText, now: now)
-        let resetAt = relativeResetAt ?? parseAbsoluteResetDate(from: focusText, now: now)
+        let explicitResetAt = parseExplicitResetDate(from: focusText, now: now)
+        let resetAt = relativeResetAt ?? explicitResetAt ?? parseAbsoluteResetDate(from: focusText, now: now)
 
         let resetDescription = extractRateLimitResetDescription(from: focusText)
         let fingerprint = rateLimitFingerprint(from: focusText, fallback: resetDescription)
@@ -1201,6 +1205,151 @@ extension ThreadManager {
         }
 
         return matchedAny ? seconds : nil
+    }
+
+    /// Parses explicit reset times like:
+    /// "You've hit your limit · resets 4pm (Europe/Warsaw)".
+    /// If no day token is provided, the reset is assumed to be today in the parsed timezone.
+    private func parseExplicitResetDate(from text: String, now: Date) -> Date? {
+        let pattern = #"resets?\s+(?:at\s+)?(?:(today|tomorrow|mon(?:day)?|tues?(?:day)?|wed(?:nesday)?|thurs?(?:day)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\s+)?(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?)(?:\s*\(([^)\n]+)\))?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = regex.matches(in: text, options: [], range: range)
+        guard !matches.isEmpty else { return nil }
+
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let clockRange = Range(match.range(at: 2), in: text) else {
+                continue
+            }
+
+            let dayToken: String? = {
+                guard let range = Range(match.range(at: 1), in: text) else { return nil }
+                return String(text[range])
+            }()
+            let timezoneToken: String? = {
+                guard match.numberOfRanges >= 4,
+                      let range = Range(match.range(at: 3), in: text) else { return nil }
+                return String(text[range])
+            }()
+
+            guard let clock = parseResetClockComponents(from: String(text[clockRange])) else { continue }
+
+            let timezone = parseResetTimeZone(from: timezoneToken) ?? .current
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timezone
+
+            let dayOffset = parseResetDayOffset(from: dayToken, now: now, calendar: calendar)
+            var dateComponents = calendar.dateComponents([.year, .month, .day], from: now)
+            dateComponents.timeZone = timezone
+            dateComponents.hour = clock.hour
+            dateComponents.minute = clock.minute
+            dateComponents.second = 0
+
+            guard let baseDate = calendar.date(from: dateComponents) else { continue }
+            if dayOffset == 0 {
+                return baseDate
+            }
+            if let shifted = calendar.date(byAdding: .day, value: dayOffset, to: baseDate) {
+                return shifted
+            }
+        }
+
+        return nil
+    }
+
+    private func parseResetClockComponents(from text: String) -> (hour: Int, minute: Int)? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pattern = #"^(\d{1,2})(?::([0-5]\d))?\s*([ap]\.?m\.?)?$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+        let range = NSRange(trimmed.startIndex..<trimmed.endIndex, in: trimmed)
+        guard let match = regex.firstMatch(in: trimmed, options: [], range: range),
+              match.numberOfRanges >= 4,
+              let hourRange = Range(match.range(at: 1), in: trimmed),
+              let hourValue = Int(trimmed[hourRange]) else {
+            return nil
+        }
+
+        let minuteValue: Int = {
+            guard let minuteRange = Range(match.range(at: 2), in: trimmed),
+                  let minute = Int(trimmed[minuteRange]) else {
+                return 0
+            }
+            return minute
+        }()
+
+        let meridiem = Range(match.range(at: 3), in: trimmed).map { String(trimmed[$0]) }
+        if let meridiem {
+            let normalized = meridiem
+                .lowercased()
+                .replacingOccurrences(of: ".", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard (1...12).contains(hourValue) else { return nil }
+            if normalized.hasPrefix("p") {
+                return (hour: hourValue == 12 ? 12 : hourValue + 12, minute: minuteValue)
+            }
+            if normalized.hasPrefix("a") {
+                return (hour: hourValue == 12 ? 0 : hourValue, minute: minuteValue)
+            }
+            return nil
+        }
+
+        guard (0...23).contains(hourValue) else { return nil }
+        return (hour: hourValue, minute: minuteValue)
+    }
+
+    private func parseResetTimeZone(from token: String?) -> TimeZone? {
+        guard let token else { return nil }
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let tz = TimeZone(identifier: trimmed) {
+            return tz
+        }
+
+        let underscored = trimmed.replacingOccurrences(of: " ", with: "_")
+        if let tz = TimeZone(identifier: underscored) {
+            return tz
+        }
+
+        return TimeZone(abbreviation: trimmed.uppercased())
+    }
+
+    private func parseResetDayOffset(from token: String?, now: Date, calendar: Calendar) -> Int {
+        guard let token else { return 0 }
+        let normalized = token
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if normalized == "today" {
+            return 0
+        }
+        if normalized == "tomorrow" {
+            return 1
+        }
+        guard let targetWeekday = weekdayIndex(forResetDayToken: normalized) else {
+            // Unknown day token: keep today semantics.
+            return 0
+        }
+
+        let currentWeekday = calendar.component(.weekday, from: now)
+        return (targetWeekday - currentWeekday + 7) % 7
+    }
+
+    private func weekdayIndex(forResetDayToken token: String) -> Int? {
+        if token.hasPrefix("sun") { return 1 }
+        if token.hasPrefix("mon") { return 2 }
+        if token.hasPrefix("tue") { return 3 }
+        if token.hasPrefix("wed") { return 4 }
+        if token.hasPrefix("thu") { return 5 }
+        if token.hasPrefix("fri") { return 6 }
+        if token.hasPrefix("sat") { return 7 }
+        return nil
     }
 
     private func parseAbsoluteResetDate(from text: String, now: Date) -> Date? {
