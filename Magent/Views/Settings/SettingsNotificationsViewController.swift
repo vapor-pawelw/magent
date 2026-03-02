@@ -12,7 +12,6 @@ final class SettingsNotificationsViewController: NSViewController {
     private var autoReorderOnCompletionCheckbox: NSButton!
     private var soundPickerPopup: NSPopUpButton!
     private var soundPickerRow: NSStackView!
-    private var rateLimitDetectionCheckbox: NSButton!
     private var rateLimitNotifyCheckbox: NSButton!
     private var rateLimitSoundPickerPopup: NSPopUpButton!
     private var rateLimitSoundPickerRow: NSStackView!
@@ -153,15 +152,6 @@ final class SettingsNotificationsViewController: NSViewController {
         soundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
         behaviorSection.addArrangedSubview(soundPickerRow)
 
-        // Rate limit detection
-        rateLimitDetectionCheckbox = NSButton(
-            checkboxWithTitle: "Detect agent rate limits",
-            target: self,
-            action: #selector(rateLimitDetectionToggled)
-        )
-        rateLimitDetectionCheckbox.state = settings.enableRateLimitDetection ? .on : .off
-        behaviorSection.addArrangedSubview(rateLimitDetectionCheckbox)
-
         // Rate limit lifted notification
         rateLimitNotifyCheckbox = NSButton(
             checkboxWithTitle: "Notify when rate limit is lifted",
@@ -169,7 +159,6 @@ final class SettingsNotificationsViewController: NSViewController {
             action: #selector(rateLimitNotifyToggled)
         )
         rateLimitNotifyCheckbox.state = settings.notifyOnRateLimitLifted ? .on : .off
-        rateLimitNotifyCheckbox.isHidden = !settings.enableRateLimitDetection
         behaviorSection.addArrangedSubview(rateLimitNotifyCheckbox)
 
         // Rate limit sound picker row
@@ -190,7 +179,7 @@ final class SettingsNotificationsViewController: NSViewController {
         populateRateLimitSoundPicker()
         rateLimitSoundPickerRow.addArrangedSubview(rateLimitSoundPickerPopup)
 
-        rateLimitSoundPickerRow.isHidden = !settings.enableRateLimitDetection || !settings.notifyOnRateLimitLifted
+        rateLimitSoundPickerRow.isHidden = !settings.notifyOnRateLimitLifted
         rateLimitSoundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
         behaviorSection.addArrangedSubview(rateLimitSoundPickerRow)
 
@@ -285,21 +274,9 @@ final class SettingsNotificationsViewController: NSViewController {
         }
     }
 
-    @objc private func rateLimitDetectionToggled() {
-        settings.enableRateLimitDetection = rateLimitDetectionCheckbox.state == .on
-        rateLimitNotifyCheckbox.isHidden = !settings.enableRateLimitDetection
-        rateLimitSoundPickerRow.isHidden = !settings.enableRateLimitDetection || !settings.notifyOnRateLimitLifted
-        if !settings.enableRateLimitDetection {
-            soundPreviewPlayer?.stop()
-            soundPreviewPlayer = nil
-        }
-        try? persistence.saveSettings(settings)
-        ThreadManager.shared.applyRateLimitDetectionSettingChange()
-    }
-
     @objc private func rateLimitNotifyToggled() {
         settings.notifyOnRateLimitLifted = rateLimitNotifyCheckbox.state == .on
-        rateLimitSoundPickerRow.isHidden = !settings.enableRateLimitDetection || !settings.notifyOnRateLimitLifted
+        rateLimitSoundPickerRow.isHidden = !settings.notifyOnRateLimitLifted
         if !settings.notifyOnRateLimitLifted {
             soundPreviewPlayer?.stop()
             soundPreviewPlayer = nil
@@ -352,13 +329,11 @@ final class SettingsNotificationsViewController: NSViewController {
                 self.showBannersCheckbox.isEnabled = authorized
                 self.completionSoundCheckbox.isEnabled = authorized
                 self.soundPickerPopup.isEnabled = authorized
-                self.rateLimitDetectionCheckbox.isEnabled = authorized
                 self.rateLimitNotifyCheckbox.isEnabled = authorized
                 self.rateLimitSoundPickerPopup.isEnabled = authorized
                 self.showBannersCheckbox.alphaValue = authorized ? 1.0 : 0.5
                 self.completionSoundCheckbox.alphaValue = authorized ? 1.0 : 0.5
                 self.soundPickerRow.alphaValue = authorized ? 1.0 : 0.5
-                self.rateLimitDetectionCheckbox.alphaValue = authorized ? 1.0 : 0.5
                 self.rateLimitNotifyCheckbox.alphaValue = authorized ? 1.0 : 0.5
                 self.rateLimitSoundPickerRow.alphaValue = authorized ? 1.0 : 0.5
             }

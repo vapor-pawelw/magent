@@ -14,6 +14,7 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     private var skipPermissionsCheckbox: NSButton!
     private var sandboxCheckbox: NSButton!
     private var ipcInjectionCheckbox: NSButton!
+    private var rateLimitDetectionCheckbox: NSButton!
     private var fdaStatusLabel: NSTextField!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
@@ -164,6 +165,20 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         ipcDesc.textColor = NSColor(resource: .textSecondary)
         permissionsSection.addArrangedSubview(ipcInjectionCheckbox)
         permissionsSection.addArrangedSubview(ipcDesc)
+
+        rateLimitDetectionCheckbox = NSButton(
+            checkboxWithTitle: "Detect agent rate limits",
+            target: self,
+            action: #selector(rateLimitDetectionToggled)
+        )
+        rateLimitDetectionCheckbox.state = settings.enableRateLimitDetection ? .on : .off
+        let rateLimitDesc = NSTextField(
+            wrappingLabelWithString: "Periodically scan terminal output for rate-limit messages and show indicators in the sidebar."
+        )
+        rateLimitDesc.font = .systemFont(ofSize: 11)
+        rateLimitDesc.textColor = NSColor(resource: .textSecondary)
+        permissionsSection.addArrangedSubview(rateLimitDetectionCheckbox)
+        permissionsSection.addArrangedSubview(rateLimitDesc)
 
         permissionsSection.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(permissionsSection)
@@ -339,6 +354,12 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         settings.agentSandboxEnabled = sandboxCheckbox.state == .on
         settings.ipcPromptInjectionEnabled = ipcInjectionCheckbox.state == .on
         try? persistence.saveSettings(settings)
+    }
+
+    @objc private func rateLimitDetectionToggled() {
+        settings.enableRateLimitDetection = rateLimitDetectionCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+        ThreadManager.shared.applyRateLimitDetectionSettingChange()
     }
 
     @objc private func defaultAgentChanged() {
