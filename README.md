@@ -24,12 +24,8 @@ To update: `brew upgrade magent`
 
 Download the latest `.zip` from [Releases](https://github.com/vapor-pawelw/magent/releases), unzip, and move `Magent.app` to `/Applications`.
 
-Since the app is unsigned, remove the quarantine and provenance attributes before launching:
-
-```bash
-sudo xattr -rd com.apple.provenance /Applications/Magent.app
-xattr -cr /Applications/Magent.app
-```
+> On first launch, macOS will show a Gatekeeper warning since the app is not notarized.
+> Right-click the app → **Open** → click **Open** in the dialog to allow it.
 
 ## ✨ Features
 
