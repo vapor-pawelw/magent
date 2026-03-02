@@ -869,6 +869,7 @@ extension ThreadManager {
         var info: AgentRateLimitInfo
         var fingerprint: String
         var hasRelativeReset: Bool
+        var hasExplicitDateAnchor: Bool
     }
 
     /// Called when the rate-limit detection setting is toggled in Settings.
@@ -878,24 +879,35 @@ extension ThreadManager {
     }
 
     private func checkForRateLimitedSessions() async {
-        guard persistence.loadSettings().enableRateLimitDetection else {
-            // Clear any existing rate-limit state so sidebar indicators disappear.
+        let detectionEnabled = persistence.loadSettings().enableRateLimitDetection
+        if !detectionEnabled {
+            // Clear any existing rate-limit state so sidebar indicators disappear,
+            // but continue scanning panes below to keep the fingerprint cache warm.
             var changed = false
             for i in threads.indices where !threads[i].rateLimitedSessions.isEmpty {
                 threads[i].rateLimitedSessions.removeAll()
                 changed = true
             }
-            if changed {
+            let hadGlobal = !globalAgentRateLimits.isEmpty
+            globalAgentRateLimits.removeAll()
+            if changed || hadGlobal {
+                lastPublishedRateLimitSummary = nil
                 await MainActor.run {
                     delegate?.threadManager(self, didUpdateThreads: threads)
                     NotificationCenter.default.post(name: .magentAgentRateLimitChanged, object: nil)
+                    NotificationCenter.default.post(name: .magentGlobalRateLimitSummaryChanged, object: nil)
                 }
             }
-            return
         }
         let now = Date()
         var changedThreadIds = Set<UUID>()
         var didChangeGlobalCache = pruneExpiredGlobalRateLimits(now: now, changedThreadIds: &changedThreadIds)
+
+        // Lazy-load the persisted fingerprint cache on first use.
+        if !rateLimitCacheLoaded {
+            rateLimitFingerprintCache = persistence.loadRateLimitCache()
+            rateLimitCacheLoaded = true
+        }
 
         for i in threads.indices {
             guard !threads[i].isArchived else { continue }
@@ -905,7 +917,6 @@ extension ThreadManager {
 
             for sessionName in thread.tmuxSessionNames {
                 guard thread.agentTmuxSessions.contains(sessionName) else {
-                    suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                     if updatedRateLimits.removeValue(forKey: sessionName) != nil {
                         changedThreadIds.insert(thread.id)
                     }
@@ -914,61 +925,71 @@ extension ThreadManager {
 
                 guard let sessionAgent = agentType(for: thread, sessionName: sessionName),
                       isRateLimitTrackable(agent: sessionAgent) else {
-                    suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                     if updatedRateLimits.removeValue(forKey: sessionName) != nil {
                         changedThreadIds.insert(thread.id)
                     }
                     continue
                 }
 
-                let cachedGlobalInfo = activeGlobalRateLimit(for: sessionAgent, now: now)
-                if let cachedGlobalInfo, updatedRateLimits[sessionName] != cachedGlobalInfo {
-                    updatedRateLimits[sessionName] = cachedGlobalInfo
-                    changedThreadIds.insert(thread.id)
+                if detectionEnabled {
+                    let cachedGlobalInfo = activeGlobalRateLimit(for: sessionAgent, now: now)
+                    if let cachedGlobalInfo, updatedRateLimits[sessionName] != cachedGlobalInfo {
+                        updatedRateLimits[sessionName] = cachedGlobalInfo
+                        changedThreadIds.insert(thread.id)
+                    }
                 }
 
                 guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
                       let detection = rateLimitDetection(from: paneContent, now: now) else {
-                    suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
-                    if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                    if detectionEnabled, updatedRateLimits.removeValue(forKey: sessionName) != nil {
                         changedThreadIds.insert(thread.id)
                     }
                     continue
                 }
 
-                if let suppressedFingerprint = suppressedExpiredRateLimitFingerprints[sessionName] {
-                    if suppressedFingerprint == detection.fingerprint {
-                        if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                // Check persisted fingerprint cache: if we've seen this exact text before,
+                // use the concrete resetAt from first detection instead of re-parsing.
+                if let cachedResetAt = rateLimitFingerprintCache[detection.fingerprint] {
+                    if cachedResetAt <= now {
+                        // Already expired — skip detection entirely.
+                        if detectionEnabled, updatedRateLimits.removeValue(forKey: sessionName) != nil {
                             changedThreadIds.insert(thread.id)
                         }
                         continue
                     }
-                    suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
-                }
+                    // Fingerprint already cached with valid time — update visible state only.
+                    guard detectionEnabled else { continue }
+                    var info = detection.info
+                    info.resetAt = cachedResetAt
 
-                var info = detection.info
-
-                // If the visible message hasn't changed, keep the previously parsed reset date.
-                // This avoids drifting reset times for static phrases like "try again in 35m".
-                if let existing = updatedRateLimits[sessionName],
-                   existing.resetDescription == info.resetDescription,
-                   let existingResetAt = existing.resetAt {
-                    if existingResetAt > now {
-                        info.resetAt = existingResetAt
-                    } else if detection.hasRelativeReset {
-                        // Static relative text can remain visible after expiry (e.g. "try again in 35m").
-                        // Suppress re-detecting the same stale message until pane content changes.
-                        suppressedExpiredRateLimitFingerprints[sessionName] = detection.fingerprint
-                        if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
-                            changedThreadIds.insert(thread.id)
-                        }
-                        continue
+                    // Preserve original detectedAt from in-memory state if available.
+                    if let existing = updatedRateLimits[sessionName] {
+                        info.detectedAt = existing.detectedAt
                     }
+
+                    if updatedRateLimits[sessionName] != info {
+                        updatedRateLimits[sessionName] = info
+                        changedThreadIds.insert(thread.id)
+                    }
+                    if globalAgentRateLimits[sessionAgent] != info {
+                        globalAgentRateLimits[sessionAgent] = info
+                        didChangeGlobalCache = true
+                    }
+                    continue
                 }
 
-                if info.resetAt.map({ $0 <= now }) ?? false {
-                    suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
-                    if cachedGlobalInfo == nil, updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                // First time seeing this fingerprint — anchor the resetAt as a concrete date.
+                // Always cache, even when detection is disabled, so re-enabling works correctly.
+                rateLimitFingerprintCache[detection.fingerprint] = detection.info.resetAt
+                rateLimitCacheDirty = true
+
+                guard detectionEnabled else { continue }
+
+                let info = detection.info
+
+                // Discard if reset time is already in the past (already cached above).
+                if info.resetAt <= now {
+                    if updatedRateLimits.removeValue(forKey: sessionName) != nil {
                         changedThreadIds.insert(thread.id)
                     }
                     continue
@@ -986,7 +1007,6 @@ extension ThreadManager {
 
             for sessionName in Array(updatedRateLimits.keys) where !validSessions.contains(sessionName) {
                 updatedRateLimits.removeValue(forKey: sessionName)
-                suppressedExpiredRateLimitFingerprints.removeValue(forKey: sessionName)
                 changedThreadIds.insert(thread.id)
             }
 
@@ -1010,10 +1030,15 @@ extension ThreadManager {
         }
 
         if didChangeGlobalCache {
-            // Keep last-published summary in sync with explicit cache changes.
             lastPublishedRateLimitSummary = nil
         }
         await publishRateLimitSummaryIfNeeded()
+
+        // Persist fingerprint cache if it changed.
+        if rateLimitCacheDirty {
+            rateLimitCacheDirty = false
+            persistence.saveRateLimitCache(rateLimitFingerprintCache)
+        }
     }
 
     private func isRateLimitTrackable(agent: AgentType) -> Bool {
@@ -1022,16 +1047,14 @@ extension ThreadManager {
 
     private func activeGlobalRateLimit(for agent: AgentType, now: Date) -> AgentRateLimitInfo? {
         guard let info = globalAgentRateLimits[agent] else { return nil }
-        if let resetAt = info.resetAt, resetAt <= now {
-            return nil
-        }
+        guard info.resetAt > now else { return nil }
         return info
     }
 
     @discardableResult
     private func pruneExpiredGlobalRateLimits(now: Date, changedThreadIds: inout Set<UUID>) -> Bool {
         let expiredAgents = globalAgentRateLimits.compactMap { entry -> AgentType? in
-            guard let resetAt = entry.value.resetAt, resetAt <= now else { return nil }
+            guard entry.value.resetAt <= now else { return nil }
             return entry.key
         }
         guard !expiredAgents.isEmpty else { return false }
@@ -1164,15 +1187,39 @@ extension ThreadManager {
 
         let focusText = rateLimitFocusText(from: tail)
         let relativeResetAt = parseRelativeResetDate(from: focusText, now: now)
-        let explicitResetAt = parseExplicitResetDate(from: focusText, now: now)
-        let resetAt = relativeResetAt ?? explicitResetAt ?? parseAbsoluteResetDate(from: focusText, now: now)
+        let explicitResult = parseExplicitResetDate(from: focusText, now: now)
+        let absoluteResetAt = parseAbsoluteResetDate(from: focusText, now: now)
+
+        let resetAt: Date
+        let hasExplicitDateAnchor: Bool
+        if let rel = relativeResetAt {
+            resetAt = rel
+            hasExplicitDateAnchor = true // relative durations are anchored to "now"
+        } else if let exp = explicitResult {
+            resetAt = exp.date
+            hasExplicitDateAnchor = exp.hasDayToken
+        } else if let abs = absoluteResetAt {
+            resetAt = abs
+            hasExplicitDateAnchor = focusTextHasDateMarkers(focusText)
+        } else {
+            // No parseable reset time — skip detection entirely (resetAt is mandatory).
+            return nil
+        }
+
+        // Cap bare-time resets at 8 hours to avoid stale overnight detections
+        // (e.g. "resets 4pm" parsed as today's 4pm when the message is from yesterday).
+        let maxBareTimeDuration: TimeInterval = 8 * 3600
+        if !hasExplicitDateAnchor && resetAt > now.addingTimeInterval(maxBareTimeDuration) {
+            return nil
+        }
 
         let resetDescription = extractRateLimitResetDescription(from: focusText)
         let fingerprint = rateLimitFingerprint(from: focusText, fallback: resetDescription)
         return RateLimitDetection(
-            info: AgentRateLimitInfo(resetAt: resetAt, resetDescription: resetDescription),
+            info: AgentRateLimitInfo(resetAt: resetAt, resetDescription: resetDescription, detectedAt: now),
             fingerprint: fingerprint,
-            hasRelativeReset: relativeResetAt != nil
+            hasRelativeReset: relativeResetAt != nil,
+            hasExplicitDateAnchor: hasExplicitDateAnchor
         )
     }
 
@@ -1271,7 +1318,18 @@ extension ThreadManager {
     /// Parses explicit reset times like:
     /// "You've hit your limit · resets 4pm (Europe/Warsaw)".
     /// If no day token is provided, the reset is assumed to be today in the parsed timezone.
-    private func parseExplicitResetDate(from text: String, now: Date) -> Date? {
+    private func focusTextHasDateMarkers(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        let monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+        if monthNames.contains(where: { lower.contains($0) }) { return true }
+        if lower.range(of: #"\b20\d{2}\b"#, options: .regularExpression) != nil { return true }
+        let dayNames = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+                        "tomorrow"]
+        if dayNames.contains(where: { lower.contains($0) }) { return true }
+        return false
+    }
+
+    private func parseExplicitResetDate(from text: String, now: Date) -> (date: Date, hasDayToken: Bool)? {
         let pattern = #"resets?\s+(?:at\s+)?(?:(today|tomorrow|mon(?:day)?|tues?(?:day)?|wed(?:nesday)?|thurs?(?:day)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\s+)?(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?)(?:\s*\(([^)\n]+)\))?"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
             return nil
@@ -1311,11 +1369,12 @@ extension ThreadManager {
             dateComponents.second = 0
 
             guard let baseDate = calendar.date(from: dateComponents) else { continue }
+            let hasDayToken = dayToken != nil
             if dayOffset == 0 {
-                return baseDate
+                return (date: baseDate, hasDayToken: hasDayToken)
             }
             if let shifted = calendar.date(byAdding: .day, value: dayOffset, to: baseDate) {
-                return shifted
+                return (date: shifted, hasDayToken: hasDayToken)
             }
         }
 

@@ -134,11 +134,8 @@ extension ThreadManager {
         let ordered: [AgentType] = [.claude, .codex]
         let entries = ordered.compactMap { agent -> String? in
             guard let info = globalAgentRateLimits[agent] else { return nil }
-            if let resetAt = info.resetAt {
-                guard resetAt > now else { return nil }
-                return "\(agent.displayName): \(countdownText(until: resetAt, now: now))"
-            }
-            return "\(agent.displayName): limited"
+            guard info.resetAt > now else { return nil }
+            return "\(agent.displayName): \(countdownText(until: info.resetAt, now: now))"
         }
 
         guard !entries.isEmpty else { return nil }

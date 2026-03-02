@@ -91,4 +91,29 @@ final class PersistenceService {
         guard cache.worktrees.count != before else { return }
         saveWorktreeCache(cache, worktreesBasePath: worktreesBasePath)
     }
+
+    // MARK: - Rate Limit Fingerprint Cache
+
+    private var rateLimitCacheURL: URL {
+        appSupportURL.appendingPathComponent("rate-limit-cache.json")
+    }
+
+    /// Loads persisted rate limit fingerprints (fingerprint → concrete resetAt).
+    /// Automatically prunes expired entries on load.
+    func loadRateLimitCache() -> [String: Date] {
+        let url = rateLimitCacheURL
+        guard let data = try? Data(contentsOf: url) else { return [:] }
+        let cache = (try? decoder.decode([String: Date].self, from: data)) ?? [:]
+        let now = Date()
+        let pruned = cache.filter { $0.value > now }
+        if pruned.count != cache.count {
+            saveRateLimitCache(pruned)
+        }
+        return pruned
+    }
+
+    func saveRateLimitCache(_ cache: [String: Date]) {
+        guard let data = try? encoder.encode(cache) else { return }
+        try? data.write(to: rateLimitCacheURL, options: .atomic)
+    }
 }

@@ -6,10 +6,7 @@ extension ThreadManager {
 
     private func isAgentCurrentlyRateLimited(_ agent: AgentType, now: Date = Date()) -> Bool {
         guard let info = globalAgentRateLimits[agent] else { return false }
-        if let resetAt = info.resetAt {
-            return resetAt > now
-        }
-        return true
+        return info.resetAt > now
     }
 
     private func slugGenerationAgentOrder(preferred preferredAgent: AgentType?, projectId: UUID?) -> (allTrackable: [AgentType], available: [AgentType]) {

@@ -1,8 +1,9 @@
 import Foundation
 
 nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
-    var resetAt: Date?
+    var resetAt: Date
     var resetDescription: String?
+    var detectedAt: Date
 }
 
 nonisolated struct PullRequestInfo: Sendable, Equatable {
@@ -104,14 +105,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     }
 
     var rateLimitLiftDescription: String? {
-        guard isBlockedByRateLimit else { return nil }
-        if let latest = rateLimitLiftAt {
-            return "Resets \(latest.formatted(date: .abbreviated, time: .shortened))"
-        }
-        let descriptions = agentTmuxSessions.compactMap { rateLimitedSessions[$0]?.resetDescription }
-        let cleaned = descriptions.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        guard !cleaned.isEmpty else { return nil }
-        return cleaned.joined(separator: " · ")
+        guard let latest = rateLimitLiftAt else { return nil }
+        return "Resets \(latest.formatted(date: .abbreviated, time: .shortened))"
     }
 
     func displayName(for sessionName: String, at index: Int) -> String {
