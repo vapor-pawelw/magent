@@ -256,14 +256,17 @@ final class DiffPanelView: NSView {
     // MARK: - File Selection
 
     private func selectFile(_ filePath: String) {
+        NSLog("[DiffPanel] selectFile: %@", filePath)
         selectedFilePath = filePath
         updateRowSelectionAppearance()
         window?.makeFirstResponder(self)
+        NSLog("[DiffPanel] posting magentShowDiffViewer notification")
         NotificationCenter.default.post(
             name: .magentShowDiffViewer,
             object: nil,
             userInfo: ["filePath": filePath]
         )
+        NSLog("[DiffPanel] notification posted, returning")
     }
 
     private func deselectFile() {
