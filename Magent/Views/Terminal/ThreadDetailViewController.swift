@@ -737,16 +737,18 @@ final class ThreadDetailViewController: NSViewController {
         }
         let envExports = envParts.joined(separator: " && ")
 
+        let envExportsWithSocket = envExports + " && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
+
         let startCmd: String
         if isAgentSession, let selectedAgentType {
-            let unset = selectedAgentType == .claude ? " && unset CLAUDECODE" : ""
-            var command = settings.command(for: selectedAgentType)
-            if selectedAgentType == .claude {
-                command += " --settings /tmp/magent-claude-hooks.json"
-            }
-            startCmd = "\(envExports) && cd \(wd)\(unset) && \(command); exec $SHELL -l"
+            startCmd = threadManager.agentStartCommand(
+                settings: settings,
+                agentType: selectedAgentType,
+                envExports: envExportsWithSocket,
+                workingDirectory: wd
+            )
         } else {
-            startCmd = "\(envExports) && cd \(wd) && exec $SHELL -l"
+            startCmd = "\(envExportsWithSocket) && cd \(wd) && exec $SHELL -l"
         }
 
         if isAgentSession {

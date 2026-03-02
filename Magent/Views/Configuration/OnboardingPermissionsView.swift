@@ -23,6 +23,12 @@ final class OnboardingPermissionsView: NSView {
     private let fdaStatusLabel = NSTextField(labelWithString: "")
     private var appActiveObserver: NSObjectProtocol?
 
+    override var isHidden: Bool {
+        didSet {
+            if !isHidden { refreshFDAStatus() }
+        }
+    }
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         setupUI()

@@ -32,6 +32,12 @@ final class OnboardingNotificationsView: NSView {
     private var appActiveObserver: NSObjectProtocol?
     private var soundPreviewPlayer: NSSound?
 
+    override var isHidden: Bool {
+        didSet {
+            if !isHidden { refreshNotificationStatus() }
+        }
+    }
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         setupUI()

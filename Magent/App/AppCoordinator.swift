@@ -77,8 +77,7 @@ final class AppCoordinator {
 
     func presentConfiguration(over viewController: NSViewController) {
         let configVC = ConfigurationViewController()
-        configVC.onComplete = { [weak viewController] in
-            viewController?.dismiss(nil)
+        configVC.onComplete = {
             Task {
                 await ThreadManager.shared.restoreThreads()
                 ThreadManager.shared.startSessionMonitor()

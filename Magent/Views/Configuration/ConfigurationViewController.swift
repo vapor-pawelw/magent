@@ -49,7 +49,7 @@ final class ConfigurationViewController: NSViewController {
         contentStack.orientation = .vertical
         contentStack.spacing = 24
         contentStack.translatesAutoresizingMaskIntoConstraints = false
-        contentStack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
+        contentStack.edgeInsets = NSEdgeInsets(top: 24, left: 0, bottom: 0, right: 0)
 
         contentStack.addArrangedSubview(dependencyCheckView)
         contentStack.addArrangedSubview(agentSelectionView)
@@ -67,8 +67,8 @@ final class ConfigurationViewController: NSViewController {
 
         NSLayoutConstraint.activate([
             contentStack.topAnchor.constraint(equalTo: view.topAnchor),
-            contentStack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            contentStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            contentStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            contentStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
             contentStack.bottomAnchor.constraint(equalTo: buttonBar.topAnchor, constant: -12),
 
             buttonBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
@@ -161,6 +161,7 @@ final class ConfigurationViewController: NSViewController {
         settings.isConfigured = true
         try? persistence.saveSettings(settings)
         onComplete?()
+        dismiss(nil)
     }
 
     private func checkDependencies() {
@@ -313,7 +314,7 @@ final class AddProjectView: NSView {
 
         let stack = NSStackView(views: [titleLabel, addButton, projectsStack])
         stack.orientation = .vertical
-        stack.alignment = .leading
+        stack.alignment = .centerX
         stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
 
