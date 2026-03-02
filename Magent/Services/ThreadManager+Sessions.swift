@@ -832,7 +832,7 @@ extension ThreadManager {
         // text without it. So "esc to interrupt" is a reliable busy signal
         // regardless of bypass mode.
         let hasBusyIndicator = nonEmpty.contains(where: {
-            $0.contains("esc to interrupt")
+            $0.localizedCaseInsensitiveContains("esc to interrupt")
         })
         if hasBusyIndicator {
             return false
