@@ -1,27 +1,5 @@
 import Cocoa
 
-// MARK: - AlwaysEmphasizedRowView
-
-/// Row view that always draws its selection in the emphasized (active) style,
-/// even when the outline view is not the first responder.
-final class AlwaysEmphasizedRowView: NSTableRowView {
-    var showsCompletionHighlight = false {
-        didSet { needsDisplay = true }
-    }
-
-    override var isEmphasized: Bool {
-        get { true }
-        set {}
-    }
-
-    override func drawBackground(in dirtyRect: NSRect) {
-        super.drawBackground(in: dirtyRect)
-        guard showsCompletionHighlight, !isSelected else { return }
-        NSColor.controlAccentColor.withAlphaComponent(0.14).setFill()
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 1), xRadius: 6, yRadius: 6).fill()
-    }
-}
-
 @MainActor
 protocol ThreadListDelegate: AnyObject {
     func threadList(_ controller: ThreadListViewController, didSelectThread thread: MagentThread)
@@ -69,36 +47,6 @@ final class ThreadListViewController: NSViewController {
     // Level 2: MagentThread (regular threads under a section)
 
     var sidebarProjects: [SidebarProject] = []
-
-    class SidebarProject {
-        let projectId: UUID
-        let name: String
-        let isPinned: Bool
-        var children: [Any] // Mix of MagentThread (main) and SidebarSection
-
-        init(projectId: UUID, name: String, isPinned: Bool, children: [Any]) {
-            self.projectId = projectId
-            self.name = name
-            self.isPinned = isPinned
-            self.children = children
-        }
-    }
-
-    class SidebarSection {
-        let projectId: UUID
-        let sectionId: UUID
-        let name: String
-        let color: NSColor
-        var threads: [MagentThread]
-
-        init(projectId: UUID, sectionId: UUID, name: String, color: NSColor, threads: [MagentThread]) {
-            self.projectId = projectId
-            self.sectionId = sectionId
-            self.name = name
-            self.color = color
-            self.threads = threads
-        }
-    }
 
     // MARK: - Lifecycle
 
