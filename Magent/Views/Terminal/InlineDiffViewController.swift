@@ -35,6 +35,21 @@ private func extractRenameFrom(_ chunk: String) -> String? {
     return nil
 }
 
+/// Parses a `@@ -oldStart,oldCount +newStart,newCount @@` header into its components.
+private func parseHunkHeader(_ header: String) -> (oldStart: Int, oldCount: Int, newStart: Int, newCount: Int)? {
+    let pattern = #"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@"#
+    guard let regex = try? NSRegularExpression(pattern: pattern),
+          let match = regex.firstMatch(in: header, range: NSRange(header.startIndex..., in: header)) else {
+        return nil
+    }
+    let ns = header as NSString
+    let oldStart = Int(ns.substring(with: match.range(at: 1))) ?? 0
+    let oldCount = match.range(at: 2).location != NSNotFound ? (Int(ns.substring(with: match.range(at: 2))) ?? 1) : 1
+    let newStart = Int(ns.substring(with: match.range(at: 3))) ?? 0
+    let newCount = match.range(at: 4).location != NSNotFound ? (Int(ns.substring(with: match.range(at: 4))) ?? 1) : 1
+    return (oldStart, oldCount, newStart, newCount)
+}
+
 // MARK: - Shared Diff Helpers
 
 private let diffDefaultFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
@@ -53,12 +68,8 @@ private func parseDiffLines(_ lines: [String]) -> NSAttributedString {
     let result = NSMutableAttributedString()
     for line in lines {
         let attrs: [NSAttributedString.Key: Any]
-        if line.hasPrefix("diff --git") {
-            continue
-        } else if line.hasPrefix("+++") || line.hasPrefix("---") {
-            attrs = [.font: diffHeaderFont, .foregroundColor: diffHeaderColor]
-        } else if line.hasPrefix("@@") {
-            attrs = [.font: diffDefaultFont, .foregroundColor: diffHunkColor]
+        if line.hasPrefix("diff --git") || line.hasPrefix("--- ") || line.hasPrefix("+++ ") || line.hasPrefix("@@") {
+            continue // Skip metadata headers; render only actual code/context lines.
         } else if line.hasPrefix("+") {
             attrs = [
                 .font: diffDefaultFont,
@@ -314,77 +325,28 @@ private final class ImageDiffContentView: NSView {
 
 // MARK: - HunkView
 
+/// Displays a single diff hunk content block.
+/// Always visible (no expand/collapse).
 private final class HunkView: NSView {
 
-    private let headerView = NSView()
-    private let chevronImage = NSImageView()
-    private let headerLabel = NSTextField(labelWithString: "")
     private let contentTextView = NSTextView()
     private var contentHeightConstraint: NSLayoutConstraint!
-    private var expandedBottomConstraint: NSLayoutConstraint!
-    private var collapsedBottomConstraint: NSLayoutConstraint!
 
-    var isExpanded: Bool = true {
-        didSet {
-            contentTextView.isHidden = !isExpanded
-            // Deactivate first, then activate to avoid momentary constraint conflicts
-            if isExpanded {
-                collapsedBottomConstraint.isActive = false
-                expandedBottomConstraint.isActive = true
-                contentHeightConstraint.isActive = true
-            } else {
-                expandedBottomConstraint.isActive = false
-                contentHeightConstraint.isActive = false
-                collapsedBottomConstraint.isActive = true
-            }
-            chevronImage.image = NSImage(
-                systemSymbolName: isExpanded ? "chevron.down" : "chevron.right",
-                accessibilityDescription: nil
-            )
-        }
-    }
-
-    init(headerLine: String, content: NSAttributedString) {
+    init(content: NSAttributedString) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        setup(headerLine: headerLine, content: content)
+        setup(content: content)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    private func setup(headerLine: String, content: NSAttributedString) {
-        // Header bar (clickable)
-        headerView.wantsLayer = true
-        headerView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(headerView)
-
-        let click = NSClickGestureRecognizer(target: self, action: #selector(headerClicked))
-        headerView.addGestureRecognizer(click)
-
-        // Small chevron
-        chevronImage.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)
-        chevronImage.contentTintColor = diffHunkColor
-        let config = NSImage.SymbolConfiguration(pointSize: 8, weight: .medium)
-        chevronImage.symbolConfiguration = config
-        chevronImage.translatesAutoresizingMaskIntoConstraints = false
-        chevronImage.setContentHuggingPriority(.required, for: .horizontal)
-        headerView.addSubview(chevronImage)
-
-        // @@ header text
-        headerLabel.stringValue = headerLine
-        headerLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        headerLabel.textColor = diffHunkColor
-        headerLabel.lineBreakMode = .byTruncatingTail
-        headerLabel.translatesAutoresizingMaskIntoConstraints = false
-        headerView.addSubview(headerLabel)
-
-        // Content text view
+    private func setup(content: NSAttributedString) {
         contentTextView.isEditable = false
         contentTextView.isSelectable = true
         contentTextView.isRichText = true
         contentTextView.drawsBackground = false
-        contentTextView.textContainerInset = NSSize(width: 8, height: 2)
+        contentTextView.textContainerInset = NSSize(width: 8, height: 0)
         contentTextView.isVerticallyResizable = false
         contentTextView.isHorizontallyResizable = false
         contentTextView.textContainer?.widthTracksTextView = true
@@ -397,29 +359,11 @@ private final class HunkView: NSView {
         let contentHeight = calculateDiffTextHeight(for: content)
         contentHeightConstraint = contentTextView.heightAnchor.constraint(equalToConstant: contentHeight)
 
-        expandedBottomConstraint = contentTextView.bottomAnchor.constraint(equalTo: bottomAnchor)
-        collapsedBottomConstraint = headerView.bottomAnchor.constraint(equalTo: bottomAnchor)
-        collapsedBottomConstraint.isActive = false
-
         NSLayoutConstraint.activate([
-            headerView.topAnchor.constraint(equalTo: topAnchor),
-            headerView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            headerView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            headerView.heightAnchor.constraint(equalToConstant: 20),
-
-            chevronImage.leadingAnchor.constraint(equalTo: headerView.leadingAnchor, constant: 12),
-            chevronImage.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
-            chevronImage.widthAnchor.constraint(equalToConstant: 8),
-            chevronImage.heightAnchor.constraint(equalToConstant: 8),
-
-            headerLabel.leadingAnchor.constraint(equalTo: chevronImage.trailingAnchor, constant: 4),
-            headerLabel.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
-            headerLabel.trailingAnchor.constraint(lessThanOrEqualTo: headerView.trailingAnchor, constant: -8),
-
-            contentTextView.topAnchor.constraint(equalTo: headerView.bottomAnchor),
+            contentTextView.topAnchor.constraint(equalTo: topAnchor),
             contentTextView.leadingAnchor.constraint(equalTo: leadingAnchor),
             contentTextView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            expandedBottomConstraint,
+            contentTextView.bottomAnchor.constraint(equalTo: bottomAnchor),
             contentHeightConstraint,
         ])
     }
@@ -429,9 +373,111 @@ private final class HunkView: NSView {
         let attrStr = NSAttributedString(attributedString: textStorage)
         contentHeightConstraint.constant = calculateDiffTextHeight(for: attrStr, width: width - 16)
     }
+}
 
-    @objc private func headerClicked() {
-        isExpanded.toggle()
+// MARK: - ContextGapView
+
+/// Displays a clickable "Show N hidden lines" indicator between diff hunks.
+/// When expanded, shows the hidden context lines from the working tree file.
+private final class ContextGapView: NSView {
+
+    let gapStartLine: Int // 1-based inclusive (new-file line number)
+    let gapEndLine: Int   // 1-based inclusive
+
+    private let expandButton = NSButton()
+    private var contentTextView: NSTextView?
+    private var heightConstraint: NSLayoutConstraint!
+    private(set) var isExpanded = false
+
+    var onRequestExpand: (() -> Void)?
+
+    init(gapStartLine: Int, gapEndLine: Int) {
+        self.gapStartLine = gapStartLine
+        self.gapEndLine = gapEndLine
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        setup()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func setup() {
+        wantsLayer = true
+
+        let lineCount = gapEndLine - gapStartLine + 1
+
+        expandButton.title = " Show \(lineCount) hidden line\(lineCount == 1 ? "" : "s")"
+        expandButton.image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil)
+        expandButton.imagePosition = .imageLeading
+        expandButton.bezelStyle = .inline
+        expandButton.isBordered = false
+        expandButton.contentTintColor = diffHunkColor.withAlphaComponent(0.7)
+        expandButton.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        expandButton.target = self
+        expandButton.action = #selector(expandClicked)
+        expandButton.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(expandButton)
+
+        heightConstraint = heightAnchor.constraint(equalToConstant: 22)
+
+        NSLayoutConstraint.activate([
+            heightConstraint,
+            expandButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            expandButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    @objc private func expandClicked() {
+        onRequestExpand?()
+    }
+
+    func showExpandedContent(_ lines: [String]) {
+        guard !isExpanded else { return }
+        isExpanded = true
+        expandButton.isHidden = true
+
+        let textView = NSTextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = true
+        textView.drawsBackground = false
+        textView.textContainerInset = NSSize(width: 8, height: 0)
+        textView.isVerticallyResizable = false
+        textView.isHorizontallyResizable = false
+        textView.textContainer?.widthTracksTextView = true
+        textView.autoresizingMask = [.width]
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(textView)
+
+        // Render lines as context (space-prefixed, dimmed)
+        let result = NSMutableAttributedString()
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: diffDefaultFont,
+            .foregroundColor: diffContextColor,
+        ]
+        for line in lines {
+            result.append(NSAttributedString(string: " " + line + "\n", attributes: attrs))
+        }
+        textView.textStorage?.setAttributedString(result)
+
+        let height = calculateDiffTextHeight(for: result, width: max(bounds.width - 16, 300))
+        heightConstraint.constant = height
+
+        NSLayoutConstraint.activate([
+            textView.topAnchor.constraint(equalTo: topAnchor),
+            textView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            textView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            textView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        contentTextView = textView
+    }
+
+    func updateContentWidth(_ width: CGFloat) {
+        guard isExpanded, let textView = contentTextView, let textStorage = textView.textStorage else { return }
+        let attrStr = NSAttributedString(attributedString: textStorage)
+        heightConstraint.constant = calculateDiffTextHeight(for: attrStr, width: width - 16)
     }
 }
 
@@ -443,6 +489,16 @@ private final class DiffSectionView: NSView {
     let additions: Int
     let deletions: Int
     let isImageMode: Bool
+    let renamedFrom: String?
+    private(set) var worktreePath: String?
+
+    /// Display path: shows "old → new" for renames, otherwise just the path.
+    var displayPath: String {
+        if let oldPath = renamedFrom {
+            return "\(oldPath) → \(filePath)"
+        }
+        return filePath
+    }
 
     private let headerView = NSView()
     private let chevronImage = NSImageView()
@@ -452,6 +508,7 @@ private final class DiffSectionView: NSView {
     // Text mode
     private let hunksStackView = NSStackView()
     private var hunkViews: [HunkView] = []
+    private var gapViews: [ContextGapView] = []
     private var preambleTextView: NSTextView?
     private var preambleHeightConstraint: NSLayoutConstraint?
 
@@ -487,12 +544,14 @@ private final class DiffSectionView: NSView {
 
     var onToggle: (() -> Void)?
 
-    /// Text diff init — takes raw chunk string and splits into collapsible hunks.
-    init(filePath: String, rawChunk: String, additions: Int, deletions: Int) {
+    /// Text diff init — takes raw chunk string and splits into hunks with context gap indicators.
+    init(filePath: String, rawChunk: String, additions: Int, deletions: Int, worktreePath: String?) {
         self.filePath = filePath
         self.additions = additions
         self.deletions = deletions
         self.isImageMode = false
+        self.worktreePath = worktreePath
+        self.renamedFrom = extractRenameFrom(rawChunk)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         setupHeader()
@@ -505,6 +564,8 @@ private final class DiffSectionView: NSView {
         self.additions = 0
         self.deletions = 0
         self.isImageMode = true
+        self.worktreePath = nil
+        self.renamedFrom = nil
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         setupHeader()
@@ -531,8 +592,9 @@ private final class DiffSectionView: NSView {
         chevronImage.setContentHuggingPriority(.required, for: .horizontal)
         headerView.addSubview(chevronImage)
 
-        // File path
-        pathLabel.stringValue = filePath
+        // File path (shows rename if applicable)
+        pathLabel.stringValue = displayPath
+        pathLabel.toolTip = displayPath
         pathLabel.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
         pathLabel.textColor = diffHeaderColor
         pathLabel.lineBreakMode = .byTruncatingHead
@@ -607,38 +669,74 @@ private final class DiffSectionView: NSView {
             hunks.append((header: header, lines: currentHunkLines))
         }
 
-        // Add preamble if non-empty
+        // Filter out --- and +++ file header lines from preamble (shown in section header instead)
+        preambleLines = preambleLines.filter { !$0.hasPrefix("--- ") && !$0.hasPrefix("+++ ") }
+
+        // Add preamble if non-empty (metadata like "new file", "deleted file", etc.)
         if !preambleLines.isEmpty && !preambleLines.allSatisfy({ $0.isEmpty }) {
             let preambleAttr = parseDiffLines(preambleLines)
-            let textView = NSTextView()
-            textView.isEditable = false
-            textView.isSelectable = true
-            textView.isRichText = true
-            textView.drawsBackground = false
-            textView.textContainerInset = NSSize(width: 8, height: 2)
-            textView.isVerticallyResizable = false
-            textView.isHorizontallyResizable = false
-            textView.textContainer?.widthTracksTextView = true
-            textView.autoresizingMask = [.width]
-            textView.translatesAutoresizingMaskIntoConstraints = false
-            textView.textStorage?.setAttributedString(preambleAttr)
+            if preambleAttr.length > 0 {
+                let textView = NSTextView()
+                textView.isEditable = false
+                textView.isSelectable = true
+                textView.isRichText = true
+                textView.drawsBackground = false
+                textView.textContainerInset = NSSize(width: 8, height: 0)
+                textView.isVerticallyResizable = false
+                textView.isHorizontallyResizable = false
+                textView.textContainer?.widthTracksTextView = true
+                textView.autoresizingMask = [.width]
+                textView.translatesAutoresizingMaskIntoConstraints = false
+                textView.textStorage?.setAttributedString(preambleAttr)
 
-            let height = calculateDiffTextHeight(for: preambleAttr)
-            let hc = textView.heightAnchor.constraint(equalToConstant: height)
-            hc.isActive = true
+                let height = calculateDiffTextHeight(for: preambleAttr)
+                let hc = textView.heightAnchor.constraint(equalToConstant: height)
+                hc.isActive = true
 
-            hunksStackView.addArrangedSubview(textView)
-            textView.leadingAnchor.constraint(equalTo: hunksStackView.leadingAnchor).isActive = true
-            textView.trailingAnchor.constraint(equalTo: hunksStackView.trailingAnchor).isActive = true
+                hunksStackView.addArrangedSubview(textView)
+                textView.leadingAnchor.constraint(equalTo: hunksStackView.leadingAnchor).isActive = true
+                textView.trailingAnchor.constraint(equalTo: hunksStackView.trailingAnchor).isActive = true
 
-            preambleTextView = textView
-            preambleHeightConstraint = hc
+                preambleTextView = textView
+                preambleHeightConstraint = hc
+            }
         }
 
-        // Add hunk views
-        for hunk in hunks {
+        // Parse hunk headers for line numbers (used for context gap calculation)
+        let parsedHeaders = hunks.map { parseHunkHeader($0.header) }
+
+        // Add hunks with context gap indicators between them
+        for (index, hunk) in hunks.enumerated() {
+            // Insert context gap before this hunk (between previous hunk's end and this hunk's start)
+            if let parsed = parsedHeaders[index] {
+                let gapStart: Int
+                if index == 0 {
+                    // Gap before first hunk: lines 1 to (newStart - 1)
+                    gapStart = 1
+                } else if let prevParsed = parsedHeaders[index - 1] {
+                    // Gap between previous hunk end and this hunk start
+                    gapStart = prevParsed.newStart + prevParsed.newCount
+                } else {
+                    gapStart = parsed.newStart
+                }
+                let gapEnd = parsed.newStart - 1
+
+                if gapEnd >= gapStart {
+                    let gapView = ContextGapView(gapStartLine: gapStart, gapEndLine: gapEnd)
+                    gapView.onRequestExpand = { [weak self, weak gapView] in
+                        guard let self, let gapView else { return }
+                        self.loadContextForGap(gapView)
+                    }
+                    gapViews.append(gapView)
+                    hunksStackView.addArrangedSubview(gapView)
+                    gapView.leadingAnchor.constraint(equalTo: hunksStackView.leadingAnchor).isActive = true
+                    gapView.trailingAnchor.constraint(equalTo: hunksStackView.trailingAnchor).isActive = true
+                }
+            }
+
+            // Render only actual diff lines (skip the @@ metadata header line).
             let hunkContent = parseDiffLines(hunk.lines)
-            let hunkView = HunkView(headerLine: hunk.header, content: hunkContent)
+            let hunkView = HunkView(content: hunkContent)
             hunkViews.append(hunkView)
             hunksStackView.addArrangedSubview(hunkView)
             hunkView.leadingAnchor.constraint(equalTo: hunksStackView.leadingAnchor).isActive = true
@@ -655,6 +753,19 @@ private final class DiffSectionView: NSView {
             hunksStackView.trailingAnchor.constraint(equalTo: trailingAnchor),
             expandedBottomConstraint,
         ])
+    }
+
+    /// Loads context lines from the working tree file and expands the given gap view.
+    private func loadContextForGap(_ gapView: ContextGapView) {
+        guard let worktreePath else { return }
+        let fullPath = URL(fileURLWithPath: worktreePath).appendingPathComponent(filePath).path
+        guard let content = try? String(contentsOfFile: fullPath, encoding: .utf8) else { return }
+        let allLines = content.components(separatedBy: "\n")
+        let startIdx = max(gapView.gapStartLine - 1, 0) // 0-based
+        let endIdx = min(gapView.gapEndLine, allLines.count) // exclusive
+        guard startIdx < endIdx else { return }
+        let contextLines = Array(allLines[startIdx..<endIdx])
+        gapView.showExpandedContent(contextLines)
     }
 
     private func setupImageContent(mode: ImageDiffMode) {
@@ -690,6 +801,10 @@ private final class DiffSectionView: NSView {
 
     func updateContentWidth(_ width: CGFloat) {
         guard !isImageMode else { return }
+        // Update gap views
+        for gapView in gapViews {
+            gapView.updateContentWidth(width)
+        }
         // Update preamble
         if let preamble = preambleTextView,
            let constraint = preambleHeightConstraint,
@@ -724,8 +839,10 @@ final class InlineDiffViewController: NSViewController {
     private let stickyChevron = NSImageView()
     private let stickyPathLabel = NSTextField(labelWithString: "")
     private let stickyStatsStack = NSStackView()
+    private let stickyPinnedTopConstant: CGFloat = 24
     private var stickyTopConstraint: NSLayoutConstraint!
     private weak var currentStickySection: DiffSectionView?
+    private var lastMeasuredContentWidth: CGFloat = 0
 
     private var sectionViews: [DiffSectionView] = []
     private var allExpanded = true
@@ -749,6 +866,19 @@ final class InlineDiffViewController: NSViewController {
         NSLog("[DiffVC] calling setupUI")
         setupUI()
         NSLog("[DiffVC] viewDidLoad done")
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+
+        // Recalculate text heights at the actual scroll viewport width to avoid oversized blank gaps.
+        let contentWidth = scrollView.contentSize.width
+        if contentWidth > 0, abs(contentWidth - lastMeasuredContentWidth) > 0.5 {
+            lastMeasuredContentWidth = contentWidth
+            for section in sectionViews {
+                section.updateContentWidth(contentWidth)
+            }
+        }
     }
 
     private func setupUI() {
@@ -867,7 +997,7 @@ final class InlineDiffViewController: NSViewController {
             expandCollapseButton.widthAnchor.constraint(equalToConstant: 16),
             expandCollapseButton.heightAnchor.constraint(equalToConstant: 16),
 
-            scrollView.topAnchor.constraint(equalTo: headerBar.bottomAnchor),
+            scrollView.topAnchor.constraint(equalTo: stickyHeader.bottomAnchor),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -884,24 +1014,33 @@ final class InlineDiffViewController: NSViewController {
     private func setupStickyHeader() {
         NSLog("[DiffVC] setupStickyHeader: configuring views")
         stickyHeader.wantsLayer = true
-        stickyHeader.layer?.backgroundColor = NSColor(resource: .textSecondary).withAlphaComponent(0.08).cgColor
+        // Opaque background so content doesn't bleed through
+        stickyHeader.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
+        stickyHeader.layer?.zPosition = 10
         stickyHeader.translatesAutoresizingMaskIntoConstraints = false
         stickyHeader.isHidden = true
+
+        // Bottom separator line
+        let stickyBottomLine = NSView()
+        stickyBottomLine.wantsLayer = true
+        stickyBottomLine.layer?.backgroundColor = NSColor(resource: .textSecondary).withAlphaComponent(0.25).cgColor
+        stickyBottomLine.translatesAutoresizingMaskIntoConstraints = false
+        stickyHeader.addSubview(stickyBottomLine)
 
         // Click gesture
         let click = NSClickGestureRecognizer(target: self, action: #selector(stickyHeaderClicked))
         stickyHeader.addGestureRecognizer(click)
 
-        // Chevron
-        stickyChevron.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)
-        stickyChevron.contentTintColor = NSColor(resource: .textSecondary)
+        // Keep reserved leading spacing for alignment with section rows, but render no icon.
+        stickyChevron.image = nil
+        stickyChevron.isHidden = false
         stickyChevron.translatesAutoresizingMaskIntoConstraints = false
         stickyChevron.setContentHuggingPriority(.required, for: .horizontal)
         stickyHeader.addSubview(stickyChevron)
 
         // File path
-        stickyPathLabel.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
-        stickyPathLabel.textColor = diffHeaderColor
+        stickyPathLabel.font = .systemFont(ofSize: 11, weight: .bold)
+        stickyPathLabel.textColor = diffHunkColor
         stickyPathLabel.lineBreakMode = .byTruncatingHead
         stickyPathLabel.translatesAutoresizingMaskIntoConstraints = false
         stickyHeader.addSubview(stickyPathLabel)
@@ -916,7 +1055,8 @@ final class InlineDiffViewController: NSViewController {
 
         NSLog("[DiffVC] setupStickyHeader: creating constraints (stickyHeader.superview=%@, scrollView.superview=%@)",
               String(describing: stickyHeader.superview), String(describing: scrollView.superview))
-        stickyTopConstraint = stickyHeader.topAnchor.constraint(equalTo: scrollView.topAnchor)
+        // Keep sticky header fixed directly under the DIFF header bar.
+        stickyTopConstraint = stickyHeader.topAnchor.constraint(equalTo: resizeHandle.bottomAnchor, constant: stickyPinnedTopConstant)
 
         NSLog("[DiffVC] setupStickyHeader: activating constraints")
         NSLayoutConstraint.activate([
@@ -924,6 +1064,11 @@ final class InlineDiffViewController: NSViewController {
             stickyHeader.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
             stickyHeader.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
             stickyHeader.heightAnchor.constraint(equalToConstant: 24),
+
+            stickyBottomLine.bottomAnchor.constraint(equalTo: stickyHeader.bottomAnchor),
+            stickyBottomLine.leadingAnchor.constraint(equalTo: stickyHeader.leadingAnchor),
+            stickyBottomLine.trailingAnchor.constraint(equalTo: stickyHeader.trailingAnchor),
+            stickyBottomLine.heightAnchor.constraint(equalToConstant: 1),
 
             stickyChevron.leadingAnchor.constraint(equalTo: stickyHeader.leadingAnchor, constant: 8),
             stickyChevron.centerYAnchor.constraint(equalTo: stickyHeader.centerYAnchor),
@@ -940,59 +1085,56 @@ final class InlineDiffViewController: NSViewController {
     }
 
     @objc private func handleScrollChange() {
-        let visibleY = scrollView.contentView.bounds.origin.y
+        guard !sectionViews.isEmpty else {
+            showStickyPlaceholder("No files changed")
+            stickyTopConstraint.constant = stickyPinnedTopConstant
+            return
+        }
+
+        // Keep layout up-to-date so section frames/hit-tests are accurate after expand/collapse.
+        sectionsStackView.layoutSubtreeIfNeeded()
+
+        // Probe the top visible content line inside the scroll viewport.
+        // Use section-local coordinate conversion to avoid document/flip coordinate mismatches.
+        let clipBounds = scrollView.contentView.bounds
+        let probeInClip = NSPoint(x: max(clipBounds.minX + 12, 12), y: clipBounds.minY + 1)
 
         var candidateSection: DiffSectionView?
-        var nextSectionHeaderY: CGFloat?
 
-        for (i, section) in sectionViews.enumerated() {
-            let frame = section.convert(section.bounds, to: sectionsStackView)
-            // Section whose header top is above visibleY but whose bottom is below
-            if frame.origin.y <= visibleY && frame.maxY > visibleY {
+        for section in sectionViews {
+            let probeInSection = section.convert(probeInClip, from: scrollView.contentView)
+            if section.bounds.contains(probeInSection) {
                 candidateSection = section
-                if i + 1 < sectionViews.count {
-                    let nextFrame = sectionViews[i + 1].convert(sectionViews[i + 1].bounds, to: sectionsStackView)
-                    nextSectionHeaderY = nextFrame.origin.y
-                }
                 break
             }
         }
 
-        guard let section = candidateSection else {
-            stickyHeader.isHidden = true
-            currentStickySection = nil
-            return
+        // Fallback: keep header stable even on boundary pixels.
+        if candidateSection == nil {
+            candidateSection = currentStickySection ?? sectionViews.first
         }
 
-        // Don't show sticky header if the section's own header is still visible
-        let sectionFrame = section.convert(section.bounds, to: sectionsStackView)
-        if sectionFrame.origin.y >= visibleY {
-            stickyHeader.isHidden = true
-            currentStickySection = nil
-            return
-        }
+        guard let section = candidateSection else { return }
 
-        // Show and update sticky header
+        // Always keep sticky header pinned right under DIFF header.
         stickyHeader.isHidden = false
-        currentStickySection = section
-        stickyPathLabel.stringValue = section.filePath
-        populateStatsStack(stickyStatsStack, additions: section.additions, deletions: section.deletions, isImage: section.isImageMode)
-        stickyChevron.image = NSImage(
-            systemSymbolName: section.isExpanded ? "chevron.down" : "chevron.right",
-            accessibilityDescription: nil
-        )
+        stickyTopConstraint.constant = stickyPinnedTopConstant
+        applyStickyHeader(section)
+    }
 
-        // Push-up effect: next section's header pushes sticky header up
-        if let nextY = nextSectionHeaderY {
-            let overlap = visibleY + 24 - nextY
-            if overlap > 0 {
-                stickyTopConstraint.constant = -overlap
-            } else {
-                stickyTopConstraint.constant = 0
-            }
-        } else {
-            stickyTopConstraint.constant = 0
-        }
+    private func applyStickyHeader(_ section: DiffSectionView) {
+        currentStickySection = section
+        stickyPathLabel.stringValue = section.displayPath
+        stickyPathLabel.toolTip = section.displayPath
+        populateStatsStack(stickyStatsStack, additions: section.additions, deletions: section.deletions, isImage: section.isImageMode)
+    }
+
+    private func showStickyPlaceholder(_ text: String) {
+        currentStickySection = nil
+        stickyHeader.isHidden = false
+        stickyPathLabel.stringValue = text
+        stickyPathLabel.toolTip = text
+        populateStatsStack(stickyStatsStack, additions: 0, deletions: 0, isImage: false)
     }
 
     @objc private func stickyHeaderClicked() {
@@ -1027,8 +1169,8 @@ final class InlineDiffViewController: NSViewController {
 
     @objc private func handleResizeDrag(_ gesture: NSPanGestureRecognizer) {
         let translation = gesture.translation(in: view)
-        // Negative y means drag up = diff gets taller
-        onResizeDrag?(gesture.state, -translation.y)
+        // Positive y = drag up = diff gets taller (AppKit origin is bottom-left)
+        onResizeDrag?(gesture.state, translation.y)
         if gesture.state == .changed {
             gesture.setTranslation(.zero, in: view)
         }
@@ -1039,6 +1181,7 @@ final class InlineDiffViewController: NSViewController {
     func setDiffContent(_ rawDiff: String, fileCount: Int, worktreePath: String?, mergeBase: String?) {
         self.worktreePath = worktreePath
         self.mergeBase = mergeBase
+        lastMeasuredContentWidth = 0
 
         headerLabel.stringValue = "DIFF (\(fileCount) files)"
 
@@ -1064,7 +1207,8 @@ final class InlineDiffViewController: NSViewController {
                     filePath: path,
                     rawChunk: chunkContent,
                     additions: additions,
-                    deletions: deletions
+                    deletions: deletions,
+                    worktreePath: worktreePath
                 )
             }
 
@@ -1078,6 +1222,21 @@ final class InlineDiffViewController: NSViewController {
             sectionsStackView.addArrangedSubview(section)
             section.leadingAnchor.constraint(equalTo: sectionsStackView.leadingAnchor).isActive = true
             section.trailingAnchor.constraint(equalTo: sectionsStackView.trailingAnchor).isActive = true
+        }
+
+        // Initialize sticky header immediately so it remains visible/pinned even before first scroll event.
+        if let firstSection = sectionViews.first {
+            stickyHeader.isHidden = false
+            stickyTopConstraint.constant = stickyPinnedTopConstant
+            applyStickyHeader(firstSection)
+        } else {
+            showStickyPlaceholder("No files changed")
+        }
+
+        // Ensure sticky header and measured text heights are correct after content replacement.
+        view.needsLayout = true
+        DispatchQueue.main.async { [weak self] in
+            self?.handleScrollChange()
         }
     }
 
