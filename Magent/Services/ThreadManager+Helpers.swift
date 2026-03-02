@@ -35,6 +35,42 @@ extension ThreadManager {
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
     """
 
+    // MARK: - Agent Readiness
+
+    /// Polls tmux pane content for agent-specific readiness signals.
+    /// Returns `true` when the agent TUI is detected, or `false` on timeout.
+    func waitForAgentReady(
+        sessionName: String,
+        agentType: AgentType?,
+        timeout: TimeInterval = 10,
+        interval: TimeInterval = 0.3
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let content = await tmux.capturePane(sessionName: sessionName, lastLines: 30) {
+                let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if isAgentContentReady(trimmed, agentType: agentType) {
+                    return true
+                }
+            }
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+        return false
+    }
+
+    /// Checks whether captured pane content indicates the agent is ready,
+    /// using agent-specific signals.
+    func isAgentContentReady(_ content: String, agentType: AgentType?) -> Bool {
+        switch agentType {
+        case .claude:
+            return content.contains("╭") || content.contains("\u{276F}")
+        case .codex:
+            return content.contains("\u{276F}") || content.filter({ !$0.isWhitespace }).count > 100
+        case .custom, .none:
+            return content.filter({ !$0.isWhitespace }).count > 50
+        }
+    }
+
     // MARK: - Injection
 
     func effectiveInjection(for projectId: UUID) -> (terminalCommand: String, agentContext: String) {
@@ -47,11 +83,11 @@ extension ThreadManager {
         return (termCmd, agentCtx)
     }
 
-    func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil) {
+    func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil, agentType: AgentType? = nil) {
         let hasPrompt = initialPrompt != nil && !initialPrompt!.isEmpty
         guard !terminalCommand.isEmpty || !agentContext.isEmpty || hasPrompt else { return }
         Task {
-            // Wait for shell/agent to initialize
+            // Wait for tmux session to start
             try? await Task.sleep(nanoseconds: 500_000_000)
             if !terminalCommand.isEmpty {
                 try? await tmux.sendKeys(sessionName: sessionName, keys: terminalCommand)
@@ -60,8 +96,8 @@ extension ThreadManager {
                 // When an initial prompt is provided, skip the agent context injection
                 // and send only the prompt. The agent context would race with the prompt —
                 // submitting as a first prompt that blocks the real one.
-                // Give the agent extra time to finish initializing its TUI.
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                // Wait for the agent TUI to be ready before sending the prompt.
+                _ = await waitForAgentReady(sessionName: sessionName, agentType: agentType)
                 // Send text and Enter separately — the Enter key gets lost if sent in the
                 // same send-keys call while the TUI is still processing buffered input.
                 try? await tmux.sendText(sessionName: sessionName, text: initialPrompt!)

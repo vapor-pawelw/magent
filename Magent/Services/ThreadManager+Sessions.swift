@@ -248,7 +248,8 @@ extension ThreadManager {
         injectAfterStart(
             sessionName: sessionName,
             terminalCommand: injection.terminalCommand,
-            agentContext: isAgentSession ? injection.agentContext : ""
+            agentContext: isAgentSession ? injection.agentContext : "",
+            agentType: sessionAgentType
         )
 
         return true
