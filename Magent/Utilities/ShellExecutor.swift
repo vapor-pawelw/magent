@@ -87,8 +87,11 @@ enum ShellExecutor {
             fullCommand = "cd \(shellQuote(wd)) && \(command)"
         }
 
-        // Set up environment with PATH
-        let env = ["PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"]
+        // Set up environment with PATH and HOME (tools like acli need HOME for config storage)
+        var env = ["PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"]
+        if let home = ProcessInfo.processInfo.environment["HOME"] {
+            env.append("HOME=\(home)")
+        }
         let envCStrings = env.map { strdup($0) } + [nil]
         defer { envCStrings.compactMap { $0 }.forEach { free($0) } }
 

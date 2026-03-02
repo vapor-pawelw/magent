@@ -194,6 +194,7 @@ final class SettingsJiraViewController: NSViewController {
             await jira.openLoginPage()
             loginButton.isEnabled = true
             loginButton.title = "Open acli Login Page"
+            refreshStatus()
         }
     }
 
