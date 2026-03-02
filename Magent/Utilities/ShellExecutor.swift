@@ -87,8 +87,16 @@ enum ShellExecutor {
             fullCommand = "cd \(shellQuote(wd)) && \(command)"
         }
 
-        // Set up environment with PATH
-        let env = ["PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"]
+        // Set up environment with PATH, LANG, and HOME.
+        // LANG is required so programs like tmux don't sanitize non-printable bytes
+        // such as tabs in format output. HOME is needed by tools like acli.
+        var env = [
+            "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+            "LANG=C.UTF-8",
+        ]
+        if let home = ProcessInfo.processInfo.environment["HOME"] {
+            env.append("HOME=\(home)")
+        }
         let envCStrings = env.map { strdup($0) } + [nil]
         defer { envCStrings.compactMap { $0 }.forEach { free($0) } }
 
