@@ -594,8 +594,11 @@ final class IPCCommandHandler {
             if !threads.isEmpty {
                 return .failure("Cannot remove section '\(sectionName)': \(threads.count) thread(s) still in it. Move them first.", id: request.id)
             }
+            guard sections.count > 1 else {
+                return .failure("Cannot remove section '\(sectionName)': at least one section is required.", id: request.id)
+            }
             sections.remove(at: sectionIndex)
-            settings.projects[projectIndex].threadSections = sections.isEmpty ? nil : sections
+            settings.projects[projectIndex].threadSections = sections
             try? persistence.saveSettings(settings)
             notifySectionsDidChange()
             return .success(id: request.id)
@@ -608,6 +611,9 @@ final class IPCCommandHandler {
             let threads = threadsInSection(section.id, projectId: nil)
             if !threads.isEmpty {
                 return .failure("Cannot remove global section '\(sectionName)': \(threads.count) thread(s) across projects still in it. Move them first.", id: request.id)
+            }
+            guard settings.threadSections.count > 1 else {
+                return .failure("Cannot remove global section '\(sectionName)': at least one section is required.", id: request.id)
             }
             settings.threadSections.remove(at: sectionIndex)
             try? persistence.saveSettings(settings)

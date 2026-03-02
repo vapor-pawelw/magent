@@ -51,6 +51,18 @@ final class SettingsProjectsViewController: NSViewController {
     // Default section
     private var defaultSectionPopup: NSPopUpButton!
 
+    // Sections management
+    private var sectionsModePopup: NSPopUpButton!
+    private var sectionsContentStack: NSStackView!
+    private var sectionsTableView: NSTableView!
+    private var currentEditingSectionId: UUID?
+
+    private var projectSortedSections: [ThreadSection] {
+        guard let index = selectedProjectIndex,
+              let sections = settings.projects[index].threadSections else { return [] }
+        return sections.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
     // Jira fields
     private var jiraProjectKeyField: NSTextField!
     private var jiraBoardPopup: NSPopUpButton!
@@ -329,6 +341,57 @@ final class SettingsProjectsViewController: NSViewController {
         refreshDefaultSectionPopup(for: project)
         detailsStack.addArrangedSubview(defaultSectionPopup)
 
+        // Sections card
+        let (sectionsCard, sectionsStack) = createSectionCard(title: "Sections")
+
+        let sectionsModeLabel = NSTextField(labelWithString: "Mode")
+        sectionsModeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        sectionsStack.addArrangedSubview(sectionsModeLabel)
+
+        sectionsModePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        sectionsModePopup.addItem(withTitle: "Use Global Sections")
+        sectionsModePopup.addItem(withTitle: "Custom Sections")
+        sectionsModePopup.selectItem(at: project.threadSections != nil ? 1 : 0)
+        sectionsModePopup.target = self
+        sectionsModePopup.action = #selector(sectionsModeChanged)
+        sectionsStack.addArrangedSubview(sectionsModePopup)
+
+        sectionsContentStack = NSStackView()
+        sectionsContentStack.orientation = .vertical
+        sectionsContentStack.alignment = .leading
+        sectionsContentStack.spacing = 8
+        sectionsContentStack.isHidden = project.threadSections == nil
+
+        sectionsTableView = NSTableView()
+        sectionsTableView.headerView = nil
+        sectionsTableView.style = .inset
+        sectionsTableView.rowSizeStyle = .default
+        sectionsTableView.selectionHighlightStyle = .none
+        sectionsTableView.registerForDraggedTypes([.string])
+        sectionsTableView.setDraggingSourceOperationMask(.move, forLocal: true)
+
+        let sectionsCol = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("ProjectSectionColumn"))
+        sectionsTableView.addTableColumn(sectionsCol)
+        sectionsTableView.dataSource = self
+        sectionsTableView.delegate = self
+
+        let sectionsScrollView = NSScrollView()
+        sectionsScrollView.documentView = sectionsTableView
+        sectionsScrollView.hasVerticalScroller = true
+        sectionsScrollView.autohidesScrollers = true
+        sectionsScrollView.translatesAutoresizingMaskIntoConstraints = false
+        sectionsContentStack.addArrangedSubview(sectionsScrollView)
+
+        let addSectionBtn = NSButton(title: "Add Section...", target: self, action: #selector(addProjectSectionTapped))
+        addSectionBtn.bezelStyle = .rounded
+        addSectionBtn.controlSize = .small
+        sectionsContentStack.addArrangedSubview(addSectionBtn)
+
+        sectionsContentStack.translatesAutoresizingMaskIntoConstraints = false
+        sectionsStack.addArrangedSubview(sectionsContentStack)
+
+        stack.addArrangedSubview(sectionsCard)
+
         let (jiraCard, jiraStack) = createSectionCard(
             title: "Jira Integration",
             description: "Project-specific Jira settings for ticket sync and section mapping."
@@ -551,6 +614,10 @@ final class SettingsProjectsViewController: NSViewController {
             documentView.widthAnchor.constraint(equalTo: detailScrollView.widthAnchor),
 
             detailsCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            sectionsCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            sectionsScrollView.widthAnchor.constraint(equalTo: sectionsContentStack.widthAnchor),
+            sectionsScrollView.heightAnchor.constraint(equalToConstant: 140),
+            sectionsContentStack.widthAnchor.constraint(equalTo: sectionsStack.widthAnchor),
             jiraCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
             overridesCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
             nameField.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
@@ -921,6 +988,188 @@ final class SettingsProjectsViewController: NSViewController {
         }
     }
 
+    // MARK: - Sections Actions
+
+    @objc private func sectionsModeChanged() {
+        guard let index = selectedProjectIndex else { return }
+        let isCustom = sectionsModePopup.indexOfSelectedItem == 1
+
+        if isCustom {
+            if settings.projects[index].threadSections == nil {
+                // Copy global sections
+                settings.projects[index].threadSections = settings.threadSections
+            }
+        } else {
+            settings.projects[index].threadSections = nil
+            settings.projects[index].defaultSectionId = nil
+        }
+
+        try? persistence.saveSettings(settings)
+        sectionsContentStack.isHidden = !isCustom
+        sectionsTableView?.reloadData()
+        refreshDefaultSectionPopup(for: settings.projects[index])
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+    }
+
+    @objc private func addProjectSectionTapped() {
+        guard let index = selectedProjectIndex else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "New Section"
+        alert.informativeText = "Enter section name"
+        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: "Cancel")
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+        textField.placeholderString = "Section name"
+        alert.accessoryView = textField
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        let name = textField.stringValue
+        guard !name.isEmpty else { return }
+
+        var sections = settings.projects[index].threadSections ?? []
+        let maxOrder = sections.map(\.sortOrder).max() ?? -1
+        let section = ThreadSection(
+            name: name,
+            colorHex: "#8E8E93",
+            sortOrder: maxOrder + 1
+        )
+        sections.append(section)
+        settings.projects[index].threadSections = sections
+        try? persistence.saveSettings(settings)
+        sectionsTableView.reloadData()
+        refreshDefaultSectionPopup(for: settings.projects[index])
+
+        showProjectColorPicker(for: section)
+    }
+
+    @objc private func projectSectionVisibilityToggled(_ sender: NSButton) {
+        guard let index = selectedProjectIndex else { return }
+        let point = sender.convert(NSPoint.zero, to: sectionsTableView)
+        let row = sectionsTableView.row(at: point)
+        guard row >= 0 else { return }
+
+        let section = projectSortedSections[row]
+        guard var sections = settings.projects[index].threadSections,
+              let sectionIndex = sections.firstIndex(where: { $0.id == section.id }) else { return }
+
+        if section.isVisible {
+            // Check for threads in this section
+            let projectId = settings.projects[index].id
+            let knownIds = Set(sections.map(\.id))
+            let defaultId = settings.projects[index].defaultSectionId ?? sections.first?.id
+            let threadsHere = ThreadManager.shared.threads.filter { thread in
+                guard !thread.isMain, thread.projectId == projectId else { return false }
+                let effectiveId: UUID?
+                if let sid = thread.sectionId, knownIds.contains(sid) {
+                    effectiveId = sid
+                } else {
+                    effectiveId = defaultId
+                }
+                return effectiveId == section.id
+            }
+            if !threadsHere.isEmpty {
+                let alert = NSAlert()
+                alert.messageText = "Cannot Hide Section"
+                alert.informativeText = "Move all threads out of \"\(section.name)\" before hiding it."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+                return
+            }
+        }
+
+        sections[sectionIndex].isVisible.toggle()
+        settings.projects[index].threadSections = sections
+        try? persistence.saveSettings(settings)
+        sectionsTableView.reloadData()
+        refreshDefaultSectionPopup(for: settings.projects[index])
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+    }
+
+    @objc private func deleteProjectSectionTapped(_ sender: NSButton) {
+        guard let index = selectedProjectIndex else { return }
+        let point = sender.convert(NSPoint.zero, to: sectionsTableView)
+        let row = sectionsTableView.row(at: point)
+        guard row >= 0 else { return }
+
+        let section = projectSortedSections[row]
+        guard var sections = settings.projects[index].threadSections else { return }
+
+        guard sections.count > 1 else {
+            let alert = NSAlert()
+            alert.messageText = "Cannot Delete Section"
+            alert.informativeText = "At least one section is required."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+
+        // Check for threads in this section
+        let projectId = settings.projects[index].id
+        let knownIds = Set(sections.map(\.id))
+        let defaultSectionId = settings.projects[index].defaultSectionId ?? sections.first?.id
+        let threadsInSection = ThreadManager.shared.threads.filter { thread in
+            guard !thread.isMain, thread.projectId == projectId else { return false }
+            let effectiveId: UUID?
+            if let sid = thread.sectionId, knownIds.contains(sid) {
+                effectiveId = sid
+            } else {
+                effectiveId = defaultSectionId
+            }
+            return effectiveId == section.id
+        }
+        if !threadsInSection.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = "Cannot Delete Section"
+            alert.informativeText = "Move all threads out of \"\(section.name)\" before deleting it."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+
+        sections.removeAll { $0.id == section.id }
+        settings.projects[index].threadSections = sections
+        try? persistence.saveSettings(settings)
+        sectionsTableView.reloadData()
+        refreshDefaultSectionPopup(for: settings.projects[index])
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+    }
+
+    @objc private func projectSectionColorDotClicked(_ sender: NSButton) {
+        let point = sender.convert(NSPoint.zero, to: sectionsTableView)
+        let row = sectionsTableView.row(at: point)
+        guard row >= 0 else { return }
+        showProjectColorPicker(for: projectSortedSections[row])
+    }
+
+    private func showProjectColorPicker(for section: ThreadSection) {
+        let panel = NSColorPanel.shared
+        panel.color = section.color
+        panel.showsAlpha = false
+        panel.setTarget(self)
+        panel.setAction(#selector(projectSectionColorChanged(_:)))
+        currentEditingSectionId = section.id
+        panel.orderFront(nil)
+    }
+
+    @objc private func projectSectionColorChanged(_ sender: NSColorPanel) {
+        guard let sectionId = currentEditingSectionId,
+              let index = selectedProjectIndex,
+              var sections = settings.projects[index].threadSections,
+              let sectionIndex = sections.firstIndex(where: { $0.id == sectionId }) else { return }
+
+        sections[sectionIndex].colorHex = sender.color.hexString
+        settings.projects[index].threadSections = sections
+        try? persistence.saveSettings(settings)
+        sectionsTableView.reloadData()
+    }
+
     // MARK: - Jira Actions
 
     @objc private func jiraProjectKeyChanged() {
@@ -1015,6 +1264,12 @@ final class SettingsProjectsViewController: NSViewController {
                 try? persistence.saveSettings(settings)
                 NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
 
+                // Update sections card UI
+                sectionsModePopup?.selectItem(at: 1)
+                sectionsContentStack?.isHidden = false
+                sectionsTableView?.reloadData()
+                refreshDefaultSectionPopup(for: settings.projects[index])
+
                 BannerManager.shared.show(
                     message: "Created \(sections.count) sections from Jira statuses",
                     style: .info,
@@ -1055,17 +1310,91 @@ final class SettingsProjectsViewController: NSViewController {
 
         settings.projects[index].jiraSyncEnabled = enabling
         try? persistence.saveSettings(settings)
+
+        // Auto-create project sections from Jira when enabling sync and no custom sections exist
+        if enabling, settings.projects[index].threadSections == nil {
+            let project = settings.projects[index]
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    let sections = try await ThreadManager.shared.syncSectionsFromJira(project: project)
+                    guard !sections.isEmpty else { return }
+                    settings.projects[index].threadSections = sections
+                    try? persistence.saveSettings(settings)
+                    NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+
+                    // Update sections card UI
+                    sectionsModePopup?.selectItem(at: 1)
+                    sectionsContentStack?.isHidden = false
+                    sectionsTableView?.reloadData()
+                    refreshDefaultSectionPopup(for: settings.projects[index])
+
+                    BannerManager.shared.show(
+                        message: "Created \(sections.count) sections from Jira statuses",
+                        style: .info,
+                        duration: 3.0
+                    )
+                } catch {
+                    // Non-critical — sync will retry on next tick
+                }
+            }
+        }
     }
 }
 
 extension SettingsProjectsViewController: NSTableViewDataSource {
     func numberOfRows(in tableView: NSTableView) -> Int {
-        settings.projects.count
+        if tableView === sectionsTableView {
+            return projectSortedSections.count
+        }
+        return settings.projects.count
+    }
+
+    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> (any NSPasteboardWriting)? {
+        guard tableView === sectionsTableView else { return nil }
+        let item = NSPasteboardItem()
+        item.setString(String(row), forType: .string)
+        return item
+    }
+
+    func tableView(_ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
+        guard tableView === sectionsTableView else { return [] }
+        return dropOperation == .above ? .move : []
+    }
+
+    func tableView(_ tableView: NSTableView, acceptDrop info: any NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+        guard tableView === sectionsTableView,
+              let index = selectedProjectIndex,
+              let item = info.draggingPasteboard.pasteboardItems?.first,
+              let rowStr = item.string(forType: .string),
+              let sourceRow = Int(rowStr) else { return false }
+
+        var sections = projectSortedSections
+        let moved = sections.remove(at: sourceRow)
+        let dest = sourceRow < row ? row - 1 : row
+        sections.insert(moved, at: dest)
+
+        for (i, section) in sections.enumerated() {
+            if var projectSections = settings.projects[index].threadSections,
+               let idx = projectSections.firstIndex(where: { $0.id == section.id }) {
+                projectSections[idx].sortOrder = i
+                settings.projects[index].threadSections = projectSections
+            }
+        }
+        try? persistence.saveSettings(settings)
+        sectionsTableView.reloadData()
+        refreshDefaultSectionPopup(for: settings.projects[index])
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+        return true
     }
 }
 
 extension SettingsProjectsViewController: NSTableViewDelegate {
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        if tableView === sectionsTableView {
+            return sectionsCellView(for: row, in: tableView)
+        }
+
         let project = settings.projects[row]
         let identifier = NSUserInterfaceItemIdentifier("ProjectListCell")
         let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView ?? {
@@ -1088,7 +1417,81 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
         return cell
     }
 
+    private func sectionsCellView(for row: Int, in tableView: NSTableView) -> NSView? {
+        let section = projectSortedSections[row]
+        let identifier = NSUserInterfaceItemIdentifier("ProjectSectionCell")
+        let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView ?? {
+            let c = NSTableCellView()
+            c.identifier = identifier
+
+            let colorBtn = NSButton()
+            colorBtn.bezelStyle = .inline
+            colorBtn.isBordered = false
+            colorBtn.tag = 200
+            colorBtn.translatesAutoresizingMaskIntoConstraints = false
+            c.addSubview(colorBtn)
+
+            let tf = NSTextField(labelWithString: "")
+            tf.translatesAutoresizingMaskIntoConstraints = false
+            c.addSubview(tf)
+            c.textField = tf
+
+            let visBtn = NSButton(image: NSImage(systemSymbolName: "eye", accessibilityDescription: nil)!, target: nil, action: nil)
+            visBtn.bezelStyle = .inline
+            visBtn.isBordered = false
+            visBtn.tag = 201
+            visBtn.translatesAutoresizingMaskIntoConstraints = false
+            c.addSubview(visBtn)
+
+            let delBtn = NSButton(image: NSImage(systemSymbolName: "trash", accessibilityDescription: "Delete")!, target: nil, action: nil)
+            delBtn.bezelStyle = .inline
+            delBtn.isBordered = false
+            delBtn.tag = 202
+            delBtn.translatesAutoresizingMaskIntoConstraints = false
+            c.addSubview(delBtn)
+
+            NSLayoutConstraint.activate([
+                colorBtn.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 4),
+                colorBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                colorBtn.widthAnchor.constraint(equalToConstant: 16),
+                colorBtn.heightAnchor.constraint(equalToConstant: 16),
+                tf.leadingAnchor.constraint(equalTo: colorBtn.trailingAnchor, constant: 8),
+                tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                delBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
+                delBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                visBtn.trailingAnchor.constraint(equalTo: delBtn.leadingAnchor, constant: -4),
+                visBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+            ])
+            return c
+        }()
+
+        cell.textField?.stringValue = section.name
+
+        if let colorBtn = cell.viewWithTag(200) as? NSButton {
+            colorBtn.image = SettingsGeneralViewController.colorDotImage(color: section.color, size: 12)
+            colorBtn.target = self
+            colorBtn.action = #selector(projectSectionColorDotClicked(_:))
+        }
+
+        if let visBtn = cell.viewWithTag(201) as? NSButton {
+            let symbolName = section.isVisible ? "eye" : "eye.slash"
+            visBtn.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+            visBtn.contentTintColor = section.isVisible ? NSColor(resource: .textPrimary) : NSColor(resource: .textSecondary)
+            visBtn.target = self
+            visBtn.action = #selector(projectSectionVisibilityToggled(_:))
+        }
+
+        if let delBtn = cell.viewWithTag(202) as? NSButton {
+            delBtn.target = self
+            delBtn.action = #selector(deleteProjectSectionTapped(_:))
+        }
+
+        return cell
+    }
+
     func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let tableView = notification.object as? NSTableView,
+              tableView === projectTableView else { return }
         updateRemoveButtonState()
         guard let project = selectedProject else {
             showEmptyState()

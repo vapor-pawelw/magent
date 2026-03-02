@@ -495,7 +495,16 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         guard row >= 0 else { return }
 
         let section = sortedSections[row]
-        guard !section.isDefault else { return }
+
+        guard settings.threadSections.count > 1 else {
+            let alert = NSAlert()
+            alert.messageText = "Cannot Delete Section"
+            alert.informativeText = "At least one section is required."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
 
         let knownSectionIds = Set(settings.threadSections.map(\.id))
         let defaultSectionId = settings.defaultSection?.id
@@ -683,7 +692,6 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         }
 
         if let delBtn = cell.viewWithTag(102) as? NSButton {
-            delBtn.isHidden = section.isDefault
             delBtn.target = self
             delBtn.action = #selector(deleteSectionTapped(_:))
         }

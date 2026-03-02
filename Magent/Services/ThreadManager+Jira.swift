@@ -44,6 +44,25 @@ extension ThreadManager {
         let siteURL = project.jiraSiteURL ?? settings.jiraSiteURL
         guard !siteURL.isEmpty else { return }
 
+        // Auto-create project sections from Jira if none exist
+        if project.threadSections == nil {
+            do {
+                let sections = try await syncSectionsFromJira(project: project)
+                guard !sections.isEmpty else { return }
+                var updatedSettings = persistence.loadSettings()
+                if let idx = updatedSettings.projects.firstIndex(where: { $0.id == project.id }) {
+                    updatedSettings.projects[idx].threadSections = sections
+                    try? persistence.saveSettings(updatedSettings)
+                    await MainActor.run {
+                        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+                    }
+                }
+            } catch {
+                // Can't sync without sections — skip this project
+                return
+            }
+        }
+
         let jql = "project = \(projectKey) AND assignee = \"\(assigneeId)\" AND statusCategory != Done ORDER BY updated DESC"
 
         let tickets: [JiraTicket]
