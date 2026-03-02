@@ -18,6 +18,10 @@ final class SettingsNotificationsViewController: NSViewController {
     private var appActiveObserver: NSObjectProtocol?
     private var soundPreviewPlayer: NSSound?
 
+    // Cards for enabling/disabling based on permission
+    private var completionCard: NSView!
+    private var rateLimitCard: NSView!
+
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
     }
@@ -29,33 +33,16 @@ final class SettingsNotificationsViewController: NSViewController {
         let stackView = NSStackView()
         stackView.orientation = .vertical
         stackView.alignment = .leading
-        stackView.spacing = 20
+        stackView.spacing = 16
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
-        // Description
-        let notificationsDesc = NSTextField(
-            wrappingLabelWithString: "When an agent finishes a command, Magent can send a system notification, play a sound, and optionally move the thread to the top of its section."
-        )
-        notificationsDesc.font = .systemFont(ofSize: 11)
-        notificationsDesc.textColor = NSColor(resource: .textSecondary)
-        notificationsDesc.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(notificationsDesc)
-        NSLayoutConstraint.activate([
-            notificationsDesc.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
-
-        // Permission status section
+        // Permission status section (no card)
         let permissionSection = NSStackView()
         permissionSection.orientation = .vertical
         permissionSection.alignment = .leading
         permissionSection.spacing = 6
 
-        let permissionLabel = NSTextField(labelWithString: "Permission Status")
-        permissionLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        permissionSection.addArrangedSubview(permissionLabel)
-
-        // Permission status row
         let statusRow = NSStackView()
         statusRow.orientation = .horizontal
         statusRow.alignment = .centerY
@@ -77,7 +64,6 @@ final class SettingsNotificationsViewController: NSViewController {
 
         permissionSection.addArrangedSubview(statusRow)
 
-        // Open Notification Settings button
         let openNotifSettingsButton = NSButton(
             title: "Open Notification Settings",
             target: self,
@@ -90,46 +76,30 @@ final class SettingsNotificationsViewController: NSViewController {
 
         permissionSection.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(permissionSection)
-        NSLayoutConstraint.activate([
-            permissionSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
 
-        // Behavior section
-        let behaviorSection = NSStackView()
-        behaviorSection.orientation = .vertical
-        behaviorSection.alignment = .leading
-        behaviorSection.spacing = 6
+        // --- Agent Completion card ---
+        let (agentCard, agentStack) = createSectionCard(
+            title: "Agent Completion",
+            description: "When an agent finishes a command, Magent can send a system notification, play a sound, and move the thread to the top of its section."
+        )
+        completionCard = agentCard
 
-        let behaviorLabel = NSTextField(labelWithString: "Behavior")
-        behaviorLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        behaviorSection.addArrangedSubview(behaviorLabel)
-
-        // Show system banners checkbox
         showBannersCheckbox = NSButton(
             checkboxWithTitle: "Show system banners",
             target: self,
             action: #selector(showBannersToggled)
         )
         showBannersCheckbox.state = settings.showSystemBanners ? .on : .off
-        behaviorSection.addArrangedSubview(showBannersCheckbox)
+        agentStack.addArrangedSubview(showBannersCheckbox)
 
         completionSoundCheckbox = NSButton(
-            checkboxWithTitle: "Play sound for completion notifications",
+            checkboxWithTitle: "Play sound",
             target: self,
             action: #selector(completionSoundToggled)
         )
         completionSoundCheckbox.state = settings.playSoundForAgentCompletion ? .on : .off
-        behaviorSection.addArrangedSubview(completionSoundCheckbox)
+        agentStack.addArrangedSubview(completionSoundCheckbox)
 
-        autoReorderOnCompletionCheckbox = NSButton(
-            checkboxWithTitle: "Move completed threads to top automatically",
-            target: self,
-            action: #selector(autoReorderOnCompletionToggled)
-        )
-        autoReorderOnCompletionCheckbox.state = settings.autoReorderThreadsOnAgentCompletion ? .on : .off
-        behaviorSection.addArrangedSubview(autoReorderOnCompletionCheckbox)
-
-        // Sound picker row
         soundPickerRow = NSStackView()
         soundPickerRow.orientation = .horizontal
         soundPickerRow.alignment = .centerY
@@ -148,20 +118,34 @@ final class SettingsNotificationsViewController: NSViewController {
         soundPickerRow.addArrangedSubview(soundPickerPopup)
 
         soundPickerRow.isHidden = !settings.playSoundForAgentCompletion
-        // Indent to align with checkbox label
         soundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
-        behaviorSection.addArrangedSubview(soundPickerRow)
+        agentStack.addArrangedSubview(soundPickerRow)
 
-        // Rate limit lifted notification
+        autoReorderOnCompletionCheckbox = NSButton(
+            checkboxWithTitle: "Move completed threads to top automatically",
+            target: self,
+            action: #selector(autoReorderOnCompletionToggled)
+        )
+        autoReorderOnCompletionCheckbox.state = settings.autoReorderThreadsOnAgentCompletion ? .on : .off
+        agentStack.addArrangedSubview(autoReorderOnCompletionCheckbox)
+
+        stackView.addArrangedSubview(agentCard)
+
+        // --- Rate Limits card ---
+        let (rlCard, rlStack) = createSectionCard(
+            title: "Rate Limits",
+            description: "Magent can detect when an agent hits a rate limit and notify you when it resumes."
+        )
+        rateLimitCard = rlCard
+
         rateLimitNotifyCheckbox = NSButton(
             checkboxWithTitle: "Notify when rate limit is lifted",
             target: self,
             action: #selector(rateLimitNotifyToggled)
         )
         rateLimitNotifyCheckbox.state = settings.notifyOnRateLimitLifted ? .on : .off
-        behaviorSection.addArrangedSubview(rateLimitNotifyCheckbox)
+        rlStack.addArrangedSubview(rateLimitNotifyCheckbox)
 
-        // Rate limit sound picker row
         rateLimitSoundPickerRow = NSStackView()
         rateLimitSoundPickerRow.orientation = .horizontal
         rateLimitSoundPickerRow.alignment = .centerY
@@ -181,13 +165,9 @@ final class SettingsNotificationsViewController: NSViewController {
 
         rateLimitSoundPickerRow.isHidden = !settings.notifyOnRateLimitLifted
         rateLimitSoundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
-        behaviorSection.addArrangedSubview(rateLimitSoundPickerRow)
+        rlStack.addArrangedSubview(rateLimitSoundPickerRow)
 
-        behaviorSection.translatesAutoresizingMaskIntoConstraints = false
-        stackView.addArrangedSubview(behaviorSection)
-        NSLayoutConstraint.activate([
-            behaviorSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-        ])
+        stackView.addArrangedSubview(rlCard)
 
         view.addSubview(stackView)
 
@@ -195,6 +175,9 @@ final class SettingsNotificationsViewController: NSViewController {
             stackView.topAnchor.constraint(equalTo: view.topAnchor),
             stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            permissionSection.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            agentCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            rlCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
     }
 
@@ -220,6 +203,43 @@ final class SettingsNotificationsViewController: NSViewController {
         appActiveObserver = nil
     }
 
+    // MARK: - Section Card Helper
+
+    private func createSectionCard(title: String, description: String? = nil) -> (container: NSView, content: NSStackView) {
+        let container = SettingsSectionCardView()
+
+        let content = NSStackView()
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 8
+        content.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(content)
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        content.addArrangedSubview(titleLabel)
+
+        if let description, !description.isEmpty {
+            let descLabel = NSTextField(wrappingLabelWithString: description)
+            descLabel.font = .systemFont(ofSize: 11)
+            descLabel.textColor = NSColor(resource: .textSecondary)
+            content.addArrangedSubview(descLabel)
+            content.setCustomSpacing(12, after: descLabel)
+            NSLayoutConstraint.activate([
+                descLabel.widthAnchor.constraint(equalTo: content.widthAnchor),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+        ])
+
+        return (container, content)
+    }
+
     // MARK: - Actions
 
     private func populateSoundPicker() {
@@ -242,9 +262,7 @@ final class SettingsNotificationsViewController: NSViewController {
         settings.agentCompletionSoundName = selectedName
         try? persistence.saveSettings(settings)
 
-        // Stop any currently playing preview
         soundPreviewPlayer?.stop()
-        // Play the selected sound as preview
         if let sound = NSSound(named: NSSound.Name(selectedName)) {
             soundPreviewPlayer = sound
             sound.play()
@@ -326,16 +344,16 @@ final class SettingsNotificationsViewController: NSViewController {
                     ? .labelColor
                     : .systemRed
 
+                let alpha: CGFloat = authorized ? 1.0 : 0.5
+                self.completionCard.alphaValue = alpha
+                self.rateLimitCard.alphaValue = alpha
+
                 self.showBannersCheckbox.isEnabled = authorized
                 self.completionSoundCheckbox.isEnabled = authorized
                 self.soundPickerPopup.isEnabled = authorized
+                self.autoReorderOnCompletionCheckbox.isEnabled = authorized
                 self.rateLimitNotifyCheckbox.isEnabled = authorized
                 self.rateLimitSoundPickerPopup.isEnabled = authorized
-                self.showBannersCheckbox.alphaValue = authorized ? 1.0 : 0.5
-                self.completionSoundCheckbox.alphaValue = authorized ? 1.0 : 0.5
-                self.soundPickerRow.alphaValue = authorized ? 1.0 : 0.5
-                self.rateLimitNotifyCheckbox.alphaValue = authorized ? 1.0 : 0.5
-                self.rateLimitSoundPickerRow.alphaValue = authorized ? 1.0 : 0.5
             }
         }
     }

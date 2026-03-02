@@ -31,7 +31,7 @@ final class OnboardingNotificationsView: NSView {
         action: nil
     )
     private let completionSoundCheckbox = NSButton(
-        checkboxWithTitle: "Play sound for completion notifications",
+        checkboxWithTitle: "Play sound",
         target: nil,
         action: nil
     )
@@ -64,12 +64,6 @@ final class OnboardingNotificationsView: NSView {
         let titleLabel = NSTextField(labelWithString: "Notifications")
         titleLabel.font = .preferredFont(forTextStyle: .headline)
 
-        let descLabel = NSTextField(
-            wrappingLabelWithString: "When an agent finishes a command, Magent sends a system notification and can move the thread to the top of its section."
-        )
-        descLabel.font = .systemFont(ofSize: 11)
-        descLabel.textColor = NSColor(resource: .textSecondary)
-
         // Permission status row
         let statusRow = NSStackView()
         statusRow.orientation = .horizontal
@@ -97,17 +91,20 @@ final class OnboardingNotificationsView: NSView {
         openNotifButton.controlSize = .small
         openNotifButton.font = .systemFont(ofSize: 11)
 
-        // Behavior section
-        let behaviorLabel = NSTextField(labelWithString: "Behavior")
-        behaviorLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        // --- Agent Completion card ---
+        let (completionCard, completionStack) = createSectionCard(
+            title: "Agent Completion",
+            description: "When an agent finishes a command, Magent can send a system notification and play a sound."
+        )
 
         showBannersCheckbox.state = .on
+        completionStack.addArrangedSubview(showBannersCheckbox)
 
         completionSoundCheckbox.state = .on
         completionSoundCheckbox.target = self
         completionSoundCheckbox.action = #selector(completionSoundToggled)
+        completionStack.addArrangedSubview(completionSoundCheckbox)
 
-        // Sound picker row
         soundPickerRow = NSStackView()
         soundPickerRow.orientation = .horizontal
         soundPickerRow.alignment = .centerY
@@ -124,11 +121,18 @@ final class OnboardingNotificationsView: NSView {
         soundPickerPopup.action = #selector(soundPickerChanged)
         populateSoundPicker()
         soundPickerRow.addArrangedSubview(soundPickerPopup)
+        completionStack.addArrangedSubview(soundPickerRow)
 
-        // Rate limit lifted notification
+        // --- Rate Limits card ---
+        let (rlCard, rlStack) = createSectionCard(
+            title: "Rate Limits",
+            description: "Get notified when an agent's rate limit is lifted."
+        )
+
         rateLimitNotifyCheckbox.state = .on
         rateLimitNotifyCheckbox.target = self
         rateLimitNotifyCheckbox.action = #selector(rateLimitNotifyToggled)
+        rlStack.addArrangedSubview(rateLimitNotifyCheckbox)
 
         rateLimitSoundPickerRow = NSStackView()
         rateLimitSoundPickerRow.orientation = .horizontal
@@ -146,20 +150,17 @@ final class OnboardingNotificationsView: NSView {
         rateLimitSoundPickerPopup.action = #selector(rateLimitSoundPickerChanged)
         populateRateLimitSoundPicker()
         rateLimitSoundPickerRow.addArrangedSubview(rateLimitSoundPickerPopup)
+        rlStack.addArrangedSubview(rateLimitSoundPickerRow)
 
         let stack = NSStackView(views: [
-            titleLabel, descLabel,
+            titleLabel,
             statusRow, openNotifButton,
-            behaviorLabel,
-            showBannersCheckbox,
-            completionSoundCheckbox,
-            soundPickerRow,
-            rateLimitNotifyCheckbox,
-            rateLimitSoundPickerRow,
+            completionCard,
+            rlCard,
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 8
+        stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         stack.setCustomSpacing(16, after: openNotifButton)
@@ -170,6 +171,8 @@ final class OnboardingNotificationsView: NSView {
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            completionCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            rlCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
 
         refreshNotificationStatus()
@@ -191,6 +194,45 @@ final class OnboardingNotificationsView: NSView {
             appActiveObserver = nil
         }
     }
+
+    // MARK: - Section Card Helper
+
+    private func createSectionCard(title: String, description: String? = nil) -> (container: NSView, content: NSStackView) {
+        let container = SettingsSectionCardView()
+
+        let content = NSStackView()
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 8
+        content.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(content)
+
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        content.addArrangedSubview(titleLabel)
+
+        if let description, !description.isEmpty {
+            let descLabel = NSTextField(wrappingLabelWithString: description)
+            descLabel.font = .systemFont(ofSize: 11)
+            descLabel.textColor = NSColor(resource: .textSecondary)
+            content.addArrangedSubview(descLabel)
+            content.setCustomSpacing(12, after: descLabel)
+            NSLayoutConstraint.activate([
+                descLabel.widthAnchor.constraint(equalTo: content.widthAnchor),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
+        ])
+
+        return (container, content)
+    }
+
+    // MARK: - Sound Pickers
 
     private func populateSoundPicker() {
         soundPickerPopup.removeAllItems()
