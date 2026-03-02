@@ -24,6 +24,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var ipcPromptInjectionEnabled: Bool
     var reviewPrompt: String
     var jiraSiteURL: String
+    var enableRateLimitDetection: Bool
     var notifyOnRateLimitLifted: Bool
     var rateLimitLiftedSoundName: String
 
@@ -48,6 +49,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         ipcPromptInjectionEnabled: Bool = true,
         reviewPrompt: String = AppSettings.defaultReviewPrompt,
         jiraSiteURL: String = "",
+        enableRateLimitDetection: Bool = true,
         notifyOnRateLimitLifted: Bool = true,
         rateLimitLiftedSoundName: String = "Glass"
     ) {
@@ -71,6 +73,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.ipcPromptInjectionEnabled = ipcPromptInjectionEnabled
         self.reviewPrompt = reviewPrompt
         self.jiraSiteURL = jiraSiteURL
+        self.enableRateLimitDetection = enableRateLimitDetection
         self.notifyOnRateLimitLifted = notifyOnRateLimitLifted
         self.rateLimitLiftedSoundName = rateLimitLiftedSoundName
     }
@@ -99,6 +102,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         ipcPromptInjectionEnabled = try container.decodeIfPresent(Bool.self, forKey: .ipcPromptInjectionEnabled) ?? true
         reviewPrompt = try container.decodeIfPresent(String.self, forKey: .reviewPrompt) ?? Self.defaultReviewPrompt
         jiraSiteURL = try container.decodeIfPresent(String.self, forKey: .jiraSiteURL) ?? ""
+        enableRateLimitDetection = try container.decodeIfPresent(Bool.self, forKey: .enableRateLimitDetection) ?? true
         notifyOnRateLimitLifted = try container.decodeIfPresent(Bool.self, forKey: .notifyOnRateLimitLifted) ?? true
         rateLimitLiftedSoundName = try container.decodeIfPresent(String.self, forKey: .rateLimitLiftedSoundName) ?? "Glass"
     }
@@ -125,6 +129,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(ipcPromptInjectionEnabled, forKey: .ipcPromptInjectionEnabled)
         try container.encode(reviewPrompt, forKey: .reviewPrompt)
         try container.encode(jiraSiteURL, forKey: .jiraSiteURL)
+        try container.encode(enableRateLimitDetection, forKey: .enableRateLimitDetection)
         try container.encode(notifyOnRateLimitLifted, forKey: .notifyOnRateLimitLifted)
         try container.encode(rateLimitLiftedSoundName, forKey: .rateLimitLiftedSoundName)
     }
@@ -224,6 +229,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case ipcPromptInjectionEnabled
         case reviewPrompt
         case jiraSiteURL
+        case enableRateLimitDetection
         case notifyOnRateLimitLifted
         case rateLimitLiftedSoundName
 

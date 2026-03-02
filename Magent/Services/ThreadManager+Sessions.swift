@@ -871,7 +871,28 @@ extension ThreadManager {
         var hasRelativeReset: Bool
     }
 
+    /// Called when the rate-limit detection setting is toggled in Settings.
+    /// Immediately clears state (if disabled) or runs a full scan (if enabled).
+    func applyRateLimitDetectionSettingChange() {
+        Task { await checkForRateLimitedSessions() }
+    }
+
     private func checkForRateLimitedSessions() async {
+        guard persistence.loadSettings().enableRateLimitDetection else {
+            // Clear any existing rate-limit state so sidebar indicators disappear.
+            var changed = false
+            for i in threads.indices where !threads[i].rateLimitedSessions.isEmpty {
+                threads[i].rateLimitedSessions.removeAll()
+                changed = true
+            }
+            if changed {
+                await MainActor.run {
+                    delegate?.threadManager(self, didUpdateThreads: threads)
+                    NotificationCenter.default.post(name: .magentAgentRateLimitChanged, object: nil)
+                }
+            }
+            return
+        }
         let now = Date()
         var changedThreadIds = Set<UUID>()
         var didChangeGlobalCache = pruneExpiredGlobalRateLimits(now: now, changedThreadIds: &changedThreadIds)
