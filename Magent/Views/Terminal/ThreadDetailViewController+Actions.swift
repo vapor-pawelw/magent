@@ -608,6 +608,7 @@ extension ThreadDetailViewController {
         }
         let startTime = Date()
         let maxWait: TimeInterval = 15
+        let overlayAgentType = thread.sessionAgentTypes[sessionName] ?? thread.selectedAgentType
 
         loadingPollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
@@ -624,7 +625,7 @@ extension ThreadDetailViewController {
             }
 
             Task {
-                let ready = await self.isAgentReady(sessionName: sessionName)
+                let ready = await self.isAgentReady(sessionName: sessionName, agentType: overlayAgentType)
                 if ready {
                     await MainActor.run {
                         self.loadingPollTimer?.invalidate()
@@ -636,13 +637,13 @@ extension ThreadDetailViewController {
         }
     }
 
-    private func isAgentReady(sessionName: String) async -> Bool {
+    private func isAgentReady(sessionName: String, agentType: AgentType? = nil) async -> Bool {
         let result = await ShellExecutor.execute(
             "tmux capture-pane -t '\(sessionName)' -p 2>/dev/null"
         )
         guard result.exitCode == 0 else { return false }
         let output = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        return output.contains("╭") || output.contains("Claude") || output.count > 50
+        return ThreadManager.shared.isAgentContentReady(output, agentType: agentType)
     }
 
     private func dismissLoadingOverlay() {

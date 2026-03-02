@@ -446,7 +446,7 @@ final class ThreadManager {
 
         // Inject terminal command and agent context
         let injection = effectiveInjection(for: project.id)
-        injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext, initialPrompt: initialPrompt)
+        injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext, initialPrompt: initialPrompt, agentType: selectedAgentType)
 
         return thread
     }
@@ -523,7 +523,7 @@ final class ThreadManager {
 
         // Inject terminal command and agent context
         let injection = effectiveInjection(for: project.id)
-        injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext)
+        injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext, agentType: selectedAgentType)
 
         return thread
     }
@@ -699,7 +699,8 @@ final class ThreadManager {
             sessionName: tmuxSessionName,
             terminalCommand: injection.terminalCommand,
             agentContext: isAgentTab ? injection.agentContext : "",
-            initialPrompt: initialPrompt
+            initialPrompt: initialPrompt,
+            agentType: selectedAgentType
         )
 
         return tab
