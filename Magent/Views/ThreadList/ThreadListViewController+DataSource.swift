@@ -1,5 +1,23 @@
 import Cocoa
 
+private enum ThreadRowSizing {
+    static let cell: ThreadCell = {
+        let cell = ThreadCell()
+
+        let imageView = NSImageView()
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        cell.addSubview(imageView)
+        cell.imageView = imageView
+
+        let textField = NSTextField(labelWithString: "")
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        cell.addSubview(textField)
+        cell.textField = textField
+
+        return cell
+    }()
+}
+
 // MARK: - NSOutlineViewDataSource
 
 extension ThreadListViewController: NSOutlineViewDataSource {
@@ -132,6 +150,76 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         case other
     }
 
+    private func descriptionLineCount(
+        _ description: String,
+        for thread: MagentThread,
+        in outlineView: NSOutlineView
+    ) -> Int {
+        let availableWidth = availableDescriptionWidth(for: thread, in: outlineView)
+        guard availableWidth > 0 else { return 2 }
+
+        let font: NSFont = thread.hasUnreadAgentCompletion
+            ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+            : .preferredFont(forTextStyle: .body)
+
+        let textStorage = NSTextStorage(
+            string: description,
+            attributes: [.font: font]
+        )
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(size: NSSize(width: availableWidth, height: .greatestFiniteMagnitude))
+        textContainer.lineFragmentPadding = 0
+        textContainer.maximumNumberOfLines = 2
+        textContainer.lineBreakMode = .byWordWrapping
+        layoutManager.addTextContainer(textContainer)
+        textStorage.addLayoutManager(layoutManager)
+
+        let glyphRange = layoutManager.glyphRange(for: textContainer)
+        var lineCount = 0
+        layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, _, _, _, _ in
+            lineCount += 1
+        }
+        return max(1, lineCount)
+    }
+
+    private func compactTextRowHeightIncrement(for thread: MagentThread) -> CGFloat {
+        let font: NSFont = thread.hasUnreadAgentCompletion
+            ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+            : .preferredFont(forTextStyle: .body)
+        return ceil(font.ascender - font.descender + font.leading)
+    }
+
+    private func descriptionTextWidth(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
+        let baseWidth: CGFloat
+        let row = outlineView.row(forItem: thread)
+        if let outlineColumn = outlineView.outlineTableColumn {
+            let columnIndex = outlineView.tableColumns.firstIndex(of: outlineColumn) ?? -1
+            if row >= 0, columnIndex >= 0 {
+                baseWidth = outlineView.frameOfCell(atColumn: columnIndex, row: row).width
+            } else {
+                baseWidth = outlineColumn.width
+            }
+        } else {
+            baseWidth = outlineView.bounds.width
+        }
+        guard baseWidth > 0 else { return 0 }
+
+        let sizingCell = ThreadRowSizing.cell
+        sizingCell.frame = NSRect(x: 0, y: 0, width: baseWidth, height: 120)
+        sizingCell.configure(with: thread, sectionColor: nil)
+        sizingCell.layoutSubtreeIfNeeded()
+
+        return sizingCell.textField?.bounds.width ?? 0
+    }
+
+    private func availableDescriptionWidth(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
+        let measuredWidth = descriptionTextWidth(for: thread, in: outlineView)
+        return max(
+            0,
+            measuredWidth
+        )
+    }
+
     private func projectHeaderHitArea(_ project: SidebarProject) -> ProjectHeaderHitArea {
         guard let event = NSApp.currentEvent,
               event.type == .leftMouseDown || event.type == .leftMouseUp else { return .other }
@@ -172,13 +260,19 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             if thread.isMain {
                 return 26
             }
-            let hasDescription = !(thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            let trimmedDescription = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasDescription = !(trimmedDescription?.isEmpty ?? true)
             let worktreeName = (thread.worktreePath as NSString).lastPathComponent
             let branchName = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
             let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
             let hasBranchWorktreeMismatch = worktreeName != resolvedBranchName
-            if hasDescription {
-                return 62
+            if hasDescription, let description = trimmedDescription {
+                let baseTwoRowHeight: CGFloat = 46
+                let descriptionLines = descriptionLineCount(description, for: thread, in: outlineView)
+                if descriptionLines > 1 {
+                    return baseTwoRowHeight + compactTextRowHeightIncrement(for: thread)
+                }
+                return baseTwoRowHeight
             }
             return hasBranchWorktreeMismatch ? 46 : 26
         }

@@ -42,6 +42,7 @@ final class ThreadListViewController: NSViewController {
     var suppressNextProjectRowToggle = false
     /// Project IDs that have at least one recognized git hosting remote (GitHub/GitLab/Bitbucket).
     var projectsWithValidRemotes: Set<UUID> = []
+    private var lastMeasuredOutlineWidth: CGFloat = 0
 
     // MARK: - Data Model (3-level hierarchy)
     // Level 0: SidebarProject (project name header)
@@ -92,6 +93,14 @@ final class ThreadListViewController: NSViewController {
     override func viewDidLayout() {
         super.viewDidLayout()
         outlineView.sizeLastColumnToFit()
+        let currentOutlineWidth = outlineView.bounds.width
+        if abs(currentOutlineWidth - lastMeasuredOutlineWidth) > 0.5 {
+            lastMeasuredOutlineWidth = currentOutlineWidth
+            let rows = outlineView.numberOfRows
+            if rows > 0 {
+                outlineView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<rows))
+            }
+        }
     }
 
     @objc private func sectionsDidChange() {
