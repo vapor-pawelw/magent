@@ -532,6 +532,7 @@ extension ThreadManager {
         let focusText = rateLimitFocusText(from: tail)
         let relativeResetAt = parseRelativeResetDate(from: focusText, now: now)
         let explicitResult = parseExplicitResetDate(from: focusText, now: now)
+        let fullDateResetAt = parseFullDateResetDate(from: focusText)
         let absoluteResetAt = parseAbsoluteResetDate(from: focusText, now: now)
 
         let resetAt: Date
@@ -542,6 +543,9 @@ extension ThreadManager {
         } else if let exp = explicitResult {
             resetAt = exp.date
             hasExplicitDateAnchor = exp.hasDayToken
+        } else if let fullDate = fullDateResetAt {
+            resetAt = fullDate
+            hasExplicitDateAnchor = true
         } else if let abs = absoluteResetAt {
             resetAt = abs
             hasExplicitDateAnchor = focusTextHasDateMarkers(focusText)
@@ -674,7 +678,7 @@ extension ThreadManager {
     }
 
     private func parseExplicitResetDate(from text: String, now: Date) -> (date: Date, hasDayToken: Bool)? {
-        let pattern = #"resets?\s+(?:at\s+)?(?:(today|tomorrow|mon(?:day)?|tues?(?:day)?|wed(?:nesday)?|thurs?(?:day)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\s+)?(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?)(?:\s*\(([^)\n]+)\))?"#
+        let pattern = #"(?:resets?|try again|retry)\s+(?:(?:at|on)\s+)?(?:(today|tomorrow|mon(?:day)?|tues?(?:day)?|wed(?:nesday)?|thurs?(?:day)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)[,;]?\s+)?(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?)(?:\s*\(([^)\n]+)\))?"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
             return nil
         }
@@ -715,6 +719,13 @@ extension ThreadManager {
             guard let baseDate = calendar.date(from: dateComponents) else { continue }
             let hasDayToken = dayToken != nil
             if dayOffset == 0 {
+                if dayToken == nil,
+                   baseDate.timeIntervalSince(now) > 12 * 3600,
+                   let yesterday = calendar.date(byAdding: .day, value: -1, to: baseDate),
+                   now.timeIntervalSince(yesterday) >= 0,
+                   now.timeIntervalSince(yesterday) <= 6 * 3600 {
+                    return (date: yesterday, hasDayToken: hasDayToken)
+                }
                 return (date: baseDate, hasDayToken: hasDayToken)
             }
             if let shifted = calendar.date(byAdding: .day, value: dayOffset, to: baseDate) {
@@ -723,6 +734,67 @@ extension ThreadManager {
         }
 
         return nil
+    }
+
+    /// Parses full date+time phrases like:
+    /// "try again at Mar 6th, 2026 1:17 AM"
+    /// "retry at March 6, 2026 1:17AM"
+    /// "available at Feb 28th, 2026 11:30 PM"
+    private func parseFullDateResetDate(from text: String) -> Date? {
+        let pattern = #"(?:try again|retry|available|resets?)\s+at\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})\s+(\d{1,2}):(\d{2})\s*(a\.?m\.?|p\.?m\.?)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: range),
+              match.numberOfRanges >= 7,
+              let monthRange = Range(match.range(at: 1), in: text),
+              let dayRange = Range(match.range(at: 2), in: text),
+              let yearRange = Range(match.range(at: 3), in: text),
+              let hourRange = Range(match.range(at: 4), in: text),
+              let minuteRange = Range(match.range(at: 5), in: text),
+              let meridiemRange = Range(match.range(at: 6), in: text) else {
+            return nil
+        }
+
+        let monthStr = String(text[monthRange]).lowercased().prefix(3)
+        let monthMap: [String: Int] = [
+            "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
+        ]
+        guard let month = monthMap[String(monthStr)],
+              let day = Int(text[dayRange]),
+              let year = Int(text[yearRange]),
+              let hour = Int(text[hourRange]),
+              let minute = Int(text[minuteRange]),
+              (1...12).contains(hour) else {
+            return nil
+        }
+
+        let meridiem = String(text[meridiemRange])
+            .lowercased()
+            .replacingOccurrences(of: ".", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let hour24: Int
+        if meridiem.hasPrefix("p") {
+            hour24 = hour == 12 ? 12 : hour + 12
+        } else if meridiem.hasPrefix("a") {
+            hour24 = hour == 12 ? 0 : hour
+        } else {
+            return nil
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        var components = DateComponents()
+        components.timeZone = .current
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour24
+        components.minute = minute
+        components.second = 0
+        return calendar.date(from: components)
     }
 
     private func parseResetClockComponents(from text: String) -> (hour: Int, minute: Int)? {
