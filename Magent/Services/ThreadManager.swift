@@ -41,6 +41,8 @@ final class ThreadManager {
     var lastPublishedRateLimitSummary: String?
     var sessionsBeingRecreated: Set<String> = []
     var sessionMonitorTimer: Timer?
+    var lastStaleSessionCleanupAt: Date = .distantPast
+    var staleMagentSessionsFirstSeenAt: [String: Date] = [:]
     var lastTmuxZombieHealthCheckAt: Date = .distantPast
     var didShowTmuxZombieWarning = false
     var isRestartingTmuxForRecovery = false

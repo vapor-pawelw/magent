@@ -14,7 +14,9 @@ extension ThreadManager {
         }
         guard sessionMonitorTimer == nil else { return }
         sessionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
-            self?.runSessionMonitorTick()
+            Task { @MainActor [weak self] in
+                self?.runSessionMonitorTick()
+            }
         }
         // Fire once immediately so we don't wait 3 seconds for the first sync.
         runSessionMonitorTick()
@@ -26,9 +28,13 @@ extension ThreadManager {
     }
 
     private func runSessionMonitorTick() {
+        let shouldRunStaleCleanup = shouldRunStaleSessionCleanupTick()
         Task {
             await self.checkForMissingWorktrees()
             await self.checkForDeadSessions()
+            if shouldRunStaleCleanup {
+                _ = await self.cleanupStaleMagentSessions(minimumStaleAge: 30)
+            }
             await self.checkForAgentCompletions()
             await self.checkForWaitingForInput()
             await self.checkForRateLimitedSessions()
@@ -59,6 +65,13 @@ extension ThreadManager {
                 await runPRSyncTick()
             }
         }
+    }
+
+    private func shouldRunStaleSessionCleanupTick(now: Date = Date()) -> Bool {
+        let cleanupInterval: TimeInterval = 5 * 60
+        guard now.timeIntervalSince(lastStaleSessionCleanupAt) >= cleanupInterval else { return false }
+        lastStaleSessionCleanupAt = now
+        return true
     }
 
     // MARK: - Missing Worktree Detection
