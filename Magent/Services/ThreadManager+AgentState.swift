@@ -507,12 +507,25 @@ extension ThreadManager {
     /// so we should show a rate-limit marker instead of a busy spinner.
     private func isAtRateLimitPrompt(_ paneContent: String) -> Bool {
         let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-        let recentLines = lines.suffix(20)
+        let recentLines = lines.suffix(30)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        return recentLines.contains(where: {
-            $0.localizedCaseInsensitiveContains("stop and wait for limit to reset")
-        })
+        guard !recentLines.isEmpty else { return false }
+
+        let normalized = recentLines
+            .joined(separator: "\n")
+            .lowercased()
+        let hasLimitContext = normalized.contains("limit")
+            || normalized.contains("rate")
+            || normalized.contains("quota")
+        let hasWaitChoice = normalized.contains("stop and wait for limit to reset")
+            || normalized.contains("stop and wait for limits to reset")
+            || normalized.contains("stop and wait")
+        let hasSwitchChoice = normalized.contains("switch to extra usage")
+            || normalized.contains("switch to max")
+            || normalized.contains("switch to pro")
+
+        return hasLimitContext && (hasWaitChoice || hasSwitchChoice)
     }
 
     /// Sets a prompt-based rate-limit marker for the session. Returns true if

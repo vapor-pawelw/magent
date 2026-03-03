@@ -35,32 +35,38 @@ extension ThreadManager {
 
     // MARK: - Rename
 
-    private func isAgentCurrentlyRateLimited(_ agent: AgentType, now: Date = Date()) -> Bool {
-        guard let info = globalAgentRateLimits[agent] else { return false }
-        return info.resetAt > now
-    }
-
     private static let slugGenerationTrackableAgents: [AgentType] = [.claude, .codex]
 
     private func slugGenerationAgentOrder(preferred preferredAgent: AgentType?, projectId: UUID?) -> (allTrackable: [AgentType], available: [AgentType]) {
         let settings = persistence.loadSettings()
-        var trackable = settings.availableActiveAgents.filter { Self.slugGenerationTrackableAgents.contains($0) }
+        let resolvedPreferred: AgentType? = {
+            if let preferredAgent { return preferredAgent }
+            if let projectId {
+                return resolveAgentType(for: projectId, requestedAgentType: nil, settings: settings)
+            }
+            return settings.effectiveGlobalDefaultAgentType
+        }()
 
-        // Keep deterministic order with preferred agent first when present.
-        if let preferredAgent,
-           let index = trackable.firstIndex(of: preferredAgent) {
-            let preferred = trackable.remove(at: index)
-            trackable.insert(preferred, at: 0)
+        let activeTrackable = settings.availableActiveAgents.filter { Self.slugGenerationTrackableAgents.contains($0) }
+        var ordered: [AgentType] = []
+        func appendIfTrackable(_ candidate: AgentType?) {
+            guard let candidate,
+                  activeTrackable.contains(candidate),
+                  !ordered.contains(candidate) else {
+                return
+            }
+            ordered.append(candidate)
         }
 
-        let available: [AgentType]
-        if settings.enableRateLimitDetection {
-            let now = Date()
-            available = trackable.filter { !isAgentCurrentlyRateLimited($0, now: now) }
-        } else {
-            available = trackable
+        // Prefer the selected/default agent first when possible.
+        appendIfTrackable(resolvedPreferred)
+        // Then try explicitly active built-ins in user-defined order.
+        for active in activeTrackable {
+            appendIfTrackable(active)
         }
-        return (allTrackable: trackable, available: available)
+
+        let available = ordered
+        return (allTrackable: ordered, available: available)
     }
 
     private static let slugPrefix = "SLUG:"
@@ -123,6 +129,12 @@ extension ThreadManager {
         return "PATH=\(localBin):\(miseShims):$PATH codex exec \(escapedPrompt) --ephemeral --config model_reasoning_effort=none"
     }
 
+    private func backgroundGenerationWorkingDirectory(projectId: UUID?) -> String? {
+        guard let projectId else { return nil }
+        let settings = persistence.loadSettings()
+        return settings.projects.first(where: { $0.id == projectId })?.repoPath
+    }
+
     private func generateSlugViaAgent(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> SlugGenerationAttemptResult {
         let truncated = String(prompt.prefix(500))
         let settings = persistence.loadSettings()
@@ -146,6 +158,7 @@ extension ThreadManager {
             """
 
         let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
+        let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
         let command: String
         switch agentType {
         case .codex:
@@ -158,7 +171,7 @@ extension ThreadManager {
 
         let result: String? = await withTaskGroup(of: String?.self) { group in
             group.addTask {
-                let result = await ShellExecutor.execute(command)
+                let result = await ShellExecutor.execute(command, workingDirectory: workingDirectory)
                 guard result.exitCode == 0 else { return nil }
                 return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             }
@@ -184,8 +197,6 @@ extension ThreadManager {
         case candidates([String])
         /// The prompt was identified as a question, not a task — no rename needed.
         case question
-        /// All agents were rate-limited — skip silently.
-        case rateLimited
         /// AI slug generation failed (timeout, error, etc.).
         case failed
     }
@@ -193,16 +204,10 @@ extension ThreadManager {
     func autoRenameCandidates(
         from prompt: String,
         agentType: AgentType?,
-        projectId: UUID? = nil,
-        skipWhenAllAgentsRateLimited: Bool = false
+        projectId: UUID? = nil
     ) async -> AutoRenameResult {
         let agentOrder = slugGenerationAgentOrder(preferred: agentType, projectId: projectId)
 
-        if skipWhenAllAgentsRateLimited && !agentOrder.allTrackable.isEmpty && agentOrder.available.isEmpty {
-            return .rateLimited
-        }
-
-        var sawQuestionClassification = false
         let normalCandidates = agentOrder.available
         for candidateAgent in normalCandidates {
             switch await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId) {
@@ -213,17 +218,14 @@ extension ThreadManager {
                 }
                 return .candidates(candidates)
             case .question:
-                // Keep trying remaining agents. Only treat this as a question
-                // if all non-rate-limited agents agree.
-                sawQuestionClassification = true
+                // A question classification (SLUG: EMPTY) should short-circuit.
+                // Retry slug generation only on the next submitted user prompt.
+                return .question
             case .failed:
                 continue
             }
         }
 
-        if sawQuestionClassification {
-            return .question
-        }
         return .failed
     }
 
@@ -399,19 +401,13 @@ extension ThreadManager {
         let result = await autoRenameCandidates(
             from: prompt,
             agentType: preferredAgent,
-            projectId: thread.projectId,
-            skipWhenAllAgentsRateLimited: true
+            projectId: thread.projectId
         )
         let candidates: [String]
         switch result {
         case .candidates(let slugs):
             candidates = slugs
         case .question:
-            return
-        case .rateLimited:
-            // With rate-limit tracking enabled, treat known-limited agents as
-            // unavailable and skip first-prompt auto-rename quietly.
-            markFirstPromptAutoRenameHandled(threadId: thread.id)
             return
         case .failed:
             // Keep first-prompt auto-rename one-time and avoid noisy warnings when
@@ -493,6 +489,7 @@ extension ThreadManager {
             """
 
         let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
+        let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
         let command: String
         switch agentType {
         case .codex:
@@ -504,7 +501,7 @@ extension ThreadManager {
 
         let result: String? = await withTaskGroup(of: String?.self) { group in
             group.addTask {
-                let result = await ShellExecutor.execute(command)
+                let result = await ShellExecutor.execute(command, workingDirectory: workingDirectory)
                 guard result.exitCode == 0 else { return nil }
                 return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             }

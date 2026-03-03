@@ -86,8 +86,8 @@ Each thread is 1:1 with a git worktree:
 
 ### 4.1 Worktree Rename Compatibility
 
-Thread rename updates branch/worktree/session names, but running agent processes cannot have their cwd/env rewritten in-place.
-To keep active sessions stable, rename creates a compatibility symlink from the old worktree path to the new path and updates tmux session environment for future shells/panes.
+Thread rename updates branch/session names, but running agent processes cannot have their cwd/env rewritten in-place.
+The underlying worktree directory is not moved. To keep active sessions stable, rename creates a compatibility symlink from the new thread-name path to the existing worktree path and updates tmux session environment for future shells/panes.
 
 ### 5. Persistence Model
 
