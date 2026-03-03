@@ -204,7 +204,8 @@ extension ThreadManager {
                     ?? threads[ti].selectedAgentType
                     ?? effectiveAgentType(for: threads[ti].projectId)
 
-                // Codex busy semantics: only "esc to interrupt" means busy.
+                // Codex busy semantics: only a live status token in the latest
+                // scope ("• esc to interrupt)") means busy.
                 if sessionAgent == .codex {
                     let hasInterruptBusySignal = await paneShowsEscToInterrupt(sessionName: session)
                     guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
@@ -549,15 +550,30 @@ extension ThreadManager {
     }
 
     private func paneShowsEscToInterrupt(sessionName: String) async -> Bool {
-        guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 10) else {
+        // Capture enough history to include at least one scope separator so we can
+        // ignore stale matches from older scopes.
+        guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 200) else {
             return false
         }
 
-        return paneContent
+        let lines = paneContent
             .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-            .contains { line in
-                String(line).localizedCaseInsensitiveContains("esc to interrupt")
-            }
+            .map(String.init)
+
+        let scopeSeparatorIndex = lines.lastIndex(where: { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.count >= 20 else { return false }
+            return trimmed.allSatisfy { $0 == "─" }
+        })
+
+        let latestScopeStart = scopeSeparatorIndex.map { lines.index(after: $0) } ?? lines.startIndex
+        let latestScopeLines = lines[latestScopeStart...]
+
+        // In Codex output, "• esc to interrupt)" appears inside the active
+        // "Working (...)" status line while the model is processing.
+        return latestScopeLines.contains { line in
+            line.localizedCaseInsensitiveContains("• esc to interrupt)")
+        }
     }
 
     // MARK: - Mark Completion / Waiting / Busy
