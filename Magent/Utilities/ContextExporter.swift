@@ -113,12 +113,7 @@ enum ContextExporter {
     // MARK: - Transfer Prompt
 
     /// Builds the initial prompt for the receiving agent.
-    static func transferPrompt(
-        contextFilePath: String,
-        sourceAgent: AgentType?,
-        targetAgent: AgentType
-    ) -> String {
-        let sourceName = sourceAgent?.displayName ?? "a previous agent"
-        return "Read the file at \(contextFilePath) for context from a previous \(sourceName) session. This contains the conversation history. Continue where the previous agent left off. Summarize what was done and ask what to do next."
+    static func transferPrompt(contextFilePath: String) -> String {
+        return "Read \(contextFilePath) for context from the previous session. Continue where it left off. If work was interrupted or unfinished, resume and complete it first. Report progress and results directly. Ask what to do next only if no clear unfinished task remains."
     }
 }

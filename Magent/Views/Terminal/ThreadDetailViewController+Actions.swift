@@ -256,11 +256,7 @@ extension ThreadDetailViewController {
                 return
             }
 
-            let prompt = ContextExporter.transferPrompt(
-                contextFilePath: contextPath,
-                sourceAgent: sourceAgent,
-                targetAgent: targetAgent
-            )
+            let prompt = ContextExporter.transferPrompt(contextFilePath: contextPath)
 
             await MainActor.run {
                 self.addTab(using: targetAgent, useAgentCommand: true, initialPrompt: prompt)
