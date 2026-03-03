@@ -11,7 +11,7 @@ extension ThreadDetailViewController {
 
         if let existing = diffVC {
             if let file = scrollToFile {
-                existing.expandFile(file, collapseOthers: true)
+                existing.expandFile(file, collapseOthers: false)
             }
             return
         }
@@ -53,7 +53,7 @@ extension ThreadDetailViewController {
                 guard diffVC == nil else {
                     isLoadingDiffViewer = false
                     if let file = scrollToFile {
-                        diffVC?.expandFile(file, collapseOthers: true)
+                        diffVC?.expandFile(file, collapseOthers: false)
                     }
                     return
                 }
@@ -106,7 +106,7 @@ extension ThreadDetailViewController {
                 if let file = scrollToFile {
                     DispatchQueue.main.async {
                         NSLog("[DiffViewer] expandFile %@", file)
-                        vc.expandFile(file, collapseOthers: true)
+                        vc.expandFile(file, collapseOthers: false)
                         NSLog("[DiffViewer] expandFile done")
                     }
                 } else {
