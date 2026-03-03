@@ -91,7 +91,7 @@ extension ThreadManager {
         // The Claude Code rate-limit prompt uses ❯ + numbered list and would
         // otherwise match the interactive selector pattern below. Exclude it
         // so it's handled as a rate-limit marker by syncBusySessionsFromProcessState.
-        if lastChunk.localizedCaseInsensitiveContains("stop and wait for limit to reset") {
+        if isInteractiveRateLimitPromptText(lastChunk) {
             return false
         }
 
@@ -115,6 +115,21 @@ extension ThreadManager {
         if lastChunk.contains("Do you want me to go ahead") { return true }
 
         return false
+    }
+
+    private func isInteractiveRateLimitPromptText(_ text: String) -> Bool {
+        let normalized = text.lowercased()
+        let hasLimitContext = normalized.contains("limit")
+            || normalized.contains("rate")
+            || normalized.contains("quota")
+        let hasWaitChoice = normalized.contains("stop and wait for limit to reset")
+            || normalized.contains("stop and wait for limits to reset")
+            || normalized.contains("stop and wait")
+        let hasSwitchChoice = normalized.contains("switch to extra usage")
+            || normalized.contains("switch to max")
+            || normalized.contains("switch to pro")
+
+        return hasLimitContext && (hasWaitChoice || hasSwitchChoice)
     }
 
     private func sendAgentWaitingNotification(for thread: MagentThread, projectName: String, playSound: Bool, sessionName: String) {

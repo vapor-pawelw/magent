@@ -43,18 +43,18 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
-        // Worktree Behavior
+        // Thread Naming
         let worktreeSection = NSStackView()
         worktreeSection.orientation = .vertical
         worktreeSection.alignment = .leading
         worktreeSection.spacing = 6
 
-        let worktreeLabel = NSTextField(labelWithString: "Worktree Behavior")
+        let worktreeLabel = NSTextField(labelWithString: "Thread Naming")
         worktreeLabel.font = .systemFont(ofSize: 14, weight: .semibold)
         worktreeSection.addArrangedSubview(worktreeLabel)
 
         autoRenameCheckbox = NSButton(
-            checkboxWithTitle: "Auto-rename worktrees from the first agent prompt",
+            checkboxWithTitle: "Auto-rename branch from the first agent prompt",
             target: self,
             action: #selector(autoRenameToggled)
         )
@@ -62,7 +62,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         worktreeSection.addArrangedSubview(autoRenameCheckbox)
 
         let autoRenameDesc = NSTextField(
-            wrappingLabelWithString: "Uses AI to generate a meaningful branch name from the prompt. Currently works with Claude Code and Codex."
+            wrappingLabelWithString: "Uses AI to generate a meaningful branch name and thread description from the prompt. Does not rename the worktree directory."
         )
         autoRenameDesc.font = .systemFont(ofSize: 11)
         autoRenameDesc.textColor = NSColor(resource: .textSecondary)
