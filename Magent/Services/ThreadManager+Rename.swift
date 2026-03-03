@@ -44,14 +44,7 @@ extension ThreadManager {
 
     private func slugGenerationAgentOrder(preferred preferredAgent: AgentType?, projectId: UUID?) -> (allTrackable: [AgentType], available: [AgentType]) {
         let settings = persistence.loadSettings()
-        let activeTrackable = settings.availableActiveAgents.filter { Self.slugGenerationTrackableAgents.contains($0) }
-        var trackable = activeTrackable
-
-        // If the preferred/default agent fails (missing binary, bad env, etc.),
-        // fall back to other built-in rename-capable agents, even if not active.
-        for candidate in Self.slugGenerationTrackableAgents where !trackable.contains(candidate) {
-            trackable.append(candidate)
-        }
+        var trackable = settings.availableActiveAgents.filter { Self.slugGenerationTrackableAgents.contains($0) }
 
         // Keep deterministic order with preferred agent first when present.
         if let preferredAgent,
@@ -210,7 +203,8 @@ extension ThreadManager {
         }
 
         var sawQuestionClassification = false
-        for candidateAgent in agentOrder.available {
+        let normalCandidates = agentOrder.available
+        for candidateAgent in normalCandidates {
             switch await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId) {
             case .slug(let slug):
                 var candidates = [slug]
