@@ -14,6 +14,8 @@ Detection only triggers when a **concrete reset time** can be parsed from the te
 
 When Magent first sees a rate-limit message, it computes a **fingerprint** (normalized text of the rate-limit lines) and stores the fingerprint along with the **concrete reset time** to disk (`rate-limit-cache.json`).
 
+Magent also stores a per-agent ignore list for fingerprints you manually dismiss (`ignored-rate-limit-fingerprints.json`).
+
 On subsequent checks:
 - **Same fingerprint, reset time still in the future** — uses the stored time (no re-parsing, no drift)
 - **Same fingerprint, reset time in the past** — rate limit expired, skips detection
@@ -37,10 +39,14 @@ This cap does **not** apply when the message includes:
 Rate limits are tracked **per agent type** (Claude, Codex), not per session. When one session detects a Claude rate limit, the same status is shown across all Claude sessions since rate limits apply at the account level.
 
 When any session detects that its agent has resumed work (producing output after being blocked), the rate limit is cleared globally for that agent.
+To avoid 3-second flapping, Magent now only auto-clears when the latest pane no longer shows an active non-ignored rate-limit fingerprint.
 
 ## UI Indicators
 
 - **Sidebar toolbar**: Shows a summary like "Rate limits: Claude: 19m · Codex: 3h 5m"
+- **Sidebar toolbar context menu (right-click on Rate limits)**:
+  - Lift Claude/Codex limit now
+  - Lift + ignore currently visible fingerprints for Claude/Codex (so only future/new messages are tracked)
 - **Thread list**: Red hourglass icon on threads where all agent tabs are rate-limited
 - **Tab bar**: Red hourglass on individual rate-limited tabs
 - **Tooltips**: Show the exact reset time (e.g., "Rate limit reached. Resets Mar 2, 2026 at 8:00 PM")

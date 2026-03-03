@@ -32,8 +32,12 @@ final class ThreadManager {
     /// Prevents re-detecting stale messages after restart and anchors relative/bare-time
     /// reset phrases to the concrete Date they were first computed at.
     var rateLimitFingerprintCache: [String: Date] = [:]
+    /// Persisted allowlist of fingerprints the user manually ignored per agent.
+    var ignoredRateLimitFingerprintsByAgent: [AgentType: Set<String>] = [:]
     var rateLimitCacheLoaded = false
     var rateLimitCacheDirty = false
+    var ignoredRateLimitCacheLoaded = false
+    var ignoredRateLimitCacheDirty = false
     var lastPublishedRateLimitSummary: String?
     var sessionsBeingRecreated: Set<String> = []
     var sessionMonitorTimer: Timer?

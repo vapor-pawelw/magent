@@ -31,6 +31,8 @@ final class ThreadListViewController: NSViewController {
     let threadManager = ThreadManager.shared
     let persistence = PersistenceService.shared
 
+    private var rateLimitStatusContainer: NSStackView!
+    private var rateLimitStatusIconView: NSImageView!
     private var rateLimitStatusLabel: NSTextField!
     var diffPanelView: DiffPanelView!
     var branchMismatchView: BranchMismatchView!
@@ -112,27 +114,115 @@ final class ThreadListViewController: NSViewController {
     // MARK: - Toolbar Buttons
 
     private func setupToolbar() {
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
+        rateLimitStatusIconView = NSImageView()
+        rateLimitStatusIconView.image = NSImage(
+            systemSymbolName: "hourglass",
+            accessibilityDescription: "Rate limits"
+        )?.withSymbolConfiguration(symbolConfig)
+        rateLimitStatusIconView.contentTintColor = NSColor(resource: .textSecondary)
+        rateLimitStatusIconView.translatesAutoresizingMaskIntoConstraints = false
+
         rateLimitStatusLabel = NSTextField(labelWithString: "")
         rateLimitStatusLabel.font = .systemFont(ofSize: 11, weight: .medium)
         rateLimitStatusLabel.textColor = NSColor(resource: .textSecondary)
         rateLimitStatusLabel.lineBreakMode = .byTruncatingTail
-        rateLimitStatusLabel.isHidden = true
         rateLimitStatusLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        view.addSubview(rateLimitStatusLabel)
+        rateLimitStatusContainer = NSStackView(views: [rateLimitStatusIconView, rateLimitStatusLabel])
+        rateLimitStatusContainer.orientation = .horizontal
+        rateLimitStatusContainer.alignment = .centerY
+        rateLimitStatusContainer.spacing = 4
+        rateLimitStatusContainer.isHidden = true
+        rateLimitStatusContainer.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(rateLimitStatusContainer)
+
+        rebuildRateLimitStatusMenu()
 
         NSLayoutConstraint.activate([
-            rateLimitStatusLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 11),
-            rateLimitStatusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            rateLimitStatusLabel.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -8),
+            rateLimitStatusContainer.topAnchor.constraint(equalTo: view.topAnchor, constant: 11),
+            rateLimitStatusContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+            rateLimitStatusContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -8),
         ])
     }
 
     private func updateGlobalRateLimitSummary() {
         let summary = threadManager.globalRateLimitSummaryText()
         rateLimitStatusLabel.stringValue = summary ?? ""
-        rateLimitStatusLabel.isHidden = (summary == nil)
+        rateLimitStatusContainer.isHidden = (summary == nil)
         rateLimitStatusLabel.toolTip = summary
+        rebuildRateLimitStatusMenu()
+    }
+
+    private func rebuildRateLimitStatusMenu() {
+        let menu = NSMenu(title: "Rate Limits")
+        menu.autoenablesItems = false
+        addRateLimitMenuItems(for: .claude, to: menu)
+        menu.addItem(NSMenuItem.separator())
+        addRateLimitMenuItems(for: .codex, to: menu)
+
+        rateLimitStatusContainer.menu = menu
+        rateLimitStatusLabel.menu = menu
+        rateLimitStatusIconView.menu = menu
+    }
+
+    private func addRateLimitMenuItems(for agent: AgentType, to menu: NSMenu) {
+        let hasActiveLimit = threadManager.hasActiveRateLimit(for: agent)
+        let shortName = agent == .claude ? "Claude" : "Codex"
+
+        let liftItem = NSMenuItem(
+            title: "Lift \(shortName) Limit Now",
+            action: #selector(liftRateLimitFromMenu(_:)),
+            keyEquivalent: ""
+        )
+        liftItem.target = self
+        liftItem.representedObject = agent.rawValue
+        liftItem.isEnabled = hasActiveLimit
+        menu.addItem(liftItem)
+
+        let ignoreLiftItem = NSMenuItem(
+            title: "Lift + Ignore Current \(shortName) Messages",
+            action: #selector(liftAndIgnoreRateLimitFromMenu(_:)),
+            keyEquivalent: ""
+        )
+        ignoreLiftItem.target = self
+        ignoreLiftItem.representedObject = agent.rawValue
+        ignoreLiftItem.isEnabled = hasActiveLimit
+        menu.addItem(ignoreLiftItem)
+    }
+
+    @objc private func liftRateLimitFromMenu(_ sender: NSMenuItem) {
+        guard let rawAgent = sender.representedObject as? String,
+              let agent = AgentType(rawValue: rawAgent) else { return }
+
+        Task {
+            _ = await threadManager.liftRateLimitManually(for: agent)
+            await MainActor.run {
+                let shortName = agent == .claude ? "Claude" : "Codex"
+                BannerManager.shared.show(message: "\(shortName) rate limit lifted manually.", style: .info)
+                updateGlobalRateLimitSummary()
+            }
+        }
+    }
+
+    @objc private func liftAndIgnoreRateLimitFromMenu(_ sender: NSMenuItem) {
+        guard let rawAgent = sender.representedObject as? String,
+              let agent = AgentType(rawValue: rawAgent) else { return }
+
+        Task {
+            let ignoredCount = await threadManager.liftAndIgnoreCurrentRateLimitFingerprints(for: agent)
+            await MainActor.run {
+                let shortName = agent == .claude ? "Claude" : "Codex"
+                let message: String
+                if ignoredCount > 0 {
+                    message = "\(shortName) limit lifted. Ignoring \(ignoredCount) current fingerprint\(ignoredCount == 1 ? "" : "s")."
+                } else {
+                    message = "\(shortName) limit lifted. No active fingerprints found to ignore."
+                }
+                BannerManager.shared.show(message: message, style: .info)
+                updateGlobalRateLimitSummary()
+            }
+        }
     }
 
     // MARK: - Outline View

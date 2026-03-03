@@ -214,7 +214,7 @@ extension ThreadManager {
                             changed = true
                             busyChangedThreadIds.insert(threads[i].id)
                         }
-                        let recoveredIds = clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
+                        let recoveredIds = await clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
                         if !recoveredIds.isEmpty {
                             rateLimitChangedThreadIds.formUnion(recoveredIds)
                             changed = true
@@ -294,7 +294,11 @@ extension ThreadManager {
                             changed = true
                             rateLimitChangedThreadIds.insert(threadId)
                         }
-                        let recoveredIds = clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
+                        let recoveredIds = await clearRateLimitAfterRecovery(
+                            threadId: threadId,
+                            sessionName: session,
+                            paneContent: capturedContent
+                        )
                         if !recoveredIds.isEmpty {
                             rateLimitChangedThreadIds.formUnion(recoveredIds)
                             changed = true
@@ -341,7 +345,11 @@ extension ThreadManager {
                                 changed = true
                                 rateLimitChangedThreadIds.insert(threadId)
                             }
-                            let recoveredIds = clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
+                            let recoveredIds = await clearRateLimitAfterRecovery(
+                                threadId: threadId,
+                                sessionName: session,
+                                paneContent: capturedContent2
+                            )
                             if !recoveredIds.isEmpty {
                                 rateLimitChangedThreadIds.formUnion(recoveredIds)
                                 changed = true
@@ -414,7 +422,11 @@ extension ThreadManager {
                                 changed = true
                                 rateLimitChangedThreadIds.insert(threadId)
                             }
-                            let recoveredIds = clearRateLimitAfterRecovery(threadId: threadId, sessionName: session)
+                            let recoveredIds = await clearRateLimitAfterRecovery(
+                                threadId: threadId,
+                                sessionName: session,
+                                paneContent: capturedContent3
+                            )
                             if !recoveredIds.isEmpty {
                                 rateLimitChangedThreadIds.formUnion(recoveredIds)
                                 changed = true

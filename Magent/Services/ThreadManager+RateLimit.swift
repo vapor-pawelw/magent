@@ -32,6 +32,34 @@ extension ThreadManager {
         return "\(max(1, minutes))m"
     }
 
+    func hasActiveRateLimit(for agent: AgentType, now: Date = Date()) -> Bool {
+        guard isRateLimitTrackable(agent: agent) else { return false }
+        return activeGlobalRateLimit(for: agent, now: now) != nil
+    }
+
+    private func ensureRateLimitCachesLoaded() {
+        if !rateLimitCacheLoaded {
+            rateLimitFingerprintCache = persistence.loadRateLimitCache()
+            rateLimitCacheLoaded = true
+        }
+        if !ignoredRateLimitCacheLoaded {
+            ignoredRateLimitFingerprintsByAgent = persistence.loadIgnoredRateLimitFingerprints()
+            ignoredRateLimitCacheLoaded = true
+        }
+    }
+
+    private func isIgnoredRateLimitFingerprint(_ fingerprint: String, for agent: AgentType) -> Bool {
+        let normalized = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return false }
+        return ignoredRateLimitFingerprintsByAgent[agent]?.contains(normalized) ?? false
+    }
+
+    private func persistIgnoredRateLimitCacheIfNeeded() {
+        guard ignoredRateLimitCacheDirty else { return }
+        ignoredRateLimitCacheDirty = false
+        persistence.saveIgnoredRateLimitFingerprints(ignoredRateLimitFingerprintsByAgent)
+    }
+
     // MARK: - Rate-Limit Detection
 
     private struct RateLimitDetection {
@@ -76,11 +104,8 @@ extension ThreadManager {
         var changedThreadIds = Set<UUID>()
         var didChangeGlobalCache = pruneExpiredGlobalRateLimits(now: now, changedThreadIds: &changedThreadIds)
 
-        // Lazy-load the persisted fingerprint cache on first use.
-        if !rateLimitCacheLoaded {
-            rateLimitFingerprintCache = persistence.loadRateLimitCache()
-            rateLimitCacheLoaded = true
-        }
+        // Lazy-load persisted rate-limit caches on first use.
+        ensureRateLimitCachesLoaded()
 
         let rateLimitSnapshot = threads.filter { !$0.isArchived }
         for thread in rateLimitSnapshot {
@@ -117,6 +142,17 @@ extension ThreadManager {
                     if detectionEnabled {
                         // Preserve prompt-based markers — they are managed by
                         // syncBusySessionsFromProcessState, not by this function.
+                        if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
+                            // keep prompt-based marker
+                        } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                            changedThreadIds.insert(threadId)
+                        }
+                    }
+                    continue
+                }
+
+                if isIgnoredRateLimitFingerprint(detection.fingerprint, for: sessionAgent) {
+                    if detectionEnabled {
                         if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
                             // keep prompt-based marker
                         } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
@@ -226,6 +262,7 @@ extension ThreadManager {
             rateLimitCacheDirty = false
             persistence.saveRateLimitCache(rateLimitFingerprintCache)
         }
+        persistIgnoredRateLimitCacheIfNeeded()
     }
 
     private func isRateLimitTrackable(agent: AgentType) -> Bool {
@@ -313,10 +350,88 @@ extension ThreadManager {
         }
     }
 
+    @discardableResult
+    func liftRateLimitManually(for agent: AgentType) async -> Set<UUID> {
+        guard isRateLimitTrackable(agent: agent) else { return [] }
+        let hadGlobal = globalAgentRateLimits.removeValue(forKey: agent) != nil
+
+        var changedThreadIds = Set<UUID>()
+        clearRateLimitMarkers(for: agent, changedThreadIds: &changedThreadIds)
+        guard hadGlobal || !changedThreadIds.isEmpty else { return [] }
+
+        lastPublishedRateLimitSummary = nil
+        if !changedThreadIds.isEmpty {
+            await MainActor.run {
+                delegate?.threadManager(self, didUpdateThreads: threads)
+                for threadId in changedThreadIds {
+                    NotificationCenter.default.post(
+                        name: .magentAgentRateLimitChanged,
+                        object: self,
+                        userInfo: ["threadId": threadId]
+                    )
+                }
+            }
+        }
+        await publishRateLimitSummaryIfNeeded()
+        return changedThreadIds
+    }
+
+    @discardableResult
+    func liftAndIgnoreCurrentRateLimitFingerprints(for agent: AgentType) async -> Int {
+        guard isRateLimitTrackable(agent: agent) else { return 0 }
+        ensureRateLimitCachesLoaded()
+
+        let now = Date()
+        let snapshot = threads.filter { !$0.isArchived }
+        var activeFingerprints = Set<String>()
+
+        for thread in snapshot {
+            for sessionName in thread.agentTmuxSessions {
+                guard agentType(for: thread, sessionName: sessionName) == agent else { continue }
+                guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
+                      let detection = rateLimitDetection(from: paneContent, now: now) else {
+                    continue
+                }
+                let effectiveResetAt = rateLimitFingerprintCache[detection.fingerprint] ?? detection.info.resetAt
+                guard effectiveResetAt > now else { continue }
+                activeFingerprints.insert(detection.fingerprint)
+            }
+        }
+
+        var ignored = ignoredRateLimitFingerprintsByAgent[agent] ?? []
+        let before = ignored.count
+        ignored.formUnion(activeFingerprints)
+        let added = ignored.count - before
+        if added > 0 {
+            ignoredRateLimitFingerprintsByAgent[agent] = ignored
+            ignoredRateLimitCacheDirty = true
+            persistIgnoredRateLimitCacheIfNeeded()
+        }
+
+        _ = await liftRateLimitManually(for: agent)
+        return added
+    }
+
+    func paneHasActiveNonIgnoredRateLimit(for agent: AgentType, paneContent: String, now: Date = Date()) -> Bool {
+        guard isRateLimitTrackable(agent: agent) else { return false }
+        ensureRateLimitCachesLoaded()
+        guard let detection = rateLimitDetection(from: paneContent, now: now) else { return false }
+        guard !isIgnoredRateLimitFingerprint(detection.fingerprint, for: agent) else { return false }
+
+        if let cachedResetAt = rateLimitFingerprintCache[detection.fingerprint] {
+            return cachedResetAt > now
+        }
+        return detection.info.resetAt > now
+    }
+
     /// If an agent starts processing work after being rate-limited, clear the rate-limit
     /// cache for that agent globally and remove markers from all tabs using it.
     @discardableResult
-    func clearRateLimitAfterRecovery(threadId: UUID, sessionName: String) -> Set<UUID> {
+    func clearRateLimitAfterRecovery(
+        threadId: UUID,
+        sessionName: String,
+        paneContent: String? = nil
+    ) async -> Set<UUID> {
         guard let thread = threads.first(where: { $0.id == threadId }) else { return [] }
         guard let agent = agentType(for: thread, sessionName: sessionName),
               isRateLimitTrackable(agent: agent) else {
@@ -326,6 +441,18 @@ extension ThreadManager {
         let hadSessionMarker = thread.rateLimitedSessions[sessionName] != nil
         let hadGlobalMarker = globalAgentRateLimits[agent] != nil
         guard hadSessionMarker || hadGlobalMarker else { return [] }
+
+        let now = Date()
+        let latestPaneContent: String?
+        if let paneContent {
+            latestPaneContent = paneContent
+        } else {
+            latestPaneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120)
+        }
+        guard let latestPaneContent else { return [] }
+        if paneHasActiveNonIgnoredRateLimit(for: agent, paneContent: latestPaneContent, now: now) {
+            return []
+        }
 
         globalAgentRateLimits.removeValue(forKey: agent)
         lastPublishedRateLimitSummary = nil

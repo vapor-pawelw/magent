@@ -98,6 +98,10 @@ final class PersistenceService {
         appSupportURL.appendingPathComponent("rate-limit-cache.json")
     }
 
+    private var ignoredRateLimitFingerprintsURL: URL {
+        appSupportURL.appendingPathComponent("ignored-rate-limit-fingerprints.json")
+    }
+
     /// Loads persisted rate limit fingerprints (fingerprint → concrete resetAt).
     /// Automatically prunes expired entries on load.
     func loadRateLimitCache() -> [String: Date] {
@@ -115,5 +119,43 @@ final class PersistenceService {
     func saveRateLimitCache(_ cache: [String: Date]) {
         guard let data = try? encoder.encode(cache) else { return }
         try? data.write(to: rateLimitCacheURL, options: .atomic)
+    }
+
+    func loadIgnoredRateLimitFingerprints() -> [AgentType: Set<String>] {
+        let url = ignoredRateLimitFingerprintsURL
+        guard let data = try? Data(contentsOf: url) else { return [:] }
+        let raw = (try? decoder.decode([String: [String]].self, from: data)) ?? [:]
+
+        var parsed: [AgentType: Set<String>] = [:]
+        for (agentRaw, fingerprints) in raw {
+            guard let agent = AgentType(rawValue: agentRaw),
+                  agent == .claude || agent == .codex else {
+                continue
+            }
+            let normalized = Set(
+                fingerprints
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            )
+            if !normalized.isEmpty {
+                parsed[agent] = normalized
+            }
+        }
+        return parsed
+    }
+
+    func saveIgnoredRateLimitFingerprints(_ ignored: [AgentType: Set<String>]) {
+        var raw: [String: [String]] = [:]
+        for (agent, fingerprints) in ignored {
+            guard agent == .claude || agent == .codex else { continue }
+            let normalized = fingerprints
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .sorted()
+            guard !normalized.isEmpty else { continue }
+            raw[agent.rawValue] = normalized
+        }
+        guard let data = try? encoder.encode(raw) else { return }
+        try? data.write(to: ignoredRateLimitFingerprintsURL, options: .atomic)
     }
 }
