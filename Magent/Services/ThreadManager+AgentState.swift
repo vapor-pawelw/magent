@@ -537,7 +537,7 @@ extension ThreadManager {
     }
 
     private func paneShowsEscToInterrupt(sessionName: String) async -> Bool {
-        guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 40) else {
+        guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 10) else {
             return false
         }
 
