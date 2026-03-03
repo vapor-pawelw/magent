@@ -14,6 +14,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var autoReorderThreadsOnAgentCompletion: Bool
     var autoRenameWorktrees: Bool
     var autoRenameSlugPrompt: String
+    var useThreadSections: Bool
     var isConfigured: Bool
     var threadSections: [ThreadSection]
     var defaultSectionId: UUID?
@@ -42,6 +43,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         autoReorderThreadsOnAgentCompletion: Bool = true,
         autoRenameWorktrees: Bool = true,
         autoRenameSlugPrompt: String = AppSettings.defaultSlugPrompt,
+        useThreadSections: Bool = true,
         isConfigured: Bool = false,
         threadSections: [ThreadSection] = ThreadSection.defaults(),
         defaultSectionId: UUID? = nil,
@@ -69,6 +71,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.autoReorderThreadsOnAgentCompletion = autoReorderThreadsOnAgentCompletion
         self.autoRenameWorktrees = autoRenameWorktrees
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
+        self.useThreadSections = useThreadSections
         self.isConfigured = isConfigured
         self.threadSections = threadSections
         self.defaultSectionId = defaultSectionId
@@ -101,6 +104,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         autoReorderThreadsOnAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .autoReorderThreadsOnAgentCompletion) ?? true
         autoRenameWorktrees = try container.decodeIfPresent(Bool.self, forKey: .autoRenameWorktrees) ?? true
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt) ?? Self.defaultSlugPrompt
+        useThreadSections = try container.decodeIfPresent(Bool.self, forKey: .useThreadSections) ?? true
         isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
         threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections) ?? ThreadSection.defaults()
         defaultSectionId = try container.decodeIfPresent(UUID.self, forKey: .defaultSectionId)
@@ -131,6 +135,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoReorderThreadsOnAgentCompletion, forKey: .autoReorderThreadsOnAgentCompletion)
         try container.encode(autoRenameWorktrees, forKey: .autoRenameWorktrees)
         try container.encode(autoRenameSlugPrompt, forKey: .autoRenameSlugPrompt)
+        try container.encode(useThreadSections, forKey: .useThreadSections)
         try container.encode(isConfigured, forKey: .isConfigured)
         try container.encode(threadSections, forKey: .threadSections)
         try container.encodeIfPresent(defaultSectionId, forKey: .defaultSectionId)
@@ -188,6 +193,14 @@ nonisolated struct AppSettings: Codable, Sendable {
         sections(for: projectId).filter(\.isVisible).sorted { $0.sortOrder < $1.sortOrder }
     }
 
+    func shouldUseThreadSections(for projectId: UUID) -> Bool {
+        if let project = projects.first(where: { $0.id == projectId }),
+           let projectOverride = project.useThreadSectionsOverride {
+            return projectOverride
+        }
+        return useThreadSections
+    }
+
     var availableActiveAgents: [AgentType] {
         var seen = Set<AgentType>()
         return activeAgents.filter { seen.insert($0).inserted }
@@ -234,6 +247,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case autoReorderThreadsOnAgentCompletion
         case autoRenameWorktrees
         case autoRenameSlugPrompt
+        case useThreadSections
         case isConfigured
         case threadSections
         case defaultSectionId

@@ -100,6 +100,20 @@ extension SettingsProjectsViewController {
         try? persistence.saveSettings(settings)
     }
 
+    @objc func threadListLayoutOverrideChanged() {
+        guard let index = selectedProjectIndex else { return }
+        switch threadListLayoutPopup.indexOfSelectedItem {
+        case 1:
+            settings.projects[index].useThreadSectionsOverride = true
+        case 2:
+            settings.projects[index].useThreadSectionsOverride = false
+        default:
+            settings.projects[index].useThreadSectionsOverride = nil
+        }
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+    }
+
     @objc func slugPromptCheckboxToggled() {
         guard let index = selectedProjectIndex else { return }
         let enabled = slugPromptCheckbox.state == .on

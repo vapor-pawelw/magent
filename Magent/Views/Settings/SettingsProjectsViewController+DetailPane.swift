@@ -263,6 +263,28 @@ extension SettingsProjectsViewController {
         overrideDesc.textColor = NSColor(resource: .textSecondary)
         overridesStack.addArrangedSubview(overrideDesc)
 
+        // Thread list layout override
+        let layoutHeader = NSTextField(labelWithString: "Thread List Layout")
+        layoutHeader.font = .systemFont(ofSize: 12, weight: .semibold)
+        overridesStack.addArrangedSubview(layoutHeader)
+
+        threadListLayoutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        let globalLayoutName = settings.useThreadSections ? "Sectioned" : "Flat"
+        threadListLayoutPopup.addItem(withTitle: "Use Default (\(globalLayoutName))")
+        threadListLayoutPopup.addItem(withTitle: "Sectioned")
+        threadListLayoutPopup.addItem(withTitle: "Flat")
+        switch project.useThreadSectionsOverride {
+        case .some(true):
+            threadListLayoutPopup.selectItem(at: 1)
+        case .some(false):
+            threadListLayoutPopup.selectItem(at: 2)
+        case .none:
+            threadListLayoutPopup.selectItem(at: 0)
+        }
+        threadListLayoutPopup.target = self
+        threadListLayoutPopup.action = #selector(threadListLayoutOverrideChanged)
+        overridesStack.addArrangedSubview(threadListLayoutPopup)
+
         // Agent type override
         let agentTypeHeader = NSTextField(labelWithString: "Default Agent")
         agentTypeHeader.font = .systemFont(ofSize: 12, weight: .semibold)

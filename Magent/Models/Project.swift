@@ -11,6 +11,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
     var agentContextInjection: String?
     var autoRenameSlugPrompt: String?
     var isPinned: Bool
+    var useThreadSectionsOverride: Bool?
     var defaultSectionId: UUID?
     var threadSections: [ThreadSection]?
     var jiraProjectKey: String?
@@ -33,6 +34,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         agentContextInjection: String? = nil,
         autoRenameSlugPrompt: String? = nil,
         isPinned: Bool = false,
+        useThreadSectionsOverride: Bool? = nil,
         defaultSectionId: UUID? = nil,
         threadSections: [ThreadSection]? = nil,
         jiraProjectKey: String? = nil,
@@ -54,6 +56,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         self.agentContextInjection = agentContextInjection
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.isPinned = isPinned
+        self.useThreadSectionsOverride = useThreadSectionsOverride
         self.defaultSectionId = defaultSectionId
         self.threadSections = threadSections
         self.jiraProjectKey = jiraProjectKey
@@ -78,6 +81,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         agentContextInjection = try container.decodeIfPresent(String.self, forKey: .agentContextInjection)
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt)
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        useThreadSectionsOverride = try container.decodeIfPresent(Bool.self, forKey: .useThreadSectionsOverride)
         defaultSectionId = try container.decodeIfPresent(UUID.self, forKey: .defaultSectionId)
         threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections)
         jiraProjectKey = try container.decodeIfPresent(String.self, forKey: .jiraProjectKey)

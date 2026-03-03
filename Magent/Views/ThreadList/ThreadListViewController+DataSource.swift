@@ -408,16 +408,15 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         let c = ThreadCell()
                         c.identifier = identifier
 
+                        let iv = NSImageView()
+                        iv.translatesAutoresizingMaskIntoConstraints = false
+                        c.addSubview(iv)
+                        c.imageView = iv
+
                         let tf = NSTextField(labelWithString: "")
                         tf.translatesAutoresizingMaskIntoConstraints = false
                         c.addSubview(tf)
                         c.textField = tf
-
-                        NSLayoutConstraint.activate([
-                            tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
-                            tf.trailingAnchor.constraint(lessThanOrEqualTo: c.trailingAnchor, constant: -Self.sidebarHorizontalInset),
-                            tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                        ])
 
                         return c
                     }()
@@ -454,9 +453,21 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 }()
 
             let settings = persistence.loadSettings()
-            let sections = settings.threadSections
-            let section = sections.first(where: { $0.id == thread.sectionId })
-            cell.configure(with: thread, sectionColor: section?.color)
+            let shouldUseSections = settings.shouldUseThreadSections(for: thread.projectId)
+            let sectionColor: NSColor?
+            if shouldUseSections {
+                let projectSections = settings.sections(for: thread.projectId)
+                let knownSectionIds = Set(projectSections.map(\.id))
+                let defaultSectionId = settings.defaultSection(for: thread.projectId)?.id
+                let resolvedSectionId = thread.resolvedSectionId(
+                    knownSectionIds: knownSectionIds,
+                    fallback: defaultSectionId
+                )
+                sectionColor = projectSections.first(where: { $0.id == resolvedSectionId })?.color
+            } else {
+                sectionColor = nil
+            }
+            cell.configure(with: thread, sectionColor: sectionColor)
             cell.onArchive = { [weak self] in
                 self?.triggerArchive(for: thread)
             }
