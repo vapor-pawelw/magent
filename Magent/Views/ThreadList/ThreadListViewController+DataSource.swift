@@ -125,6 +125,42 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         return index > 0
     }
 
+    private enum ProjectHeaderHitArea {
+        case name
+        case disclosure
+        case add
+        case other
+    }
+
+    private func projectHeaderHitArea(_ project: SidebarProject) -> ProjectHeaderHitArea {
+        guard let event = NSApp.currentEvent,
+              event.type == .leftMouseDown || event.type == .leftMouseUp else { return .other }
+
+        let pointInOutline = outlineView.convert(event.locationInWindow, from: nil)
+        let row = outlineView.row(at: pointInOutline)
+        guard row >= 0,
+              let rowProject = outlineView.item(atRow: row) as? SidebarProject,
+              rowProject.projectId == project.projectId,
+              let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView else {
+            return .other
+        }
+
+        let pointInCell = cell.convert(pointInOutline, from: outlineView)
+        if let textField = cell.textField,
+           textField.frame.insetBy(dx: -2, dy: -2).contains(pointInCell) {
+            return .name
+        }
+        if let disclosureButton = cell.subviews.first(where: { $0.identifier == Self.projectDisclosureButtonIdentifier }),
+           disclosureButton.frame.insetBy(dx: -2, dy: -2).contains(pointInCell) {
+            return .disclosure
+        }
+        if let addButton = cell.subviews.first(where: { $0.identifier == Self.projectAddButtonIdentifier }),
+           addButton.frame.insetBy(dx: -2, dy: -2).contains(pointInCell) {
+            return .add
+        }
+        return .other
+    }
+
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
         if let project = item as? SidebarProject {
             return shouldShowTopSeparator(for: project) ? 60 : 34
@@ -159,8 +195,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             if suppressNextProjectRowToggle {
                 return false
             }
-            setProjectCollapsed(project, isCollapsed: !isProjectCollapsed(project))
-            reloadData()
+
+            if case .name = projectHeaderHitArea(project) {
+                setProjectCollapsed(project, isCollapsed: !isProjectCollapsed(project))
+                reloadData()
+            }
             return false
         }
 
@@ -233,22 +272,25 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         separator.heightAnchor.constraint(equalToConstant: 1),
                         tf.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -8),
                         tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
-                        tf.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -6),
-                        iv.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 6),
+                        disclosureButton.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 4),
+                        disclosureButton.centerYAnchor.constraint(
+                            equalTo: tf.lastBaselineAnchor,
+                            constant: Self.projectHeaderDisclosureCenterToBaselineOffset
+                        ),
+                        disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
+                        disclosureButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
+                        iv.leadingAnchor.constraint(equalTo: disclosureButton.trailingAnchor, constant: 6),
                         iv.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
                         iv.widthAnchor.constraint(equalToConstant: 10),
                         iv.heightAnchor.constraint(equalToConstant: 10),
-                        addButton.trailingAnchor.constraint(equalTo: disclosureButton.leadingAnchor, constant: -2),
+                        iv.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -6),
                         addButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
                         addButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                         addButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
-                        disclosureButton.trailingAnchor.constraint(
+                        addButton.trailingAnchor.constraint(
                             equalTo: c.trailingAnchor,
                             constant: -Self.projectDisclosureTrailingInset
                         ),
-                        disclosureButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
-                        disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
-                        disclosureButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                     ])
                     return c
                 }()

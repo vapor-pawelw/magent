@@ -150,10 +150,18 @@ extension ThreadListViewController {
     }
 
     private func projectFromProjectHeaderButton(_ sender: NSButton) -> Project? {
-        guard let rawProjectId = sender.objectValue as? String,
-              let projectId = UUID(uuidString: rawProjectId) else { return nil }
         let settings = persistence.loadSettings()
-        return settings.projects.first(where: { $0.id == projectId })
+
+        if let rawProjectId = sender.objectValue as? String,
+           let projectId = UUID(uuidString: rawProjectId),
+           let matched = settings.projects.first(where: { $0.id == projectId }) {
+            return matched
+        }
+
+        let row = outlineView.row(for: sender)
+        guard row >= 0,
+              let sidebarProject = outlineView.item(atRow: row) as? SidebarProject else { return nil }
+        return settings.projects.first(where: { $0.id == sidebarProject.projectId })
     }
 
     private func showNoProjectsAlert() {

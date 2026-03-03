@@ -23,6 +23,7 @@ final class ThreadListViewController: NSViewController {
     static let projectDisclosureTrailingInset: CGFloat = 8
     static let outlineIndentationPerLevel: CGFloat = 16
     static let disclosureButtonSize: CGFloat = 16
+    static let projectHeaderDisclosureCenterToBaselineOffset: CGFloat = -5
 
     weak var delegate: ThreadListDelegate?
 
