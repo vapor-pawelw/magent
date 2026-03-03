@@ -12,6 +12,7 @@ final class SettingsNotificationsViewController: NSViewController {
     private var autoReorderOnCompletionCheckbox: NSButton!
     private var soundPickerPopup: NSPopUpButton!
     private var soundPickerRow: NSStackView!
+    private var rateLimitSystemNotificationCheckbox: NSButton!
     private var rateLimitNotifyCheckbox: NSButton!
     private var rateLimitSoundPickerPopup: NSPopUpButton!
     private var rateLimitSoundPickerRow: NSStackView!
@@ -141,8 +142,16 @@ final class SettingsNotificationsViewController: NSViewController {
         )
         rateLimitCard = rlCard
 
+        rateLimitSystemNotificationCheckbox = NSButton(
+            checkboxWithTitle: "Show system notification when rate limit is lifted",
+            target: self,
+            action: #selector(rateLimitSystemNotificationToggled)
+        )
+        rateLimitSystemNotificationCheckbox.state = settings.showSystemNotificationOnRateLimitLifted ? .on : .off
+        rlStack.addArrangedSubview(rateLimitSystemNotificationCheckbox)
+
         rateLimitNotifyCheckbox = NSButton(
-            checkboxWithTitle: "Notify when rate limit is lifted",
+            checkboxWithTitle: "Play sound when rate limit is lifted",
             target: self,
             action: #selector(rateLimitNotifyToggled)
         )
@@ -357,6 +366,11 @@ final class SettingsNotificationsViewController: NSViewController {
         try? persistence.saveSettings(settings)
     }
 
+    @objc private func rateLimitSystemNotificationToggled() {
+        settings.showSystemNotificationOnRateLimitLifted = rateLimitSystemNotificationCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
+
     @objc private func rateLimitDetectedSoundToggled() {
         settings.playSoundOnRateLimitDetected = rateLimitDetectedSoundCheckbox.state == .on
         rateLimitDetectedSoundPickerRow.isHidden = !settings.playSoundOnRateLimitDetected
@@ -417,6 +431,7 @@ final class SettingsNotificationsViewController: NSViewController {
                 self.completionSoundCheckbox.isEnabled = authorized
                 self.soundPickerPopup.isEnabled = authorized
                 self.autoReorderOnCompletionCheckbox.isEnabled = authorized
+                self.rateLimitSystemNotificationCheckbox.isEnabled = authorized
                 self.rateLimitNotifyCheckbox.isEnabled = authorized
                 self.rateLimitSoundPickerPopup.isEnabled = authorized
                 self.rateLimitDetectedSoundCheckbox.isEnabled = authorized && self.settings.enableRateLimitDetection

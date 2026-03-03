@@ -15,6 +15,10 @@ final class OnboardingNotificationsView: NSView {
         soundPickerPopup.selectedItem?.title ?? "Ping"
     }
 
+    var showSystemNotificationOnRateLimitLifted: Bool {
+        rateLimitSystemNotificationCheckbox.state == .on
+    }
+
     var notifyOnRateLimitLifted: Bool {
         rateLimitNotifyCheckbox.state == .on
     }
@@ -45,8 +49,13 @@ final class OnboardingNotificationsView: NSView {
     )
     private let soundPickerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private var soundPickerRow: NSStackView!
+    private let rateLimitSystemNotificationCheckbox = NSButton(
+        checkboxWithTitle: "Show system notification when rate limit is lifted",
+        target: nil,
+        action: nil
+    )
     private let rateLimitNotifyCheckbox = NSButton(
-        checkboxWithTitle: "Notify when rate limit is lifted",
+        checkboxWithTitle: "Play sound when rate limit is lifted",
         target: nil,
         action: nil
     )
@@ -143,6 +152,9 @@ final class OnboardingNotificationsView: NSView {
             title: "Rate Limits",
             description: "Get notified when an agent's rate limit is lifted. Rate limit notifications require \"Track agent rate limits\" in Settings > Agents."
         )
+
+        rateLimitSystemNotificationCheckbox.state = .on
+        rlStack.addArrangedSubview(rateLimitSystemNotificationCheckbox)
 
         rateLimitNotifyCheckbox.state = .on
         rateLimitNotifyCheckbox.target = self
@@ -301,6 +313,7 @@ final class OnboardingNotificationsView: NSView {
                 self.showBannersCheckbox.isEnabled = authorized
                 self.completionSoundCheckbox.isEnabled = authorized
                 self.soundPickerPopup.isEnabled = authorized
+                self.rateLimitSystemNotificationCheckbox.isEnabled = authorized
                 self.rateLimitNotifyCheckbox.isEnabled = authorized
                 self.rateLimitSoundPickerPopup.isEnabled = authorized
                 self.rateLimitDetectedSoundCheckbox.isEnabled = authorized
@@ -308,6 +321,7 @@ final class OnboardingNotificationsView: NSView {
                 self.showBannersCheckbox.alphaValue = authorized ? 1.0 : 0.5
                 self.completionSoundCheckbox.alphaValue = authorized ? 1.0 : 0.5
                 self.soundPickerRow.alphaValue = authorized ? 1.0 : 0.5
+                self.rateLimitSystemNotificationCheckbox.alphaValue = authorized ? 1.0 : 0.5
                 self.rateLimitNotifyCheckbox.alphaValue = authorized ? 1.0 : 0.5
                 self.rateLimitSoundPickerRow.alphaValue = authorized ? 1.0 : 0.5
                 self.rateLimitDetectedSoundCheckbox.alphaValue = authorized ? 1.0 : 0.5

@@ -27,6 +27,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var enableRateLimitDetection: Bool
     var playSoundOnRateLimitDetected: Bool
     var rateLimitDetectedSoundName: String
+    var showSystemNotificationOnRateLimitLifted: Bool
     var notifyOnRateLimitLifted: Bool
     var rateLimitLiftedSoundName: String
 
@@ -54,6 +55,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         enableRateLimitDetection: Bool = true,
         playSoundOnRateLimitDetected: Bool = true,
         rateLimitDetectedSoundName: String = "Sosumi",
+        showSystemNotificationOnRateLimitLifted: Bool = true,
         notifyOnRateLimitLifted: Bool = true,
         rateLimitLiftedSoundName: String = "Glass"
     ) {
@@ -80,6 +82,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.enableRateLimitDetection = enableRateLimitDetection
         self.playSoundOnRateLimitDetected = playSoundOnRateLimitDetected
         self.rateLimitDetectedSoundName = rateLimitDetectedSoundName
+        self.showSystemNotificationOnRateLimitLifted = showSystemNotificationOnRateLimitLifted
         self.notifyOnRateLimitLifted = notifyOnRateLimitLifted
         self.rateLimitLiftedSoundName = rateLimitLiftedSoundName
     }
@@ -112,6 +115,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         playSoundOnRateLimitDetected = try container.decodeIfPresent(Bool.self, forKey: .playSoundOnRateLimitDetected) ?? true
         rateLimitDetectedSoundName = try container.decodeIfPresent(String.self, forKey: .rateLimitDetectedSoundName) ?? "Sosumi"
         notifyOnRateLimitLifted = try container.decodeIfPresent(Bool.self, forKey: .notifyOnRateLimitLifted) ?? true
+        showSystemNotificationOnRateLimitLifted = try container.decodeIfPresent(Bool.self, forKey: .showSystemNotificationOnRateLimitLifted) ?? notifyOnRateLimitLifted
         rateLimitLiftedSoundName = try container.decodeIfPresent(String.self, forKey: .rateLimitLiftedSoundName) ?? "Glass"
     }
 
@@ -141,6 +145,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(playSoundOnRateLimitDetected, forKey: .playSoundOnRateLimitDetected)
         try container.encode(rateLimitDetectedSoundName, forKey: .rateLimitDetectedSoundName)
         try container.encode(notifyOnRateLimitLifted, forKey: .notifyOnRateLimitLifted)
+        try container.encode(showSystemNotificationOnRateLimitLifted, forKey: .showSystemNotificationOnRateLimitLifted)
         try container.encode(rateLimitLiftedSoundName, forKey: .rateLimitLiftedSoundName)
     }
 
@@ -242,6 +247,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case enableRateLimitDetection
         case playSoundOnRateLimitDetected
         case rateLimitDetectedSoundName
+        case showSystemNotificationOnRateLimitLifted
         case notifyOnRateLimitLifted
         case rateLimitLiftedSoundName
 

@@ -56,7 +56,7 @@ To avoid 3-second flapping, Magent now only auto-clears when the latest pane no 
 
 Rate limit tracking can be toggled in **Settings > Agents**:
 - **Track agent rate limits** — master toggle for the tracking system
-- **Notify when rate limit is lifted** — system notification when countdown reaches zero (Settings > Notifications)
-- **Sound** — optional sound for the lift notification
+- **Show system notification when rate limit is lifted** — post a system notification when countdown reaches zero (Settings > Notifications)
+- **Play sound when rate limit is lifted** — optional lift sound
 
 When tracking is disabled, the app no longer parses reset times or shows countdowns. However, rate-limit icons still appear temporarily while the agent is at a rate-limit prompt — they disappear automatically once the conversation resumes. The fingerprint cache continues to be populated in the background so that re-enabling tracking handles stale messages correctly.

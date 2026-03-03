@@ -159,6 +159,7 @@ final class ConfigurationViewController: NSViewController {
         settings.agentCompletionSoundName = notificationsView.completionSoundName
         settings.playSoundOnRateLimitDetected = notificationsView.playSoundOnRateLimitDetected
         settings.rateLimitDetectedSoundName = notificationsView.rateLimitDetectedSoundName
+        settings.showSystemNotificationOnRateLimitLifted = notificationsView.showSystemNotificationOnRateLimitLifted
         settings.notifyOnRateLimitLifted = notificationsView.notifyOnRateLimitLifted
         settings.rateLimitLiftedSoundName = notificationsView.rateLimitLiftedSoundName
 
