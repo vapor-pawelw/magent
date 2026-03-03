@@ -38,12 +38,18 @@ extension ThreadListViewController {
         moveItem.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
         menu.addItem(moveItem)
 
-        // Rename
-        let renameItem = NSMenuItem(title: "Rename...", action: #selector(renameThread(_:)), keyEquivalent: "")
+        // Rename branch
+        let renameItem = NSMenuItem(title: "Rename branch...", action: #selector(renameThread(_:)), keyEquivalent: "")
         renameItem.target = self
         renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
         renameItem.representedObject = thread
         menu.addItem(renameItem)
+
+        let descriptionItem = NSMenuItem(title: "Set description...", action: #selector(setThreadDescription(_:)), keyEquivalent: "")
+        descriptionItem.target = self
+        descriptionItem.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
+        descriptionItem.representedObject = thread
+        menu.addItem(descriptionItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -263,8 +269,8 @@ extension ThreadListViewController {
         guard let thread = sender.representedObject as? MagentThread else { return }
 
         let alert = NSAlert()
-        alert.messageText = "Rename Thread"
-        alert.informativeText = "Enter new name for the thread"
+        alert.messageText = "Rename Branch"
+        alert.informativeText = "Enter a new branch name"
         alert.addButton(withTitle: "Rename")
         alert.addButton(withTitle: "Cancel")
 
@@ -296,6 +302,35 @@ extension ThreadListViewController {
                     alert.runModal()
                 }
             }
+        }
+    }
+
+    @objc private func setThreadDescription(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Set Description"
+        alert.informativeText = "Enter a short description (max 8 words). Leave empty to clear."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        textField.stringValue = thread.taskDescription ?? ""
+        alert.accessoryView = textField
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        let requestedDescription = textField.stringValue
+        do {
+            try threadManager.setTaskDescription(threadId: thread.id, description: requestedDescription)
+        } catch {
+            let errorAlert = NSAlert()
+            errorAlert.messageText = "Could Not Save Description"
+            errorAlert.informativeText = error.localizedDescription
+            errorAlert.alertStyle = .warning
+            errorAlert.addButton(withTitle: "OK")
+            errorAlert.runModal()
         }
     }
 
@@ -493,4 +528,3 @@ extension ThreadListViewController: NSMenuDelegate {
         }
     }
 }
-

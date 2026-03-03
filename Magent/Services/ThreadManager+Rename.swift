@@ -385,40 +385,44 @@ extension ThreadManager {
     // MARK: - Task Description
 
     private static let descPrefix = "DESC:"
+    private static let maxTaskDescriptionWords = 8
 
-    private func sanitizeDescription(_ raw: String) -> String? {
+    private func normalizeTaskDescription(_ value: String) -> String? {
+        let sanitized = value
+            .replacingOccurrences(of: "`", with: "")
+            .replacingOccurrences(of: "\"", with: "")
+            .replacingOccurrences(of: "'", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !sanitized.isEmpty, sanitized.uppercased() != "EMPTY" else { return nil }
+
+        let words = sanitized
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        guard !words.isEmpty else { return nil }
+
+        let limitedWords = Array(words.prefix(Self.maxTaskDescriptionWords))
+        let normalized = limitedWords.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.count >= 2 else { return nil }
+        guard normalized.contains(where: { $0.isLetter }) else { return nil }
+        return normalized
+    }
+
+    private func sanitizeGeneratedDescription(_ raw: String) -> String? {
         guard let prefixRange = raw.range(of: Self.descPrefix) else { return nil }
         let afterPrefix = raw[prefixRange.upperBound...]
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !afterPrefix.isEmpty, afterPrefix.uppercased() != "EMPTY" else { return nil }
 
-        // Take first line only
-        let line = afterPrefix.components(separatedBy: .newlines).first ?? afterPrefix
-
-        // Strip quotes and backticks
-        var desc = line
-            .replacingOccurrences(of: "`", with: "")
-            .replacingOccurrences(of: "\"", with: "")
-            .replacingOccurrences(of: "'", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Enforce max length
-        if desc.count > 50 {
-            desc = String(desc.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        // Validate: 2–50 chars, must contain at least one letter
-        guard desc.count >= 2 else { return nil }
-        guard desc.contains(where: { $0.isLetter }) else { return nil }
-
-        return desc
+        let line = afterPrefix.components(separatedBy: .newlines).first ?? String(afterPrefix)
+        return normalizeTaskDescription(line)
     }
 
     private func generateTaskDescription(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> String? {
         let truncated = String(prompt.prefix(500))
         let aiPrompt = """
-            Generate a very short human-readable task description (2-5 words, Title Case) for this task. \
+            Generate a very short human-readable task description (2-8 words, Title Case) for this task. \
             Output ONLY the prefix DESC: followed by the description. No quotes, no explanation. \
             Output DESC: EMPTY for pure knowledge questions with no implied action. \
             Example: "Fix auth bug in login" → DESC: Fix Auth Login Bug \
@@ -453,7 +457,7 @@ extension ThreadManager {
         }
 
         guard let raw = result, !raw.isEmpty else { return nil }
-        return sanitizeDescription(raw)
+        return sanitizeGeneratedDescription(raw)
     }
 
     func generateTaskDescriptionIfNeeded(threadId: UUID, prompt: String) async {
@@ -478,6 +482,32 @@ extension ThreadManager {
                 return
             }
         }
+    }
+
+    func setTaskDescription(threadId: UUID, description: String?) throws {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+
+        let normalizedDescription: String?
+        if let description {
+            let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                normalizedDescription = nil
+            } else {
+                guard let normalized = normalizeTaskDescription(trimmed) else {
+                    throw ThreadManagerError.invalidDescription
+                }
+                normalizedDescription = normalized
+            }
+        } else {
+            normalizedDescription = nil
+        }
+
+        threads[index].taskDescription = normalizedDescription
+        try persistence.saveThreads(threads)
+
+        delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
     // MARK: - Rename Tab
