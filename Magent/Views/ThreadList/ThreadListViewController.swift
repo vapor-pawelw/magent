@@ -329,6 +329,9 @@ final class ThreadListViewController: NSViewController {
         sidebarProjects = sortedProjects.map { project in
             var children: [Any] = []
             let shouldUseSections = settings.shouldUseThreadSections(for: project.id)
+            let projectSections = settings.visibleSections(for: project.id)
+            let projectKnownSectionIds = Set(settings.sections(for: project.id).map(\.id))
+            let projectDefaultSectionId = settings.defaultSection(for: project.id)?.id
 
             // Main thread(s) for this project first
             let projectMainThreads = mainThreads.filter { $0.projectId == project.id }
@@ -336,10 +339,6 @@ final class ThreadListViewController: NSViewController {
 
             if shouldUseSections {
                 // Section groups with regular threads (per-project or global fallback)
-                let projectSections = settings.visibleSections(for: project.id)
-                let projectKnownSectionIds = Set(settings.sections(for: project.id).map(\.id))
-                let projectDefaultSectionId = settings.defaultSection(for: project.id)?.id
-
                 for section in projectSections {
                     let matchingThreads = regularThreads.filter { thread in
                         guard thread.projectId == project.id else { return false }
@@ -358,10 +357,14 @@ final class ThreadListViewController: NSViewController {
                     ))
                 }
             } else {
-                // Flat list: main first, then pinned and unpinned regular threads.
+                // Flat list: main first, then regular threads in the same order they
+                // would appear across sections (section order + in-section order).
                 let projectRegularThreads = regularThreads.filter { $0.projectId == project.id }
-                let sortedThreads = sortThreadsForDisplay(
+                let sortedThreads = sortThreadsForFlatDisplay(
                     projectRegularThreads,
+                    projectSections: projectSections,
+                    knownSectionIds: projectKnownSectionIds,
+                    defaultSectionId: projectDefaultSectionId,
                     preferRecentCompletions: settings.autoReorderThreadsOnAgentCompletion
                 )
                 children.append(contentsOf: sortedThreads)
@@ -464,6 +467,44 @@ final class ThreadListViewController: NSViewController {
                 return lhs.offset < rhs.offset
             }
             .map(\.element)
+    }
+
+    private func sortThreadsForFlatDisplay(
+        _ threads: [MagentThread],
+        projectSections: [ThreadSection],
+        knownSectionIds: Set<UUID>,
+        defaultSectionId: UUID?,
+        preferRecentCompletions: Bool
+    ) -> [MagentThread] {
+        guard !projectSections.isEmpty else {
+            return sortThreadsForDisplay(threads, preferRecentCompletions: preferRecentCompletions)
+        }
+
+        var orderedThreads: [MagentThread] = []
+        var seenThreadIds: Set<UUID> = []
+
+        for section in projectSections {
+            let sectionThreads = threads.filter { thread in
+                thread.resolvedSectionId(knownSectionIds: knownSectionIds, fallback: defaultSectionId) == section.id
+            }
+            let sortedSectionThreads = sortThreadsForDisplay(
+                sectionThreads,
+                preferRecentCompletions: preferRecentCompletions
+            )
+            orderedThreads.append(contentsOf: sortedSectionThreads)
+            seenThreadIds.formUnion(sortedSectionThreads.map(\.id))
+        }
+
+        // Keep unmatched threads visible and consistently ordered.
+        let unmatchedThreads = threads.filter { !seenThreadIds.contains($0.id) }
+        if !unmatchedThreads.isEmpty {
+            orderedThreads.append(contentsOf: sortThreadsForDisplay(
+                unmatchedThreads,
+                preferRecentCompletions: preferRecentCompletions
+            ))
+        }
+
+        return orderedThreads
     }
 
     func autoSelectFirst() {
