@@ -134,7 +134,7 @@ final class SettingsNotificationsViewController: NSViewController {
         // --- Rate Limits card ---
         let (rlCard, rlStack) = createSectionCard(
             title: "Rate Limits",
-            description: "Magent can detect when an agent hits a rate limit and notify you when it resumes."
+            description: "When rate limit tracking is enabled, Magent can notify you when the countdown reaches zero and the agent is ready to use again."
         )
         rateLimitCard = rlCard
 

@@ -48,9 +48,9 @@ When any session detects that its agent has resumed work (producing output after
 
 ## Settings
 
-Rate limit detection can be toggled in **Settings > Agents**:
-- **Detect agent rate limits** — master toggle for the detection system
-- **Notify when rate limit is lifted** — system notification when countdown reaches zero
+Rate limit tracking can be toggled in **Settings > Agents**:
+- **Track agent rate limits** — master toggle for the tracking system
+- **Notify when rate limit is lifted** — system notification when countdown reaches zero (Settings > Notifications)
 - **Sound** — optional sound for the lift notification
 
-When detection is disabled, all rate-limit indicators are hidden immediately. The fingerprint cache continues to be populated in the background so that re-enabling detection handles stale messages correctly.
+When tracking is disabled, the app no longer parses reset times or shows countdowns. However, rate-limit icons still appear temporarily while the agent is at a rate-limit prompt — they disappear automatically once the conversation resumes. The fingerprint cache continues to be populated in the background so that re-enabling tracking handles stale messages correctly.

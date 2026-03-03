@@ -167,13 +167,13 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         permissionsSection.addArrangedSubview(ipcDesc)
 
         rateLimitDetectionCheckbox = NSButton(
-            checkboxWithTitle: "Detect agent rate limits",
+            checkboxWithTitle: "Track agent rate limits",
             target: self,
             action: #selector(rateLimitDetectionToggled)
         )
         rateLimitDetectionCheckbox.state = settings.enableRateLimitDetection ? .on : .off
         let rateLimitDesc = NSTextField(
-            wrappingLabelWithString: "Periodically scan terminal output for rate-limit messages and show indicators in the sidebar."
+            wrappingLabelWithString: "Parse rate-limit reset times from terminal output and show a countdown in the sidebar. When off, rate-limit icons still appear while the agent is blocked but disappear once the conversation resumes."
         )
         rateLimitDesc.font = .systemFont(ofSize: 11)
         rateLimitDesc.textColor = NSColor(resource: .textSecondary)
