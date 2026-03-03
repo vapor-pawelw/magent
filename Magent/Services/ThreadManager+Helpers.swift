@@ -436,6 +436,7 @@ extension Notification.Name {
 enum ThreadManagerError: LocalizedError {
     case threadNotFound
     case invalidName
+    case invalidDescription
     case duplicateName
     case invalidTabIndex
     case cannotDeleteMainThread
@@ -449,6 +450,8 @@ enum ThreadManagerError: LocalizedError {
             return "Thread not found"
         case .invalidName:
             return "Invalid name. Name must not be empty or contain slashes."
+        case .invalidDescription:
+            return "Invalid description. Use 1-8 words with at least one letter."
         case .duplicateName:
             return "A thread with that name already exists."
         case .invalidTabIndex:

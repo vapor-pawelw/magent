@@ -133,7 +133,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             return 28
         }
         if let thread = item as? MagentThread {
-            return thread.isMain ? 26 : 38
+            if thread.isMain {
+                return 26
+            }
+            let hasDescription = !(thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            return hasDescription ? 46 : 26
         }
         return 26
     }

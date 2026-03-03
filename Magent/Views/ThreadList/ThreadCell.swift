@@ -5,7 +5,8 @@ final class ThreadCell: NSTableCellView {
     private var prLabel: NSTextField?
     private var subtitleLabel: NSTextField?
     private var jiraImageView: NSImageView?
-    private(set) var inlineDirtyDot: NSImageView?
+    private var primaryDirtyDot: NSImageView?
+    private var secondaryDirtyDot: NSImageView?
     private var pinImageView: NSImageView?
     private var leadingPinImageView: NSImageView?
     private var archiveButton: NSButton?
@@ -27,24 +28,17 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
-    /// Reparents imageView and textField into a horizontal stack with a dirty dot in between.
-    /// Also creates a subtitle label below the text field for task description.
+    /// Reparents imageView and textField into a horizontal stack.
+    /// The first row can show a multi-line description; the second row shows branch/worktree.
     /// Safe to call multiple times — only runs once.
     func ensureLeadingStack() {
-        guard inlineDirtyDot == nil, let iv = imageView, let tf = textField else { return }
+        guard primaryDirtyDot == nil, let iv = imageView, let tf = textField else { return }
 
-        let dot = NSImageView()
-        dot.translatesAutoresizingMaskIntoConstraints = false
-        dot.setContentHuggingPriority(.required, for: .horizontal)
-        dot.setContentCompressionResistancePriority(.required, for: .horizontal)
-        dot.isHidden = true
-        NSLayoutConstraint.activate([
-            dot.widthAnchor.constraint(equalToConstant: 7),
-            dot.heightAnchor.constraint(equalToConstant: 7),
-        ])
-        inlineDirtyDot = dot
+        let primaryDot = makeDirtyDot()
+        let secondaryDot = makeDirtyDot()
+        primaryDirtyDot = primaryDot
+        secondaryDirtyDot = secondaryDot
 
-        // Create subtitle label
         let subtitle = NSTextField(labelWithString: "")
         subtitle.translatesAutoresizingMaskIntoConstraints = false
         subtitle.font = .systemFont(ofSize: 10)
@@ -56,7 +50,6 @@ final class ThreadCell: NSTableCellView {
         subtitle.isHidden = true
         subtitleLabel = subtitle
 
-        // Remove existing constraints and reparent into a stack
         iv.removeFromSuperview()
         tf.removeFromSuperview()
 
@@ -64,16 +57,30 @@ final class ThreadCell: NSTableCellView {
             iv.widthAnchor.constraint(equalToConstant: 16),
             iv.heightAnchor.constraint(equalToConstant: 16),
         ])
-        tf.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        // Wrap textField and subtitleLabel in a vertical stack
-        let verticalStack = NSStackView(views: [tf, subtitle])
+        tf.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        tf.lineBreakMode = .byTruncatingTail
+        tf.maximumNumberOfLines = 1
+
+        let primaryRow = NSStackView(views: [primaryDot, tf])
+        primaryRow.orientation = .horizontal
+        primaryRow.alignment = .centerY
+        primaryRow.spacing = 4
+        primaryRow.translatesAutoresizingMaskIntoConstraints = false
+
+        let secondaryRow = NSStackView(views: [secondaryDot, subtitle])
+        secondaryRow.orientation = .horizontal
+        secondaryRow.alignment = .centerY
+        secondaryRow.spacing = 4
+        secondaryRow.translatesAutoresizingMaskIntoConstraints = false
+
+        let verticalStack = NSStackView(views: [primaryRow, secondaryRow])
         verticalStack.orientation = .vertical
         verticalStack.alignment = .leading
         verticalStack.spacing = 1
         verticalStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let stack = NSStackView(views: [iv, dot, verticalStack])
+        let stack = NSStackView(views: [iv, verticalStack])
         stack.orientation = .horizontal
         stack.spacing = 4
         stack.alignment = .centerY
@@ -91,6 +98,20 @@ final class ThreadCell: NSTableCellView {
         }
         NSLayoutConstraint.activate(constraints)
     }
+
+    private func makeDirtyDot() -> NSImageView {
+        let dot = NSImageView()
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        dot.setContentHuggingPriority(.required, for: .horizontal)
+        dot.setContentCompressionResistancePriority(.required, for: .horizontal)
+        dot.isHidden = true
+        NSLayoutConstraint.activate([
+            dot.widthAnchor.constraint(equalToConstant: 7),
+            dot.heightAnchor.constraint(equalToConstant: 7),
+        ])
+        return dot
+    }
+
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
         let completionIndicatorSize: CGFloat = 10
@@ -107,7 +128,6 @@ final class ThreadCell: NSTableCellView {
         jiraIV.translatesAutoresizingMaskIntoConstraints = false
         jiraIV.setContentHuggingPriority(.required, for: .horizontal)
         jiraIV.isHidden = true
-
 
         let pinIV = NSImageView()
         pinIV.translatesAutoresizingMaskIntoConstraints = false
@@ -191,69 +211,86 @@ final class ThreadCell: NSTableCellView {
         let pin = NSImageView()
         pin.translatesAutoresizingMaskIntoConstraints = false
         pin.setContentHuggingPriority(.required, for: .horizontal)
-        pin.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
-        pin.contentTintColor = .tertiaryLabelColor
+        let pinImage = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")?
+            .withSymbolConfiguration(.init(pointSize: 12, weight: .bold))
+        pin.image = pinImage
+        pin.contentTintColor = .controlAccentColor
         pin.isHidden = true
         addSubview(pin)
         NSLayoutConstraint.activate([
-            pin.trailingAnchor.constraint(equalTo: iv.leadingAnchor, constant: -2),
+            pin.trailingAnchor.constraint(equalTo: iv.leadingAnchor, constant: -8),
             pin.centerYAnchor.constraint(equalTo: iv.centerYAnchor),
-            pin.widthAnchor.constraint(equalToConstant: 10),
-            pin.heightAnchor.constraint(equalToConstant: 10),
+            pin.widthAnchor.constraint(equalToConstant: 12),
+            pin.heightAnchor.constraint(equalToConstant: 12),
         ])
         leadingPinImageView = pin
     }
 
     func configure(with thread: MagentThread, sectionColor: NSColor?) {
-        textField?.stringValue = thread.name
+        ensureTrailingStack()
+        ensureLeadingStack()
+
+        let worktreeName = (thread.worktreePath as NSString).lastPathComponent
+        let branchName = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
+        let branchDisplay = resolvedBranchName == worktreeName
+            ? resolvedBranchName
+            : "\(resolvedBranchName) (\(worktreeName))"
+
+        var branchLineParts = [branchDisplay]
+        if let pr = thread.pullRequestInfo {
+            branchLineParts.append(pr.displayLabel)
+        }
+        let branchLine = branchLineParts.joined(separator: "  ·  ")
+
+        let trimmedDescription = thread.taskDescription?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasDescription = !(trimmedDescription?.isEmpty ?? true)
+
         textField?.font = thread.hasUnreadAgentCompletion
             ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
             : .preferredFont(forTextStyle: .body)
+        textField?.textColor = thread.jiraUnassigned ? .tertiaryLabelColor : .labelColor
+        textField?.lineBreakMode = .byTruncatingTail
 
-        // Gray out threads whose Jira ticket is no longer assigned to the user
-        if thread.jiraUnassigned {
-            textField?.textColor = .tertiaryLabelColor
+        if hasDescription, let description = trimmedDescription {
+            textField?.stringValue = description
+            textField?.maximumNumberOfLines = 2
+            subtitleLabel?.stringValue = branchLine
+            subtitleLabel?.textColor = thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
+            subtitleLabel?.isHidden = false
+            setDirtyDot(primaryDirtyDot, visible: false)
+            setDirtyDot(secondaryDirtyDot, visible: thread.isDirty)
         } else {
-            textField?.textColor = .labelColor
+            textField?.stringValue = branchLine
+            textField?.maximumNumberOfLines = 1
+            subtitleLabel?.isHidden = true
+            setDirtyDot(primaryDirtyDot, visible: thread.isDirty)
+            setDirtyDot(secondaryDirtyDot, visible: false)
         }
 
-        toolTip = nil
+        let detailedTooltip = buildDetailedTooltip(
+            description: trimmedDescription,
+            branchName: resolvedBranchName,
+            worktreeName: worktreeName,
+            prLabel: thread.pullRequestInfo?.displayLabel,
+            statuses: statusDescriptions(for: thread)
+        )
+        toolTip = detailedTooltip
+        imageView?.toolTip = detailedTooltip
+        textField?.toolTip = detailedTooltip
+        subtitleLabel?.toolTip = detailedTooltip
+        primaryDirtyDot?.toolTip = detailedTooltip
+        secondaryDirtyDot?.toolTip = detailedTooltip
 
         imageView?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
         imageView?.contentTintColor = thread.hasUnreadAgentCompletion
             ? NSColor.controlAccentColor
             : (sectionColor ?? NSColor(resource: .primaryBrand))
 
-        ensureTrailingStack()
-        ensureLeadingStack()
-
-        // PR info now shown in subtitle — hide trailing PR label
         prLabel?.stringValue = ""
         prLabel?.toolTip = nil
         prLabel?.isHidden = true
-
-        // Build subtitle: taskDescription · worktreeDirName · PR #123
-        if !thread.isMain {
-            var parts: [String] = []
-            if let desc = thread.taskDescription, !desc.isEmpty {
-                parts.append(desc)
-            }
-            let worktreeDirName = (thread.worktreePath as NSString).lastPathComponent
-            if worktreeDirName != thread.name {
-                parts.append(worktreeDirName)
-            }
-            if let pr = thread.pullRequestInfo {
-                parts.append(pr.displayLabel)
-            }
-            if parts.isEmpty {
-                subtitleLabel?.isHidden = true
-            } else {
-                subtitleLabel?.stringValue = parts.joined(separator: "  ·  ")
-                subtitleLabel?.isHidden = false
-            }
-        } else {
-            subtitleLabel?.isHidden = true
-        }
 
         if thread.jiraTicketKey != nil {
             jiraImageView?.image = NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira ticket")
@@ -264,17 +301,6 @@ final class ThreadCell: NSTableCellView {
             jiraImageView?.image = nil
             jiraImageView?.toolTip = nil
             jiraImageView?.isHidden = true
-        }
-
-        if thread.isDirty {
-            inlineDirtyDot?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
-            inlineDirtyDot?.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
-            inlineDirtyDot?.toolTip = "Uncommitted changes"
-            inlineDirtyDot?.isHidden = false
-        } else {
-            inlineDirtyDot?.image = nil
-            inlineDirtyDot?.toolTip = nil
-            inlineDirtyDot?.isHidden = true
         }
 
         // Trailing pin icon — always hidden (replaced by leading pin)
@@ -355,6 +381,8 @@ final class ThreadCell: NSTableCellView {
             ofSize: NSFont.systemFontSize,
             weight: isUnreadCompletion ? .semibold : .regular
         )
+        textField?.lineBreakMode = .byTruncatingTail
+        textField?.maximumNumberOfLines = 1
 
         imageView?.image = nil
         imageView?.isHidden = true
@@ -365,16 +393,8 @@ final class ThreadCell: NSTableCellView {
         pinImageView?.isHidden = true
         archiveButton?.isHidden = true
 
-        if isDirty {
-            inlineDirtyDot?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
-            inlineDirtyDot?.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
-            inlineDirtyDot?.toolTip = "Uncommitted changes"
-            inlineDirtyDot?.isHidden = false
-        } else {
-            inlineDirtyDot?.image = nil
-            inlineDirtyDot?.toolTip = nil
-            inlineDirtyDot?.isHidden = true
-        }
+        setDirtyDot(primaryDirtyDot, visible: isDirty)
+        setDirtyDot(secondaryDirtyDot, visible: false)
 
         if isBlockedByRateLimit {
             busySpinner?.stopAnimation(nil)
@@ -430,6 +450,62 @@ final class ThreadCell: NSTableCellView {
             completionImageView?.toolTip = nil
             completionImageView?.isHidden = true
         }
+    }
+
+    private func setDirtyDot(_ dot: NSImageView?, visible: Bool) {
+        guard let dot else { return }
+        if visible {
+            dot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
+            dot.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
+            dot.isHidden = false
+        } else {
+            dot.image = nil
+            dot.isHidden = true
+        }
+    }
+
+    private func statusDescriptions(for thread: MagentThread) -> [String] {
+        var statuses: [String] = []
+        statuses.append(thread.isDirty ? "Dirty" : "Clean")
+
+        if thread.isBlockedByRateLimit {
+            if let detail = thread.rateLimitLiftDescription, !detail.isEmpty {
+                statuses.append("Rate limited (\(detail))")
+            } else {
+                statuses.append("Rate limited")
+            }
+        } else if thread.hasWaitingForInput {
+            statuses.append("Waiting for input")
+        } else if thread.hasAgentBusy {
+            statuses.append("Agent busy")
+        } else if thread.hasUnreadAgentCompletion {
+            statuses.append("Agent completed")
+        }
+
+        if thread.showArchiveSuggestion {
+            statuses.append("Ready to archive")
+        }
+
+        return statuses
+    }
+
+    private func buildDetailedTooltip(
+        description: String?,
+        branchName: String,
+        worktreeName: String,
+        prLabel: String?,
+        statuses: [String]
+    ) -> String {
+        let resolvedDescription = description?.isEmpty == false ? description! : "None"
+        let resolvedPR = prLabel ?? "None"
+        let resolvedStatuses = statuses.isEmpty ? "None" : statuses.joined(separator: ", ")
+        return """
+        Description: \(resolvedDescription)
+        Branch: \(branchName)
+        Worktree: \(worktreeName)
+        PR: \(resolvedPR)
+        Status: \(resolvedStatuses)
+        """
     }
 
     private func rateLimitTooltip(for thread: MagentThread) -> String {
