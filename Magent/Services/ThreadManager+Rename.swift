@@ -136,7 +136,9 @@ extension ThreadManager {
         let command: String
         switch agentType {
         case .codex:
-            command = "codex exec \(escapedPrompt) --model o4-mini --ephemeral"
+            // Use the account-configured default model so ChatGPT-authenticated
+            // Codex users are not blocked by hard-coded model restrictions.
+            command = "codex exec \(escapedPrompt) --ephemeral --config model_reasoning_effort=none"
         default:
             // Use claude for .claude, .custom, and nil (claude is a prerequisite for this app)
             let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
@@ -319,6 +321,10 @@ extension ThreadManager {
             threads[index].didAutoRenameFromFirstPrompt = true
         }
 
+        // Once any rename succeeds, allow auto-rename skip banners to surface again.
+        // This resets per-thread dedup after a successful retry (same or different thread).
+        autoRenameSkipBannerShownThreadIds.removeAll()
+
         try persistence.saveThreads(threads)
 
         await MainActor.run {
@@ -337,6 +343,17 @@ extension ThreadManager {
 
         guard !thread.isMain else { return }
         guard !thread.didAutoRenameFromFirstPrompt else { return }
+
+        // If the user already provided a description, treat first-prompt
+        // auto-rename as handled and avoid skip banners/retries.
+        let hasTaskDescription = !(thread.taskDescription?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty ?? true)
+        if hasTaskDescription {
+            markFirstPromptAutoRenameHandled(threadId: thread.id)
+            return
+        }
+
         // If the thread name no longer matches the worktree directory basename,
         // it was already renamed (manually or otherwise) — skip auto-rename.
         guard thread.name == (thread.worktreePath as NSString).lastPathComponent else { return }
@@ -371,6 +388,7 @@ extension ThreadManager {
         case .question:
             return
         case .rateLimited:
+            guard markAutoRenameSkipBannerShownIfNeeded(threadId: thread.id) else { return }
             await MainActor.run {
                 BannerManager.shared.show(
                     message: "Auto-rename skipped — all agents are rate-limited",
@@ -379,6 +397,7 @@ extension ThreadManager {
             }
             return
         case .failed:
+            guard markAutoRenameSkipBannerShownIfNeeded(threadId: thread.id) else { return }
             await MainActor.run {
                 BannerManager.shared.show(
                     message: "Auto-rename skipped — could not generate a name from the prompt",
@@ -408,6 +427,12 @@ extension ThreadManager {
         guard !threads[index].didAutoRenameFromFirstPrompt else { return }
         threads[index].didAutoRenameFromFirstPrompt = true
         try? persistence.saveThreads(threads)
+    }
+
+    private func markAutoRenameSkipBannerShownIfNeeded(threadId: UUID) -> Bool {
+        guard !autoRenameSkipBannerShownThreadIds.contains(threadId) else { return false }
+        autoRenameSkipBannerShownThreadIds.insert(threadId)
+        return true
     }
 
     // MARK: - Task Description
@@ -464,7 +489,9 @@ extension ThreadManager {
         let command: String
         switch agentType {
         case .codex:
-            command = "codex exec \(escapedPrompt) --model o4-mini --ephemeral"
+            // Keep behavior consistent with slug generation and avoid unsupported
+            // hard-coded models for ChatGPT-authenticated Codex users.
+            command = "codex exec \(escapedPrompt) --ephemeral --config model_reasoning_effort=none"
         default:
             let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
             command = "PATH=\(homeDir)/.local/bin:$PATH claude -p \(escapedPrompt) --model haiku --no-session-persistence"

@@ -24,6 +24,8 @@ final class ThreadManager {
     var activeThreadId: UUID?
     var recentBellBySession: [String: Date] = [:]
     var autoRenameInProgress: Set<UUID> = []
+    /// Dedup tracker — prevents repeating "Auto-rename skipped" banners per thread.
+    var autoRenameSkipBannerShownThreadIds: Set<UUID> = []
     /// Dedup tracker — prevents repeated "waiting for input" notifications for the same session.
     var notifiedWaitingSessions: Set<String> = []
     /// Global per-agent rate-limit cache (Claude/Codex), shared across all tabs/threads.
