@@ -45,7 +45,7 @@ final class ThreadListViewController: NSViewController {
 
     // MARK: - Data Model (3-level hierarchy)
     // Level 0: SidebarProject (project name header)
-    // Level 1: MagentThread (main) or SidebarSection (section header)
+    // Level 1: MagentThread (main/flat item) or SidebarSection (section header)
     // Level 2: MagentThread (regular threads under a section)
 
     var sidebarProjects: [SidebarProject] = []
@@ -328,32 +328,43 @@ final class ThreadListViewController: NSViewController {
 
         sidebarProjects = sortedProjects.map { project in
             var children: [Any] = []
+            let shouldUseSections = settings.shouldUseThreadSections(for: project.id)
 
             // Main thread(s) for this project first
             let projectMainThreads = mainThreads.filter { $0.projectId == project.id }
             children.append(contentsOf: projectMainThreads)
 
-            // Section groups with regular threads (per-project or global fallback)
-            let projectSections = settings.visibleSections(for: project.id)
-            let projectKnownSectionIds = Set(settings.sections(for: project.id).map(\.id))
-            let projectDefaultSectionId = settings.defaultSection(for: project.id)?.id
+            if shouldUseSections {
+                // Section groups with regular threads (per-project or global fallback)
+                let projectSections = settings.visibleSections(for: project.id)
+                let projectKnownSectionIds = Set(settings.sections(for: project.id).map(\.id))
+                let projectDefaultSectionId = settings.defaultSection(for: project.id)?.id
 
-            for section in projectSections {
-                let matchingThreads = regularThreads.filter { thread in
-                    guard thread.projectId == project.id else { return false }
-                    return thread.resolvedSectionId(knownSectionIds: projectKnownSectionIds, fallback: projectDefaultSectionId) == section.id
+                for section in projectSections {
+                    let matchingThreads = regularThreads.filter { thread in
+                        guard thread.projectId == project.id else { return false }
+                        return thread.resolvedSectionId(knownSectionIds: projectKnownSectionIds, fallback: projectDefaultSectionId) == section.id
+                    }
+                    let sortedThreads = sortThreadsForDisplay(
+                        matchingThreads,
+                        preferRecentCompletions: settings.autoReorderThreadsOnAgentCompletion
+                    )
+                    children.append(SidebarSection(
+                        projectId: project.id,
+                        sectionId: section.id,
+                        name: section.name,
+                        color: section.color,
+                        threads: sortedThreads
+                    ))
                 }
+            } else {
+                // Flat list: main first, then pinned and unpinned regular threads.
+                let projectRegularThreads = regularThreads.filter { $0.projectId == project.id }
                 let sortedThreads = sortThreadsForDisplay(
-                    matchingThreads,
+                    projectRegularThreads,
                     preferRecentCompletions: settings.autoReorderThreadsOnAgentCompletion
                 )
-                children.append(SidebarSection(
-                    projectId: project.id,
-                    sectionId: section.id,
-                    name: section.name,
-                    color: section.color,
-                    threads: sortedThreads
-                ))
+                children.append(contentsOf: sortedThreads)
             }
 
             return SidebarProject(

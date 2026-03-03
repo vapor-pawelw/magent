@@ -21,6 +21,7 @@ final class SettingsProjectsViewController: NSViewController {
     var slugPromptCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
     var slugPromptContainer: NSView!
+    var threadListLayoutPopup: NSPopUpButton!
 
     // Default section
     var defaultSectionPopup: NSPopUpButton!

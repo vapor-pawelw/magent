@@ -400,17 +400,20 @@ final class ThreadCell: NSTableCellView {
             ofSize: NSFont.systemFontSize,
             weight: isUnreadCompletion ? .semibold : .regular
         )
+        textField?.textColor = .labelColor
         textField?.lineBreakMode = .byTruncatingTail
         textField?.maximumNumberOfLines = 1
-
-        imageView?.image = nil
-        imageView?.isHidden = true
 
         ensureTrailingStack()
         ensureLeadingStack()
         subtitleLabel?.isHidden = true
         pinImageView?.isHidden = true
         archiveButton?.isHidden = true
+        leadingPinImageView?.isHidden = true
+
+        imageView?.image = NSImage(systemSymbolName: "house.fill", accessibilityDescription: "Main thread")
+        imageView?.contentTintColor = .controlAccentColor
+        imageView?.isHidden = false
 
         setDirtyDot(primaryDirtyDot, visible: isDirty)
         setDirtyDot(secondaryDirtyDot, visible: false)

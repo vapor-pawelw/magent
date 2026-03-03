@@ -15,6 +15,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     // Thread sections
     var sectionsTableView: NSTableView!
     private var defaultSectionPopup: NSPopUpButton!
+    private var useSectionsCheckbox: NSButton!
     var currentEditingSectionId: UUID?
 
     var sortedSections: [ThreadSection] {
@@ -237,6 +238,14 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         sectionsDesc.translatesAutoresizingMaskIntoConstraints = false
         stackView.addArrangedSubview(sectionsDesc)
 
+        useSectionsCheckbox = NSButton(
+            checkboxWithTitle: "Group threads by sections in the sidebar",
+            target: self,
+            action: #selector(useSectionsToggled)
+        )
+        useSectionsCheckbox.state = settings.useThreadSections ? .on : .off
+        stackView.addArrangedSubview(useSectionsCheckbox)
+
         sectionsTableView = NSTableView()
         sectionsTableView.headerView = nil
         sectionsTableView.style = .inset
@@ -346,6 +355,12 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     @objc private func autoRenameToggled() {
         settings.autoRenameWorktrees = autoRenameCheckbox.state == .on
         try? persistence.saveSettings(settings)
+    }
+
+    @objc private func useSectionsToggled() {
+        settings.useThreadSections = useSectionsCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
     @objc private func resetSlugPromptToDefault() {
