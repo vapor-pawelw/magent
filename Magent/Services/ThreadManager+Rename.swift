@@ -56,49 +56,6 @@ extension ThreadManager {
         return (allTrackable: trackable, available: available)
     }
 
-    private func naiveAutoRenameCandidates(from prompt: String) -> [String] {
-        let words = prompt
-            .lowercased()
-            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-            .map(String.init)
-        guard !words.isEmpty else { return [] }
-
-        let baseWords = Array(words.prefix(3))
-        var candidates: [String] = []
-
-        func append(_ parts: [String]) {
-            let trimmed = parts
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            guard !trimmed.isEmpty else { return }
-            let candidate = trimmed.joined(separator: "-")
-            guard !candidate.isEmpty else { return }
-            guard !candidates.contains(candidate) else { return }
-            candidates.append(candidate)
-        }
-
-        append(baseWords)
-
-        if baseWords.count == 3 {
-            append(Array(baseWords.prefix(2)))
-        }
-
-        if let first = baseWords.first {
-            if baseWords.count >= 2 {
-                let twoWords = Array(baseWords.prefix(2))
-                for i in 2...9 {
-                    append(twoWords + ["\(i)"])
-                }
-            } else {
-                for i in 2...9 {
-                    append([first, "\(i)"])
-                }
-            }
-        }
-
-        return candidates
-    }
-
     private static let slugPrefix = "SLUG:"
 
     private func sanitizeSlug(_ raw: String) -> String? {
@@ -197,31 +154,41 @@ extension ThreadManager {
         return sanitizeSlug(raw)
     }
 
+    enum AutoRenameResult {
+        case candidates([String])
+        /// The prompt was identified as a question, not a task — no rename needed.
+        case question
+        /// All agents were rate-limited — skip silently.
+        case rateLimited
+        /// AI slug generation failed (timeout, error, etc.).
+        case failed
+    }
+
     func autoRenameCandidates(
         from prompt: String,
         agentType: AgentType?,
         projectId: UUID? = nil,
         skipWhenAllAgentsRateLimited: Bool = false
-    ) async -> [String] {
+    ) async -> AutoRenameResult {
         let agentOrder = slugGenerationAgentOrder(preferred: agentType, projectId: projectId)
 
         if skipWhenAllAgentsRateLimited && !agentOrder.allTrackable.isEmpty && agentOrder.available.isEmpty {
-            return []
+            return .rateLimited
         }
 
         for candidateAgent in agentOrder.available {
             if let slug = await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId) {
-                // Agent signalled "question, not a task" → skip rename entirely (no fallback)
-                guard slug != Self.slugQuestionSentinel else { return [] }
+                // Agent signalled "question, not a task" → skip rename entirely
+                guard slug != Self.slugQuestionSentinel else { return .question }
                 var candidates = [slug]
                 for i in 2...9 {
                     candidates.append("\(slug)-\(i)")
                 }
-                return candidates
+                return .candidates(candidates)
             }
         }
 
-        return naiveAutoRenameCandidates(from: prompt)
+        return .failed
     }
 
     func renameThread(
@@ -370,13 +337,35 @@ extension ThreadManager {
         guard thread.agentTmuxSessions.contains(sessionName) else { return }
         guard !autoRenameInProgress.contains(thread.id) else { return }
 
-        let candidates = await autoRenameCandidates(
+        let result = await autoRenameCandidates(
             from: prompt,
             agentType: thread.selectedAgentType,
             projectId: thread.projectId,
             skipWhenAllAgentsRateLimited: true
         )
-        guard !candidates.isEmpty else { return }
+        let candidates: [String]
+        switch result {
+        case .candidates(let slugs):
+            candidates = slugs
+        case .question:
+            return
+        case .rateLimited:
+            await MainActor.run {
+                BannerManager.shared.show(
+                    message: "Auto-rename skipped — all agents are rate-limited",
+                    style: .warning
+                )
+            }
+            return
+        case .failed:
+            await MainActor.run {
+                BannerManager.shared.show(
+                    message: "Auto-rename skipped — could not generate a name from the prompt",
+                    style: .warning
+                )
+            }
+            return
+        }
 
         autoRenameInProgress.insert(thread.id)
         defer { autoRenameInProgress.remove(thread.id) }

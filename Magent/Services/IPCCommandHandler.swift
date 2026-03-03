@@ -114,10 +114,14 @@ final class IPCCommandHandler {
             let resolvedAgent = requestedAgent ?? threadManager.resolveAgentType(
                 for: project.id, requestedAgentType: nil, settings: settings
             )
-            let candidates = await threadManager.autoRenameCandidates(
+            let renameResult = await threadManager.autoRenameCandidates(
                 from: description, agentType: resolvedAgent, projectId: project.id
             )
-            requestedName = candidates.first
+            if case .candidates(let slugs) = renameResult {
+                requestedName = slugs.first
+            } else {
+                requestedName = nil
+            }
         } else {
             requestedName = nil
         }
@@ -328,8 +332,8 @@ final class IPCCommandHandler {
             return .failure("Missing required field: description (pass via newName)", id: request.id)
         }
 
-        let candidates = await threadManager.autoRenameCandidates(from: description, agentType: thread.selectedAgentType, projectId: thread.projectId)
-        guard !candidates.isEmpty else {
+        let renameResult = await threadManager.autoRenameCandidates(from: description, agentType: thread.selectedAgentType, projectId: thread.projectId)
+        guard case .candidates(let candidates) = renameResult else {
             return .failure("Could not generate a name from the given description", id: request.id)
         }
 
