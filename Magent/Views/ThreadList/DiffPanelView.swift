@@ -58,6 +58,7 @@ final class DiffPanelView: NSView {
     private var selectedFilePath: String?
 
     private var heightConstraint: NSLayoutConstraint!
+    private var expandedHeight: CGFloat = DiffPanelView.defaultHeight
     private static let minHeight: CGFloat = 60
     private static let maxHeight: CGFloat = 500
     private static let defaultHeight: CGFloat = 140
@@ -130,6 +131,7 @@ final class DiffPanelView: NSView {
 
         let savedHeight = UserDefaults.standard.object(forKey: Self.heightKey) as? CGFloat ?? Self.defaultHeight
         let clampedHeight = min(max(savedHeight, Self.minHeight), Self.maxHeight)
+        expandedHeight = clampedHeight
         heightConstraint = heightAnchor.constraint(equalToConstant: clampedHeight)
 
         NSLayoutConstraint.activate([
@@ -199,7 +201,7 @@ final class DiffPanelView: NSView {
     override func mouseDragged(with event: NSEvent) {
         guard isDragging else { super.mouseDragged(with: event); return }
         let currentY = NSEvent.mouseLocation.y
-        let delta = dragStartY - currentY
+        let delta = currentY - dragStartY
         let newHeight = min(max(dragStartHeight + delta, Self.minHeight), Self.maxHeight)
         heightConstraint.constant = newHeight
     }
@@ -207,6 +209,7 @@ final class DiffPanelView: NSView {
     override func mouseUp(with event: NSEvent) {
         if isDragging {
             isDragging = false
+            expandedHeight = min(max(heightConstraint.constant, Self.minHeight), Self.maxHeight)
             UserDefaults.standard.set(heightConstraint.constant, forKey: Self.heightKey)
         } else {
             super.mouseUp(with: event)
@@ -297,11 +300,11 @@ final class DiffPanelView: NSView {
         if entries.isEmpty {
             headerButton.title = "CHANGES"
             branchInfoLabel.isHidden = true
-            isHidden = true
+            setPanelVisible(false)
             return
         }
 
-        isHidden = false
+        setPanelVisible(true)
         headerButton.title = "CHANGES (\(entries.count))"
 
         for entry in entries {
@@ -327,7 +330,7 @@ final class DiffPanelView: NSView {
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         headerButton.title = "CHANGES"
         branchInfoLabel.isHidden = true
-        isHidden = true
+        setPanelVisible(false)
     }
 
     @objc private func headerTapped() {
@@ -414,6 +417,21 @@ final class DiffPanelView: NSView {
             return NSColor(red: 0.78, green: 0.3, blue: 0.3, alpha: 1.0)
         case .untracked:
             return NSColor(red: 0.76, green: 0.65, blue: 0.42, alpha: 1.0)
+        }
+    }
+
+    private func setPanelVisible(_ visible: Bool) {
+        if visible {
+            let clamped = min(max(expandedHeight, Self.minHeight), Self.maxHeight)
+            expandedHeight = clamped
+            heightConstraint.constant = clamped
+            isHidden = false
+        } else {
+            if !isHidden && heightConstraint.constant > 0 {
+                expandedHeight = min(max(heightConstraint.constant, Self.minHeight), Self.maxHeight)
+            }
+            heightConstraint.constant = 0
+            isHidden = true
         }
     }
 }
