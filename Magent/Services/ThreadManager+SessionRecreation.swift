@@ -4,9 +4,9 @@ extension ThreadManager {
 
     // MARK: - Stale Session Cleanup
 
-    /// Kills live tmux sessions prefixed with "magent" that are not referenced by any non-archived thread/tab.
+    /// Kills live tmux sessions prefixed with "ma-" that are not referenced by any non-archived thread/tab.
     @discardableResult
-    func cleanupStaleMagentSessions() async -> [String] {
+    func cleanupStaleMagentSessions(minimumStaleAge: TimeInterval = 0, now: Date = Date()) async -> [String] {
         let referencedSessions = referencedMagentSessionNames()
 
         let liveSessions: [String]
@@ -17,16 +17,37 @@ extension ThreadManager {
         }
 
         let staleSessions = liveSessions.filter { sessionName in
-            Self.isMagentSession(sessionName) && !referencedSessions.contains(sessionName)
+            sessionName.hasPrefix("ma-") && !referencedSessions.contains(sessionName)
         }
 
         guard !staleSessions.isEmpty else { return [] }
 
-        for sessionName in staleSessions {
-            try? await tmux.killSession(name: sessionName)
+        let staleSet = Set(staleSessions)
+        staleMagentSessionsFirstSeenAt = staleMagentSessionsFirstSeenAt.filter { staleSet.contains($0.key) }
+
+        let sessionsToKill: [String]
+        if minimumStaleAge > 0 {
+            var matured = [String]()
+            for sessionName in staleSessions {
+                let firstSeen = staleMagentSessionsFirstSeenAt[sessionName] ?? now
+                staleMagentSessionsFirstSeenAt[sessionName] = firstSeen
+                if now.timeIntervalSince(firstSeen) >= minimumStaleAge {
+                    matured.append(sessionName)
+                }
+            }
+            sessionsToKill = matured
+        } else {
+            sessionsToKill = staleSessions
         }
 
-        return staleSessions
+        guard !sessionsToKill.isEmpty else { return [] }
+
+        for sessionName in sessionsToKill {
+            try? await tmux.killSession(name: sessionName)
+            staleMagentSessionsFirstSeenAt.removeValue(forKey: sessionName)
+        }
+
+        return sessionsToKill
     }
 
     private func referencedMagentSessionNames() -> Set<String> {
@@ -35,16 +56,16 @@ extension ThreadManager {
         // Include both in-memory and persisted threads so cleanup is safe during transitional states.
         let allNonArchivedThreads = threads.filter { !$0.isArchived } + persistence.loadThreads().filter { !$0.isArchived }
         for thread in allNonArchivedThreads {
-            for sessionName in thread.tmuxSessionNames where Self.isMagentSession(sessionName) {
+            for sessionName in thread.tmuxSessionNames where sessionName.hasPrefix("ma-") {
                 names.insert(sessionName)
             }
-            for sessionName in thread.agentTmuxSessions where Self.isMagentSession(sessionName) {
+            for sessionName in thread.agentTmuxSessions where sessionName.hasPrefix("ma-") {
                 names.insert(sessionName)
             }
-            for sessionName in thread.pinnedTmuxSessions where Self.isMagentSession(sessionName) {
+            for sessionName in thread.pinnedTmuxSessions where sessionName.hasPrefix("ma-") {
                 names.insert(sessionName)
             }
-            if let selectedSession = thread.lastSelectedTmuxSessionName, Self.isMagentSession(selectedSession) {
+            if let selectedSession = thread.lastSelectedTmuxSessionName, selectedSession.hasPrefix("ma-") {
                 names.insert(selectedSession)
             }
         }
