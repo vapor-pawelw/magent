@@ -17,11 +17,11 @@ final class ThreadListViewController: NSViewController {
     static let collapsedSectionIdsKey = "MagentCollapsedSectionIds"
     static let projectSeparatorIdentifier = NSUserInterfaceItemIdentifier("ProjectTopSeparator")
     static let projectDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectDisclosureButton")
+    static let projectAddButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectAddButton")
     static let sectionDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("SectionDisclosureButton")
     static let sidebarHorizontalInset: CGFloat = 0
     static let projectDisclosureTrailingInset: CGFloat = 8
     static let outlineIndentationPerLevel: CGFloat = 16
-    static let toolbarPlusTrailingInset: CGFloat = projectDisclosureTrailingInset
     static let disclosureButtonSize: CGFloat = 16
 
     weak var delegate: ThreadListDelegate?
@@ -31,7 +31,6 @@ final class ThreadListViewController: NSViewController {
     let threadManager = ThreadManager.shared
     let persistence = PersistenceService.shared
 
-    var addButton: NSButton!
     private var rateLimitStatusLabel: NSTextField!
     var diffPanelView: DiffPanelView!
     var branchMismatchView: BranchMismatchView!
@@ -120,30 +119,12 @@ final class ThreadListViewController: NSViewController {
         rateLimitStatusLabel.isHidden = true
         rateLimitStatusLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let plusImage = NSImage(
-            systemSymbolName: "plus",
-            accessibilityDescription: "Add Thread"
-        )?.withSymbolConfiguration(.init(pointSize: 15, weight: .heavy))
-        addButton = NSButton(
-            image: plusImage ?? NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Thread")!,
-            target: self,
-            action: #selector(addThreadTapped)
-        )
-        addButton.isBordered = false
-        addButton.contentTintColor = .controlAccentColor
-        addButton.translatesAutoresizingMaskIntoConstraints = false
-
         view.addSubview(rateLimitStatusLabel)
-        view.addSubview(addButton)
 
         NSLayoutConstraint.activate([
             rateLimitStatusLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 11),
             rateLimitStatusLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            rateLimitStatusLabel.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -8),
-            addButton.topAnchor.constraint(equalTo: view.topAnchor, constant: 10),
-            addButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Self.toolbarPlusTrailingInset),
-            addButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
-            addButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
+            rateLimitStatusLabel.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -8),
         ])
     }
 

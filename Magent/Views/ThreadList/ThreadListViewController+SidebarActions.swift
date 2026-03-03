@@ -4,35 +4,18 @@ extension ThreadListViewController {
 
     // MARK: - Actions
 
-    @objc func addThreadTapped() {
+    @objc func addThreadForProjectTapped(_ sender: NSButton) {
         guard !isCreatingThread else { return }
 
-        let settings = persistence.loadSettings()
-        let projects = settings.projects
-
-        guard !projects.isEmpty else {
-            let alert = NSAlert()
-            alert.messageText = "No Projects"
-            alert.informativeText = "Add a project in Settings first."
-            alert.alertStyle = .informational
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
-            return
-        }
-
-        if projects.count == 1 {
-            let project = projects[0]
-            presentProjectAgentMenu(project: project)
-        } else {
-            let menu = NSMenu()
-            let activeAgents = settings.availableActiveAgents
-            for project in projects {
-                let item = NSMenuItem(title: project.name, action: nil, keyEquivalent: "")
-                item.submenu = buildAgentSubmenu(for: project, activeAgents: activeAgents)
-                menu.addItem(item)
+        suppressNextProjectRowToggle = true
+        defer {
+            DispatchQueue.main.async { [weak self] in
+                self?.suppressNextProjectRowToggle = false
             }
-            menu.popUp(positioning: nil, at: NSPoint(x: addButton.bounds.minX, y: addButton.bounds.minY), in: addButton)
         }
+
+        guard let project = projectFromProjectHeaderButton(sender) else { return }
+        presentProjectAgentMenu(project: project, anchorView: sender)
     }
 
     @objc func toggleSectionExpanded(_ sender: NSButton) {
@@ -166,11 +149,56 @@ extension ThreadListViewController {
         }
     }
 
-    private func presentProjectAgentMenu(project: Project) {
+    private func projectFromProjectHeaderButton(_ sender: NSButton) -> Project? {
+        guard let rawProjectId = sender.objectValue as? String,
+              let projectId = UUID(uuidString: rawProjectId) else { return nil }
+        let settings = persistence.loadSettings()
+        return settings.projects.first(where: { $0.id == projectId })
+    }
+
+    private func showNoProjectsAlert() {
+        let alert = NSAlert()
+        alert.messageText = "No Projects"
+        alert.informativeText = "Add a project in Settings first."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private func preferredProjectForQuickCreate(from projects: [Project]) -> Project? {
+        guard !projects.isEmpty else { return nil }
+
+        let selectedRow = outlineView.selectedRow
+        if selectedRow >= 0 {
+            if let selectedThread = outlineView.item(atRow: selectedRow) as? MagentThread,
+               let matched = projects.first(where: { $0.id == selectedThread.projectId }) {
+                return matched
+            }
+            if let selectedProject = outlineView.item(atRow: selectedRow) as? SidebarProject,
+               let matched = projects.first(where: { $0.id == selectedProject.projectId }) {
+                return matched
+            }
+        }
+
+        if let lastProjectRaw = UserDefaults.standard.string(forKey: Self.lastOpenedProjectDefaultsKey),
+           let lastProjectId = UUID(uuidString: lastProjectRaw),
+           let matched = projects.first(where: { $0.id == lastProjectId }) {
+            return matched
+        }
+
+        if let firstSidebarProject = sidebarProjects.first,
+           let matched = projects.first(where: { $0.id == firstSidebarProject.projectId }) {
+            return matched
+        }
+
+        return projects.first
+    }
+
+    private func presentProjectAgentMenu(project: Project, anchorView: NSView) {
         let settings = persistence.loadSettings()
         let activeAgents = settings.availableActiveAgents
         let menu = buildAgentSubmenu(for: project, activeAgents: activeAgents)
-        menu.popUp(positioning: nil, at: NSPoint(x: addButton.bounds.minX, y: addButton.bounds.minY), in: addButton)
+        menu.popUp(positioning: nil, at: NSPoint(x: anchorView.bounds.minX, y: anchorView.bounds.minY), in: anchorView)
     }
 
     private func buildAgentSubmenu(for project: Project, activeAgents: [AgentType]) -> NSMenu {
@@ -204,9 +232,19 @@ extension ThreadListViewController {
         }
     }
 
-    /// Called from SplitViewController's Cmd+N shortcut to respect the loading guard
+    /// Called from SplitViewController's Cmd+N shortcut to respect the loading guard.
+    /// Picks the most relevant project context and opens that project's agent menu.
     func requestNewThread() {
-        addThreadTapped()
+        guard !isCreatingThread else { return }
+
+        let settings = persistence.loadSettings()
+        let projects = settings.projects
+        guard !projects.isEmpty else {
+            showNoProjectsAlert()
+            return
+        }
+        guard let project = preferredProjectForQuickCreate(from: projects) else { return }
+        presentProjectAgentMenu(project: project, anchorView: outlineView)
     }
 
     private func createThread(
@@ -215,7 +253,7 @@ extension ThreadListViewController {
         useAgentCommand: Bool = true
     ) {
         isCreatingThread = true
-        addButton.isEnabled = false
+        reloadData()
 
         performWithSpinner(message: "Creating thread...", errorTitle: "Creation Failed") {
             do {
@@ -226,13 +264,13 @@ extension ThreadListViewController {
                 )
                 await MainActor.run {
                     self.isCreatingThread = false
-                    self.addButton.isEnabled = true
+                    self.reloadData()
                     self.delegate?.threadList(self, didSelectThread: thread)
                 }
             } catch {
                 await MainActor.run {
                     self.isCreatingThread = false
-                    self.addButton.isEnabled = true
+                    self.reloadData()
                 }
                 throw error
             }

@@ -206,6 +206,18 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     disclosureButton.action = #selector(toggleProjectExpanded(_:))
                     c.addSubview(disclosureButton)
 
+                    let addButton = NSButton()
+                    addButton.identifier = Self.projectAddButtonIdentifier
+                    addButton.translatesAutoresizingMaskIntoConstraints = false
+                    addButton.isBordered = false
+                    addButton.imagePosition = .imageOnly
+                    addButton.focusRingType = .none
+                    addButton.setButtonType(.momentaryChange)
+                    addButton.sendAction(on: [.leftMouseUp])
+                    addButton.target = self
+                    addButton.action = #selector(addThreadForProjectTapped(_:))
+                    c.addSubview(addButton)
+
                     let separator = NSView()
                     separator.identifier = Self.projectSeparatorIdentifier
                     separator.translatesAutoresizingMaskIntoConstraints = false
@@ -221,11 +233,15 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         separator.heightAnchor.constraint(equalToConstant: 1),
                         tf.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -8),
                         tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
-                        tf.trailingAnchor.constraint(lessThanOrEqualTo: disclosureButton.leadingAnchor, constant: -6),
+                        tf.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -6),
                         iv.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 6),
                         iv.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
                         iv.widthAnchor.constraint(equalToConstant: 10),
                         iv.heightAnchor.constraint(equalToConstant: 10),
+                        addButton.trailingAnchor.constraint(equalTo: disclosureButton.leadingAnchor, constant: -2),
+                        addButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
+                        addButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
+                        addButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                         disclosureButton.trailingAnchor.constraint(
                             equalTo: c.trailingAnchor,
                             constant: -Self.projectDisclosureTrailingInset
@@ -252,6 +268,17 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 updateProjectDisclosureButton(disclosureButton, isExpanded: !isProjectCollapsed(project))
                 disclosureButton.isHidden = !hasChildren
                 disclosureButton.isEnabled = hasChildren
+            }
+            if let addButton = cell.subviews.first(where: { $0.identifier == Self.projectAddButtonIdentifier }) as? NSButton {
+                let plusImage = NSImage(
+                    systemSymbolName: "plus",
+                    accessibilityDescription: "Add Thread to \(project.name)"
+                )?.withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
+                addButton.image = plusImage ?? NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Thread")
+                addButton.contentTintColor = .controlAccentColor
+                addButton.objectValue = project.projectId.uuidString
+                addButton.toolTip = "Add thread to \(project.name)"
+                addButton.isEnabled = !isCreatingThread
             }
             if project.isPinned {
                 cell.imageView?.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
