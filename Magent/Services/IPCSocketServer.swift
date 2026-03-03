@@ -4,7 +4,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v10"
+    private static let cliVersion = "magent-cli-v11"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -314,19 +314,21 @@ actor IPCSocketServer {
             [ -n "$session" ] || die "Not running inside a tmux session"
             send_request "{$(json_kv command current-thread),$(json_kv sessionName "$session")}"
             ;;
-        rename-thread)
-            thread=""; description=""
+        auto-rename-thread|rename-thread)
+            thread=""; prompt=""; description=""
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --thread)      thread="$2"; shift 2 ;;
+                    --prompt)      prompt="$2"; shift 2 ;;
                     --description) description="$2"; shift 2 ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] && [ -n "$description" ] || die "Usage: magent-cli rename-thread --thread <name> --description <text>"
-            send_request "{$(json_kv command rename-thread),$(json_kv threadName "$thread"),$(json_kv newName "$description")}"
+            [ -z "$prompt" ] && [ -n "$description" ] && prompt="$description"
+            [ -n "$thread" ] && [ -n "$prompt" ] || die "Usage: magent-cli auto-rename-thread --thread <name> --prompt <text>"
+            send_request "{$(json_kv command auto-rename-thread),$(json_kv threadName "$thread"),$(json_kv prompt "$prompt")}"
             ;;
-        rename-thread-exact)
+        rename-branch|rename-thread-exact)
             thread=""; name=""
             while [ $# -gt 0 ]; do
                 case "$1" in
@@ -335,8 +337,25 @@ actor IPCSocketServer {
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] && [ -n "$name" ] || die "Usage: magent-cli rename-thread-exact --thread <name> --name <text>"
-            send_request "{$(json_kv command rename-thread-exact),$(json_kv threadName "$thread"),$(json_kv newName "$name")}"
+            [ -n "$thread" ] && [ -n "$name" ] || die "Usage: magent-cli rename-branch --thread <name> --name <text>"
+            send_request "{$(json_kv command rename-branch),$(json_kv threadName "$thread"),$(json_kv newName "$name")}"
+            ;;
+        set-description)
+            thread=""; description=""; clear=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread)      thread="$2"; shift 2 ;;
+                    --description) description="$2"; shift 2 ;;
+                    --clear)       clear="1"; shift 1 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli set-description --thread <name> [--description <text> | --clear]"
+            [ -z "$clear" ] || [ -z "$description" ] || die "Choose either --description or --clear"
+            json="{$(json_kv command set-description),$(json_kv threadName "$thread")"
+            [ -n "$description" ] && json="$json,$(json_kv description "$description")"
+            json="$json}"
+            send_request "$json"
             ;;
         thread-info)
             thread=""
@@ -484,8 +503,11 @@ actor IPCSocketServer {
             echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]"
             echo "  close-tab            --thread <name> (--index <n> | --session <name>)"
             echo "  current-thread                                               (returns current thread info)"
-            echo "  rename-thread        --thread <name> --description <text>  (AI-generated slug)"
-            echo "  rename-thread-exact  --thread <name> --name <text>         (exact name)"
+            echo "  auto-rename-thread   --thread <name> --prompt <text>       (AI-generated branch + description)"
+            echo "  rename-thread        --thread <name> --prompt <text>       (alias for auto-rename-thread)"
+            echo "  rename-branch        --thread <name> --name <text>         (exact branch name)"
+            echo "  rename-thread-exact  --thread <name> --name <text>         (alias for rename-branch)"
+            echo "  set-description      --thread <name> [--description <text> | --clear]"
             echo "  thread-info          --thread <name>                       (full thread details)"
             echo "  move-thread          --thread <name> --section <name>     (move thread to section)"
             echo ""

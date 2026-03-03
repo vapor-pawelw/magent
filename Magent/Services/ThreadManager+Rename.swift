@@ -422,11 +422,12 @@ extension ThreadManager {
     private func generateTaskDescription(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> String? {
         let truncated = String(prompt.prefix(500))
         let aiPrompt = """
-            Generate a very short human-readable task description (2-8 words, Title Case) for this task. \
+            Generate a very short human-readable task description (2-8 words) for this task. \
+            Use natural capitalization (sentence case); do not capitalize every word. \
             Output ONLY the prefix DESC: followed by the description. No quotes, no explanation. \
             Output DESC: EMPTY for pure knowledge questions with no implied action. \
-            Example: "Fix auth bug in login" → DESC: Fix Auth Login Bug \
-            Example: "Add dark mode support" → DESC: Add Dark Mode Support \
+            Example: "Fix auth bug in login" → DESC: Fix auth login bug \
+            Example: "Add dark mode support" → DESC: Add dark mode support \
             Example: "How does the auth system work?" → DESC: EMPTY
             Task: \(truncated)
             """
@@ -460,28 +461,51 @@ extension ThreadManager {
         return sanitizeGeneratedDescription(raw)
     }
 
-    func generateTaskDescriptionIfNeeded(threadId: UUID, prompt: String) async {
-        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+    @discardableResult
+    private func generateAndPersistTaskDescription(
+        threadId: UUID,
+        prompt: String,
+        overwriteExisting: Bool
+    ) async -> String? {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return nil }
         let thread = threads[index]
 
-        guard !thread.isMain else { return }
-        guard thread.taskDescription == nil else { return }
+        guard !thread.isMain else { return nil }
+        if !overwriteExisting, thread.taskDescription != nil { return nil }
 
         let agentOrder = slugGenerationAgentOrder(preferred: thread.selectedAgentType, projectId: thread.projectId)
-        guard !agentOrder.allTrackable.isEmpty, !agentOrder.available.isEmpty else { return }
+        guard !agentOrder.allTrackable.isEmpty, !agentOrder.available.isEmpty else { return nil }
 
         for candidateAgent in agentOrder.available {
             if let desc = await generateTaskDescription(from: prompt, agentType: candidateAgent, projectId: thread.projectId) {
                 // Re-check index — thread array may have changed during async work
-                guard let currentIndex = threads.firstIndex(where: { $0.id == threadId }) else { return }
+                guard let currentIndex = threads.firstIndex(where: { $0.id == threadId }) else { return nil }
                 threads[currentIndex].taskDescription = desc
                 try? persistence.saveThreads(threads)
                 await MainActor.run {
                     delegate?.threadManager(self, didUpdateThreads: threads)
                 }
-                return
+                return desc
             }
         }
+        return nil
+    }
+
+    func generateTaskDescriptionIfNeeded(threadId: UUID, prompt: String) async {
+        _ = await generateAndPersistTaskDescription(
+            threadId: threadId,
+            prompt: prompt,
+            overwriteExisting: false
+        )
+    }
+
+    @discardableResult
+    func regenerateTaskDescription(threadId: UUID, prompt: String) async -> String? {
+        await generateAndPersistTaskDescription(
+            threadId: threadId,
+            prompt: prompt,
+            overwriteExisting: true
+        )
     }
 
     func setTaskDescription(threadId: UUID, description: String?) throws {

@@ -78,7 +78,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         slugPromptWrapper.addArrangedSubview(slugPromptLabel)
 
         let slugPromptDesc = NSTextField(
-            wrappingLabelWithString: "Instruction used to generate branch slugs — for auto-rename on first prompt, rename via agent, or CLI rename-thread command."
+            wrappingLabelWithString: "Instruction used to generate branch slugs — for auto-rename on first prompt, rename via agent, or CLI auto-rename-thread command."
         )
         slugPromptDesc.font = .systemFont(ofSize: 11)
         slugPromptDesc.textColor = NSColor(resource: .textSecondary)

@@ -15,8 +15,10 @@ enum IPCAgentDocs {
     /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
     /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
     /tmp/magent-cli current-thread
-    /tmp/magent-cli rename-thread --thread <name> --description <text>
-    /tmp/magent-cli rename-thread-exact --thread <name> --name <text>
+    /tmp/magent-cli auto-rename-thread --thread <name> --prompt <text>
+    /tmp/magent-cli rename-thread --thread <name> --prompt <text>
+    /tmp/magent-cli rename-branch --thread <name> --name <text>
+    /tmp/magent-cli set-description --thread <name> [--description <text> | --clear]
     /tmp/magent-cli thread-info --thread <name>
     /tmp/magent-cli list-sections [--project <name>]
     /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
@@ -31,8 +33,9 @@ enum IPCAgentDocs {
     private static let usageNotes = """
     Use current-thread to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
     When creating threads, use --description to name them upfront (AI generates a slug respecting project naming rules). Only use --name when the user explicitly provides a literal name. Omit both for a random name.
-    Use rename-thread by default (generates a slug from the description). Only use rename-thread-exact when the user specifies an exact name.
-    rename-thread-exact is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use rename-thread with that description instead.
+    Use auto-rename-thread (or its rename-thread alias) by default; it generates both branch name and description from one prompt.
+    Use rename-branch ONLY when the user gives a literal branch name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about, use auto-rename-thread instead.
+    Use set-description to manually set or clear the thread description without renaming the branch.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
     """
 
@@ -47,7 +50,7 @@ enum IPCAgentDocs {
 
     static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    static let codexIPCVersion = "<!-- magent-ipc-v6 -->"
+    static let codexIPCVersion = "<!-- magent-ipc-v7 -->"
 
     /// Markdown format used for Codex's `AGENTS.md` file.
     static let codexAgentsMdBlock: String = """
@@ -64,9 +67,9 @@ enum IPCAgentDocs {
 
     Use `current-thread` to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
     When creating threads, use `--description` to name them upfront (AI generates a slug respecting project naming rules). Only use `--name` when the user explicitly provides a literal name. Omit both for a random name.
-    Use `rename-thread` by default (generates a slug from the description).
-    Only use `rename-thread-exact` when the user specifies an exact name.
-    `rename-thread-exact` is ONLY for when the user gives a literal name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about (e.g. "rename this to something about authentication"), use `rename-thread` with that description instead.
+    Use `auto-rename-thread` (or its `rename-thread` alias) by default; it generates both branch name and description from one prompt.
+    Use `rename-branch` ONLY when the user specifies an exact branch name.
+    Use `set-description` to manually set or clear only the thread description.
     Section commands without `--project` operate on global sections. With `--project`, they operate on project-specific overrides.
     \(codexIPCMarkerEnd)
     """

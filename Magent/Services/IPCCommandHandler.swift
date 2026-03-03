@@ -28,10 +28,12 @@ final class IPCCommandHandler {
             return await createTab(request)
         case "close-tab":
             return await closeTab(request)
-        case "rename-thread":
-            return await renameThread(request)
-        case "rename-thread-exact":
-            return await renameThreadExact(request)
+        case "auto-rename-thread", "rename-thread":
+            return await autoRenameThread(request)
+        case "rename-branch", "rename-thread-exact":
+            return await renameBranch(request)
+        case "set-description":
+            return setDescription(request)
         case "current-thread":
             return currentThread(request)
         case "thread-info":
@@ -321,44 +323,59 @@ final class IPCCommandHandler {
         }
     }
 
-    private func renameThread(_ request: IPCRequest) async -> IPCResponse {
+    private func autoRenameThread(_ request: IPCRequest) async -> IPCResponse {
         let thread: MagentThread
         switch resolveThread(request) {
         case .found(let t): thread = t
         case .error(let err): return err
         }
 
-        guard let description = request.newName, !description.isEmpty else {
-            return .failure("Missing required field: description (pass via newName)", id: request.id)
+        let prompt = [request.prompt, request.description, request.newName]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty })
+        guard let prompt else {
+            return .failure("Missing required field: prompt", id: request.id)
         }
 
-        let renameResult = await threadManager.autoRenameCandidates(from: description, agentType: thread.selectedAgentType, projectId: thread.projectId)
+        let renameResult = await threadManager.autoRenameCandidates(
+            from: prompt,
+            agentType: thread.selectedAgentType,
+            projectId: thread.projectId
+        )
         guard case .candidates(let candidates) = renameResult else {
-            return .failure("Could not generate a name from the given description", id: request.id)
+            return .failure("Could not generate a branch name from the prompt", id: request.id)
         }
 
-        for candidate in candidates where candidate != thread.name {
+        var didRename = false
+        let renameCandidates = candidates.filter { $0 != thread.name }
+        for candidate in renameCandidates {
             do {
                 try await threadManager.renameThread(thread, to: candidate, markFirstPromptRenameHandled: false)
-                let settings = persistence.loadSettings()
-                let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
-                // Re-fetch thread after rename
-                guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
-                    return .success(id: request.id)
-                }
-                let info = IPCThreadInfo(thread: updated, projectName: projectName)
-                return IPCResponse(ok: true, id: request.id, thread: info)
+                didRename = true
+                break
             } catch ThreadManagerError.duplicateName {
                 continue
             } catch {
-                return .failure("Failed to rename thread: \(error.localizedDescription)", id: request.id)
+                return .failure("Failed to rename branch: \(error.localizedDescription)", id: request.id)
             }
         }
 
-        return .failure("All generated name candidates are taken", id: request.id)
+        if !renameCandidates.isEmpty, !didRename {
+            return .failure("All generated branch name candidates are taken", id: request.id)
+        }
+
+        _ = await threadManager.regenerateTaskDescription(threadId: thread.id, prompt: prompt)
+
+        let settings = persistence.loadSettings()
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            return .success(id: request.id)
+        }
+        let info = IPCThreadInfo(thread: updated, projectName: projectName)
+        return IPCResponse(ok: true, id: request.id, thread: info)
     }
 
-    private func renameThreadExact(_ request: IPCRequest) async -> IPCResponse {
+    private func renameBranch(_ request: IPCRequest) async -> IPCResponse {
         let thread: MagentThread
         switch resolveThread(request) {
         case .found(let t): thread = t
@@ -372,7 +389,31 @@ final class IPCCommandHandler {
         do {
             try await threadManager.renameThread(thread, to: newName, markFirstPromptRenameHandled: false)
         } catch {
-            return .failure("Failed to rename thread: \(error.localizedDescription)", id: request.id)
+            return .failure("Failed to rename branch: \(error.localizedDescription)", id: request.id)
+        }
+
+        let settings = persistence.loadSettings()
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            return .success(id: request.id)
+        }
+        let info = IPCThreadInfo(thread: updated, projectName: projectName)
+        return IPCResponse(ok: true, id: request.id, thread: info)
+    }
+
+    private func setDescription(_ request: IPCRequest) -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        do {
+            try threadManager.setTaskDescription(threadId: thread.id, description: request.description)
+        } catch ThreadManagerError.invalidDescription {
+            return .failure("Invalid description. Use 2-8 words.", id: request.id)
+        } catch {
+            return .failure("Failed to set description: \(error.localizedDescription)", id: request.id)
         }
 
         let settings = persistence.loadSettings()

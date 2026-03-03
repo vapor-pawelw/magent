@@ -87,20 +87,35 @@ Send a prompt to a thread's agent.
 magent-cli send-prompt --thread <name> --prompt <text>
 ```
 
-### rename-thread
+### auto-rename-thread
 
-Rename a thread using AI-generated slug from a description.
+Rename a thread from a single prompt. This generates both:
+- branch/worktree slug
+- thread description (2-8 words)
 
 ```bash
-magent-cli rename-thread --thread <name> --description <text>
+magent-cli auto-rename-thread --thread <name> --prompt <text>
 ```
 
-### rename-thread-exact
+`rename-thread` remains as a compatibility alias and accepts `--prompt` (or legacy `--description`).
 
-Rename a thread to an exact name.
+### rename-branch
+
+Rename a thread/worktree to an exact branch name.
 
 ```bash
-magent-cli rename-thread-exact --thread <name> --name <text>
+magent-cli rename-branch --thread <name> --name <text>
+```
+
+`rename-thread-exact` remains as a compatibility alias.
+
+### set-description
+
+Set or clear a thread description without renaming the branch/worktree.
+
+```bash
+magent-cli set-description --thread <name> --description <text>
+magent-cli set-description --thread <name> --clear
 ```
 
 ### archive-thread
