@@ -2,6 +2,37 @@ import Foundation
 
 extension ThreadManager {
 
+    // MARK: - Tmux Session Rename (two-phase to avoid collisions)
+
+    /// Renames tmux sessions in two phases to avoid collisions during rename.
+    /// Dead sessions are skipped; they will be recreated lazily with the new name.
+    func renameTmuxSessions(from oldNames: [String], to newNames: [String]) async throws {
+        precondition(oldNames.count == newNames.count)
+        var currentNames = oldNames
+        var liveIndices: [Int] = []
+        for i in oldNames.indices where oldNames[i] != newNames[i] {
+            if await tmux.hasSession(name: oldNames[i]) {
+                liveIndices.append(i)
+            }
+        }
+        do {
+            for i in liveIndices {
+                let tempName = "ma-rename-\(UUID().uuidString.lowercased())"
+                try await tmux.renameSession(from: oldNames[i], to: tempName)
+                currentNames[i] = tempName
+            }
+            for i in liveIndices {
+                try await tmux.renameSession(from: currentNames[i], to: newNames[i])
+                currentNames[i] = newNames[i]
+            }
+        } catch {
+            for i in liveIndices.reversed() where currentNames[i] != oldNames[i] {
+                try? await tmux.renameSession(from: currentNames[i], to: oldNames[i])
+            }
+            throw error
+        }
+    }
+
     // MARK: - Rename
 
     private func isAgentCurrentlyRateLimited(_ agent: AgentType, now: Date = Date()) -> Bool {

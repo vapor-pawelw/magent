@@ -130,125 +130,43 @@ extension ThreadManager {
         return nil
     }
 
-    func globalRateLimitSummaryText(now: Date = Date()) -> String? {
-        let ordered: [AgentType] = [.claude, .codex]
-        let entries = ordered.compactMap { agent -> String? in
-            guard let info = globalAgentRateLimits[agent] else { return nil }
-            guard info.resetAt > now else { return nil }
-            return "\(agent.displayName): \(countdownText(until: info.resetAt, now: now))"
-        }
-
-        guard !entries.isEmpty else { return nil }
-        return "Rate limits: " + entries.joined(separator: "  ·  ")
-    }
-
-    private func countdownText(until resetAt: Date, now: Date) -> String {
-        let remaining = max(0, Int(resetAt.timeIntervalSince(now)))
-        let days = remaining / 86_400
-        let hours = (remaining % 86_400) / 3_600
-        let minutes = (remaining % 3_600) / 60
-        if days > 0 {
-            return "\(days)d \(hours)h"
-        }
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
-        }
-        return "\(max(1, minutes))m"
-    }
-
-
-    // MARK: - Helpers
+    // MARK: - Session Naming (delegates to TmuxSessionNaming)
 
     /// Renames session names produced by Magent without touching unrelated substrings.
-    /// This avoids accidental rewrites when thread names overlap with the "magent" prefix.
     func renamedSessionName(_ sessionName: String, fromThreadName oldName: String, toThreadName newName: String, repoSlug: String) -> String {
-        let oldPrefix = Self.buildSessionName(repoSlug: repoSlug, threadName: oldName)
-        let newPrefix = Self.buildSessionName(repoSlug: repoSlug, threadName: newName)
-
-        if sessionName == oldPrefix {
-            return newPrefix
-        }
-        if sessionName.hasPrefix(oldPrefix + "-") {
-            return newPrefix + String(sessionName.dropFirst(oldPrefix.count))
-        }
-        return sessionName
+        TmuxSessionNaming.renamedSessionName(sessionName, fromThreadName: oldName, toThreadName: newName, repoSlug: repoSlug)
     }
 
-    /// Renames tmux sessions in two phases to avoid collisions during rename.
-    /// Dead sessions are skipped; they will be recreated lazily with the new name.
-    func renameTmuxSessions(from oldNames: [String], to newNames: [String]) async throws {
-        precondition(oldNames.count == newNames.count)
-
-        var currentNames = oldNames
-        var liveIndices: [Int] = []
-
-        for i in oldNames.indices where oldNames[i] != newNames[i] {
-            if await tmux.hasSession(name: oldNames[i]) {
-                liveIndices.append(i)
-            }
-        }
-
-        do {
-            for i in liveIndices {
-                let tempName = "ma-rename-\(UUID().uuidString.lowercased())"
-                try await tmux.renameSession(from: oldNames[i], to: tempName)
-                currentNames[i] = tempName
-            }
-
-            for i in liveIndices {
-                try await tmux.renameSession(from: currentNames[i], to: newNames[i])
-                currentNames[i] = newNames[i]
-            }
-        } catch {
-            // Best-effort rollback so the model doesn't diverge from live tmux state.
-            for i in liveIndices.reversed() where currentNames[i] != oldNames[i] {
-                try? await tmux.renameSession(from: currentNames[i], to: oldNames[i])
-            }
-            throw error
-        }
+    static func sanitizeForTmux(_ name: String) -> String {
+        TmuxSessionNaming.sanitizeForTmux(name)
     }
 
-    /// Removes broken symlinks from all projects' worktrees base directories.
+    static func repoSlug(from projectName: String) -> String {
+        TmuxSessionNaming.repoSlug(from: projectName)
+    }
+
+    static func buildSessionName(repoSlug: String, threadName: String?, tabSlug: String? = nil) -> String {
+        TmuxSessionNaming.buildSessionName(repoSlug: repoSlug, threadName: threadName, tabSlug: tabSlug)
+    }
+
+    static func isMagentSession(_ name: String) -> Bool {
+        TmuxSessionNaming.isMagentSession(name)
+    }
+
+    // MARK: - Symlinks (delegates to SymlinkManager)
+
     func cleanupAllBrokenSymlinks() {
-        let settings = persistence.loadSettings()
-        for project in settings.projects {
-            cleanupBrokenSymlinks(in: project.resolvedWorktreesBasePath())
-        }
-    }
-
-    /// Removes broken symlinks from the worktrees base directory.
-    /// Rename operations leave symlinks (old-name → actual-worktree-dir) that become
-    /// stale once the worktree is archived/removed.
-    private func cleanupBrokenSymlinks(in directory: String) {
-        let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(atPath: directory) else { return }
-        for entry in entries {
-            let fullPath = (directory as NSString).appendingPathComponent(entry)
-            let url = URL(fileURLWithPath: fullPath)
-            guard let values = try? url.resourceValues(forKeys: [.isSymbolicLinkKey]),
-                  values.isSymbolicLink == true else { continue }
-            // Broken symlink: the target no longer exists
-            if !fm.fileExists(atPath: fullPath) {
-                try? fm.removeItem(atPath: fullPath)
-            }
-        }
+        SymlinkManager.cleanupAll(settings: persistence.loadSettings())
     }
 
     func createCompatibilitySymlink(from oldPath: String, to newPath: String) {
-        let fileManager = FileManager.default
-        let oldURL = URL(fileURLWithPath: oldPath)
-
-        if let values = try? oldURL.resourceValues(forKeys: [.isSymbolicLinkKey]),
-           values.isSymbolicLink == true {
-            try? fileManager.removeItem(atPath: oldPath)
-        }
-
-        guard !fileManager.fileExists(atPath: oldPath) else { return }
-        try? fileManager.createSymbolicLink(atPath: oldPath, withDestinationPath: newPath)
+        SymlinkManager.createCompatibilitySymlink(from: oldPath, to: newPath)
     }
 
+    // MARK: - Claude Hooks
+
     /// Path to the Magent-specific Claude Code hooks settings file.
-    private static let claudeHooksSettingsPath = "/tmp/magent-claude-hooks.json"
+    static let claudeHooksSettingsPath = "/tmp/magent-claude-hooks.json"
 
     /// Writes (or refreshes) the Claude Code hooks JSON that Magent injects via `--settings`.
     /// The `Stop` hook writes the tmux session name to the agent-completion event log so
@@ -285,6 +203,8 @@ extension ThreadManager {
         try? json.write(toFile: path, atomically: true, encoding: .utf8)
     }
 
+    // MARK: - Codex Config
+
     /// Ensures the Codex CLI config has `tui.notification_method = "bel"` so the
     /// pipe-pane bell watcher can detect when Codex finishes a turn.
     func ensureCodexBellNotification() {
@@ -319,6 +239,8 @@ extension ThreadManager {
         }
         try? updated.write(toFile: configPath, atomically: true, encoding: .utf8)
     }
+
+    // MARK: - Codex IPC Instructions
 
     private static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     private static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
@@ -364,9 +286,6 @@ extension ThreadManager {
     \(codexIPCMarkerEnd)
     """
 
-    /// Writes or updates the Magent IPC section in `~/.codex/AGENTS.md` so Codex
-    /// agents auto-discover `magent-cli`. Preserves any existing user content;
-    /// only the delimited Magent section is managed.
     func installCodexIPCInstructions() {
         let codexDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex")
@@ -400,7 +319,8 @@ extension ThreadManager {
         }
     }
 
-    /// Builds the shell command to start the selected agent with any required agent-specific setup.
+    // MARK: - Agent Start Command
+
     private static let userShell: String = {
         ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
     }()
@@ -433,7 +353,8 @@ extension ThreadManager {
         return "exec \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
     }
 
-    /// Checks if a thread name is available (no conflicts with existing threads, worktrees, branches, or tmux sessions).
+    // MARK: - Name Availability
+
     func isNameAvailable(_ name: String, project: Project) async throws -> Bool {
         let nameInUse = threads.contains(where: { $0.name == name })
         let dirExists = FileManager.default.fileExists(
@@ -450,7 +371,8 @@ extension ThreadManager {
         return !branchExists && !tmuxExists
     }
 
-    /// Runs agent-specific post-setup (e.g. pre-trusting directories for Claude Code).
+    // MARK: - Agent Trust
+
     func trustDirectoryIfNeeded(_ path: String, agentType: AgentType?) {
         switch agentType {
         case .claude:
@@ -490,120 +412,9 @@ extension ThreadManager {
         if existingNames.contains(name) { return true }
         return await tmux.hasSession(name: name)
     }
-
-    static func sanitizeForTmux(_ name: String) -> String {
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
-        return name.unicodeScalars
-            .map { allowed.contains($0) ? String($0) : "-" }
-            .joined()
-            .lowercased()
-    }
-
-    static func repoSlug(from projectName: String) -> String {
-        var slug = sanitizeForTmux(projectName)
-        if slug.count > 16 {
-            slug = String(slug.prefix(16))
-                .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-        }
-        return slug
-    }
-
-    static func buildSessionName(repoSlug: String, threadName: String?, tabSlug: String? = nil) -> String {
-        var parts = ["ma", repoSlug]
-        if let threadName {
-            parts.append(threadName)
-        }
-        if let tabSlug {
-            parts.append(tabSlug)
-        }
-        return parts.joined(separator: "-")
-    }
-
-    static func isMagentSession(_ name: String) -> Bool {
-        name.hasPrefix("ma-") || name.hasPrefix("magent-")
-    }
-
-    // MARK: - Tmux Zombie Health
-
-    func checkTmuxZombieHealth() async {
-        let now = Date()
-        guard now.timeIntervalSince(lastTmuxZombieHealthCheckAt) >= 15 else { return }
-        lastTmuxZombieHealthCheckAt = now
-        guard !isRestartingTmuxForRecovery else { return }
-
-        let summaries = await tmux.zombieParentSummaries()
-        let threshold = 200
-        guard let worst = summaries.max(by: { $0.zombieCount < $1.zombieCount }),
-              worst.zombieCount >= threshold else {
-            didShowTmuxZombieWarning = false
-            return
-        }
-        guard !didShowTmuxZombieWarning else { return }
-        didShowTmuxZombieWarning = true
-
-        await MainActor.run {
-            BannerManager.shared.show(
-                message: "tmux health issue: \(worst.zombieCount) defunct processes on parent \(worst.parentPid). Restart and recover sessions.",
-                style: .warning,
-                duration: nil,
-                actions: [
-                    BannerAction(title: "Restart tmux + Recover") { [weak self] in
-                        Task { await self?.restartTmuxAndRecoverSessions() }
-                    },
-                    BannerAction(title: "Ignore") { [weak self] in
-                        self?.didShowTmuxZombieWarning = false
-                    },
-                ]
-            )
-        }
-    }
-
-    func restartTmuxAndRecoverSessions() async {
-        guard !isRestartingTmuxForRecovery else { return }
-        isRestartingTmuxForRecovery = true
-        didShowTmuxZombieWarning = false
-
-        await MainActor.run {
-            BannerManager.shared.show(
-                message: "Restarting tmux and recovering sessions...",
-                style: .warning,
-                duration: nil,
-                isDismissible: false
-            )
-            stopSessionMonitor()
-        }
-
-        await tmux.killServer()
-
-        var recreatedCount = 0
-        let activeThreads = threads.filter { !$0.isArchived }
-        for thread in activeThreads {
-            for sessionName in thread.tmuxSessionNames {
-                let recreated = await recreateSessionIfNeeded(sessionName: sessionName, thread: thread)
-                if recreated {
-                    recreatedCount += 1
-                }
-            }
-        }
-
-        await ensureBellPipes()
-        await syncBusySessionsFromProcessState()
-        _ = await cleanupStaleMagentSessions()
-        try? persistence.saveThreads(threads)
-
-        isRestartingTmuxForRecovery = false
-
-        await MainActor.run {
-            updateDockBadge()
-            delegate?.threadManager(self, didUpdateThreads: threads)
-            BannerManager.shared.show(
-                message: "tmux restarted. Recovered \(recreatedCount) session\(recreatedCount == 1 ? "" : "s").",
-                style: .info
-            )
-            startSessionMonitor()
-        }
-    }
 }
+
+// MARK: - Notification Names
 
 extension Notification.Name {
     static let magentDeadSessionsDetected = Notification.Name("magentDeadSessionsDetected")
@@ -619,6 +430,8 @@ extension Notification.Name {
     static let magentNavigateToThread = Notification.Name("magentNavigateToThread")
     static let magentPullRequestInfoChanged = Notification.Name("magentPullRequestInfoChanged")
 }
+
+// MARK: - Errors
 
 enum ThreadManagerError: LocalizedError {
     case threadNotFound
