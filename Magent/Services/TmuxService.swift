@@ -267,89 +267,6 @@ final class TmuxService {
         return (command, path)
     }
 
-    /// Updates live shell panes to a new working directory.
-    /// Non-shell panes (e.g. running agent binaries) are left untouched.
-    /// Returns the set of pane IDs that received the `cd` command.
-    @discardableResult
-    func updateWorkingDirectory(sessionName: String, to path: String) async -> Set<String> {
-        let output: String
-        do {
-            output = try await ShellExecutor.run(
-                "tmux list-panes -t \(shellQuote(sessionName)) -F '#{pane_id}\t#{pane_current_command}'"
-            )
-        } catch {
-            return []
-        }
-
-        let cdCommand = "cd \(shellQuote(path))"
-        var enforcedPanes = Set<String>()
-
-        for line in output.components(separatedBy: "\n") where !line.isEmpty {
-            let parts = line.components(separatedBy: "\t")
-            guard parts.count >= 2 else { continue }
-
-            let paneId = parts[0]
-            let paneCommand = parts[1]
-            guard Self.shellCommands.contains(paneCommand) else { continue }
-
-            // Clear any partial input before sending cd
-            _ = try? await ShellExecutor.run(
-                "tmux send-keys -t \(shellQuote(paneId)) C-u"
-            )
-            _ = try? await ShellExecutor.run(
-                "tmux send-keys -t \(shellQuote(paneId)) \(shellQuote(cdCommand)) Enter"
-            )
-            enforcedPanes.insert(paneId)
-        }
-
-        return enforcedPanes
-    }
-
-    /// Sends `cd` to shell panes that haven't been enforced yet.
-    /// Returns the set of newly enforced pane IDs, and whether any non-shell panes remain unenforced.
-    func enforceWorkingDirectoryOnNewPanes(
-        sessionName: String,
-        path: String,
-        alreadyEnforced: Set<String>
-    ) async -> (newlyEnforced: Set<String>, hasUnenforced: Bool) {
-        let output: String
-        do {
-            output = try await ShellExecutor.run(
-                "tmux list-panes -t \(shellQuote(sessionName)) -F '#{pane_id}\t#{pane_current_command}'"
-            )
-        } catch {
-            return ([], false) // session gone
-        }
-
-        let cdCommand = "cd \(shellQuote(path))"
-        var newlyEnforced = Set<String>()
-        var hasUnenforced = false
-
-        for line in output.components(separatedBy: "\n") where !line.isEmpty {
-            let parts = line.components(separatedBy: "\t")
-            guard parts.count >= 2 else { continue }
-
-            let paneId = parts[0]
-            let paneCommand = parts[1]
-
-            if alreadyEnforced.contains(paneId) { continue }
-
-            if Self.shellCommands.contains(paneCommand) {
-                _ = try? await ShellExecutor.run(
-                    "tmux send-keys -t \(shellQuote(paneId)) C-u"
-                )
-                _ = try? await ShellExecutor.run(
-                    "tmux send-keys -t \(shellQuote(paneId)) \(shellQuote(cdCommand)) Enter"
-                )
-                newlyEnforced.insert(paneId)
-            } else {
-                hasUnenforced = true
-            }
-        }
-
-        return (newlyEnforced, hasUnenforced)
-    }
-
     /// Returns a dictionary mapping session names to their active pane's current command.
     /// Only includes sessions from the given set that are alive.
     func activeCommands(forSessions sessionNames: Set<String>) async -> [String: String] {
@@ -438,11 +355,6 @@ final class TmuxService {
         }
         return output
     }
-
-    static let shellCommands: Set<String> = [
-        "sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh",
-        "-sh", "-bash", "-zsh", "-fish", "-ksh", "-tcsh", "-csh"
-    ]
 
     /// Returns tmux parent processes that currently hold zombie children.
     func zombieParentSummaries() async -> [ZombieParentSummary] {

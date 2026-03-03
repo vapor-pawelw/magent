@@ -87,8 +87,6 @@ extension ThreadManager {
                     projectPath: projectPath,
                     projectName: projectName
                 )
-                await tmux.updateWorkingDirectory(sessionName: sessionName, to: thread.worktreePath)
-                enforceWorkingDirectoryAfterStartup(sessionName: sessionName, path: thread.worktreePath)
                 if isAgentSession {
                     await tmux.setupBellPipe(for: sessionName)
                 }
@@ -117,7 +115,10 @@ extension ThreadManager {
                 workingDirectory: thread.worktreePath
             )
         } else {
-            startCmd = "\(envExports) && cd \(thread.worktreePath) && exec zsh -l"
+            startCmd = terminalStartCommand(
+                envExports: envExports,
+                workingDirectory: thread.worktreePath
+            )
         }
 
         try? await tmux.createSession(
@@ -132,8 +133,6 @@ extension ThreadManager {
             projectPath: projectPath,
             projectName: projectName
         )
-        await tmux.updateWorkingDirectory(sessionName: sessionName, to: thread.worktreePath)
-        enforceWorkingDirectoryAfterStartup(sessionName: sessionName, path: thread.worktreePath)
 
         if isAgentSession {
             await tmux.setupBellPipe(for: sessionName)
@@ -191,10 +190,7 @@ extension ThreadManager {
         if let paneInfo = await tmux.activePaneInfo(sessionName: sessionName),
            !path(paneInfo.path, isWithin: expectedPath) {
             if !isAgentSession && isShellCommand(paneInfo.command) {
-                // Existing terminal shell drifted due startup config (e.g. .zshrc cd).
-                // Keep the session and correct cwd in-place.
-                await tmux.updateWorkingDirectory(sessionName: sessionName, to: expectedPath)
-                enforceWorkingDirectoryAfterStartup(sessionName: sessionName, path: expectedPath)
+                // Keep terminal sessions when users navigate away manually.
                 return true
             }
             // Agent sessions or non-shell commands in the wrong directory should be recreated.
@@ -236,65 +232,5 @@ extension ThreadManager {
     private func path(_ path: String, isWithin root: String) -> Bool {
         let normalizedRoot = root.hasSuffix("/") ? String(root.dropLast()) : root
         return path == normalizedRoot || path.hasPrefix(normalizedRoot + "/")
-    }
-
-    // MARK: - CWD Enforcement
-
-    /// Some shell startup configs can change cwd after the session starts.
-    /// Re-apply working directory shortly after startup to keep tabs anchored to the thread worktree.
-    /// Checks the pane's actual cwd and stops early once it's within the expected path.
-    func enforceWorkingDirectoryAfterStartup(sessionName: String, path: String) {
-        Task {
-            for delayNs: UInt64 in [300_000_000, 1_000_000_000, 2_500_000_000, 5_000_000_000] {
-                try? await Task.sleep(nanoseconds: delayNs)
-                if let info = await tmux.activePaneInfo(sessionName: sessionName),
-                   self.path(info.path, isWithin: path) {
-                    break
-                }
-                await tmux.updateWorkingDirectory(sessionName: sessionName, to: path)
-            }
-        }
-    }
-
-    // MARK: - Pending CWD Enforcement
-
-    struct PendingCwdEnforcement {
-        let path: String
-        let expiresAt: Date
-        var enforcedPaneIds: Set<String>
-    }
-
-    /// Checks pending cwd enforcements registered after thread rename.
-    /// For each pending session, sends `cd` to any pane that has returned to a shell
-    /// since the last check. Removes the entry once all panes are enforced or the deadline passes.
-    func checkPendingCwdEnforcements() async {
-        guard !pendingCwdEnforcements.isEmpty else { return }
-
-        let now = Date()
-        var resolved = [String]()
-
-        for (sessionName, var enforcement) in pendingCwdEnforcements {
-            if now >= enforcement.expiresAt {
-                resolved.append(sessionName)
-                continue
-            }
-
-            let (newlyEnforced, hasUnenforced) = await tmux.enforceWorkingDirectoryOnNewPanes(
-                sessionName: sessionName,
-                path: enforcement.path,
-                alreadyEnforced: enforcement.enforcedPaneIds
-            )
-
-            enforcement.enforcedPaneIds.formUnion(newlyEnforced)
-            pendingCwdEnforcements[sessionName] = enforcement
-
-            if !hasUnenforced {
-                resolved.append(sessionName)
-            }
-        }
-
-        for sessionName in resolved {
-            pendingCwdEnforcements.removeValue(forKey: sessionName)
-        }
     }
 }

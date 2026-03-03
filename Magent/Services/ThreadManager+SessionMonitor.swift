@@ -34,7 +34,6 @@ extension ThreadManager {
             await self.checkForRateLimitedSessions()
             await self.syncBusySessionsFromProcessState()
             await self.ensureBellPipes()
-            await self.checkPendingCwdEnforcements()
             await self.checkTmuxZombieHealth()
 
             // Refresh dirty and delivered states every 10th tick (~30 seconds)

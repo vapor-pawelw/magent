@@ -48,7 +48,10 @@ extension ThreadManager {
                 requestedTabBaseName = TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType)
             } else {
                 selectedAgentType = nil
-                startCmd = "\(envExports) && cd \(projectPath) && exec zsh -l"
+                startCmd = terminalStartCommand(
+                    envExports: envExports,
+                    workingDirectory: projectPath
+                )
                 requestedTabBaseName = "Terminal"
             }
 
@@ -83,7 +86,10 @@ extension ThreadManager {
                 )
                 requestedTabBaseName = TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType)
             } else {
-                startCmd = "\(envExports) && cd \(currentThread.worktreePath) && exec zsh -l"
+                startCmd = terminalStartCommand(
+                    envExports: envExports,
+                    workingDirectory: currentThread.worktreePath
+                )
                 requestedTabBaseName = "Terminal"
             }
 
@@ -129,8 +135,6 @@ extension ThreadManager {
         if useAgentCommand, let selectedAgentType {
             try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
         }
-        await tmux.updateWorkingDirectory(sessionName: tmuxSessionName, to: currentThread.worktreePath)
-        enforceWorkingDirectoryAfterStartup(sessionName: tmuxSessionName, path: currentThread.worktreePath)
 
         threads[index].tmuxSessionNames.append(tmuxSessionName)
         threads[index].customTabNames[tmuxSessionName] = tabDisplayName

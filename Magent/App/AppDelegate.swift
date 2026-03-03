@@ -37,6 +37,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         notificationCenter.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
 
         Task { await TmuxService.shared.applyGlobalSettings() }
+        ThreadManager.shared.ensureManagedZdotdir()
         coordinator = AppCoordinator()
         coordinator?.start()
 
@@ -52,6 +53,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Clean up any leftover ephemeral context transfer files
         let worktreePaths = ThreadManager.shared.threads.map(\.worktreePath)
         ContextExporter.cleanupAllContextFiles(worktreePaths: worktreePaths)
+        ThreadManager.shared.cleanupManagedZdotdir()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {

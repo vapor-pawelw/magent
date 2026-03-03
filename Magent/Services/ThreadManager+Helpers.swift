@@ -321,9 +321,88 @@ extension ThreadManager {
 
     // MARK: - Agent Start Command
 
+    private static let managedZdotdirPath = "/tmp/magent-zdotdir"
+    private static let managedZdotdirMarker = "# magent-zdotdir-v1"
+    private static let managedZdotdirFiles = [".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout"]
+    private static let managedZdotdirLock = NSLock()
     private static let userShell: String = {
         ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
     }()
+    private static let startupShell: String = {
+        let shell = userShell
+        let shellName = URL(fileURLWithPath: shell).lastPathComponent.lowercased()
+        return shellName.contains("zsh") ? shell : "/bin/zsh"
+    }()
+
+    private static func managedZdotfileContents(fileName: String) -> String {
+        switch fileName {
+        case ".zshrc":
+            return """
+            \(managedZdotdirMarker)
+            export ZDOTDIR="$HOME"
+            if [ -f "$HOME/.zshrc" ]; then
+              source "$HOME/.zshrc"
+            fi
+            if [ -n "${MAGENT_START_CWD:-}" ] && [ -d "${MAGENT_START_CWD}" ]; then
+              cd -- "${MAGENT_START_CWD}" || true
+            fi
+            unset MAGENT_START_CWD
+            """
+        case ".zshenv", ".zprofile", ".zlogin", ".zlogout":
+            return """
+            \(managedZdotdirMarker)
+            if [ -f "$HOME/\(fileName)" ]; then
+              source "$HOME/\(fileName)"
+            fi
+            """
+        default:
+            return "\(managedZdotdirMarker)\n"
+        }
+    }
+
+    @discardableResult
+    func ensureManagedZdotdir() -> String {
+        Self.managedZdotdirLock.lock()
+        defer { Self.managedZdotdirLock.unlock() }
+
+        let path = Self.managedZdotdirPath
+        let fileManager = FileManager.default
+
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: path, isDirectory: &isDirectory),
+           !isDirectory.boolValue {
+            try? fileManager.removeItem(atPath: path)
+        }
+        try? fileManager.createDirectory(atPath: path, withIntermediateDirectories: true)
+
+        for fileName in Self.managedZdotdirFiles {
+            let filePath = "\(path)/\(fileName)"
+            let desired = Self.managedZdotfileContents(fileName: fileName)
+            if let existing = try? String(contentsOfFile: filePath, encoding: .utf8),
+               existing == desired {
+                continue
+            }
+            try? desired.write(toFile: filePath, atomically: true, encoding: .utf8)
+        }
+
+        return path
+    }
+
+    func cleanupManagedZdotdir() {
+        Self.managedZdotdirLock.lock()
+        defer { Self.managedZdotdirLock.unlock() }
+        try? FileManager.default.removeItem(atPath: Self.managedZdotdirPath)
+    }
+
+    func terminalStartCommand(
+        envExports: String,
+        workingDirectory: String
+    ) -> String {
+        let shell = ShellExecutor.shellQuote(Self.startupShell)
+        let zdotdir = ShellExecutor.shellQuote(ensureManagedZdotdir())
+        let startCwd = ShellExecutor.shellQuote(workingDirectory)
+        return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -l"
+    }
 
     func agentStartCommand(
         settings: AppSettings,
@@ -331,12 +410,15 @@ extension ThreadManager {
         envExports: String,
         workingDirectory: String
     ) -> String {
-        let shell = Self.userShell
-        var parts = [envExports, "cd \(workingDirectory)"]
+        let shell = ShellExecutor.shellQuote(Self.startupShell)
+        let zdotdir = ShellExecutor.shellQuote(ensureManagedZdotdir())
+        let startCwd = ShellExecutor.shellQuote(workingDirectory)
+
         guard let agentType else {
-            parts.append("exec \(shell) -l")
-            return parts.joined(separator: " && ")
+            return terminalStartCommand(envExports: envExports, workingDirectory: workingDirectory)
         }
+
+        var parts = [String]()
         if agentType == .claude {
             parts.append("unset CLAUDECODE")
         }
@@ -349,8 +431,9 @@ extension ThreadManager {
         }
         // Wrap the agent command in a login shell so user profile files are sourced
         // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
-        let innerCmd = parts.joined(separator: " && ") + " && " + command + "; exec \(shell) -l"
-        return "exec \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
+        parts.append(command)
+        let innerCmd = parts.joined(separator: " && ") + "; exec \(shell) -l"
+        return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
     }
 
     // MARK: - Name Availability

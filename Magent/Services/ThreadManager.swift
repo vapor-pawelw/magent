@@ -24,7 +24,6 @@ final class ThreadManager {
     var activeThreadId: UUID?
     var recentBellBySession: [String: Date] = [:]
     var autoRenameInProgress: Set<UUID> = []
-    var pendingCwdEnforcements: [String: PendingCwdEnforcement] = [:]
     /// Dedup tracker — prevents repeated "waiting for input" notifications for the same session.
     var notifiedWaitingSessions: Set<String> = []
     /// Global per-agent rate-limit cache (Claude/Codex), shared across all tabs/threads.

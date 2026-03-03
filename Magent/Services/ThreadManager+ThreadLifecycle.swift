@@ -122,14 +122,16 @@ extension ThreadManager {
                 workingDirectory: worktreePath
             )
         } else {
-            startCmd = "\(envExports) && cd \(worktreePath) && exec zsh -l"
+            startCmd = terminalStartCommand(
+                envExports: envExports,
+                workingDirectory: worktreePath
+            )
         }
         try await tmux.createSession(
             name: tmuxSessionName,
             workingDirectory: worktreePath,
             command: startCmd
         )
-        enforceWorkingDirectoryAfterStartup(sessionName: tmuxSessionName, path: worktreePath)
 
         // Also set on the tmux session so new panes/windows inherit them
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_PATH", value: worktreePath)
@@ -227,7 +229,7 @@ extension ThreadManager {
             workingDirectory: project.repoPath,
             command: startCmd
         )
-        enforceWorkingDirectoryAfterStartup(sessionName: tmuxSessionName, path: project.repoPath)
+        // Main thread is always an agent session.
 
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
         try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
