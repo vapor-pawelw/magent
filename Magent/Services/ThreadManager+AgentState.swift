@@ -162,15 +162,54 @@ extension ThreadManager {
     /// This intentionally avoids treating every shell binary as idle because custom agent wrappers
     /// can run under `bash`/`sh` even while agent work is still in progress.
     func syncBusySessionsFromProcessState() async {
+        var changed = false
+        var busyChangedThreadIds = Set<UUID>()
+        var rateLimitChangedThreadIds = Set<UUID>()
+
+        func publishBusySyncChangesIfNeeded() async {
+            guard changed else { return }
+            await MainActor.run {
+                delegate?.threadManager(self, didUpdateThreads: threads)
+                for threadId in busyChangedThreadIds {
+                    if let thread = threads.first(where: { $0.id == threadId }) {
+                        postBusySessionsChangedNotification(for: thread)
+                    }
+                }
+                for threadId in rateLimitChangedThreadIds {
+                    NotificationCenter.default.post(
+                        name: .magentAgentRateLimitChanged,
+                        object: self,
+                        userInfo: ["threadId": threadId]
+                    )
+                }
+            }
+            await publishRateLimitSummaryIfNeeded()
+        }
+
+        // Reconcile stale transient state first. This catches session renames or
+        // removals performed outside Magent and prevents stuck busy/waiting flags.
+        for i in threads.indices where !threads[i].isArchived {
+            if pruneTransientSessionStateToKnownAgentSessions(threadIndex: i) {
+                changed = true
+                busyChangedThreadIds.insert(threads[i].id)
+            }
+        }
+
         // Collect all agent sessions across non-archived threads
         var allAgentSessions = Set<String>()
         for thread in threads where !thread.isArchived {
             allAgentSessions.formUnion(thread.agentTmuxSessions)
         }
-        guard !allAgentSessions.isEmpty else { return }
+        guard !allAgentSessions.isEmpty else {
+            await publishBusySyncChangesIfNeeded()
+            return
+        }
 
         let paneStates = await tmux.activePaneStates(forSessions: allAgentSessions)
-        guard !paneStates.isEmpty else { return }
+        guard !paneStates.isEmpty else {
+            await publishBusySyncChangesIfNeeded()
+            return
+        }
 
         // Collect pane PIDs for all shell sessions (both title-busy and non-busy).
         // Child-process checks detect agents inside shell wrappers AND verify
@@ -187,9 +226,6 @@ extension ThreadManager {
         }
         let childrenByPid = await tmux.childPids(forParents: shellPidsToCheck)
 
-        var changed = false
-        var busyChangedThreadIds = Set<UUID>()
-        var rateLimitChangedThreadIds = Set<UUID>()
         // Snapshot thread IDs and their sessions before iterating. The `threads`
         // array can shrink during `await` suspension points (e.g. archive), which
         // would invalidate raw indices and cause an out-of-bounds crash.
@@ -438,24 +474,7 @@ extension ThreadManager {
             }
         }
 
-        if changed {
-            await MainActor.run {
-                delegate?.threadManager(self, didUpdateThreads: threads)
-                for threadId in busyChangedThreadIds {
-                    if let thread = threads.first(where: { $0.id == threadId }) {
-                        postBusySessionsChangedNotification(for: thread)
-                    }
-                }
-                for threadId in rateLimitChangedThreadIds {
-                    NotificationCenter.default.post(
-                        name: .magentAgentRateLimitChanged,
-                        object: self,
-                        userInfo: ["threadId": threadId]
-                    )
-                }
-            }
-            await publishRateLimitSummaryIfNeeded()
-        }
+        await publishBusySyncChangesIfNeeded()
     }
 
     // MARK: - Busy Indicators

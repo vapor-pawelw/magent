@@ -321,6 +321,7 @@ extension ThreadManager {
         threads[index].tmuxSessionNames = newSessionNames
         threads[index].agentTmuxSessions = newAgentSessions
         threads[index].pinnedTmuxSessions = newPinnedSessions
+        _ = remapTransientSessionState(threadIndex: index, sessionRenameMap: sessionRenameMap)
         threads[index].unreadCompletionSessions = Set(
             threads[index].unreadCompletionSessions.map { sessionRenameMap[$0] ?? $0 }
         )
@@ -671,6 +672,10 @@ extension ThreadManager {
             threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
             threads[index].sessionAgentTypes[resolvedSessionName] = agentType
         }
+        _ = remapTransientSessionState(
+            threadIndex: index,
+            sessionRenameMap: [sessionName: resolvedSessionName]
+        )
 
         // Update custom tab names: remove old key, store under new key
         threads[index].customTabNames.removeValue(forKey: sessionName)
