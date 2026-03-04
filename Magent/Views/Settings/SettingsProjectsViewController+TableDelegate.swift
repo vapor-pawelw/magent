@@ -220,6 +220,9 @@ extension SettingsProjectsViewController: NSTextViewDelegate {
         if textView === terminalInjectionTextView {
             let value = textView.string
             settings.projects[index].terminalInjectionCommand = value.isEmpty ? nil : value
+        } else if textView === preAgentInjectionTextView {
+            let value = textView.string
+            settings.projects[index].preAgentInjectionCommand = value.isEmpty ? nil : value
         } else if textView === agentContextTextView {
             let value = textView.string
             settings.projects[index].agentContextInjection = value.isEmpty ? nil : value

@@ -131,6 +131,7 @@ extension ThreadManager {
         if isAgentSession {
             startCmd = agentStartCommand(
                 settings: settings,
+                projectId: thread.projectId,
                 agentType: sessionAgentType,
                 envExports: envExports,
                 workingDirectory: thread.worktreePath

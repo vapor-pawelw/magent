@@ -8,6 +8,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
     var defaultBranch: String?
     var agentType: AgentType?
     var terminalInjectionCommand: String?
+    var preAgentInjectionCommand: String?
     var agentContextInjection: String?
     var autoRenameSlugPrompt: String?
     var isPinned: Bool
@@ -32,6 +33,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         defaultBranch: String? = nil,
         agentType: AgentType? = nil,
         terminalInjectionCommand: String? = nil,
+        preAgentInjectionCommand: String? = nil,
         agentContextInjection: String? = nil,
         autoRenameSlugPrompt: String? = nil,
         isPinned: Bool = false,
@@ -55,6 +57,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         self.defaultBranch = defaultBranch
         self.agentType = agentType
         self.terminalInjectionCommand = terminalInjectionCommand
+        self.preAgentInjectionCommand = preAgentInjectionCommand
         self.agentContextInjection = agentContextInjection
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.isPinned = isPinned
@@ -81,6 +84,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         defaultBranch = try container.decodeIfPresent(String.self, forKey: .defaultBranch)
         agentType = try container.decodeIfPresent(AgentType.self, forKey: .agentType)
         terminalInjectionCommand = try container.decodeIfPresent(String.self, forKey: .terminalInjectionCommand)
+        preAgentInjectionCommand = try container.decodeIfPresent(String.self, forKey: .preAgentInjectionCommand)
         agentContextInjection = try container.decodeIfPresent(String.self, forKey: .agentContextInjection)
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt)
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false

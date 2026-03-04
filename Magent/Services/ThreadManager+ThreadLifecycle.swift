@@ -130,6 +130,7 @@ extension ThreadManager {
         if useAgentCommand {
             startCmd = agentStartCommand(
                 settings: settings,
+                projectId: project.id,
                 agentType: selectedAgentType,
                 envExports: envExports,
                 workingDirectory: worktreePath
@@ -233,6 +234,7 @@ extension ThreadManager {
         let envExports = "export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
         let startCmd = agentStartCommand(
             settings: settings,
+            projectId: project.id,
             agentType: selectedAgentType,
             envExports: envExports,
             workingDirectory: project.repoPath

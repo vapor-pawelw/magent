@@ -41,6 +41,7 @@ extension ThreadManager {
                 )
                 startCmd = agentStartCommand(
                     settings: settings,
+                    projectId: currentThread.projectId,
                     agentType: selectedAgentType,
                     envExports: envExports,
                     workingDirectory: projectPath
@@ -80,6 +81,7 @@ extension ThreadManager {
                 )
                 startCmd = agentStartCommand(
                     settings: settings,
+                    projectId: currentThread.projectId,
                     agentType: selectedAgentType,
                     envExports: envExports,
                     workingDirectory: currentThread.worktreePath

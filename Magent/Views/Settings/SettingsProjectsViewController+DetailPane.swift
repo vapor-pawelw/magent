@@ -382,6 +382,14 @@ extension SettingsProjectsViewController {
             font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
 
+        preAgentInjectionTextView = createOverrideSection(
+            in: overridesStack,
+            title: "Pre-Agent Command",
+            description: "Runs after shell startup and before the agent command. Empty = disabled.",
+            value: project.preAgentInjectionCommand ?? "",
+            font: .monospacedSystemFont(ofSize: 13, weight: .regular)
+        )
+
         // Agent Context Override
         let globalContext = settings.agentContextInjection
         let contextDesc = globalContext.isEmpty

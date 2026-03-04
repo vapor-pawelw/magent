@@ -87,6 +87,13 @@ extension ThreadManager {
         return (termCmd, agentCtx)
     }
 
+    func preAgentInjectionCommand(for projectId: UUID, settings: AppSettings) -> String {
+        guard let project = settings.projects.first(where: { $0.id == projectId }),
+              let command = project.preAgentInjectionCommand?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !command.isEmpty else { return "" }
+        return command
+    }
+
     func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil, agentType: AgentType? = nil) {
         let hasPrompt = initialPrompt != nil && !initialPrompt!.isEmpty
         guard !terminalCommand.isEmpty || !agentContext.isEmpty || hasPrompt else { return }
@@ -488,6 +495,7 @@ extension ThreadManager {
 
     func agentStartCommand(
         settings: AppSettings,
+        projectId: UUID? = nil,
         agentType: AgentType?,
         envExports: String,
         workingDirectory: String
@@ -495,6 +503,7 @@ extension ThreadManager {
         let shell = ShellExecutor.shellQuote(Self.startupShell)
         let zdotdir = ShellExecutor.shellQuote(ensureManagedZdotdir())
         let startCwd = ShellExecutor.shellQuote(workingDirectory)
+        let preAgentCommand = projectId.map { preAgentInjectionCommand(for: $0, settings: settings) } ?? ""
 
         guard let agentType else {
             return terminalStartCommand(envExports: envExports, workingDirectory: workingDirectory)
@@ -503,6 +512,10 @@ extension ThreadManager {
         var parts = [String]()
         if agentType == .claude {
             parts.append("unset CLAUDECODE")
+        }
+        if !preAgentCommand.isEmpty {
+            // Pre-agent startup commands are best-effort and should not block agent launch.
+            parts.append("{ \(preAgentCommand) ; } || true")
         }
         var command = settings.command(for: agentType)
         if agentType == .claude {

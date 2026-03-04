@@ -387,6 +387,7 @@ final class ThreadDetailViewController: NSViewController {
         if isAgentSession, let selectedAgentType {
             startCmd = threadManager.agentStartCommand(
                 settings: settings,
+                projectId: thread.projectId,
                 agentType: selectedAgentType,
                 envExports: envExportsWithSocket,
                 workingDirectory: wd
