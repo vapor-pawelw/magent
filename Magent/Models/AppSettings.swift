@@ -14,6 +14,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var autoReorderThreadsOnAgentCompletion: Bool
     var autoRenameBranches: Bool
     var autoSetThreadDescription: Bool
+    var autoSetThreadIconFromWorkType: Bool
     var autoRenameSlugPrompt: String
     var useThreadSections: Bool
     var isConfigured: Bool
@@ -44,6 +45,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         autoReorderThreadsOnAgentCompletion: Bool = true,
         autoRenameBranches: Bool = true,
         autoSetThreadDescription: Bool = true,
+        autoSetThreadIconFromWorkType: Bool = true,
         autoRenameSlugPrompt: String = AppSettings.defaultSlugPrompt,
         useThreadSections: Bool = true,
         isConfigured: Bool = false,
@@ -73,6 +75,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.autoReorderThreadsOnAgentCompletion = autoReorderThreadsOnAgentCompletion
         self.autoRenameBranches = autoRenameBranches
         self.autoSetThreadDescription = autoSetThreadDescription
+        self.autoSetThreadIconFromWorkType = autoSetThreadIconFromWorkType
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.useThreadSections = useThreadSections
         self.isConfigured = isConfigured
@@ -108,6 +111,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         let legacyAutoRename = try container.decodeIfPresent(Bool.self, forKey: .autoRenameWorktrees)
         autoRenameBranches = try container.decodeIfPresent(Bool.self, forKey: .autoRenameBranches) ?? legacyAutoRename ?? true
         autoSetThreadDescription = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadDescription) ?? legacyAutoRename ?? true
+        autoSetThreadIconFromWorkType = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadIconFromWorkType) ?? true
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt) ?? Self.defaultSlugPrompt
         useThreadSections = try container.decodeIfPresent(Bool.self, forKey: .useThreadSections) ?? true
         isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
@@ -140,6 +144,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoReorderThreadsOnAgentCompletion, forKey: .autoReorderThreadsOnAgentCompletion)
         try container.encode(autoRenameBranches, forKey: .autoRenameBranches)
         try container.encode(autoSetThreadDescription, forKey: .autoSetThreadDescription)
+        try container.encode(autoSetThreadIconFromWorkType, forKey: .autoSetThreadIconFromWorkType)
         // Keep writing the legacy key for backward compatibility with older builds.
         try container.encode(autoRenameBranches, forKey: .autoRenameWorktrees)
         try container.encode(autoRenameSlugPrompt, forKey: .autoRenameSlugPrompt)
@@ -255,6 +260,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case autoReorderThreadsOnAgentCompletion
         case autoRenameBranches
         case autoSetThreadDescription
+        case autoSetThreadIconFromWorkType
         case autoRenameWorktrees
         case autoRenameSlugPrompt
         case useThreadSections

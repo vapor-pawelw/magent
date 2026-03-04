@@ -442,7 +442,15 @@ extension ThreadManager {
     // MARK: - Task Description
 
     private static let descPrefix = "DESC:"
+    private static let workTypePrefix = "TYPE:"
+    private static let iconPrefix = "ICON:"
+    private static let knownWorkTypeNames = Set(ThreadIcon.allCases.map(\.rawValue))
     private static let maxTaskDescriptionWords = 8
+
+    private struct GeneratedTaskDescription {
+        let description: String
+        let suggestedIcon: ThreadIcon
+    }
 
     private func normalizeTaskDescription(_ value: String) -> String? {
         let sanitized = value
@@ -465,27 +473,72 @@ extension ThreadManager {
         return normalized
     }
 
-    private func sanitizeGeneratedDescription(_ raw: String) -> String? {
-        guard let prefixRange = raw.range(of: Self.descPrefix) else { return nil }
+    private func valueAfterFirstPrefix(in raw: String, prefixes: [String]) -> String? {
+        let matches = prefixes.compactMap { raw.range(of: $0, options: .caseInsensitive) }
+        guard let firstMatch = matches.min(by: { $0.lowerBound < $1.lowerBound }) else { return nil }
+        let afterPrefix = raw[firstMatch.upperBound...]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !afterPrefix.isEmpty else { return nil }
+        let line = afterPrefix.components(separatedBy: .newlines).first ?? String(afterPrefix)
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func normalizeGeneratedWorkType(_ value: String?) -> ThreadIcon {
+        guard let value else { return .other }
+        let token = value
+            .replacingOccurrences(of: "`", with: "")
+            .replacingOccurrences(of: "\"", with: "")
+            .replacingOccurrences(of: "'", with: "")
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "-" && $0 != "_" })
+            .first
+            .map(String.init)
+
+        guard let token, Self.knownWorkTypeNames.contains(token) else {
+            return .other
+        }
+        return ThreadIcon(rawValue: token) ?? .other
+    }
+
+    private func sanitizeGeneratedTaskDescription(_ raw: String) -> GeneratedTaskDescription? {
+        guard let prefixRange = raw.range(of: Self.descPrefix, options: .caseInsensitive) else { return nil }
         let afterPrefix = raw[prefixRange.upperBound...]
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !afterPrefix.isEmpty, afterPrefix.uppercased() != "EMPTY" else { return nil }
 
         let line = afterPrefix.components(separatedBy: .newlines).first ?? String(afterPrefix)
-        return normalizeTaskDescription(line)
+        var normalizedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        for marker in [Self.workTypePrefix, Self.iconPrefix] {
+            if let markerRange = normalizedLine.range(of: marker, options: .caseInsensitive) {
+                normalizedLine = String(normalizedLine[..<markerRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        guard let description = normalizeTaskDescription(normalizedLine) else { return nil }
+        let suggestedType = valueAfterFirstPrefix(in: raw, prefixes: [Self.workTypePrefix, Self.iconPrefix])
+        let suggestedIcon = normalizeGeneratedWorkType(suggestedType)
+        return GeneratedTaskDescription(description: description, suggestedIcon: suggestedIcon)
     }
 
-    private func generateTaskDescription(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> String? {
+    private func generateTaskDescription(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> GeneratedTaskDescription? {
         let truncated = String(prompt.prefix(500))
         let aiPrompt = """
             Generate a very short human-readable task description (2-8 words) for this task. \
             Use natural casing. Do not force every word to start with a capital letter; only capitalize where it makes sense (e.g. proper nouns, acronyms). \
-            Output ONLY the prefix DESC: followed by the description. No quotes, no explanation. \
-            Output DESC: EMPTY for pure knowledge questions with no implied action. \
-            Example: "Fix auth bug in login" → DESC: Fix auth login bug \
-            Example: "Add dark mode support" → DESC: Add dark mode support \
-            Example: "How does the auth system work?" → DESC: EMPTY
+            Also assign the work type to one icon category name: feature, fix, refactor, test, or other. \
+            If not sure or not a direct match, use other. \
+            Output ONLY two lines in this exact format: \
+            DESC: <description or EMPTY> \
+            TYPE: <feature|fix|refactor|test|other> \
+            No quotes, no explanation. \
+            Output DESC: EMPTY and TYPE: other for pure knowledge questions with no implied action. \
+            Example: "Fix auth bug in login" → DESC: Fix auth login bug + TYPE: fix \
+            Example: "Add dark mode support" → DESC: Add dark mode support + TYPE: feature \
+            Example: "Add regression tests for auth flow" → DESC: Add auth flow regression tests + TYPE: test \
+            Example: "How does the auth system work?" → DESC: EMPTY + TYPE: other
             Task: \(truncated)
             """
 
@@ -516,7 +569,7 @@ extension ThreadManager {
         }
 
         guard let raw = result, !raw.isEmpty else { return nil }
-        return sanitizeGeneratedDescription(raw)
+        return sanitizeGeneratedTaskDescription(raw)
     }
 
     @discardableResult
@@ -531,19 +584,24 @@ extension ThreadManager {
         guard !thread.isMain else { return nil }
         if !overwriteExisting, thread.taskDescription != nil { return nil }
 
+        let settings = persistence.loadSettings()
+        let shouldAutoSetIcon = settings.autoSetThreadIconFromWorkType
         let agentOrder = slugGenerationAgentOrder(preferred: thread.selectedAgentType, projectId: thread.projectId)
         guard !agentOrder.allTrackable.isEmpty, !agentOrder.available.isEmpty else { return nil }
 
         for candidateAgent in agentOrder.available {
-            if let desc = await generateTaskDescription(from: prompt, agentType: candidateAgent, projectId: thread.projectId) {
+            if let generated = await generateTaskDescription(from: prompt, agentType: candidateAgent, projectId: thread.projectId) {
                 // Re-check index — thread array may have changed during async work
                 guard let currentIndex = threads.firstIndex(where: { $0.id == threadId }) else { return nil }
-                threads[currentIndex].taskDescription = desc
+                threads[currentIndex].taskDescription = generated.description
+                if shouldAutoSetIcon, !threads[currentIndex].isThreadIconManuallySet {
+                    threads[currentIndex].threadIcon = generated.suggestedIcon
+                }
                 try? persistence.saveThreads(threads)
                 await MainActor.run {
                     delegate?.threadManager(self, didUpdateThreads: threads)
                 }
-                return desc
+                return generated.description
             }
         }
         return nil
@@ -593,13 +651,20 @@ extension ThreadManager {
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
-    func setThreadIcon(threadId: UUID, icon: ThreadIcon) throws {
+    func setThreadIcon(threadId: UUID, icon: ThreadIcon, markAsManualOverride: Bool = true) throws {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else {
             throw ThreadManagerError.threadNotFound
         }
-        guard threads[index].threadIcon != icon else { return }
+        let shouldUpdateIcon = threads[index].threadIcon != icon
+        let shouldUpdateManualFlag = markAsManualOverride && !threads[index].isThreadIconManuallySet
+        guard shouldUpdateIcon || shouldUpdateManualFlag else { return }
 
-        threads[index].threadIcon = icon
+        if shouldUpdateIcon {
+            threads[index].threadIcon = icon
+        }
+        if markAsManualOverride {
+            threads[index].isThreadIconManuallySet = true
+        }
         try persistence.saveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
     }

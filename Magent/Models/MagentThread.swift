@@ -92,6 +92,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var jiraTicketKey: String?
     var taskDescription: String?
     var threadIcon: ThreadIcon
+    var isThreadIconManuallySet: Bool
 
     // Transient (not persisted) — tracks which agent sessions are currently working
     var busySessions: Set<String> = []
@@ -187,6 +188,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case jiraTicketKey
         case taskDescription
         case threadIcon
+        case isThreadIconManuallySet
     }
 
     init(
@@ -215,7 +217,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         displayOrder: Int = 0,
         jiraTicketKey: String? = nil,
         taskDescription: String? = nil,
-        threadIcon: ThreadIcon = .other
+        threadIcon: ThreadIcon = .other,
+        isThreadIconManuallySet: Bool = false
     ) {
         self.id = id
         self.projectId = projectId
@@ -243,6 +246,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.jiraTicketKey = jiraTicketKey
         self.taskDescription = taskDescription
         self.threadIcon = threadIcon
+        self.isThreadIconManuallySet = isThreadIconManuallySet
     }
 
     init(from decoder: Decoder) throws {
@@ -272,6 +276,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         jiraTicketKey = try container.decodeIfPresent(String.self, forKey: .jiraTicketKey)
         taskDescription = try container.decodeIfPresent(String.self, forKey: .taskDescription)
         threadIcon = try container.decodeIfPresent(ThreadIcon.self, forKey: .threadIcon) ?? .other
+        isThreadIconManuallySet = try container.decodeIfPresent(Bool.self, forKey: .isThreadIconManuallySet)
+            ?? (threadIcon != .other)
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -314,6 +320,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encodeIfPresent(jiraTicketKey, forKey: .jiraTicketKey)
         try container.encodeIfPresent(taskDescription, forKey: .taskDescription)
         try container.encode(threadIcon, forKey: .threadIcon)
+        try container.encode(isThreadIconManuallySet, forKey: .isThreadIconManuallySet)
     }
 }
 

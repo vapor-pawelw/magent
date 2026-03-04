@@ -6,6 +6,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     var settings: AppSettings!
     private var autoRenameBranchCheckbox: NSButton!
     private var autoSetDescriptionCheckbox: NSButton!
+    private var autoSetIconFromWorkTypeCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
     var terminalInjectionTextView: NSTextView!
     var agentContextTextView: NSTextView!
@@ -76,7 +77,22 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         autoSetDescriptionDesc.font = .systemFont(ofSize: 11)
         autoSetDescriptionDesc.textColor = NSColor(resource: .textSecondary)
         worktreeSection.addArrangedSubview(autoSetDescriptionDesc)
-        worktreeSection.setCustomSpacing(10, after: autoSetDescriptionDesc)
+
+        autoSetIconFromWorkTypeCheckbox = NSButton(
+            checkboxWithTitle: "Auto-set thread icon from work type",
+            target: self,
+            action: #selector(autoSetIconFromWorkTypeToggled)
+        )
+        autoSetIconFromWorkTypeCheckbox.state = settings.autoSetThreadIconFromWorkType ? .on : .off
+        worktreeSection.addArrangedSubview(autoSetIconFromWorkTypeCheckbox)
+
+        let autoSetIconDesc = NSTextField(
+            wrappingLabelWithString: "When generating a description, AI also picks one icon category: feature, fix, refactor, test, or other."
+        )
+        autoSetIconDesc.font = .systemFont(ofSize: 11)
+        autoSetIconDesc.textColor = NSColor(resource: .textSecondary)
+        worktreeSection.addArrangedSubview(autoSetIconDesc)
+        worktreeSection.setCustomSpacing(10, after: autoSetIconDesc)
 
         slugPromptTextView = createTextEditorSection(
             in: worktreeSection,
@@ -389,6 +405,11 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
 
     @objc private func autoSetDescriptionToggled() {
         settings.autoSetThreadDescription = autoSetDescriptionCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func autoSetIconFromWorkTypeToggled() {
+        settings.autoSetThreadIconFromWorkType = autoSetIconFromWorkTypeCheckbox.state == .on
         try? persistence.saveSettings(settings)
     }
 
