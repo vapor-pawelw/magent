@@ -189,8 +189,8 @@ extension ThreadDetailViewController {
         NSWorkspace.shared.open(url)
     }
 
-    func xcodeButtonImage() -> NSImage {
-        let image = NSWorkspace.shared.icon(forFile: "/Applications/Xcode.app")
+    func xcodeButtonImage(forAppURL url: URL) -> NSImage {
+        let image = NSWorkspace.shared.icon(forFile: url.path())
         image.size = NSSize(width: 14, height: 14)
         return image
     }
@@ -218,10 +218,21 @@ extension ThreadDetailViewController {
 
         return nil
     }
-
+    
+    private func urlForXcodeProjectOpeningApp() -> URL? {
+        guard let projPath = xcodeProjectPath() else { return nil }
+        let projURL = URL(fileURLWithPath: projPath)
+        return NSWorkspace.shared.urlForApplication(toOpen: projURL)
+    }
+    
     func refreshXcodeButton() {
-        let xcodeExists = FileManager.default.fileExists(atPath: "/Applications/Xcode.app")
-        openInXcodeButton.isHidden = !xcodeExists || xcodeProjectPath() == nil
+        let openingAppURL = urlForXcodeProjectOpeningApp()
+        
+        if let openingAppURL {
+            openInXcodeButton.image = xcodeButtonImage(forAppURL: openingAppURL)
+        }
+        
+        openInXcodeButton.isHidden = openingAppURL == nil
     }
 
     @objc func openInXcodeTapped() {

@@ -174,11 +174,10 @@ final class ThreadDetailViewController: NSViewController {
         openInJiraButton.isHidden = true
 
         openInXcodeButton.bezelStyle = .texturedRounded
-        openInXcodeButton.image = xcodeButtonImage()
         openInXcodeButton.imageScaling = .scaleProportionallyDown
         openInXcodeButton.target = self
         openInXcodeButton.action = #selector(openInXcodeTapped)
-        openInXcodeButton.toolTip = "Open in Xcode"
+        openInXcodeButton.toolTip = "Open project"
         openInXcodeButton.isHidden = true
 
         openInFinderButton.bezelStyle = .texturedRounded

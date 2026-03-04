@@ -66,6 +66,12 @@ extension ThreadListViewController {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Open project (if Xcode is installed and project has xcworkspace/xcodeproj)
+        if let projectPath = xcodeProjectPath(for: thread), let xcodePath = urlForXcodeProjectOpeningApp(for: projectPath) {
+            let xcodeItem = createMenuItemForOpenProject(for: thread, xcodePath: xcodePath.path())
+            menu.addItem(xcodeItem)
+        }
+        
         // Open in Finder
         let finderItem = NSMenuItem(title: "Open in Finder", action: #selector(openThreadInFinder(_:)), keyEquivalent: "")
         finderItem.target = self
@@ -147,14 +153,9 @@ extension ThreadListViewController {
             menu.addItem(createFromBranchItem)
         }
 
-        // Open in Xcode (if Xcode is installed and project has xcworkspace/xcodeproj)
-        if xcodeProjectPath(for: thread) != nil {
-            let xcodeItem = NSMenuItem(title: "Open in Xcode", action: #selector(openThreadInXcode(_:)), keyEquivalent: "")
-            xcodeItem.target = self
-            let xcodeIcon = NSWorkspace.shared.icon(forFile: "/Applications/Xcode.app")
-            xcodeIcon.size = NSSize(width: 16, height: 16)
-            xcodeItem.image = xcodeIcon
-            xcodeItem.representedObject = thread
+        // Open project (if Xcode is installed and project has xcworkspace/xcodeproj)
+        if let projectPath = xcodeProjectPath(for: thread), let xcodePath = urlForXcodeProjectOpeningApp(for: projectPath) {
+            let xcodeItem = createMenuItemForOpenProject(for: thread, xcodePath: xcodePath.path())
             menu.addItem(xcodeItem)
         }
 
@@ -174,6 +175,16 @@ extension ThreadListViewController {
         }
 
         return menu
+    }
+    
+    private func createMenuItemForOpenProject(for thread: MagentThread, xcodePath: String) -> NSMenuItem {
+        let xcodeItem = NSMenuItem(title: "Open project", action: #selector(openThreadInXcode(_:)), keyEquivalent: "")
+        xcodeItem.target = self
+        let xcodeIcon = NSWorkspace.shared.icon(forFile: xcodePath)
+        xcodeIcon.size = NSSize(width: 16, height: 16)
+        xcodeItem.image = xcodeIcon
+        xcodeItem.representedObject = thread
+        return xcodeItem
     }
 
     private func createThreadFromBaseMenuItem(for thread: MagentThread, settings: AppSettings) -> NSMenuItem? {
@@ -219,9 +230,18 @@ extension ThreadListViewController {
         }
         return thread.worktreePath
     }
+    
+    private func urlForXcodeProjectOpeningApp(for thread: MagentThread) -> URL? {
+        guard let projectPath = xcodeProjectPath(for: thread) else { return nil }
+        return urlForXcodeProjectOpeningApp(for: projectPath)
+    }
+    
+    private func urlForXcodeProjectOpeningApp(for projPath: String) -> URL? {
+        let projURL = URL(fileURLWithPath: projPath)
+        return NSWorkspace.shared.urlForApplication(toOpen: projURL)
+    }
 
     private func xcodeProjectPath(for thread: MagentThread) -> String? {
-        guard FileManager.default.fileExists(atPath: "/Applications/Xcode.app") else { return nil }
         let dirPath = NSString(string: projectRootPath(for: thread)).expandingTildeInPath
         guard let contents = try? FileManager.default.contentsOfDirectory(atPath: dirPath) else { return nil }
 
@@ -238,7 +258,11 @@ extension ThreadListViewController {
 
     @objc private func openThreadInXcode(_ sender: NSMenuItem) {
         guard let thread = sender.representedObject as? MagentThread,
-              let path = xcodeProjectPath(for: thread) else { return }
+              let path = xcodeProjectPath(for: thread),
+              urlForXcodeProjectOpeningApp(for: path) != nil else {
+            return
+        }
+        
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
