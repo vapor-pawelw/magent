@@ -11,10 +11,11 @@ let project = Project(
             deploymentTargets: .macOS("14.0"),
             infoPlist: .dictionary([
                 "CFBundleDevelopmentRegion": "en",
+                "CFBundleDisplayName": "mAgent",
                 "CFBundleExecutable": "$(EXECUTABLE_NAME)",
                 "CFBundleIdentifier": "$(PRODUCT_BUNDLE_IDENTIFIER)",
                 "CFBundleInfoDictionaryVersion": "6.0",
-                "CFBundleName": "$(PRODUCT_NAME)",
+                "CFBundleName": "mAgent",
                 "CFBundlePackageType": "APPL",
                 "CFBundleShortVersionString": "1.0",
                 "CFBundleVersion": "1",
