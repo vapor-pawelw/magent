@@ -37,6 +37,42 @@ infer_owner_repo() {
   return 1
 }
 
+normalize_owner_repo() {
+  local owner_repo="$1"
+  owner_repo="${owner_repo%.git}"
+  printf '%s\n' "$owner_repo"
+}
+
+release_workflow_status() {
+  local owner_repo="$1"
+  local total_count release_count
+
+  total_count="$(gh api "repos/${owner_repo}/actions/workflows" --jq '.total_count' 2>/dev/null || true)"
+  if [[ -z "$total_count" ]]; then
+    return 2
+  fi
+  if [[ ! "$total_count" =~ ^[0-9]+$ ]]; then
+    return 2
+  fi
+
+  if [[ "$total_count" -eq 0 ]]; then
+    return 3
+  fi
+
+  release_count="$(gh api "repos/${owner_repo}/actions/workflows" --jq ".workflows | map(select(.name == \"${RELEASE_WORKFLOW_NAME}\")) | length" 2>/dev/null || true)"
+  if [[ -z "$release_count" ]]; then
+    return 2
+  fi
+  if [[ ! "$release_count" =~ ^[0-9]+$ ]]; then
+    return 2
+  fi
+  if [[ "$release_count" -eq 0 ]]; then
+    return 4
+  fi
+
+  return 0
+}
+
 default_next_patch() {
   local latest_tag="$1"
   local clean
@@ -56,7 +92,10 @@ confirm() {
   local prompt="$1"
   local response
   read -r -p "$prompt [y/N]: " response
-  [[ "${response,,}" == "y" || "${response,,}" == "yes" ]]
+  case "$response" in
+    [Yy]|[Yy][Ee][Ss]) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 wait_for_release_run_id() {
@@ -160,6 +199,7 @@ main() {
     echo "Could not infer GitHub owner/repo from origin remote." >&2
     exit 1
   fi
+  owner_repo="$(normalize_owner_repo "$owner_repo")"
 
   local tap_repo
   tap_repo="${MAGENT_HOMEBREW_TAP_REPO:-$DEFAULT_HOMEBREW_TAP_REPO}"
@@ -241,6 +281,30 @@ main() {
     echo "Failed to push tag. Cleaning up local tag '$tag'." >&2
     git tag -d "$tag" >/dev/null 2>&1 || true
     exit 1
+  fi
+
+  if release_workflow_status "$owner_repo"; then
+    :
+  else
+    local workflow_status
+    workflow_status="$?"
+    case "$workflow_status" in
+      2)
+        echo "Tag pushed, but could not query GitHub Actions workflows for ${owner_repo}."
+        echo "Skipping workflow/release/Homebrew verification."
+        exit 0
+        ;;
+      3)
+        echo "Tag pushed. No GitHub Actions workflows are configured in ${owner_repo}."
+        echo "Skipping workflow/release/Homebrew verification."
+        exit 0
+        ;;
+      4)
+        echo "Tag pushed. Workflow '${RELEASE_WORKFLOW_NAME}' is not configured in ${owner_repo}."
+        echo "Skipping workflow/release/Homebrew verification."
+        exit 0
+        ;;
+    esac
   fi
 
   echo "Tag pushed. Waiting for GitHub Actions run..."
