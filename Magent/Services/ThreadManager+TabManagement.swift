@@ -276,6 +276,7 @@ extension ThreadManager {
         threads[index].agentTmuxSessions.removeAll { $0 == sessionName }
         threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
         threads[index].unreadCompletionSessions.remove(sessionName)
+        threads[index].busySessions.remove(sessionName)
         threads[index].waitingForInputSessions.remove(sessionName)
         threads[index].rateLimitedSessions.removeValue(forKey: sessionName)
         notifiedWaitingSessions.remove(sessionName)

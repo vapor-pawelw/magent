@@ -134,6 +134,81 @@ extension ThreadManager {
         return nil
     }
 
+    // MARK: - Session-State Rekey/Prune
+
+    /// Rekeys transient, session-scoped state after tmux session renames.
+    /// Keeps only sessions that are still agent tabs for this thread.
+    @discardableResult
+    func remapTransientSessionState(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
+        guard threads.indices.contains(index) else { return false }
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        var changed = false
+        let validAgentSessions = Set(threads[index].agentTmuxSessions)
+
+        let remappedBusy = Set(
+            threads[index].busySessions
+                .map { sessionRenameMap[$0] ?? $0 }
+                .filter { validAgentSessions.contains($0) }
+        )
+        if remappedBusy != threads[index].busySessions {
+            threads[index].busySessions = remappedBusy
+            changed = true
+        }
+
+        let remappedWaiting = Set(
+            threads[index].waitingForInputSessions
+                .map { sessionRenameMap[$0] ?? $0 }
+                .filter { validAgentSessions.contains($0) }
+        )
+        if remappedWaiting != threads[index].waitingForInputSessions {
+            threads[index].waitingForInputSessions = remappedWaiting
+            changed = true
+        }
+
+        // Keep notification dedup state aligned with waiting sessions after rename.
+        let renamedTargets = Set(sessionRenameMap.values)
+        for (oldName, newName) in sessionRenameMap where notifiedWaitingSessions.remove(oldName) != nil {
+            if remappedWaiting.contains(newName) {
+                notifiedWaitingSessions.insert(newName)
+            }
+        }
+        for target in renamedTargets where !remappedWaiting.contains(target) {
+            notifiedWaitingSessions.remove(target)
+        }
+
+        return changed
+    }
+
+    /// Removes stale transient session state that references non-agent sessions.
+    /// Returns true when any thread-visible state changed.
+    @discardableResult
+    func pruneTransientSessionStateToKnownAgentSessions(threadIndex index: Int) -> Bool {
+        guard threads.indices.contains(index) else { return false }
+
+        var changed = false
+        let validAgentSessions = Set(threads[index].agentTmuxSessions)
+
+        let prunedBusy = threads[index].busySessions.intersection(validAgentSessions)
+        if prunedBusy != threads[index].busySessions {
+            threads[index].busySessions = prunedBusy
+            changed = true
+        }
+
+        let oldWaiting = threads[index].waitingForInputSessions
+        let prunedWaiting = oldWaiting.intersection(validAgentSessions)
+        if prunedWaiting != oldWaiting {
+            let removed = oldWaiting.subtracting(prunedWaiting)
+            for session in removed {
+                notifiedWaitingSessions.remove(session)
+            }
+            threads[index].waitingForInputSessions = prunedWaiting
+            changed = true
+        }
+
+        return changed
+    }
+
     // MARK: - Session Naming (delegates to TmuxSessionNaming)
 
     /// Renames session names produced by Magent without touching unrelated substrings.
