@@ -1,5 +1,8 @@
 # Releasing
 
+Before releasing, make sure `CHANGELOG.md` has user-facing notes under `## Unreleased`.
+See [docs/changelog.md](./changelog.md) for the changelog workflow.
+
 Use the interactive helper to run the full release flow:
 
 ```bash
@@ -9,10 +12,12 @@ Use the interactive helper to run the full release flow:
 It will:
 
 1. Ask for the target version
-2. Create and push the git tag
-3. Watch the GitHub `Release` workflow until completion
-4. Verify the release contains `Magent.zip`
-5. Verify `homebrew-magent/Casks/magent.rb` was updated to the same version
+2. Promote `CHANGELOG.md` `## Unreleased` notes into a versioned section
+3. Commit and push the changelog update
+4. Create and push an annotated git tag with changelog notes
+5. Watch the GitHub `Release` workflow until completion
+6. Verify the release contains `Magent.zip`
+7. Verify `homebrew-magent/Casks/magent.rb` was updated to the same version
 
 If your tap repo is different, set:
 
@@ -20,17 +25,17 @@ If your tap repo is different, set:
 MAGENT_HOMEBREW_TAP_REPO=<owner>/<repo> ./scripts/release-interactive.sh
 ```
 
-Manual flow (equivalent) is tag-driven. To publish directly:
+Manual flow (equivalent) is also tag-driven, but should use an annotated tag body:
 
 ```bash
-git tag v1.2.0
+git tag -a v1.2.0 -m "<release notes from CHANGELOG.md>"
 git push origin v1.2.0
 ```
 
 This triggers a GitHub Actions workflow that:
 
 1. Builds `Magent.app` (unsigned)
-2. Creates a GitHub Release with the zipped app
+2. Creates a GitHub Release with `Magent.zip` and tag-annotation release notes
 3. Auto-updates the Homebrew cask formula with the new version and SHA
 
 Commits on `main` without a tag do **not** produce a release.
@@ -39,7 +44,7 @@ Commits on `main` without a tag do **not** produce a release.
 
 When updating `CHANGELOG.md` for a release or pre-release notes:
 
-1. Base notes on user-visible changes since the previous release tag.
+1. Keep pending release notes under `## Unreleased`, then let `./scripts/release-interactive.sh` promote them into the versioned section.
 2. Include only:
    - New features
    - Bug fixes

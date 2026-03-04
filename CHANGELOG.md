@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## Unreleased
 
 ### Added
 - New interactive SSH attach flow with persistent launchers, making it much easier to reconnect to remote Magent sessions.

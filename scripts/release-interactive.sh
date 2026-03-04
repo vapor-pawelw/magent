@@ -4,6 +4,8 @@ set -euo pipefail
 
 RELEASE_WORKFLOW_NAME="Release"
 DEFAULT_HOMEBREW_TAP_REPO="vapor-pawelw/homebrew-magent"
+CHANGELOG_FILE="CHANGELOG.md"
+CHANGELOG_UNRELEASED_PLACEHOLDER="- _No notable changes yet._"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -86,6 +88,90 @@ default_next_patch() {
     return 0
   fi
   return 1
+}
+
+extract_unreleased_notes() {
+  local file="$1"
+  awk '
+    BEGIN { in_unreleased = 0; found = 0 }
+    /^## Unreleased[[:space:]]*$/ {
+      in_unreleased = 1
+      found = 1
+      next
+    }
+    /^## / {
+      if (in_unreleased == 1) {
+        exit
+      }
+    }
+    in_unreleased == 1 {
+      print
+    }
+    END {
+      if (found == 0) {
+        exit 2
+      }
+    }
+  ' "$file"
+}
+
+has_meaningful_changelog_notes() {
+  local notes_file="$1"
+  sed '/^[[:space:]]*$/d' "$notes_file" \
+    | grep -Fvx -- "$CHANGELOG_UNRELEASED_PLACEHOLDER" \
+    | grep -q '[^[:space:]]'
+}
+
+promote_unreleased_changelog() {
+  local changelog_file="$1"
+  local version="$2"
+  local release_date="$3"
+  local notes_file="$4"
+  local tmp_file
+  tmp_file="$(mktemp)"
+
+  if ! awk -v version="$version" \
+    -v release_date="$release_date" \
+    -v placeholder="$CHANGELOG_UNRELEASED_PLACEHOLDER" \
+    -v notes_file="$notes_file" '
+      BEGIN { in_unreleased = 0; inserted = 0 }
+      /^## Unreleased[[:space:]]*$/ && inserted == 0 {
+        print
+        print ""
+        print placeholder
+        print ""
+        printf "## %s - %s\n\n", version, release_date
+        while ((getline line < notes_file) > 0) {
+          print line
+        }
+        close(notes_file)
+        print ""
+        in_unreleased = 1
+        inserted = 1
+        next
+      }
+      /^## / {
+        if (in_unreleased == 1) {
+          in_unreleased = 0
+        }
+      }
+      {
+        if (in_unreleased == 1) {
+          next
+        }
+        print
+      }
+      END {
+        if (inserted == 0) {
+          exit 2
+        }
+      }
+    ' "$changelog_file" >"$tmp_file"; then
+    rm -f "$tmp_file"
+    return 1
+  fi
+
+  mv "$tmp_file" "$changelog_file"
 }
 
 confirm() {
@@ -182,6 +268,9 @@ main() {
   require_cmd gh
   require_cmd sed
   require_cmd grep
+  require_cmd awk
+  require_cmd date
+  require_cmd mktemp
 
   if ! git rev-parse --git-dir >/dev/null 2>&1; then
     echo "Run this script from inside a git repository." >&2
@@ -204,13 +293,18 @@ main() {
   local tap_repo
   tap_repo="${MAGENT_HOMEBREW_TAP_REPO:-$DEFAULT_HOMEBREW_TAP_REPO}"
 
-  local branch latest_tag default_version version tag
+  local branch latest_tag default_version version tag release_date
   branch="$(git branch --show-current)"
+  if [[ -z "$branch" ]]; then
+    echo "Detached HEAD is not supported for releases. Check out a branch first." >&2
+    exit 1
+  fi
   latest_tag="$(git tag --sort=-v:refname | head -n1 || true)"
   default_version=""
   if [[ -n "$latest_tag" ]]; then
     default_version="$(default_next_patch "$latest_tag" || true)"
   fi
+  release_date="$(date +%Y-%m-%d)"
 
   echo "Repository: $owner_repo"
   echo "Current branch: ${branch:-detached}"
@@ -260,12 +354,38 @@ main() {
     exit 1
   fi
 
+  if [[ ! -f "$CHANGELOG_FILE" ]]; then
+    echo "Missing ${CHANGELOG_FILE}. Add it before creating a release." >&2
+    exit 1
+  fi
+
+  local release_notes_file
+  release_notes_file="$(mktemp)"
+  trap 'rm -f "'"$release_notes_file"'"' EXIT
+
+  if ! extract_unreleased_notes "$CHANGELOG_FILE" >"$release_notes_file"; then
+    echo "Could not read '## Unreleased' from ${CHANGELOG_FILE}." >&2
+    echo "Expected format:"
+    echo "## Unreleased"
+    echo
+    echo "- Bullet describing a user-visible change"
+    exit 1
+  fi
+
+  if ! has_meaningful_changelog_notes "$release_notes_file"; then
+    echo "${CHANGELOG_FILE} has no release notes under '## Unreleased'." >&2
+    echo "Add at least one bullet before releasing."
+    exit 1
+  fi
+
   local commit
   commit="$(git rev-parse --short HEAD)"
   echo
   echo "Release plan:"
-  echo "- Create and push tag: $tag"
-  echo "- Source commit: $commit"
+  echo "- Promote ${CHANGELOG_FILE} '## Unreleased' notes into '## ${version} - ${release_date}'"
+  echo "- Create and push changelog commit on branch '${branch}'"
+  echo "- Create and push annotated tag: $tag"
+  echo "- Current source commit: $commit"
   echo "- Watch workflow: $RELEASE_WORKFLOW_NAME"
   echo "- Verify GitHub release contains Magent.zip"
   echo "- Verify Homebrew tap ${tap_repo} points to version ${version}"
@@ -276,7 +396,29 @@ main() {
     exit 0
   fi
 
-  git tag "$tag"
+  if ! promote_unreleased_changelog "$CHANGELOG_FILE" "$version" "$release_date" "$release_notes_file"; then
+    echo "Failed to update ${CHANGELOG_FILE} for ${version}." >&2
+    exit 1
+  fi
+
+  git add "$CHANGELOG_FILE"
+  if git diff --cached --quiet -- "$CHANGELOG_FILE"; then
+    echo "No changelog changes were staged for release ${version}." >&2
+    exit 1
+  fi
+
+  local changelog_commit
+  git commit -m "Update changelog for ${tag}" -- "$CHANGELOG_FILE"
+  changelog_commit="$(git rev-parse --short HEAD)"
+
+  if ! git push origin "$branch"; then
+    echo "Failed to push branch '${branch}'. Tag was not created." >&2
+    exit 1
+  fi
+
+  local release_notes
+  release_notes="$(cat "$release_notes_file")"
+  git tag -a "$tag" -m "$release_notes"
   if ! git push origin "$tag"; then
     echo "Failed to push tag. Cleaning up local tag '$tag'." >&2
     git tag -d "$tag" >/dev/null 2>&1 || true
@@ -307,7 +449,7 @@ main() {
     esac
   fi
 
-  echo "Tag pushed. Waiting for GitHub Actions run..."
+  echo "Changelog commit ${changelog_commit} pushed. Waiting for GitHub Actions run..."
   local run_id
   run_id="$(wait_for_release_run_id "$owner_repo" "$tag" || true)"
   if [[ -z "$run_id" ]]; then
@@ -336,6 +478,7 @@ main() {
 
   echo
   echo "Release complete."
+  echo "- Changelog commit: ${changelog_commit}"
   echo "- Tag: ${tag}"
   echo "- GitHub release: ${release_url}"
   echo "- Homebrew cask: https://github.com/${tap_repo}/blob/main/Casks/magent.rb"

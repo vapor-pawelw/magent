@@ -58,6 +58,7 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 - **Auto icon assignment must respect manual overrides**: AI-driven work-type icon assignment is allowed only when `AppSettings.autoSetThreadIconFromWorkType` is enabled and `MagentThread.isThreadIconManuallySet` is false. Any user-triggered icon change must mark `isThreadIconManuallySet = true`, including no-op re-selections of the current icon.
 - **Rate-limit parsing must be scoped to the latest terminal block**: In `ThreadManager+RateLimit`, only treat rate-limit text as active when detected in the latest pane scope (after the last separator) and near the bottom. Avoid pane-wide keyword scans/fingerprints that can ingest quoted logs/diagnostics and poison `rate-limit-cache.json`.
 - **Session rename/migration must re-key transient session state**: When tmux session names change (rename, migration, external reconciliation), always re-key/prune transient per-session sets (`busySessions`, `waitingForInputSessions`, notification dedupe state) so thread-level busy/waiting indicators cannot get stuck on stale session names.
+- **Release changelog contract**: Keep user-facing release notes in `CHANGELOG.md` under `## Unreleased` as short bullets, ordered by user impact (broad/high-impact first). `scripts/release-interactive.sh` promotes that block into a versioned section, commits it, and creates an annotated tag from those notes.
 - **Tuist**: Run `mise x -- tuist generate --no-open` after adding/removing Swift files.
 - **Build bootstrap (Codex)**: If `mise` trust/toolchain issues appear, run: `mise trust && mise install && mise x -- tuist install && mise x -- tuist generate --no-open && mise x -- tuist build Magent`.
 - **Changelog discipline for `main`**: Every user-facing addition merged to `main` must be evaluated for `CHANGELOG.md` inclusion. Follow `docs/releasing.md` changelog guidelines: include only features/fixes/performance items, write user-facing outcomes (no technical internals), and order by impact (largest/broadest first, niche/smaller last).
@@ -72,17 +73,18 @@ When the user asks to "release", "publish", "cut a release", or "bump version":
    - **major** (1.0.0 → 2.0.0): breaking changes (rare — confirm with user)
    - If the bump type is ambiguous, ask the user
 2. **Find the current version**: `git tag --sort=-v:refname | head -1`
-3. **Tag and push**:
+3. **Ensure changelog notes exist** under `CHANGELOG.md` → `## Unreleased`
+4. **Run release helper**:
    ```bash
-   git tag v<new_version>
-   git push origin v<new_version>
+   ./scripts/release-interactive.sh
    ```
-4. **Monitor the workflow**: `gh run list --limit 1` then `gh run watch <id> --exit-status`
-5. **Verify**: `gh release view v<new_version>` — confirm the release has `Magent.zip` attached
+5. **Manual fallback only if needed**: create an **annotated** tag (`git tag -a v<new_version> -m "<notes>"`) and push it
+6. **Monitor the workflow**: `gh run list --limit 1` then `gh run watch <id> --exit-status`
+7. **Verify**: `gh release view v<new_version>` — confirm the release has `Magent.zip` attached
 
 The tag push triggers a GitHub Actions workflow (`.github/workflows/release.yml`) that:
 - Builds an unsigned `Magent.app` on `macos-26`
-- Creates a GitHub Release with the zipped app
+- Creates a GitHub Release with changelog/tag-annotation notes and the zipped app
 - Auto-updates the Homebrew cask in `vapor-pawelw/homebrew-magent`
 
 **Do NOT** manually edit `Project.swift` version strings — the workflow injects them from the git tag automatically.
@@ -94,6 +96,8 @@ The tag push triggers a GitHub Actions workflow (`.github/workflows/release.yml`
 - `docs/cli.md` — complete CLI command reference (all `magent-cli` commands, options, `thread-info` status fields)
 - `docs/building.md` — build prerequisites and instructions
 - `docs/releasing.md` — release process (tag-driven)
+- `docs/changelog.md` — changelog authoring + release-notes flow
+- `CHANGELOG.md` — source of truth for user-facing release notes
 
 ## Self-Learning
 

@@ -15,6 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           lfs: true
 
       - name: Install mise
@@ -69,7 +70,32 @@ jobs:
           echo "Found app at: $APP_PATH"
           ditto -c -k --keepParent "$APP_PATH" Magent.zip
 
-      - name: Create GitHub Release
+      - name: Read release notes from tag annotation
+        id: release_notes
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          NOTES="$(git for-each-ref "refs/tags/${TAG}" --format='%(contents)')"
+          if [ -z "$NOTES" ]; then
+            echo "No tag annotation found for ${TAG}; will use generated release notes."
+            echo "has_notes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has_notes=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "body<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release (from changelog)
+        if: steps.release_notes.outputs.has_notes == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Magent.zip
+          body: ${{ steps.release_notes.outputs.body }}
+
+      - name: Create GitHub Release (generated fallback)
+        if: steps.release_notes.outputs.has_notes != 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: Magent.zip
