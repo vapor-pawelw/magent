@@ -32,9 +32,18 @@ extension IPCCommandHandler {
     func threadsInSection(_ sectionId: UUID, projectId: UUID?) -> [MagentThread] {
         let allThreads = threadManager.threads.filter { !$0.isArchived }
         let settings = persistence.loadSettings()
-        let knownSectionIds = Set(settings.threadSections.map(\.id))
+        let scopedSections = if let projectId {
+            settings.sections(for: projectId)
+        } else {
+            settings.threadSections
+        }
+        let knownSectionIds = Set(scopedSections.map(\.id))
+        let fallbackId = if let projectId {
+            settings.defaultSection(for: projectId)?.id
+        } else {
+            settings.defaultSection?.id
+        }
 
-        let fallbackId = settings.defaultSection?.id
         return allThreads.filter { thread in
             if let projectId, thread.projectId != projectId { return false }
             return thread.resolvedSectionId(knownSectionIds: knownSectionIds, fallback: fallbackId) == sectionId
@@ -61,9 +70,13 @@ extension IPCCommandHandler {
         let sortedSections = sections.sorted { $0.sortOrder < $1.sortOrder }
         let allThreads = threadManager.threads.filter { !$0.isArchived }
         let knownSectionIds = Set(sections.map(\.id))
+        let sectionFallbackId = if let projectId {
+            settings.defaultSection(for: projectId)?.id
+        } else {
+            settings.defaultSection?.id
+        }
 
         let infos: [IPCSectionInfo] = sortedSections.map { section in
-            let sectionFallbackId = sortedSections.first?.id
             let matchingThreads = allThreads.filter { thread in
                 if let projectId, thread.projectId != projectId { return false }
                 if projectId == nil { return false } // global listing doesn't include threads
@@ -185,6 +198,7 @@ extension IPCCommandHandler {
         var settings = persistence.loadSettings()
         let (project, error) = resolveProjectForSection(request, settings: settings)
         if let error { return error }
+        let previousGlobalDefaultId = settings.defaultSection?.id
 
         if let project {
             let projectIndex = settings.projects.firstIndex(where: { $0.id == project.id })!
@@ -201,6 +215,9 @@ extension IPCCommandHandler {
         } else {
             guard let sectionIndex = settings.threadSections.firstIndex(where: { $0.name.caseInsensitiveCompare(sectionName) == .orderedSame }) else {
                 return .failure("Section not found: \(sectionName)", id: request.id)
+            }
+            if settings.defaultSectionId == nil {
+                settings.defaultSectionId = previousGlobalDefaultId
             }
             let section = settings.threadSections.remove(at: sectionIndex)
             let clampedPos = max(0, min(newPosition, settings.threadSections.count))

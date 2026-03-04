@@ -180,16 +180,22 @@ nonisolated struct AppSettings: Codable, Sendable {
     }
 
     func defaultSection(for projectId: UUID) -> ThreadSection? {
-        if let project = projects.first(where: { $0.id == projectId }) {
-            let sections = visibleSections(for: projectId)
-            if let id = project.defaultSectionId, let match = sections.first(where: { $0.id == id }) {
-                return match
-            }
-            if project.threadSections != nil {
-                return sections.first
-            }
+        guard let project = projects.first(where: { $0.id == projectId }) else {
+            return defaultSection
         }
-        return defaultSection
+
+        let sections = visibleSections(for: projectId)
+        if let id = project.defaultSectionId,
+           let match = sections.first(where: { $0.id == id }) {
+            return match
+        }
+
+        if let inheritedId = defaultSection?.id,
+           let inherited = sections.first(where: { $0.id == inheritedId }) {
+            return inherited
+        }
+
+        return sections.first
     }
 
     /// Returns sections for a specific project — project override if set, otherwise global.

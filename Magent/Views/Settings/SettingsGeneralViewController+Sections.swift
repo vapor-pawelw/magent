@@ -148,6 +148,7 @@ extension SettingsGeneralViewController {
               let rowStr = item.string(forType: .string),
               let sourceRow = Int(rowStr) else { return false }
 
+        let previousDefaultId = settings.defaultSection?.id
         var sections = sortedSections
         let moved = sections.remove(at: sourceRow)
         let dest = sourceRow < row ? row - 1 : row
@@ -157,6 +158,9 @@ extension SettingsGeneralViewController {
             if let idx = settings.threadSections.firstIndex(where: { $0.id == section.id }) {
                 settings.threadSections[idx].sortOrder = i
             }
+        }
+        if settings.defaultSectionId == nil {
+            settings.defaultSectionId = previousDefaultId
         }
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()

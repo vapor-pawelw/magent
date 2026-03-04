@@ -515,7 +515,7 @@ final class IPCCommandHandler {
         if let sectionId = thread.sectionId,
            let section = sections.first(where: { $0.id == sectionId }) {
             sectionName = section.name
-        } else if let defaultSection = sections.filter(\.isVisible).sorted(by: { $0.sortOrder < $1.sortOrder }).first {
+        } else if let defaultSection = settings.defaultSection(for: thread.projectId) {
             sectionName = defaultSection.name
         } else {
             sectionName = nil

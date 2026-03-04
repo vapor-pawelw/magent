@@ -66,7 +66,7 @@ extension SettingsProjectsViewController {
         let project = settings.projects[projectIndex]
         let sections = project.threadSections ?? []
         let knownIds = Set(sections.map(\.id))
-        let defaultId = project.defaultSectionId ?? sections.first?.id
+        let defaultId = settings.defaultSection(for: project.id)?.id
         return ThreadManager.shared.threads.filter { thread in
             guard !thread.isMain, thread.projectId == project.id else { return false }
             let effectiveId: UUID?

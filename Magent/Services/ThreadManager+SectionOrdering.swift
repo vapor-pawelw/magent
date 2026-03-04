@@ -128,8 +128,8 @@ extension ThreadManager {
         threads[index].displayOrder = groupMin - 1
     }
 
-    /// Returns the effective section ID for a thread, falling back to the first visible section
-    /// for the thread's project when the thread has no section or an unrecognized one.
+    /// Returns the effective section ID for a thread, falling back to the configured default
+    /// section for the thread's project when the thread has no section or an unrecognized one.
     func effectiveSectionId(for thread: MagentThread) -> UUID? {
         let settings = persistence.loadSettings()
         let projectSections = settings.sections(for: thread.projectId)
@@ -137,7 +137,7 @@ extension ThreadManager {
         if let sid = thread.sectionId, knownIds.contains(sid) {
             return sid
         }
-        return settings.visibleSections(for: thread.projectId).first?.id
+        return settings.defaultSection(for: thread.projectId)?.id
     }
 
     @MainActor
