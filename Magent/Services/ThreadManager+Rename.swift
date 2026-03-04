@@ -446,30 +446,6 @@ extension ThreadManager {
     private static let iconPrefix = "ICON:"
     private static let knownWorkTypeNames = Set(ThreadIcon.allCases.map(\.rawValue))
     private static let maxTaskDescriptionWords = 8
-    private static let featureWorkTypeWords: Set<String> = [
-        "add", "allow", "build", "create", "enable", "feature", "implement", "introduce", "support"
-    ]
-    private static let featureWorkTypePhrases = [
-        "new feature", "add support", "implement support", "introduce support"
-    ]
-    private static let fixWorkTypeWords: Set<String> = [
-        "broken", "bug", "bugs", "crash", "crashes", "defect", "fix", "fixed", "hotfix", "regression"
-    ]
-    private static let fixWorkTypePhrases = [
-        "doesn't work", "doesnt work", "failing to", "not working"
-    ]
-    private static let refactorWorkTypeWords: Set<String> = [
-        "clean", "cleanup", "extract", "modularize", "refactor", "rename", "reorganize", "restructure", "simplify"
-    ]
-    private static let refactorWorkTypePhrases = [
-        "clean up", "code cleanup", "technical debt"
-    ]
-    private static let testWorkTypeWords: Set<String> = [
-        "e2e", "integration", "mock", "mocks", "regression", "spec", "specs", "snapshot", "test", "testing", "tests", "unittest"
-    ]
-    private static let testWorkTypePhrases = [
-        "add tests", "integration test", "regression test", "test coverage", "unit test", "write tests"
-    ]
 
     private struct GeneratedTaskDescription {
         let description: String
@@ -531,84 +507,7 @@ extension ThreadManager {
         return ThreadIcon(rawValue: token) ?? .other
     }
 
-    private func normalizedWorkTypeSignalText(prompt: String, description: String) -> String {
-        let combined = "\(prompt) \(description)".lowercased()
-        return combined.map { character in
-            character.isLetter || character.isNumber || character == "'" ? character : " "
-        }.reduce(into: String()) { partialResult, character in
-            if character == " " {
-                if partialResult.last != " " {
-                    partialResult.append(character)
-                }
-            } else {
-                partialResult.append(character)
-            }
-        }.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func workTypeSignalScore(
-        words: Set<String>,
-        phrases: [String],
-        text: String,
-        tokens: Set<String>
-    ) -> Int {
-        let wordHits = words.intersection(tokens).count
-        let phraseHits = phrases.reduce(into: 0) { count, phrase in
-            if text.contains(phrase) { count += 1 }
-        }
-        return wordHits + (phraseHits * 2)
-    }
-
-    private func confidentGeneratedIcon(
-        suggestedIcon: ThreadIcon,
-        prompt: String,
-        description: String
-    ) -> ThreadIcon {
-        guard suggestedIcon != .other else { return .other }
-
-        let normalized = normalizedWorkTypeSignalText(prompt: prompt, description: description)
-        guard !normalized.isEmpty else { return .other }
-
-        let tokens = Set(normalized.split(separator: " ").map(String.init))
-        let scores: [ThreadIcon: Int] = [
-            .feature: workTypeSignalScore(
-                words: Self.featureWorkTypeWords,
-                phrases: Self.featureWorkTypePhrases,
-                text: normalized,
-                tokens: tokens
-            ),
-            .fix: workTypeSignalScore(
-                words: Self.fixWorkTypeWords,
-                phrases: Self.fixWorkTypePhrases,
-                text: normalized,
-                tokens: tokens
-            ),
-            .refactor: workTypeSignalScore(
-                words: Self.refactorWorkTypeWords,
-                phrases: Self.refactorWorkTypePhrases,
-                text: normalized,
-                tokens: tokens
-            ),
-            .test: workTypeSignalScore(
-                words: Self.testWorkTypeWords,
-                phrases: Self.testWorkTypePhrases,
-                text: normalized,
-                tokens: tokens
-            )
-        ]
-
-        let suggestedScore = scores[suggestedIcon] ?? 0
-        let minimumScore: Int = suggestedIcon == .feature ? 3 : 2
-        guard suggestedScore >= minimumScore else { return .other }
-
-        for (icon, score) in scores where icon != suggestedIcon {
-            if score > 0 { return .other }
-        }
-
-        return suggestedIcon
-    }
-
-    private func sanitizeGeneratedTaskDescription(_ raw: String, prompt: String) -> GeneratedTaskDescription? {
+    private func sanitizeGeneratedTaskDescription(_ raw: String) -> GeneratedTaskDescription? {
         guard let prefixRange = raw.range(of: Self.descPrefix, options: .caseInsensitive) else { return nil }
         let afterPrefix = raw[prefixRange.upperBound...]
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -626,11 +525,7 @@ extension ThreadManager {
         guard let description = normalizeTaskDescription(normalizedLine) else { return nil }
         let capitalizedDescription = capitalizeFirstCharacter(description)
         let suggestedType = valueAfterFirstPrefix(in: raw, prefixes: [Self.workTypePrefix, Self.iconPrefix])
-        let suggestedIcon = confidentGeneratedIcon(
-            suggestedIcon: normalizeGeneratedWorkType(suggestedType),
-            prompt: prompt,
-            description: capitalizedDescription
-        )
+        let suggestedIcon = normalizeGeneratedWorkType(suggestedType)
         return GeneratedTaskDescription(description: capitalizedDescription, suggestedIcon: suggestedIcon)
     }
 
@@ -638,8 +533,8 @@ extension ThreadManager {
         let truncated = String(prompt.prefix(500))
         let aiPrompt = """
             Generate a short task description (2-8 words) in natural casing, with the first letter uppercase. \
-            Also output one icon type: feature, fix, refactor, test, or other. \
-            If not sure, return other. \
+            Icon types: feature (new functionality), fix (bug/regression), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
+            Evaluate all icon types, pick the highest-confidence one, and use other when no icon type is above 70% confidence. \
             Output exactly: \
             DESC: <description or EMPTY> \
             TYPE: <feature|fix|refactor|test|other> \
@@ -674,7 +569,7 @@ extension ThreadManager {
         }
 
         guard let raw = result, !raw.isEmpty else { return nil }
-        return sanitizeGeneratedTaskDescription(raw, prompt: truncated)
+        return sanitizeGeneratedTaskDescription(raw)
     }
 
     @discardableResult

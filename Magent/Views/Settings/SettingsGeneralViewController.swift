@@ -87,7 +87,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         worktreeSection.addArrangedSubview(autoSetIconFromWorkTypeCheckbox)
 
         let autoSetIconDesc = NSTextField(
-            wrappingLabelWithString: "When generating a description, AI picks an icon category only for clear, unambiguous tasks; otherwise it stays as other."
+            wrappingLabelWithString: "When generating a description, AI picks the highest-confidence icon category and uses other only when confidence is low."
         )
         autoSetIconDesc.font = .systemFont(ofSize: 11)
         autoSetIconDesc.textColor = NSColor(resource: .textSecondary)

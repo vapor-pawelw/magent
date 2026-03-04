@@ -15,3 +15,4 @@ All notable changes to this project will be documented in this file.
 - Reordering sections no longer changes the default section unexpectedly.
 - Auto-generated task descriptions now use cleaner capitalization for better readability.
 - Reduced excess top padding in the sidebar for a tighter layout.
+- Auto-set thread icons now rely on agent confidence-guided work-type selection, reducing unnecessary fallback to `other`.
