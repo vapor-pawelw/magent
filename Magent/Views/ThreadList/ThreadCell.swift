@@ -14,6 +14,7 @@ final class ThreadCell: NSTableCellView {
     private var rateLimitImageView: NSImageView?
     private var busySpinner: NSProgressIndicator?
     private var trailingStackView: NSStackView?
+    private var leadingStackConstraint: NSLayoutConstraint?
     private var hasInstalledTextTrailingConstraint = false
 
     var onArchive: (() -> Void)?
@@ -87,8 +88,14 @@ final class ThreadCell: NSTableCellView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
 
+        let leadingConstraint = stack.leadingAnchor.constraint(
+            equalTo: leadingAnchor,
+            constant: ThreadListViewController.sidebarHorizontalInset
+        )
+        leadingStackConstraint = leadingConstraint
+
         var constraints = [
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: ThreadListViewController.sidebarHorizontalInset),
+            leadingConstraint,
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
         ]
         if let trailingStack = trailingStackView {
@@ -97,6 +104,10 @@ final class ThreadCell: NSTableCellView {
             constraints.append(stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -ThreadListViewController.sidebarHorizontalInset))
         }
         NSLayoutConstraint.activate(constraints)
+    }
+
+    private func setLeadingOffset(_ offset: CGFloat) {
+        leadingStackConstraint?.constant = ThreadListViewController.sidebarHorizontalInset + offset
     }
 
     private func makeDirtyDot() -> NSImageView {
@@ -226,9 +237,10 @@ final class ThreadCell: NSTableCellView {
         leadingPinImageView = pin
     }
 
-    func configure(with thread: MagentThread, sectionColor: NSColor?) {
+    func configure(with thread: MagentThread, sectionColor: NSColor?, leadingOffset: CGFloat = 0) {
         ensureTrailingStack()
         ensureLeadingStack()
+        setLeadingOffset(leadingOffset)
 
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
         let branchName = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -396,7 +408,8 @@ final class ThreadCell: NSTableCellView {
         isWaitingForInput: Bool = false,
         isDirty: Bool = false,
         isBlockedByRateLimit: Bool = false,
-        rateLimitTooltip: String? = nil
+        rateLimitTooltip: String? = nil,
+        leadingOffset: CGFloat = 0
     ) {
         textField?.stringValue = "Main"
         textField?.font = .systemFont(
@@ -409,6 +422,7 @@ final class ThreadCell: NSTableCellView {
 
         ensureTrailingStack()
         ensureLeadingStack()
+        setLeadingOffset(leadingOffset)
         subtitleLabel?.isHidden = true
         pinImageView?.isHidden = true
         archiveButton?.isHidden = true
