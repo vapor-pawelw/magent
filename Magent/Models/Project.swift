@@ -11,6 +11,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
     var agentContextInjection: String?
     var autoRenameSlugPrompt: String?
     var isPinned: Bool
+    var isHidden: Bool
     var useThreadSectionsOverride: Bool?
     var defaultSectionId: UUID?
     var threadSections: [ThreadSection]?
@@ -34,6 +35,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         agentContextInjection: String? = nil,
         autoRenameSlugPrompt: String? = nil,
         isPinned: Bool = false,
+        isHidden: Bool = false,
         useThreadSectionsOverride: Bool? = nil,
         defaultSectionId: UUID? = nil,
         threadSections: [ThreadSection]? = nil,
@@ -56,6 +58,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         self.agentContextInjection = agentContextInjection
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.isPinned = isPinned
+        self.isHidden = isHidden
         self.useThreadSectionsOverride = useThreadSectionsOverride
         self.defaultSectionId = defaultSectionId
         self.threadSections = threadSections
@@ -81,6 +84,7 @@ nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         agentContextInjection = try container.decodeIfPresent(String.self, forKey: .agentContextInjection)
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt)
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        isHidden = try container.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
         useThreadSectionsOverride = try container.decodeIfPresent(Bool.self, forKey: .useThreadSectionsOverride)
         defaultSectionId = try container.decodeIfPresent(UUID.self, forKey: .defaultSectionId)
         threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections)

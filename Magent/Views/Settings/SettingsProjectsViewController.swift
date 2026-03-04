@@ -1,6 +1,8 @@
 import Cocoa
 
 final class SettingsProjectsViewController: NSViewController {
+    static let projectRowPasteboardType = NSPasteboard.PasteboardType("com.magent.settings.project-row")
+    static let sectionRowPasteboardType = NSPasteboard.PasteboardType("com.magent.settings.section-row")
 
     let persistence = PersistenceService.shared
     var settings: AppSettings!
@@ -76,6 +78,8 @@ final class SettingsProjectsViewController: NSViewController {
         projectTableView.style = .inset
         projectTableView.rowSizeStyle = .default
         projectTableView.selectionHighlightStyle = .regular
+        projectTableView.registerForDraggedTypes([Self.projectRowPasteboardType])
+        projectTableView.setDraggingSourceOperationMask(.move, forLocal: true)
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("ProjectColumn"))
         projectTableView.addTableColumn(column)

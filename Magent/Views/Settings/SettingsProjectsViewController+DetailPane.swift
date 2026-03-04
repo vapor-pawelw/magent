@@ -142,7 +142,7 @@ extension SettingsProjectsViewController {
         sectionsTableView.style = .inset
         sectionsTableView.rowSizeStyle = .default
         sectionsTableView.selectionHighlightStyle = .none
-        sectionsTableView.registerForDraggedTypes([.string])
+        sectionsTableView.registerForDraggedTypes([Self.sectionRowPasteboardType])
         sectionsTableView.setDraggingSourceOperationMask(.move, forLocal: true)
 
         let sectionsCol = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("ProjectSectionColumn"))

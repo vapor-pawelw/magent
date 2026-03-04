@@ -316,21 +316,19 @@ final class ThreadListViewController: NSViewController {
         let mainThreads = allThreads.filter { $0.isMain }
         let regularThreads = allThreads.filter { !$0.isMain }
 
-        let sortedValidProjects = settings.projects.filter(\.isValid).sorted { a, b in
-            if a.isPinned != b.isPinned { return a.isPinned }
-            return false // stable: preserve original order within each group
-        }
+        let validVisibleProjects = settings.projects.filter { $0.isValid && !$0.isHidden }
+        let sortedValidProjects = validVisibleProjects.filter(\.isPinned) + validVisibleProjects.filter { !$0.isPinned }
         // If project path validation temporarily excludes all projects, still render
         // projects referenced by live threads so users can recover from Settings.
         let sortedProjects: [Project]
         if sortedValidProjects.isEmpty && !allThreads.isEmpty {
             let projectIdsWithThreads = Set(allThreads.map(\.projectId))
-            sortedProjects = settings.projects
-                .filter { projectIdsWithThreads.contains($0.id) }
-                .sorted { a, b in
-                    if a.isPinned != b.isPinned { return a.isPinned }
-                    return false
-                }
+            let projectsWithThreads = settings.projects
+                .filter { projectIdsWithThreads.contains($0.id) && !$0.isHidden }
+            let pinned = projectsWithThreads.filter(\.isPinned)
+            let unpinned = projectsWithThreads.filter { !$0.isPinned }
+            // Preserve explicit project ordering from settings within each pin group.
+            sortedProjects = pinned + unpinned
         } else {
             sortedProjects = sortedValidProjects
         }

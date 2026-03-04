@@ -67,6 +67,17 @@ extension SettingsProjectsViewController {
         }
     }
 
+    @objc func toggleProjectVisibility(_ sender: NSButton) {
+        let point = sender.convert(NSPoint.zero, to: projectTableView)
+        let row = projectTableView.row(at: point)
+        guard row >= 0, row < settings.projects.count else { return }
+
+        settings.projects[row].isHidden.toggle()
+        try? persistence.saveSettings(settings)
+        projectTableView.reloadData(forRowIndexes: IndexSet(integer: row), columnIndexes: IndexSet(integer: 0))
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+    }
+
     // MARK: - Field Handlers
 
     @objc func nameFieldChanged() {

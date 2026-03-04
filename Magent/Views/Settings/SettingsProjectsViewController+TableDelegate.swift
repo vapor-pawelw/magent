@@ -9,22 +9,53 @@ extension SettingsProjectsViewController: NSTableViewDataSource {
     }
 
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> (any NSPasteboardWriting)? {
+        if tableView === projectTableView {
+            let item = NSPasteboardItem()
+            item.setString(String(row), forType: Self.projectRowPasteboardType)
+            return item
+        }
+
         guard tableView === sectionsTableView else { return nil }
         let item = NSPasteboardItem()
-        item.setString(String(row), forType: .string)
+        item.setString(String(row), forType: Self.sectionRowPasteboardType)
         return item
     }
 
     func tableView(_ tableView: NSTableView, validateDrop info: any NSDraggingInfo, proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
+        if tableView === projectTableView {
+            return dropOperation == .above ? .move : []
+        }
+
         guard tableView === sectionsTableView else { return [] }
         return dropOperation == .above ? .move : []
     }
 
     func tableView(_ tableView: NSTableView, acceptDrop info: any NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+        if tableView === projectTableView {
+            guard let item = info.draggingPasteboard.pasteboardItems?.first,
+                  let rowStr = item.string(forType: Self.projectRowPasteboardType),
+                  let sourceRow = Int(rowStr),
+                  sourceRow >= 0,
+                  sourceRow < settings.projects.count else { return false }
+
+            let destinationRow = min(max(row, 0), settings.projects.count)
+            if sourceRow == destinationRow || sourceRow + 1 == destinationRow {
+                return false
+            }
+
+            let movedProject = settings.projects.remove(at: sourceRow)
+            let insertIndex = sourceRow < destinationRow ? destinationRow - 1 : destinationRow
+            settings.projects.insert(movedProject, at: insertIndex)
+            try? persistence.saveSettings(settings)
+            reloadProjectsAndSelect(row: insertIndex)
+            NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+            return true
+        }
+
         guard tableView === sectionsTableView,
               let index = selectedProjectIndex,
               let item = info.draggingPasteboard.pasteboardItems?.first,
-              let rowStr = item.string(forType: .string),
+              let rowStr = item.string(forType: Self.sectionRowPasteboardType),
               let sourceRow = Int(rowStr) else { return false }
 
         var sections = projectSortedSections
@@ -62,16 +93,38 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
             tf.translatesAutoresizingMaskIntoConstraints = false
             c.addSubview(tf)
             c.textField = tf
+            let visBtn = NSButton(image: NSImage(systemSymbolName: "eye", accessibilityDescription: nil)!, target: nil, action: nil)
+            visBtn.bezelStyle = .inline
+            visBtn.isBordered = false
+            visBtn.tag = 100
+            visBtn.translatesAutoresizingMaskIntoConstraints = false
+            c.addSubview(visBtn)
             NSLayoutConstraint.activate([
                 tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 4),
-                tf.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
+                tf.trailingAnchor.constraint(equalTo: visBtn.leadingAnchor, constant: -4),
                 tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                visBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
+                visBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
             ])
             return c
         }()
 
         cell.textField?.stringValue = project.name
-        cell.textField?.textColor = project.isValid ? .labelColor : .systemRed
+        if let visBtn = cell.viewWithTag(100) as? NSButton {
+            let symbolName = project.isHidden ? "eye.slash" : "eye"
+            visBtn.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+            visBtn.contentTintColor = project.isHidden ? NSColor(resource: .textSecondary) : NSColor(resource: .textPrimary)
+            visBtn.toolTip = project.isHidden ? "Show in sidebar" : "Hide from sidebar"
+            visBtn.target = self
+            visBtn.action = #selector(toggleProjectVisibility(_:))
+        }
+
+        if project.isValid {
+            cell.textField?.textColor = project.isHidden ? NSColor(resource: .textSecondary) : .labelColor
+        } else {
+            cell.textField?.textColor = .systemRed
+        }
+        cell.alphaValue = project.isHidden ? 0.8 : 1.0
         return cell
     }
 
