@@ -99,13 +99,21 @@ final class IPCCommandHandler {
         }
 
         let requestedAgent: AgentType?
+        let useAgentCommand: Bool
         if let agentStr = request.agentType {
-            requestedAgent = AgentType(rawValue: agentStr)
-            if requestedAgent == nil {
-                return .failure("Unknown agent type: \(agentStr). Valid: claude, codex, custom", id: request.id)
+            if agentStr == "terminal" {
+                requestedAgent = nil
+                useAgentCommand = false
+            } else {
+                requestedAgent = AgentType(rawValue: agentStr)
+                guard requestedAgent != nil else {
+                    return .failure("Unknown agent type: \(agentStr). Valid: claude, codex, custom, terminal", id: request.id)
+                }
+                useAgentCommand = true
             }
         } else {
             requestedAgent = nil
+            useAgentCommand = true
         }
 
         // Resolve requested name: --name takes precedence, --description generates a slug
@@ -194,6 +202,7 @@ final class IPCCommandHandler {
             thread = try await threadManager.createThread(
                 project: project,
                 requestedAgentType: requestedAgent,
+                useAgentCommand: useAgentCommand,
                 initialPrompt: request.prompt,
                 requestedName: requestedName,
                 requestedBaseBranch: requestedBaseBranch

@@ -8,7 +8,7 @@ extension ThreadManager {
 
     static let ipcAgentDocs = """
     You have access to Magent IPC. Use `/tmp/magent-cli` to manage threads and tabs:
-      /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>] [--base-thread <name> | --base-branch <name>]
+      /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--base-thread <name> | --base-branch <name>]
       /tmp/magent-cli list-projects
       /tmp/magent-cli list-threads [--project <name>]
       /tmp/magent-cli send-prompt --thread <name> --prompt <text>
@@ -334,7 +334,7 @@ extension ThreadManager {
     a Magent-managed terminal. Use `/tmp/magent-cli` to manage threads and tabs:
 
     ```
-    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>] [--base-thread <name> | --base-branch <name>]
+    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--base-thread <name> | --base-branch <name>]
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
     /tmp/magent-cli send-prompt --thread <name> --prompt <text>

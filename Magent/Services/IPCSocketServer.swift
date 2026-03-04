@@ -4,7 +4,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v12"
+    private static let cliVersion = "magent-cli-v13"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -157,22 +157,32 @@ actor IPCSocketServer {
 
         if let existing = try? String(contentsOfFile: path, encoding: .utf8),
            existing.contains(marker) {
+            installPersistentLaunchers()
             return
         }
 
-        let script = """
+        let script = #"""
         #!/bin/sh
-        # \(marker)
+        # \#(marker)
         # Magent IPC CLI — installed by Magent.app
         # Usage: magent-cli <command> [options]
 
-        SOCKET="${MAGENT_SOCKET:-\(socketPath)}"
+        SOCKET="${MAGENT_SOCKET:-\#(socketPath)}"
+        SEP="$(printf '\037')"
 
         die() { echo "Error: $1" >&2; exit 1; }
 
+        have_cmd() {
+            command -v "$1" >/dev/null 2>&1
+        }
+
+        require_jq() {
+            have_cmd jq || die "jq is required for this command."
+        }
+
         # Escape a value for JSON string embedding
         json_escape() {
-            printf '%s' "$1" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/\\t/\\\\t/g'
+            printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g'
         }
 
         json_kv() {
@@ -180,10 +190,186 @@ actor IPCSocketServer {
         }
 
         send_request() {
-            printf '%s\\n' "$1" | nc -U "$SOCKET" -w 5 2>/dev/null
+            printf '%s\n' "$1" | nc -U "$SOCKET" -w 5 2>/dev/null
         }
 
-        cmd="${1:-}"; shift 2>/dev/null || true
+        send_checked_request() {
+            require_jq
+            checked_resp=$(send_request "$1")
+            [ -n "$checked_resp" ] || die "Cannot reach Magent IPC at $SOCKET. Is Magent.app running?"
+            checked_ok=$(printf '%s' "$checked_resp" | jq -r '.ok // false' 2>/dev/null)
+            [ "$checked_ok" = "true" ] || {
+                checked_err=$(printf '%s' "$checked_resp" | jq -r '.error // "Unknown error"' 2>/dev/null)
+                die "$checked_err"
+            }
+            printf '%s\n' "$checked_resp"
+        }
+
+        pick_value() {
+            picker_prompt="$1"
+            picker_tmp=$(mktemp 2>/dev/null || mktemp -t magent-picker)
+            cat >"$picker_tmp"
+
+            if [ ! -s "$picker_tmp" ]; then
+                rm -f "$picker_tmp"
+                return 1
+            fi
+
+            picker_choice=""
+            if have_cmd fzf; then
+                picker_choice=$(awk -F '\037' '{printf "%s\t%s\n", $2, $1}' "$picker_tmp" \
+                    | fzf --prompt="$picker_prompt> " --height=40% --layout=reverse --border 2>/dev/null \
+                    | awk -F '\t' '{print $NF}')
+            else
+                awk -F '\037' '{printf "%3d) %s\n", NR, $2}' "$picker_tmp" >&2
+                printf '%s> ' "$picker_prompt" >&2
+                IFS= read -r picker_idx || picker_idx=""
+                case "$picker_idx" in
+                    ''|*[!0-9]*) picker_choice="" ;;
+                    *) picker_choice=$(awk -F '\037' -v n="$picker_idx" 'NR == n { print $1 }' "$picker_tmp") ;;
+                esac
+            fi
+
+            rm -f "$picker_tmp"
+            [ -n "$picker_choice" ] || return 1
+            printf '%s\n' "$picker_choice"
+        }
+
+        attach_tmux_session() {
+            attach_session="$1"
+            [ -n "$attach_session" ] || die "Missing tmux session name"
+            have_cmd tmux || die "tmux is required."
+            tmux has-session -t "$attach_session" 2>/dev/null || die "tmux session not found: $attach_session"
+
+            if [ -n "${TMUX:-}" ]; then
+                tmux switch-client -t "$attach_session"
+            else
+                exec tmux attach -t "$attach_session"
+            fi
+        }
+
+        pick_project() {
+            project_resp=$(send_checked_request "{$(json_kv command list-projects)}")
+            project_lines=$(printf '%s' "$project_resp" | jq -r '.projects | sort_by(.name)[] | "\(.name)\u001f\(.name)  \(.repoPath)"')
+            [ -n "$project_lines" ] || die "No projects configured."
+            printf '%s\n' "$project_lines" | pick_value "Project"
+        }
+
+        pick_thread_or_create() {
+            project_name="$1"
+            thread_req="{$(json_kv command list-threads),$(json_kv project "$project_name")}"
+            thread_resp=$(send_checked_request "$thread_req")
+            thread_lines=$(printf '%s' "$thread_resp" | jq -r '.threads | sort_by((if .isMain then 0 else 1 end), .name)[] | "\(.id)\u001f\(.name)\(if (.taskDescription // "") != "" then " — " + .taskDescription else "" end)  [\(.agentType // "terminal")]  \(.tmuxSession)"')
+            if [ -n "$thread_lines" ]; then
+                { printf '__create__%s+ Create thread\n' "$SEP"; printf '%s\n' "$thread_lines"; } | pick_value "Thread"
+            else
+                printf '__create__%s+ Create thread\n' "$SEP" | pick_value "Thread"
+            fi
+        }
+
+        pick_tab_session() {
+            tab_thread_id="$1"
+            tab_req="{$(json_kv command list-tabs),$(json_kv threadId "$tab_thread_id")}"
+            tab_resp=$(send_checked_request "$tab_req")
+            tab_count=$(printf '%s' "$tab_resp" | jq -r '.tabs | length')
+            [ "$tab_count" -gt 0 ] || die "Thread has no tabs."
+
+            if [ "$tab_count" -eq 1 ]; then
+                printf '%s' "$tab_resp" | jq -r '.tabs[0].sessionName'
+                return 0
+            fi
+
+            tab_lines=$(printf '%s' "$tab_resp" | jq -r '.tabs | sort_by(.index)[] | "\(.sessionName)\u001f#\(.index) · \((if .isAgent then (.agentType // "agent") else "terminal" end)) · \(.sessionName)"')
+            printf '%s\n' "$tab_lines" | pick_value "Tab"
+        }
+
+        interactive_create_thread() {
+            create_project="$1"
+            create_mode_lines="default${SEP}Use Project Default
+        claude${SEP}Claude
+        codex${SEP}Codex
+        custom${SEP}Custom
+        terminal${SEP}Terminal"
+            create_mode=$(printf '%s\n' "$create_mode_lines" | pick_value "Thread Type") || return 1
+
+            create_req="{$(json_kv command create-thread),$(json_kv project "$create_project")"
+            if [ "$create_mode" != "default" ]; then
+                create_req="$create_req,$(json_kv agentType "$create_mode")"
+            fi
+            create_req="$create_req}"
+
+            create_resp=$(send_checked_request "$create_req")
+            create_session=$(printf '%s' "$create_resp" | jq -r '.thread.tmuxSession // empty')
+            [ -n "$create_session" ] || die "Created thread has no tmux session."
+            attach_tmux_session "$create_session"
+        }
+
+        run_interactive() {
+            interactive_project="$1"
+            if [ -z "$interactive_project" ]; then
+                interactive_project=$(pick_project) || exit 1
+            fi
+
+            interactive_pick=$(pick_thread_or_create "$interactive_project") || exit 1
+            if [ "$interactive_pick" = "__create__" ]; then
+                interactive_create_thread "$interactive_project"
+                return
+            fi
+
+            interactive_session=$(pick_tab_session "$interactive_pick") || exit 1
+            attach_tmux_session "$interactive_session"
+        }
+
+        run_ls() {
+            ls_project="$1"
+            ls_req="{$(json_kv command list-threads)"
+            [ -n "$ls_project" ] && ls_req="$ls_req,$(json_kv project "$ls_project")"
+            ls_req="$ls_req}"
+
+            ls_resp=$(send_checked_request "$ls_req")
+            ls_count=$(printf '%s' "$ls_resp" | jq -r '.threads | length')
+            if [ "$ls_count" -eq 0 ]; then
+                echo "No threads found."
+                return 0
+            fi
+
+            ls_tmp=$(mktemp 2>/dev/null || mktemp -t magent-ls)
+            printf '%s' "$ls_resp" \
+                | jq -r '.threads[] | [.id, .projectName, .name, (.agentType // "terminal"), (.taskDescription // ""), .tmuxSession] | @tsv' \
+                | while IFS="$(printf '\t')" read -r ls_id ls_project_name ls_name ls_agent ls_desc ls_session; do
+                    ls_info_req="{$(json_kv command thread-info),$(json_kv threadId "$ls_id")}"
+                    ls_info_resp=$(send_checked_request "$ls_info_req")
+                    ls_branch=$(printf '%s' "$ls_info_resp" | jq -r '.thread.status.branchName // "-"')
+                    ls_status=$(printf '%s' "$ls_info_resp" | jq -r '
+                        .thread.status as $s
+                        | [
+                            (if $s.isBusy then "busy" else empty end),
+                            (if $s.isWaitingForInput then "input" else empty end),
+                            (if $s.hasUnreadCompletion then "done" else empty end),
+                            (if $s.isDirty then "dirty" else empty end),
+                            (if $s.isBlockedByRateLimit then "limited" else empty end)
+                        ]
+                        | if length == 0 then "-" else join(",") end
+                    ')
+                    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ls_project_name" "$ls_name" "$ls_branch" "$ls_agent" "$ls_status" "$ls_desc" "$ls_session"
+                done >"$ls_tmp"
+
+            {
+                printf 'PROJECT\tTHREAD\tBRANCH\tTYPE\tSTATUS\tDESCRIPTION\tSESSION\n'
+                sort -t "$(printf '\t')" -k1,1 -k2,2 "$ls_tmp"
+            } | if have_cmd column; then
+                column -t -s "$(printf '\t')"
+            else
+                cat
+            fi
+            rm -f "$ls_tmp"
+        }
+
+        cmd="${1:-}"
+        [ -n "$cmd" ] && shift
+        if [ -z "$cmd" ] && [ -t 0 ] && [ -t 1 ]; then
+            cmd="interactive"
+        fi
 
         case "$cmd" in
         create-thread)
@@ -201,7 +387,7 @@ actor IPCSocketServer {
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>]"
+            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>]"
             [ -z "$base_thread" ] || [ -z "$base_branch" ] || die "Use either --base-thread or --base-branch, not both"
             json="{$(json_kv command create-thread),$(json_kv project "$project")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
@@ -229,6 +415,70 @@ actor IPCSocketServer {
             [ -n "$project" ] && json="$json,$(json_kv project "$project")"
             json="$json}"
             send_request "$json"
+            ;;
+        ls)
+            ls_project=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --project) ls_project="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            run_ls "$ls_project"
+            ;;
+        interactive)
+            interactive_project=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --project) interactive_project="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            run_interactive "$interactive_project"
+            ;;
+        attach)
+            attach_thread=""
+            attach_thread_id=""
+            attach_tab_index=""
+            attach_session=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) attach_thread="$2"; shift 2 ;;
+                    --thread-id) attach_thread_id="$2"; shift 2 ;;
+                    --index) attach_tab_index="$2"; shift 2 ;;
+                    --session) attach_session="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+
+            if [ -n "$attach_session" ]; then
+                attach_tmux_session "$attach_session"
+                exit $?
+            fi
+
+            [ -z "$attach_thread" ] || [ -z "$attach_thread_id" ] || die "Use either --thread or --thread-id, not both"
+            [ -n "$attach_thread" ] || [ -n "$attach_thread_id" ] || die "Usage: magent-cli attach (--thread <name> | --thread-id <id>) [--index <n> | --session <name>]"
+
+            attach_list_req="{$(json_kv command list-tabs),"
+            if [ -n "$attach_thread_id" ]; then
+                attach_list_req="$attach_list_req$(json_kv threadId "$attach_thread_id")"
+            else
+                attach_list_req="$attach_list_req$(json_kv threadName "$attach_thread")"
+            fi
+            attach_list_req="$attach_list_req}"
+            attach_list_resp=$(send_checked_request "$attach_list_req")
+
+            if [ -n "$attach_tab_index" ]; then
+                case "$attach_tab_index" in
+                    ''|*[!0-9]*) die "--index must be an integer" ;;
+                esac
+                attach_session=$(printf '%s' "$attach_list_resp" | jq -r --argjson idx "$attach_tab_index" '.tabs[] | select(.index == $idx) | .sessionName' | head -1)
+            else
+                attach_session=$(printf '%s' "$attach_list_resp" | jq -r '.tabs[0].sessionName // empty')
+            fi
+
+            [ -n "$attach_session" ] || die "No matching tab found."
+            attach_tmux_session "$attach_session"
             ;;
         send-prompt)
             thread=""; prompt=""
@@ -265,15 +515,21 @@ actor IPCSocketServer {
             send_request "{$(json_kv command delete-thread),$(json_kv threadName "$thread")}"
             ;;
         list-tabs)
-            thread=""
+            thread=""; thread_id=""
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --thread) thread="$2"; shift 2 ;;
+                    --thread-id) thread_id="$2"; shift 2 ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] || die "Usage: magent-cli list-tabs --thread <name>"
-            send_request "{$(json_kv command list-tabs),$(json_kv threadName "$thread")}"
+            [ -z "$thread" ] || [ -z "$thread_id" ] || die "Use either --thread or --thread-id, not both"
+            [ -n "$thread" ] || [ -n "$thread_id" ] || die "Usage: magent-cli list-tabs (--thread <name> | --thread-id <id>)"
+            if [ -n "$thread_id" ]; then
+                send_request "{$(json_kv command list-tabs),$(json_kv threadId "$thread_id")}"
+            else
+                send_request "{$(json_kv command list-tabs),$(json_kv threadName "$thread")}"
+            fi
             ;;
         create-tab)
             thread=""; agent=""; prompt=""
@@ -305,7 +561,7 @@ actor IPCSocketServer {
             [ -n "$thread" ] || die "Usage: magent-cli close-tab --thread <name> (--index <n> | --session <name>)"
             json="{$(json_kv command close-tab),$(json_kv threadName "$thread")"
             if [ -n "$tab_index" ]; then
-                json="$json,\\"tabIndex\\":$tab_index"
+                json="$json,\"tabIndex\":$tab_index"
             elif [ -n "$session" ]; then
                 json="$json,$(json_kv sessionName "$session")"
             else
@@ -363,15 +619,21 @@ actor IPCSocketServer {
             send_request "$json"
             ;;
         thread-info)
-            thread=""
+            thread=""; thread_id=""
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --thread) thread="$2"; shift 2 ;;
+                    --thread-id) thread_id="$2"; shift 2 ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] || die "Usage: magent-cli thread-info --thread <name>"
-            send_request "{$(json_kv command thread-info),$(json_kv threadName "$thread")}"
+            [ -z "$thread" ] || [ -z "$thread_id" ] || die "Use either --thread or --thread-id, not both"
+            [ -n "$thread" ] || [ -n "$thread_id" ] || die "Usage: magent-cli thread-info (--thread <name> | --thread-id <id>)"
+            if [ -n "$thread_id" ]; then
+                send_request "{$(json_kv command thread-info),$(json_kv threadId "$thread_id")}"
+            else
+                send_request "{$(json_kv command thread-info),$(json_kv threadName "$thread")}"
+            fi
             ;;
         move-thread)
             thread=""; section=""
@@ -441,7 +703,7 @@ actor IPCSocketServer {
                 esac
             done
             [ -n "$section_name" ] && [ -n "$position" ] || die "Usage: magent-cli reorder-section --name <name> --position <n> [--project <name>]"
-            json="{$(json_kv command reorder-section),$(json_kv sectionName "$section_name"),\\"position\\":$position"
+            json="{$(json_kv command reorder-section),$(json_kv sectionName "$section_name"),\"position\":$position"
             [ -n "$project" ] && json="$json,$(json_kv project "$project")"
             json="$json}"
             send_request "$json"
@@ -497,14 +759,21 @@ actor IPCSocketServer {
         ""|help|-h|--help)
             echo "Usage: magent-cli <command> [options]"
             echo ""
+            echo "Interactive:"
+            echo "  magent-cli                           (opens interactive picker in TTY)"
+            echo "  magent-cli interactive [--project <name>]"
+            echo "  magent-cli ls [--project <name>]"
+            echo "  magent-cli attach (--thread <name> | --thread-id <id>) [--index <n>]"
+            echo "  magent-cli attach --session <tmux-session>"
+            echo ""
             echo "Thread commands:"
-            echo "  create-thread        --project <name> [--agent claude|codex|custom] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>]"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>]"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
             echo "  send-prompt          --thread <name> --prompt <text>"
             echo "  archive-thread       --thread <name>    (removes worktree, keeps branch)"
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
-            echo "  list-tabs            --thread <name>"
+            echo "  list-tabs            (--thread <name> | --thread-id <id>)"
             echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]"
             echo "  close-tab            --thread <name> (--index <n> | --session <name>)"
             echo "  current-thread                                               (returns current thread info)"
@@ -513,8 +782,8 @@ actor IPCSocketServer {
             echo "  rename-branch        --thread <name> --name <text>         (exact branch name)"
             echo "  rename-thread-exact  --thread <name> --name <text>         (alias for rename-branch)"
             echo "  set-description      --thread <name> [--description <text> | --clear]"
-            echo "  thread-info          --thread <name>                       (full thread details)"
-            echo "  move-thread          --thread <name> --section <name>     (move thread to section)"
+            echo "  thread-info          (--thread <name> | --thread-id <id>)  (full thread details)"
+            echo "  move-thread          --thread <name> --section <name>      (move thread to section)"
             echo ""
             echo "Section commands:"
             echo "  list-sections        [--project <name>]"
@@ -529,9 +798,65 @@ actor IPCSocketServer {
             die "Unknown command: $cmd. Run 'magent-cli help' for usage."
             ;;
         esac
-        """
+        """#
 
         try? script.write(toFile: path, atomically: true, encoding: .utf8)
         chmod(path, 0o755)
+        installPersistentLaunchers()
+    }
+
+    nonisolated private static func installPersistentLaunchers() {
+        let fm = FileManager.default
+        let home = NSHomeDirectory()
+        let candidateDirs = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "\(home)/.local/bin",
+            "\(home)/bin",
+        ]
+        let launcherNames = ["magent", "magent-cli", "magent-tmux"]
+
+        for dir in candidateDirs {
+            var isDir: ObjCBool = false
+            if !fm.fileExists(atPath: dir, isDirectory: &isDir) {
+                if dir.hasPrefix(home) {
+                    try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+                    isDir = true
+                } else {
+                    continue
+                }
+            }
+            guard isDir.boolValue, Self.isWritableDirectory(dir) else { continue }
+            for launcherName in launcherNames {
+                let launcherPath = (dir as NSString).appendingPathComponent(launcherName)
+                installPersistentLauncher(at: launcherPath)
+            }
+        }
+    }
+
+    nonisolated private static func installPersistentLauncher(at path: String) {
+        let launcherMarker = "magent-launcher-v1"
+        if let existing = try? String(contentsOfFile: path, encoding: .utf8),
+           !existing.contains(launcherMarker) {
+            return
+        }
+
+        let script = """
+        #!/bin/sh
+        # \(launcherMarker)
+        exec "\(cliPath)" "$@"
+        """
+        try? script.write(toFile: path, atomically: true, encoding: .utf8)
+        chmod(path, 0o755)
+    }
+
+    nonisolated private static func isWritableDirectory(_ path: String) -> Bool {
+        let fm = FileManager.default
+        let probe = (path as NSString).appendingPathComponent(".magent-write-probe-\(UUID().uuidString)")
+        guard fm.createFile(atPath: probe, contents: Data()) else {
+            return false
+        }
+        try? fm.removeItem(atPath: probe)
+        return true
     }
 }

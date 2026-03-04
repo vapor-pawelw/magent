@@ -1,8 +1,25 @@
 # CLI Reference
 
 mAgent installs a `magent-cli` script at `/tmp/magent-cli` on launch. It communicates with the running app over a Unix domain socket (`/tmp/magent.sock`).
+It also installs launcher commands (`magent`, `magent-cli`, `magent-tmux`) into common user PATH directories when writable.
 
-The CLI is auto-updated when the app version changes — no manual installation needed.
+The CLI is auto-updated when the app version changes.
+
+## Interactive Commands
+
+`magent-cli` with no arguments opens interactive mode when run in a TTY.
+
+```bash
+magent-cli
+magent-cli interactive [--project <name>]
+magent-cli ls [--project <name>]
+magent-cli attach --session <tmux-session>
+magent-cli attach (--thread <name> | --thread-id <id>) [--index <n>]
+```
+
+- `interactive`: picker flow `project -> thread (or create) -> tab -> tmux attach`
+- `ls`: table view (project/thread/branch/type/status/description/session)
+- `attach`: attach directly by session or by thread + tab index
 
 ## Thread Commands
 
@@ -17,7 +34,7 @@ magent-cli create-thread --project <name> [options]
 | Option | Description |
 |--------|-------------|
 | `--project <name>` | **Required.** Project to create the thread in. |
-| `--agent <type>` | Agent type: `claude`, `codex`, or `custom`. Defaults to project/global setting. |
+| `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`. Defaults to project/global setting. |
 | `--prompt <text>` | Initial prompt to send to the agent after creation. |
 | `--name <slug>` | Exact thread name (must be unique). |
 | `--description <text>` | Natural-language description — AI generates a slug from it. |
@@ -50,6 +67,7 @@ Get full details for a thread, including runtime status.
 
 ```bash
 magent-cli thread-info --thread <name>
+magent-cli thread-info --thread-id <id>
 ```
 
 The response includes a `status` object with all UI-visible indicators:
@@ -164,6 +182,7 @@ List all tabs in a thread.
 
 ```bash
 magent-cli list-tabs --thread <name>
+magent-cli list-tabs --thread-id <id>
 ```
 
 ### close-tab
