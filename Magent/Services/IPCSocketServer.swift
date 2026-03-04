@@ -4,7 +4,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v15"
+    private static let cliVersion = "magent-cli-v16"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -323,13 +323,24 @@ actor IPCSocketServer {
 
         interactive_create_thread() {
             create_project="$1"
-            create_mode_lines="default${SEP}Use Project Default
-        claude${SEP}Claude
-        codex${SEP}Codex
-        custom${SEP}Custom
-        terminal${SEP}Terminal
-        __back__${SEP}← Back"
-            create_mode=$(printf '%s\n' "$create_mode_lines" | pick_value "Thread Type") || return 1
+            create_agents_req="{$(json_kv command list-projects)}"
+            create_agents_resp=$(send_checked_request "$create_agents_req")
+            create_agent_lines=$(printf '%s' "$create_agents_resp" | jq -r '
+                .activeAgents // []
+                | .[]
+                | select(. == "claude" or . == "codex" or . == "custom")
+                | . + "\u001f" + (if . == "claude" then "Claude" elif . == "codex" then "Codex" else "Custom" end)
+            ')
+            create_mode=$(
+                {
+                    printf 'default%sUse Project Default\n' "$SEP"
+                    if [ -n "$create_agent_lines" ]; then
+                        printf '%s\n' "$create_agent_lines"
+                    fi
+                    printf 'terminal%sTerminal\n' "$SEP"
+                    printf '__back__%s← Back\n' "$SEP"
+                } | pick_value "Thread Type"
+            ) || return 1
             [ "$create_mode" = "__back__" ] && return 2
 
             create_req="{$(json_kv command create-thread),$(json_kv project "$create_project")"

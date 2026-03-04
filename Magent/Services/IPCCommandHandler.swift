@@ -115,6 +115,9 @@ final class IPCCommandHandler {
             requestedAgent = nil
             useAgentCommand = true
         }
+        if let requestedAgent, !settings.availableActiveAgents.contains(requestedAgent) {
+            return .failure("Agent type is not enabled: \(requestedAgent.rawValue)", id: request.id)
+        }
 
         // Resolve requested name: --name takes precedence, --description generates a slug
         let requestedName: String?
@@ -228,7 +231,8 @@ final class IPCCommandHandler {
     private func listProjects(_ request: IPCRequest) -> IPCResponse {
         let settings = persistence.loadSettings()
         let projects = settings.projects.map { IPCProjectInfo(project: $0) }
-        return IPCResponse(ok: true, id: request.id, projects: projects)
+        let activeAgents = settings.availableActiveAgents.map(\.rawValue)
+        return IPCResponse(ok: true, id: request.id, projects: projects, activeAgents: activeAgents)
     }
 
     private func listThreads(_ request: IPCRequest) -> IPCResponse {

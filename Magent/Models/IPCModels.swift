@@ -34,6 +34,7 @@ nonisolated struct IPCResponse: Encodable, Sendable {
     var tab: IPCTabInfo?
     var sections: [IPCSectionInfo]?
     var section: IPCSectionInfo?
+    var activeAgents: [String]?
 
     static func success(id: String? = nil) -> IPCResponse {
         IPCResponse(ok: true, id: id)
