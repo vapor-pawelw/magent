@@ -1,5 +1,47 @@
 import Foundation
 
+nonisolated enum ThreadIcon: String, CaseIterable, Codable, Sendable {
+    case feature
+    case fix
+    case refactor
+    case test
+    case other
+
+    var symbolName: String {
+        switch self {
+        case .feature:
+            return "sparkles"
+        case .fix:
+            return "wrench.and.screwdriver"
+        case .refactor:
+            return "arrow.triangle.branch"
+        case .test:
+            return "checkmark.seal"
+        case .other:
+            return "circle.grid.2x2"
+        }
+    }
+
+    var menuTitle: String {
+        switch self {
+        case .feature:
+            return "Feature"
+        case .fix:
+            return "Fix"
+        case .refactor:
+            return "Refactor"
+        case .test:
+            return "Test"
+        case .other:
+            return "Other"
+        }
+    }
+
+    var accessibilityDescription: String {
+        "\(menuTitle) thread"
+    }
+}
+
 nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
     var resetAt: Date
     var resetDescription: String?
@@ -49,6 +91,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var displayOrder: Int
     var jiraTicketKey: String?
     var taskDescription: String?
+    var threadIcon: ThreadIcon
 
     // Transient (not persisted) — tracks which agent sessions are currently working
     var busySessions: Set<String> = []
@@ -143,6 +186,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case displayOrder
         case jiraTicketKey
         case taskDescription
+        case threadIcon
     }
 
     init(
@@ -170,7 +214,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         baseBranch: String? = nil,
         displayOrder: Int = 0,
         jiraTicketKey: String? = nil,
-        taskDescription: String? = nil
+        taskDescription: String? = nil,
+        threadIcon: ThreadIcon = .other
     ) {
         self.id = id
         self.projectId = projectId
@@ -197,6 +242,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.displayOrder = displayOrder
         self.jiraTicketKey = jiraTicketKey
         self.taskDescription = taskDescription
+        self.threadIcon = threadIcon
     }
 
     init(from decoder: Decoder) throws {
@@ -225,6 +271,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         displayOrder = try container.decodeIfPresent(Int.self, forKey: .displayOrder) ?? 0
         jiraTicketKey = try container.decodeIfPresent(String.self, forKey: .jiraTicketKey)
         taskDescription = try container.decodeIfPresent(String.self, forKey: .taskDescription)
+        threadIcon = try container.decodeIfPresent(ThreadIcon.self, forKey: .threadIcon) ?? .other
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -266,6 +313,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(displayOrder, forKey: .displayOrder)
         try container.encodeIfPresent(jiraTicketKey, forKey: .jiraTicketKey)
         try container.encodeIfPresent(taskDescription, forKey: .taskDescription)
+        try container.encode(threadIcon, forKey: .threadIcon)
     }
 }
 

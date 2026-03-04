@@ -591,6 +591,17 @@ extension ThreadManager {
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
+    func setThreadIcon(threadId: UUID, icon: ThreadIcon) throws {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+        guard threads[index].threadIcon != icon else { return }
+
+        threads[index].threadIcon = icon
+        try persistence.saveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
     // MARK: - Rename Tab
 
     func renameTab(threadId: UUID, sessionName: String, newDisplayName: String) async throws {

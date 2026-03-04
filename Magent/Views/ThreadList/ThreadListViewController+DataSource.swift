@@ -185,7 +185,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             baseWidth = outlineView.bounds.width
         }
         guard baseWidth > 0 else { return 0 }
-        let leadingContentWidth: CGFloat = 16 + 6 // terminal icon + icon/text spacing
+        let leadingContentWidth: CGFloat = 16 + 6 // thread icon + icon/text spacing
         let trailingInset = ThreadListViewController.projectDisclosureTrailingInset
             + (ThreadListViewController.disclosureButtonSize / 2)
             - 5 // completion indicator radius used by ThreadCell.trailingAlignmentInset

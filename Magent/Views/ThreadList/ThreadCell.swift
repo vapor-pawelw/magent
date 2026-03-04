@@ -302,7 +302,10 @@ final class ThreadCell: NSTableCellView {
         primaryDirtyDot?.toolTip = detailedTooltip
         secondaryDirtyDot?.toolTip = detailedTooltip
 
-        imageView?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
+        imageView?.image = NSImage(
+            systemSymbolName: thread.threadIcon.symbolName,
+            accessibilityDescription: thread.threadIcon.accessibilityDescription
+        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
         imageView?.contentTintColor = thread.hasUnreadAgentCompletion
             ? NSColor.controlAccentColor
             : (sectionColor ?? NSColor(resource: .primaryBrand))
@@ -325,7 +328,7 @@ final class ThreadCell: NSTableCellView {
         // Trailing pin icon — always hidden (replaced by leading pin)
         pinImageView?.isHidden = true
 
-        // Leading pin icon — appears to the left of the terminal icon
+        // Leading pin icon — appears to the left of the thread icon
         ensureLeadingPin()
         leadingPinImageView?.isHidden = !thread.isPinned
 

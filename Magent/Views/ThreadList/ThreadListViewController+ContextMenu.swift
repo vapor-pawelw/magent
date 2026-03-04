@@ -35,7 +35,14 @@ extension ThreadListViewController {
         renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
         renameItem.representedObject = thread
         menu.addItem(renameItem)
-        menu.addItem(NSMenuItem.separator())
+
+        let iconItem = NSMenuItem(title: "Set icon", action: nil, keyEquivalent: "")
+        iconItem.image = NSImage(
+            systemSymbolName: thread.threadIcon.symbolName,
+            accessibilityDescription: thread.threadIcon.accessibilityDescription
+        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
+        iconItem.submenu = buildThreadIconSubmenu(for: thread)
+        menu.addItem(iconItem)
 
         // Move to... submenu
         let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
@@ -104,6 +111,25 @@ extension ThreadListViewController {
         menu.addItem(deleteItem)
 
         return menu
+    }
+
+    private func buildThreadIconSubmenu(for thread: MagentThread) -> NSMenu {
+        let submenu = NSMenu()
+        for icon in ThreadIcon.allCases {
+            let item = NSMenuItem(title: icon.menuTitle, action: #selector(setThreadIcon(_:)), keyEquivalent: "")
+            item.target = self
+            item.state = thread.threadIcon == icon ? .on : .off
+            item.image = NSImage(
+                systemSymbolName: icon.symbolName,
+                accessibilityDescription: icon.accessibilityDescription
+            ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
+            item.representedObject = [
+                "threadId": thread.id,
+                "icon": icon.rawValue
+            ] as [String: Any]
+            submenu.addItem(item)
+        }
+        return submenu
     }
 
     private func buildMainThreadContextMenu(for thread: MagentThread) -> NSMenu {
@@ -309,6 +335,23 @@ extension ThreadListViewController {
               let sectionId = info["sectionId"] as? UUID else { return }
         threadManager.moveThread(thread, toSection: sectionId)
         reloadData()
+    }
+
+    @objc private func setThreadIcon(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let threadId = info["threadId"] as? UUID,
+              let iconRaw = info["icon"] as? String,
+              let icon = ThreadIcon(rawValue: iconRaw) else { return }
+        do {
+            try threadManager.setThreadIcon(threadId: threadId, icon: icon)
+        } catch {
+            let errorAlert = NSAlert()
+            errorAlert.messageText = "Could Not Save Icon"
+            errorAlert.informativeText = error.localizedDescription
+            errorAlert.alertStyle = .warning
+            errorAlert.addButton(withTitle: "OK")
+            errorAlert.runModal()
+        }
     }
 
     @objc private func renameThread(_ sender: NSMenuItem) {
