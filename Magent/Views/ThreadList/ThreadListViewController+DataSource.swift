@@ -185,13 +185,21 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             baseWidth = outlineView.bounds.width
         }
         guard baseWidth > 0 else { return 0 }
+        let leadingOffsetCompensation = -min(0, threadLeadingOffset(for: thread, in: outlineView))
         let leadingContentWidth: CGFloat = 16 + 6 // thread icon + icon/text spacing
         let trailingInset = ThreadListViewController.projectDisclosureTrailingInset
             + (ThreadListViewController.disclosureButtonSize / 2)
             - 5 // completion indicator radius used by ThreadCell.trailingAlignmentInset
             + 6 // gap between leading and trailing stacks
         let trailingMarkerWidth = threadTrailingMarkerWidth(for: thread)
-        return max(0, baseWidth - leadingContentWidth - trailingInset - trailingMarkerWidth)
+        return max(0, baseWidth + leadingOffsetCompensation - leadingContentWidth - trailingInset - trailingMarkerWidth)
+    }
+
+    private func threadLeadingOffset(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
+        if outlineView.parent(forItem: thread) is SidebarSection {
+            return -Self.outlineIndentationPerLevel
+        }
+        return 0
     }
 
     private func threadTrailingMarkerWidth(for thread: MagentThread) -> CGFloat {
@@ -466,7 +474,10 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     c.addSubview(disclosureButton)
 
                     NSLayoutConstraint.activate([
-                        iv.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: Self.sidebarHorizontalInset),
+                        iv.leadingAnchor.constraint(
+                            equalTo: c.leadingAnchor,
+                            constant: Self.sidebarHorizontalInset - Self.outlineIndentationPerLevel
+                        ),
                         iv.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         iv.widthAnchor.constraint(equalToConstant: 8),
                         iv.heightAnchor.constraint(equalToConstant: 8),
@@ -526,7 +537,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     isWaitingForInput: thread.hasWaitingForInput,
                     isDirty: thread.isDirty,
                     isBlockedByRateLimit: thread.isBlockedByRateLimit,
-                    rateLimitTooltip: thread.rateLimitLiftDescription.map { "Rate limit reached. \($0)" }
+                    rateLimitTooltip: thread.rateLimitLiftDescription.map { "Rate limit reached. \($0)" },
+                    leadingOffset: -Self.outlineIndentationPerLevel
                 )
                 return cell
             }
@@ -566,7 +578,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             } else {
                 sectionColor = nil
             }
-            cell.configure(with: thread, sectionColor: sectionColor)
+            cell.configure(
+                with: thread,
+                sectionColor: sectionColor,
+                leadingOffset: threadLeadingOffset(for: thread, in: outlineView)
+            )
             cell.onArchive = { [weak self] in
                 self?.triggerArchive(for: thread)
             }
