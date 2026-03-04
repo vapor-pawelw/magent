@@ -361,7 +361,7 @@ extension ThreadManager {
         sessionName: String,
         prompt: String
     ) async {
-        guard persistence.loadSettings().autoRenameWorktrees else { return }
+        guard persistence.loadSettings().autoRenameBranches else { return }
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         let thread = threads[index]
 
@@ -550,6 +550,7 @@ extension ThreadManager {
     }
 
     func generateTaskDescriptionIfNeeded(threadId: UUID, prompt: String) async {
+        guard persistence.loadSettings().autoSetThreadDescription else { return }
         _ = await generateAndPersistTaskDescription(
             threadId: threadId,
             prompt: prompt,

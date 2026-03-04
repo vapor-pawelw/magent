@@ -4,7 +4,8 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
 
     let persistence = PersistenceService.shared
     var settings: AppSettings!
-    private var autoRenameCheckbox: NSButton!
+    private var autoRenameBranchCheckbox: NSButton!
+    private var autoSetDescriptionCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
     var terminalInjectionTextView: NSTextView!
     var agentContextTextView: NSTextView!
@@ -46,21 +47,36 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         let (worktreeCard, worktreeSection) = createSectionCard(title: "Thread Naming")
         stackView.addArrangedSubview(worktreeCard)
 
-        autoRenameCheckbox = NSButton(
+        autoRenameBranchCheckbox = NSButton(
             checkboxWithTitle: "Auto-rename branch from the first agent prompt",
             target: self,
-            action: #selector(autoRenameToggled)
+            action: #selector(autoRenameBranchToggled)
         )
-        autoRenameCheckbox.state = settings.autoRenameWorktrees ? .on : .off
-        worktreeSection.addArrangedSubview(autoRenameCheckbox)
+        autoRenameBranchCheckbox.state = settings.autoRenameBranches ? .on : .off
+        worktreeSection.addArrangedSubview(autoRenameBranchCheckbox)
 
         let autoRenameDesc = NSTextField(
-            wrappingLabelWithString: "Uses AI to generate a meaningful branch name and thread description from the prompt. Does not rename the worktree directory."
+            wrappingLabelWithString: "Uses AI to generate a meaningful branch name from the first agent prompt. Does not rename the worktree directory."
         )
         autoRenameDesc.font = .systemFont(ofSize: 11)
         autoRenameDesc.textColor = NSColor(resource: .textSecondary)
         worktreeSection.addArrangedSubview(autoRenameDesc)
-        worktreeSection.setCustomSpacing(10, after: autoRenameDesc)
+
+        autoSetDescriptionCheckbox = NSButton(
+            checkboxWithTitle: "Auto-set thread description from agent prompts",
+            target: self,
+            action: #selector(autoSetDescriptionToggled)
+        )
+        autoSetDescriptionCheckbox.state = settings.autoSetThreadDescription ? .on : .off
+        worktreeSection.addArrangedSubview(autoSetDescriptionCheckbox)
+
+        let autoSetDescriptionDesc = NSTextField(
+            wrappingLabelWithString: "Uses AI to generate a short thread description when one is missing."
+        )
+        autoSetDescriptionDesc.font = .systemFont(ofSize: 11)
+        autoSetDescriptionDesc.textColor = NSColor(resource: .textSecondary)
+        worktreeSection.addArrangedSubview(autoSetDescriptionDesc)
+        worktreeSection.setCustomSpacing(10, after: autoSetDescriptionDesc)
 
         slugPromptTextView = createTextEditorSection(
             in: worktreeSection,
@@ -366,8 +382,13 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     }
 
 
-    @objc private func autoRenameToggled() {
-        settings.autoRenameWorktrees = autoRenameCheckbox.state == .on
+    @objc private func autoRenameBranchToggled() {
+        settings.autoRenameBranches = autoRenameBranchCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func autoSetDescriptionToggled() {
+        settings.autoSetThreadDescription = autoSetDescriptionCheckbox.state == .on
         try? persistence.saveSettings(settings)
     }
 

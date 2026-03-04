@@ -12,7 +12,8 @@ nonisolated struct AppSettings: Codable, Sendable {
     var playSoundForAgentCompletion: Bool
     var agentCompletionSoundName: String
     var autoReorderThreadsOnAgentCompletion: Bool
-    var autoRenameWorktrees: Bool
+    var autoRenameBranches: Bool
+    var autoSetThreadDescription: Bool
     var autoRenameSlugPrompt: String
     var useThreadSections: Bool
     var isConfigured: Bool
@@ -41,7 +42,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         playSoundForAgentCompletion: Bool = true,
         agentCompletionSoundName: String = "Ping",
         autoReorderThreadsOnAgentCompletion: Bool = true,
-        autoRenameWorktrees: Bool = true,
+        autoRenameBranches: Bool = true,
+        autoSetThreadDescription: Bool = true,
         autoRenameSlugPrompt: String = AppSettings.defaultSlugPrompt,
         useThreadSections: Bool = true,
         isConfigured: Bool = false,
@@ -69,7 +71,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.playSoundForAgentCompletion = playSoundForAgentCompletion
         self.agentCompletionSoundName = agentCompletionSoundName
         self.autoReorderThreadsOnAgentCompletion = autoReorderThreadsOnAgentCompletion
-        self.autoRenameWorktrees = autoRenameWorktrees
+        self.autoRenameBranches = autoRenameBranches
+        self.autoSetThreadDescription = autoSetThreadDescription
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.useThreadSections = useThreadSections
         self.isConfigured = isConfigured
@@ -102,7 +105,9 @@ nonisolated struct AppSettings: Codable, Sendable {
         playSoundForAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .playSoundForAgentCompletion) ?? true
         agentCompletionSoundName = try container.decodeIfPresent(String.self, forKey: .agentCompletionSoundName) ?? "Ping"
         autoReorderThreadsOnAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .autoReorderThreadsOnAgentCompletion) ?? true
-        autoRenameWorktrees = try container.decodeIfPresent(Bool.self, forKey: .autoRenameWorktrees) ?? true
+        let legacyAutoRename = try container.decodeIfPresent(Bool.self, forKey: .autoRenameWorktrees)
+        autoRenameBranches = try container.decodeIfPresent(Bool.self, forKey: .autoRenameBranches) ?? legacyAutoRename ?? true
+        autoSetThreadDescription = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadDescription) ?? legacyAutoRename ?? true
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt) ?? Self.defaultSlugPrompt
         useThreadSections = try container.decodeIfPresent(Bool.self, forKey: .useThreadSections) ?? true
         isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
@@ -133,7 +138,10 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(playSoundForAgentCompletion, forKey: .playSoundForAgentCompletion)
         try container.encode(agentCompletionSoundName, forKey: .agentCompletionSoundName)
         try container.encode(autoReorderThreadsOnAgentCompletion, forKey: .autoReorderThreadsOnAgentCompletion)
-        try container.encode(autoRenameWorktrees, forKey: .autoRenameWorktrees)
+        try container.encode(autoRenameBranches, forKey: .autoRenameBranches)
+        try container.encode(autoSetThreadDescription, forKey: .autoSetThreadDescription)
+        // Keep writing the legacy key for backward compatibility with older builds.
+        try container.encode(autoRenameBranches, forKey: .autoRenameWorktrees)
         try container.encode(autoRenameSlugPrompt, forKey: .autoRenameSlugPrompt)
         try container.encode(useThreadSections, forKey: .useThreadSections)
         try container.encode(isConfigured, forKey: .isConfigured)
@@ -245,6 +253,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         case playSoundForAgentCompletion
         case agentCompletionSoundName
         case autoReorderThreadsOnAgentCompletion
+        case autoRenameBranches
+        case autoSetThreadDescription
         case autoRenameWorktrees
         case autoRenameSlugPrompt
         case useThreadSections
