@@ -126,7 +126,6 @@ extension ThreadManager {
         let sessionAgentType = agentType(for: refreshedThread, sessionName: sessionName)
             ?? refreshedThread.selectedAgentType
             ?? effectiveAgentType(for: refreshedThread.projectId)
-        let resumeSessionID = refreshedThread.sessionConversationIDs[sessionName]
         let envExports: String
         if thread.isMain {
             envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
@@ -139,8 +138,7 @@ extension ThreadManager {
                 projectId: thread.projectId,
                 agentType: sessionAgentType,
                 envExports: envExports,
-                workingDirectory: thread.worktreePath,
-                resumeSessionID: resumeSessionID
+                workingDirectory: thread.worktreePath
             )
         } else {
             startCmd = terminalStartCommand(
