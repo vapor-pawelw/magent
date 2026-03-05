@@ -8,6 +8,9 @@ final class ThreadDetailViewController: NSViewController {
     static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
     static let lastOpenedSessionDefaultsKey = "MagentLastOpenedSessionName"
     static let promptTOCPositionDefaultsPrefix = "MagentPromptTOCPosition"
+    static let promptTOCSizeDefaultsPrefix = "MagentPromptTOCSize"
+    static let promptTOCMinimumWidth: CGFloat = 320
+    static let promptTOCMinimumHeight: CGFloat = 250
 
     var thread: MagentThread
     let threadManager = ThreadManager.shared
@@ -35,10 +38,13 @@ final class ThreadDetailViewController: NSViewController {
     var promptTOCView: PromptTableOfContentsView?
     var promptTOCTopConstraint: NSLayoutConstraint?
     var promptTOCTrailingConstraint: NSLayoutConstraint?
+    var promptTOCWidthConstraint: NSLayoutConstraint?
+    var promptTOCHeightConstraint: NSLayoutConstraint?
     var promptTOCRefreshTask: Task<Void, Never>?
     var promptTOCEntries: [PromptTOCEntry] = []
     var promptTOCSessionName: String?
     var promptTOCDragStartOrigin: NSPoint = .zero
+    var promptTOCResizeStartSize: NSSize = .zero
     var promptTOCCanShowForCurrentTab = false
     var isPromptTOCManuallyHidden = false
 

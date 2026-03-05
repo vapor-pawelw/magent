@@ -23,23 +23,25 @@ extension ThreadDetailViewController {
         tocView.onDragGesture = { [weak self] gesture in
             self?.handlePromptTOCDrag(gesture)
         }
+        tocView.onResizeGesture = { [weak self] gesture in
+            self?.handlePromptTOCResize(gesture)
+        }
 
         terminalContainer.addSubview(tocView)
         let top = tocView.topAnchor.constraint(equalTo: terminalContainer.topAnchor, constant: 12)
         let trailing = tocView.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor, constant: -12)
+        let width = tocView.widthAnchor.constraint(equalToConstant: Self.promptTOCMinimumWidth)
+        let height = tocView.heightAnchor.constraint(equalToConstant: Self.promptTOCMinimumHeight)
         promptTOCTopConstraint = top
         promptTOCTrailingConstraint = trailing
-
-        let preferredHeight = tocView.heightAnchor.constraint(equalToConstant: 250)
-        preferredHeight.priority = .defaultHigh
-        let maxHeight = tocView.heightAnchor.constraint(lessThanOrEqualTo: terminalContainer.heightAnchor, multiplier: 0.8)
+        promptTOCWidthConstraint = width
+        promptTOCHeightConstraint = height
 
         NSLayoutConstraint.activate([
             top,
             trailing,
-            tocView.widthAnchor.constraint(equalToConstant: 320),
-            preferredHeight,
-            maxHeight,
+            width,
+            height,
         ])
 
         promptTOCView = tocView
@@ -105,6 +107,7 @@ extension ThreadDetailViewController {
         promptTOCView?.setEntries(entries, agentType: agentType)
         promptTOCView?.isHidden = isPromptTOCManuallyHidden
         if previousSessionName != sessionName {
+            restorePromptTOCSize(for: sessionName)
             restorePromptTOCPosition(for: sessionName)
         }
         clampPromptTOCPositionIfNeeded()
@@ -191,7 +194,7 @@ extension ThreadDetailViewController {
                     matched.append(
                         PromptTOCEntry(
                             lineIndex: candidate.lineIndex,
-                            displayText: truncatedPromptText(candidate.promptText)
+                            displayText: candidate.promptText
                         )
                     )
                     searchStart += 1
@@ -211,7 +214,7 @@ extension ThreadDetailViewController {
         var entries = candidates.map { candidate in
             PromptTOCEntry(
                 lineIndex: candidate.lineIndex,
-                displayText: truncatedPromptText(candidate.promptText)
+                displayText: candidate.promptText
             )
         }
         if entries.count > 250 {
@@ -231,13 +234,6 @@ extension ThreadDetailViewController {
         text
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func truncatedPromptText(_ text: String) -> String {
-        if text.count > 140 {
-            return String(text.prefix(139)) + "…"
-        }
-        return text
     }
 
     private func removingTrailingComposerCandidates(from candidates: [PromptPaneCandidate], lineCount: Int) -> [PromptPaneCandidate] {
@@ -342,6 +338,39 @@ extension ThreadDetailViewController {
         }
     }
 
+    private func handlePromptTOCResize(_ gesture: NSPanGestureRecognizer) {
+        guard promptTOCView != nil else { return }
+        guard !isPromptTOCManuallyHidden else { return }
+        guard let width = promptTOCWidthConstraint, let height = promptTOCHeightConstraint else { return }
+
+        switch gesture.state {
+        case .began:
+            promptTOCResizeStartSize = NSSize(width: width.constant, height: height.constant)
+        case .changed:
+            let translation = gesture.translation(in: terminalContainer)
+            let minimumWidth = Self.promptTOCMinimumWidth
+            let minimumHeight = Self.promptTOCMinimumHeight
+            let maxWidth = max(minimumWidth, terminalContainer.bounds.width - 8)
+            let maxHeight = max(minimumHeight, terminalContainer.bounds.height - 8)
+
+            let proposedWidth = promptTOCResizeStartSize.width + translation.x
+            let proposedHeight = promptTOCResizeStartSize.height - translation.y
+            width.constant = min(max(minimumWidth, proposedWidth), maxWidth)
+            height.constant = min(max(minimumHeight, proposedHeight), maxHeight)
+
+            terminalContainer.layoutSubtreeIfNeeded()
+            clampPromptTOCPositionIfNeeded()
+        case .ended, .cancelled:
+            clampPromptTOCPositionIfNeeded()
+            if let sessionName = promptTOCSessionName {
+                savePromptTOCSize(for: sessionName)
+                savePromptTOCPosition(for: sessionName)
+            }
+        default:
+            break
+        }
+    }
+
     func clampPromptTOCPositionIfNeeded() {
         guard let tocView = promptTOCView, !tocView.isHidden else { return }
         guard let top = promptTOCTopConstraint, let trailing = promptTOCTrailingConstraint else { return }
@@ -398,6 +427,16 @@ extension ThreadDetailViewController {
         )
     }
 
+    private func savePromptTOCSize(for sessionName: String) {
+        guard let width = promptTOCWidthConstraint, let height = promptTOCHeightConstraint else { return }
+        let storedWidth = max(Self.promptTOCMinimumWidth, width.constant)
+        let storedHeight = max(Self.promptTOCMinimumHeight, height.constant)
+        UserDefaults.standard.set(
+            [storedWidth, storedHeight],
+            forKey: promptTOCSizeDefaultsKey(for: sessionName)
+        )
+    }
+
     private func restorePromptTOCPosition(for sessionName: String) {
         guard let values = UserDefaults.standard.array(forKey: promptTOCPositionDefaultsKey(for: sessionName)) as? [Double],
               values.count == 2,
@@ -421,9 +460,31 @@ extension ThreadDetailViewController {
         trailing.constant = originX + tocView.frame.width - terminalContainer.bounds.width
     }
 
+    private func restorePromptTOCSize(for sessionName: String) {
+        guard let width = promptTOCWidthConstraint, let height = promptTOCHeightConstraint else { return }
+        guard let values = UserDefaults.standard.array(forKey: promptTOCSizeDefaultsKey(for: sessionName)) as? [Double],
+              values.count == 2 else {
+            width.constant = Self.promptTOCMinimumWidth
+            height.constant = Self.promptTOCMinimumHeight
+            return
+        }
+
+        let minimumWidth = Self.promptTOCMinimumWidth
+        let minimumHeight = Self.promptTOCMinimumHeight
+        let maxWidth = max(minimumWidth, terminalContainer.bounds.width - 8)
+        let maxHeight = max(minimumHeight, terminalContainer.bounds.height - 8)
+        width.constant = min(max(minimumWidth, values[0]), maxWidth)
+        height.constant = min(max(minimumHeight, values[1]), maxHeight)
+    }
+
     private func promptTOCPositionDefaultsKey(for sessionName: String) -> String {
         let raw = "\(thread.id.uuidString)-\(sessionName)"
         return "\(Self.promptTOCPositionDefaultsPrefix).\(sanitizedDefaultsKeySegment(raw))"
+    }
+
+    private func promptTOCSizeDefaultsKey(for sessionName: String) -> String {
+        let raw = "\(thread.id.uuidString)-\(sessionName)"
+        return "\(Self.promptTOCSizeDefaultsPrefix).\(sanitizedDefaultsKeySegment(raw))"
     }
 
     private func sanitizedDefaultsKeySegment(_ text: String) -> String {
@@ -436,6 +497,7 @@ extension ThreadDetailViewController {
 final class PromptTableOfContentsView: NSView {
     var onSelectEntry: ((Int) -> Void)?
     var onDragGesture: ((NSPanGestureRecognizer) -> Void)?
+    var onResizeGesture: ((NSPanGestureRecognizer) -> Void)?
 
     private let titleLabel = NSTextField(labelWithString: "Table of Contents")
     private let subtitleLabel = NSTextField(labelWithString: "")
@@ -443,6 +505,7 @@ final class PromptTableOfContentsView: NSView {
     private let scrollView = NSScrollView()
     private let emptyLabel = NSTextField(labelWithString: "No prompts yet")
     private let spinner = NSProgressIndicator()
+    private let resizeHandle = NSImageView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -476,18 +539,40 @@ final class PromptTableOfContentsView: NSView {
 
         emptyLabel.isHidden = true
         for (index, entry) in entries.enumerated() {
-            let button = NSButton(title: "\(index + 1). \(entry.displayText)", target: self, action: #selector(handleEntryTap(_:)))
-            button.tag = index
-            button.bezelStyle = .inline
-            button.isBordered = false
-            button.alignment = .left
-            button.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-            button.contentTintColor = NSColor(resource: .textPrimary)
-            button.cell?.lineBreakMode = .byTruncatingTail
-            button.setButtonType(.momentaryChange)
-            button.translatesAutoresizingMaskIntoConstraints = false
-            button.heightAnchor.constraint(equalToConstant: 18).isActive = true
-            rowsStack.addArrangedSubview(button)
+            let row = NSView()
+            row.tag = index
+            row.translatesAutoresizingMaskIntoConstraints = false
+            row.wantsLayer = true
+            row.layer?.cornerRadius = 4
+            if index.isMultiple(of: 2) {
+                row.layer?.backgroundColor = NSColor.clear.cgColor
+            } else {
+                row.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.08).cgColor
+            }
+
+            let label = NSTextField(wrappingLabelWithString: "\(index + 1). \(entry.displayText)")
+            label.translatesAutoresizingMaskIntoConstraints = false
+            label.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+            label.textColor = NSColor(resource: .textPrimary)
+            label.maximumNumberOfLines = 3
+            label.lineBreakMode = .byTruncatingTail
+
+            row.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.topAnchor.constraint(equalTo: row.topAnchor, constant: 4),
+                label.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 6),
+                label.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -6),
+                label.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -4),
+            ])
+
+            let tap = NSClickGestureRecognizer(target: self, action: #selector(handleEntryRowTap(_:)))
+            row.addGestureRecognizer(tap)
+
+            rowsStack.addArrangedSubview(row)
+            NSLayoutConstraint.activate([
+                row.leadingAnchor.constraint(equalTo: rowsStack.leadingAnchor),
+                row.trailingAnchor.constraint(equalTo: rowsStack.trailingAnchor),
+            ])
         }
     }
 
@@ -565,9 +650,17 @@ final class PromptTableOfContentsView: NSView {
         emptyLabel.isHidden = true
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
 
+        resizeHandle.image = NSImage(systemSymbolName: "arrow.up.left.and.arrow.down.right", accessibilityDescription: "Resize Table of Contents")
+        resizeHandle.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.8)
+        resizeHandle.translatesAutoresizingMaskIntoConstraints = false
+        resizeHandle.toolTip = "Drag to resize"
+        let resizePan = NSPanGestureRecognizer(target: self, action: #selector(handleResize(_:)))
+        resizeHandle.addGestureRecognizer(resizePan)
+
         addSubview(headerStack)
         addSubview(scrollView)
         addSubview(emptyLabel)
+        addSubview(resizeHandle)
 
         NSLayoutConstraint.activate([
             headerStack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
@@ -582,6 +675,11 @@ final class PromptTableOfContentsView: NSView {
             emptyLabel.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
             emptyLabel.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+
+            resizeHandle.widthAnchor.constraint(equalToConstant: 12),
+            resizeHandle.heightAnchor.constraint(equalToConstant: 12),
+            resizeHandle.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            resizeHandle.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
         ])
     }
 
@@ -604,11 +702,16 @@ final class PromptTableOfContentsView: NSView {
         return "\(agentLabel) · \(count) \(noun)"
     }
 
-    @objc private func handleEntryTap(_ sender: NSButton) {
-        onSelectEntry?(sender.tag)
+    @objc private func handleEntryRowTap(_ gesture: NSClickGestureRecognizer) {
+        guard let row = gesture.view else { return }
+        onSelectEntry?(row.tag)
     }
 
     @objc private func handleDrag(_ gesture: NSPanGestureRecognizer) {
         onDragGesture?(gesture)
+    }
+
+    @objc private func handleResize(_ gesture: NSPanGestureRecognizer) {
+        onResizeGesture?(gesture)
     }
 }

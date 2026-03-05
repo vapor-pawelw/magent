@@ -100,6 +100,21 @@ Prompt TOC content is submission-driven, not pane-marker-driven. Persist per-ses
 When session names are renamed/migrated, re-key this prompt history together with other session-scoped maps; when sessions are removed, prune it. Parser-based pane scanning is fallback-only for legacy sessions without stored history.
 Fallback parsing must also reject generic composer suggestion templates (for example `Implement (feature)`), so non-submitted placeholder prompts never appear in TOC rows.
 
+### 4.4 Prompt TOC Layout + Interaction Persistence
+
+Prompt TOC geometry is session-scoped UI state:
+- Persist panel position and size per `(threadID, sessionName)` in `UserDefaults`.
+- Restore size first, then restore position, and clamp both against current terminal container bounds.
+- Keep minimum size fixed at `320x250` (the original default panel dimensions).
+
+Prompt row interaction/visual rules:
+- Row hit target is the full row (not only text), so clicking anywhere in the row triggers navigation.
+- Row labels can wrap up to 3 lines and then truncate.
+- Apply subtle alternating row backgrounds to improve scanability without dominating the terminal UI.
+
+Navigation behavior:
+- TOC selection uses tmux copy-mode positioning (`scrollHistoryLineToTop`) so the selected prompt line is anchored at the top of the viewport whenever enough lines exist below it.
+
 ### 5. Persistence Model
 
 Thread state persisted as JSON in app's Application Support directory:

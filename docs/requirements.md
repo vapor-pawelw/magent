@@ -96,6 +96,10 @@ Before the app is usable, the user must complete a configuration step:
 - Do not include non-submitted composer content, placeholder suggestions, or interactive selector rows.
 - Switching threads/tabs must not surface stale non-submitted prompt text in TOC.
 - TOC entry ordering follows actual submission order for that session.
+- TOC panel must be draggable and resizable by the user.
+- The minimum TOC size is the original default size (320x250).
+- Selecting a TOC row must jump to that prompt and anchor it at the top of the terminal scroll viewport when possible.
+- Prompt rows support up to 3 lines and use subtle alternating background stripes for readability.
 
 ## Thread Row Display Rules
 
