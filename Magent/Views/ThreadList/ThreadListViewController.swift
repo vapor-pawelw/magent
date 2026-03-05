@@ -15,9 +15,9 @@ final class ThreadListViewController: NSViewController {
     static let lastOpenedProjectDefaultsKey = "MagentLastOpenedProjectID"
     static let collapsedProjectIdsKey = "MagentCollapsedProjectIds"
     static let collapsedSectionIdsKey = "MagentCollapsedSectionIds"
-    static let projectSeparatorIdentifier = NSUserInterfaceItemIdentifier("ProjectTopSeparator")
     static let projectDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectDisclosureButton")
     static let projectAddButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectAddButton")
+    static let projectAccentBarIdentifier = NSUserInterfaceItemIdentifier("ProjectAccentBar")
     static let sectionDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("SectionDisclosureButton")
     static let sectionCountBadgeContainerIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeContainer")
     static let sectionCountBadgeLabelIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeLabel")
@@ -25,6 +25,16 @@ final class ThreadListViewController: NSViewController {
     static let projectDisclosureTrailingInset: CGFloat = 8
     static let outlineIndentationPerLevel: CGFloat = 16
     static let disclosureButtonSize: CGFloat = 16
+    static let projectHeaderVerticalPadding: CGFloat = 8
+    static let projectHeaderRowHeight: CGFloat = disclosureButtonSize + (projectHeaderVerticalPadding * 2) + 2
+    static let projectSpacerDividerVerticalSpacing: CGFloat = 8
+    static let projectSpacerDividerHeight: CGFloat = 1
+    static let projectSpacerDividerHorizontalInset: CGFloat = 8
+    static let projectSpacerDividerLeadingInset: CGFloat =
+        projectSpacerDividerHorizontalInset - (outlineIndentationPerLevel / 2)
+    static let projectSpacerDividerTrailingInset: CGFloat = projectSpacerDividerHorizontalInset
+    static let projectHeaderInterProjectGap: CGFloat =
+        (projectSpacerDividerVerticalSpacing * 2) + projectSpacerDividerHeight
 
     weak var delegate: ThreadListDelegate?
 
@@ -51,6 +61,7 @@ final class ThreadListViewController: NSViewController {
     // Level 2: MagentThread (regular threads under a section)
 
     var sidebarProjects: [SidebarProject] = []
+    var sidebarRootItems: [Any] = []
 
     // MARK: - Lifecycle
 
@@ -162,6 +173,8 @@ final class ThreadListViewController: NSViewController {
         rateLimitStatusLabel.stringValue = summary ?? ""
         rateLimitStatusContainer.isHidden = (summary == nil)
         rateLimitStatusLabel.toolTip = summary
+        let topInset: CGFloat = summary == nil ? 0 : 16
+        scrollView.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 4, right: 0)
         rebuildRateLimitStatusMenu()
     }
 
@@ -287,7 +300,7 @@ final class ThreadListViewController: NSViewController {
         view.addSubview(branchMismatchView)
 
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
+            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: diffPanelView.topAnchor),
@@ -384,6 +397,14 @@ final class ThreadListViewController: NSViewController {
                 isPinned: project.isPinned,
                 children: children
             )
+        }
+
+        sidebarRootItems = []
+        for (index, project) in sidebarProjects.enumerated() {
+            if index > 0 {
+                sidebarRootItems.append(SidebarSpacer())
+            }
+            sidebarRootItems.append(project)
         }
 
         outlineView.reloadData()

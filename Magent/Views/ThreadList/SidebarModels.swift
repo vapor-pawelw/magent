@@ -29,3 +29,5 @@ class SidebarSection {
         self.threads = threads
     }
 }
+
+final class SidebarSpacer {}

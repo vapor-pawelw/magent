@@ -16,8 +16,15 @@ final class ThreadCell: NSTableCellView {
     private var trailingStackView: NSStackView?
     private var leadingStackConstraint: NSLayoutConstraint?
     private var hasInstalledTextTrailingConstraint = false
+    private var isConfiguredAsMain = false
 
     var onArchive: (() -> Void)?
+
+    override var backgroundStyle: NSView.BackgroundStyle {
+        didSet {
+            updateMainTextColorForSelection()
+        }
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -238,6 +245,7 @@ final class ThreadCell: NSTableCellView {
     }
 
     func configure(with thread: MagentThread, sectionColor: NSColor?, leadingOffset: CGFloat = 0) {
+        isConfiguredAsMain = false
         ensureTrailingStack()
         ensureLeadingStack()
         setLeadingOffset(leadingOffset)
@@ -411,12 +419,13 @@ final class ThreadCell: NSTableCellView {
         rateLimitTooltip: String? = nil,
         leadingOffset: CGFloat = 0
     ) {
+        isConfiguredAsMain = true
         textField?.stringValue = "Main"
         textField?.font = .systemFont(
             ofSize: NSFont.systemFontSize,
-            weight: isUnreadCompletion ? .semibold : .regular
+            weight: isUnreadCompletion ? .bold : .semibold
         )
-        textField?.textColor = .labelColor
+        updateMainTextColorForSelection()
         textField?.lineBreakMode = .byTruncatingTail
         textField?.maximumNumberOfLines = 1
 
@@ -428,11 +437,10 @@ final class ThreadCell: NSTableCellView {
         archiveButton?.isHidden = true
         leadingPinImageView?.isHidden = true
 
-        imageView?.image = NSImage(systemSymbolName: "house.fill", accessibilityDescription: "Main thread")
-        imageView?.contentTintColor = .controlAccentColor
-        imageView?.isHidden = false
+        imageView?.image = nil
+        imageView?.isHidden = true
 
-        setDirtyDot(primaryDirtyDot, visible: isDirty)
+        setDirtyDot(primaryDirtyDot, visible: false)
         setDirtyDot(secondaryDirtyDot, visible: false)
 
         if isBlockedByRateLimit {
@@ -501,6 +509,11 @@ final class ThreadCell: NSTableCellView {
             dot.image = nil
             dot.isHidden = true
         }
+    }
+
+    private func updateMainTextColorForSelection() {
+        guard isConfiguredAsMain else { return }
+        textField?.textColor = backgroundStyle == .emphasized ? .white : .controlAccentColor
     }
 
     private func statusDescriptions(for thread: MagentThread) -> [String] {
