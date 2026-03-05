@@ -1,5 +1,11 @@
 import Cocoa
 
+private enum SettingsProjectsTableLayout {
+    static let horizontalInset: CGFloat = 4
+    static let iconSpacing: CGFloat = 6
+    static let iconButtonSize: CGFloat = 16
+}
+
 extension SettingsProjectsViewController: NSTableViewDataSource {
     func numberOfRows(in tableView: NSTableView) -> Int {
         if tableView === sectionsTableView {
@@ -96,15 +102,23 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
             let visBtn = NSButton(image: NSImage(systemSymbolName: "eye", accessibilityDescription: nil)!, target: nil, action: nil)
             visBtn.bezelStyle = .inline
             visBtn.isBordered = false
+            visBtn.imagePosition = .imageOnly
+            visBtn.imageScaling = .scaleProportionallyDown
+            visBtn.setContentHuggingPriority(.required, for: .horizontal)
+            visBtn.setContentHuggingPriority(.required, for: .vertical)
+            visBtn.setContentCompressionResistancePriority(.required, for: .horizontal)
+            visBtn.setContentCompressionResistancePriority(.required, for: .vertical)
             visBtn.tag = 100
             visBtn.translatesAutoresizingMaskIntoConstraints = false
             c.addSubview(visBtn)
             NSLayoutConstraint.activate([
-                tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 4),
-                tf.trailingAnchor.constraint(equalTo: visBtn.leadingAnchor, constant: -4),
+                tf.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: SettingsProjectsTableLayout.horizontalInset),
+                tf.trailingAnchor.constraint(lessThanOrEqualTo: visBtn.leadingAnchor, constant: -SettingsProjectsTableLayout.iconSpacing),
                 tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                visBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
+                visBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -SettingsProjectsTableLayout.horizontalInset),
                 visBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                visBtn.widthAnchor.constraint(equalToConstant: SettingsProjectsTableLayout.iconButtonSize),
+                visBtn.heightAnchor.constraint(equalToConstant: SettingsProjectsTableLayout.iconButtonSize),
             ])
             return c
         }()
@@ -138,6 +152,8 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
             let colorBtn = NSButton()
             colorBtn.bezelStyle = .inline
             colorBtn.isBordered = false
+            colorBtn.imagePosition = .imageOnly
+            colorBtn.imageScaling = .scaleProportionallyDown
             colorBtn.tag = 200
             colorBtn.translatesAutoresizingMaskIntoConstraints = false
             c.addSubview(colorBtn)
@@ -150,6 +166,10 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
             let visBtn = NSButton(image: NSImage(systemSymbolName: "eye", accessibilityDescription: nil)!, target: nil, action: nil)
             visBtn.bezelStyle = .inline
             visBtn.isBordered = false
+            visBtn.imagePosition = .imageOnly
+            visBtn.imageScaling = .scaleProportionallyDown
+            visBtn.setContentHuggingPriority(.required, for: .horizontal)
+            visBtn.setContentCompressionResistancePriority(.required, for: .horizontal)
             visBtn.tag = 201
             visBtn.translatesAutoresizingMaskIntoConstraints = false
             c.addSubview(visBtn)
@@ -157,21 +177,30 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
             let delBtn = NSButton(image: NSImage(systemSymbolName: "trash", accessibilityDescription: "Delete")!, target: nil, action: nil)
             delBtn.bezelStyle = .inline
             delBtn.isBordered = false
+            delBtn.imagePosition = .imageOnly
+            delBtn.imageScaling = .scaleProportionallyDown
+            delBtn.setContentHuggingPriority(.required, for: .horizontal)
+            delBtn.setContentCompressionResistancePriority(.required, for: .horizontal)
             delBtn.tag = 202
             delBtn.translatesAutoresizingMaskIntoConstraints = false
             c.addSubview(delBtn)
 
             NSLayoutConstraint.activate([
-                colorBtn.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 4),
+                colorBtn.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: SettingsProjectsTableLayout.horizontalInset),
                 colorBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                colorBtn.widthAnchor.constraint(equalToConstant: 16),
-                colorBtn.heightAnchor.constraint(equalToConstant: 16),
+                colorBtn.widthAnchor.constraint(equalToConstant: SettingsProjectsTableLayout.iconButtonSize),
+                colorBtn.heightAnchor.constraint(equalToConstant: SettingsProjectsTableLayout.iconButtonSize),
                 tf.leadingAnchor.constraint(equalTo: colorBtn.trailingAnchor, constant: 8),
+                tf.trailingAnchor.constraint(lessThanOrEqualTo: delBtn.leadingAnchor, constant: -SettingsProjectsTableLayout.iconSpacing),
                 tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                delBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
-                delBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
-                visBtn.trailingAnchor.constraint(equalTo: delBtn.leadingAnchor, constant: -4),
+                visBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -SettingsProjectsTableLayout.horizontalInset),
                 visBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                visBtn.widthAnchor.constraint(equalToConstant: SettingsProjectsTableLayout.iconButtonSize),
+                visBtn.heightAnchor.constraint(equalToConstant: SettingsProjectsTableLayout.iconButtonSize),
+                delBtn.trailingAnchor.constraint(equalTo: visBtn.leadingAnchor, constant: -SettingsProjectsTableLayout.iconSpacing),
+                delBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                delBtn.widthAnchor.constraint(equalToConstant: SettingsProjectsTableLayout.iconButtonSize),
+                delBtn.heightAnchor.constraint(equalToConstant: SettingsProjectsTableLayout.iconButtonSize),
             ])
             return c
         }()

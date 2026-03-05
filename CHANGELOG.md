@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file.
 
 ### Settings
 - Project settings now include project reorder and visibility controls.
+- Fixed project visibility eye buttons in Settings so only the icon toggles visibility (no oversized horizontal click area), with trailing-aligned square controls.
 - Added update controls in Settings: automatic update checks on launch and a manual **Check for Updates Now** action.
 
 ### Agents
