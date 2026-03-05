@@ -15,11 +15,13 @@ magent-cli interactive [--project <name>]
 magent-cli ls [--project <name>]
 magent-cli attach --session <tmux-session>
 magent-cli attach (--thread <name> | --thread-id <id>) [--index <n>]
+magent-cli docs
 ```
 
 - `interactive`: picker flow `project -> thread (or create) -> tab -> tmux attach`
 - `ls`: table view (project/thread/branch/type/status/description/session)
 - `attach`: attach directly by session or by thread + tab index
+- `docs`: full on-demand IPC command reference + usage guidance (for agent/tooling prompts)
 
 ## Thread Commands
 

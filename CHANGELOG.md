@@ -8,6 +8,13 @@ All notable changes to this project will be documented in this file.
 - Added a draggable terminal Table of Contents with a top-bar show/hide toggle that lists submitted Codex/Claude prompts per tab, jumps directly to the selected prompt in scrollback, and remembers panel position per tab.
 - New interactive SSH attach flow with persistent launchers, making it much easier to reconnect to remote Magent sessions.
 - SSH picker now uses app-like thread rows with back navigation, and has a more reliable fallback path when advanced picker tools are unavailable.
+- Project settings now include project reorder and visibility controls.
+- Sidebar sections now show thread count badges.
+- Project-level **Pre-Agent Command** setting in App Settings to run setup commands before the selected agent starts for new/recreated agent sessions.
+
+### Fixed
+- Agent IPC guidance injection is now lightweight by default, with full `magent-cli` docs loaded only on demand (`magent-cli docs`) to reduce token usage.
+- Reordering sections no longer changes the default section unexpectedly.
 - Auto-generated task descriptions now use cleaner capitalization for better readability.
 - Added an `Improvement` thread icon type.
 - Added `set-thread-icon` CLI command to manually set thread icon type (`feature`, `fix`, `improvement`, `refactor`, `test`, `other`).

@@ -4,43 +4,6 @@ import UserNotifications
 
 extension ThreadManager {
 
-    // MARK: - IPC Agent Docs
-
-    static let ipcAgentDocs = """
-    You have access to Magent IPC. Use `/tmp/magent-cli` to manage threads and tabs:
-      /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--base-thread <name> | --base-branch <name>]
-      /tmp/magent-cli list-projects
-      /tmp/magent-cli list-threads [--project <name>]
-      /tmp/magent-cli send-prompt --thread <name> --prompt <text>
-      /tmp/magent-cli archive-thread --thread <name>
-      /tmp/magent-cli delete-thread --thread <name>
-      /tmp/magent-cli list-tabs --thread <name>
-      /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
-      /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
-      /tmp/magent-cli current-thread
-      /tmp/magent-cli auto-rename-thread --thread <name> --prompt <text>
-      /tmp/magent-cli rename-thread --thread <name> --prompt <text>
-      /tmp/magent-cli rename-branch --thread <name> --name <text>
-      /tmp/magent-cli set-description --thread <name> [--description <text> | --clear]
-      /tmp/magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>
-      /tmp/magent-cli thread-info --thread <name>
-      /tmp/magent-cli list-sections [--project <name>]
-      /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
-      /tmp/magent-cli remove-section --name <name> [--project <name>]
-      /tmp/magent-cli reorder-section --name <name> --position <n> [--project <name>]
-      /tmp/magent-cli rename-section --name <name> --new-name <text> [--color <hex>] [--project <name>]
-      /tmp/magent-cli hide-section --name <name> [--project <name>]
-      /tmp/magent-cli show-section --name <name> [--project <name>]
-    Use current-thread to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
-    When creating threads, use --description to name them upfront (AI generates a slug respecting project naming rules). Only use --name when the user explicitly provides a literal name. Omit both for a random name.
-    To branch from an existing thread, pass --base-thread <name>. Use --base-branch <name> only when you need an exact branch literal.
-    Use auto-rename-thread (or its rename-thread alias) by default; it generates both branch name and description from one prompt.
-    Use rename-branch ONLY when the user specifies an exact branch name.
-    Use set-description to manually set or clear only the thread description.
-    Use set-thread-icon to manually set the thread icon type.
-    Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
-    """
-
     // MARK: - Agent Readiness
 
     /// Polls tmux pane content for agent-specific readiness signals.
@@ -141,166 +104,6 @@ extension ThreadManager {
             return thread.selectedAgentType
         }
         return nil
-    }
-
-    // MARK: - Agent Conversation IDs
-
-    func conversationID(for threadId: UUID, sessionName: String) -> String? {
-        guard let thread = threads.first(where: { $0.id == threadId }) else { return nil }
-        return thread.sessionConversationIDs[sessionName]
-    }
-
-    func scheduleAgentConversationIDRefresh(
-        threadId: UUID,
-        sessionName: String,
-        delaySeconds: TimeInterval = 1.2
-    ) {
-        Task { [weak self] in
-            guard delaySeconds > 0 else {
-                await self?.refreshAgentConversationID(threadId: threadId, sessionName: sessionName)
-                return
-            }
-            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
-            await self?.refreshAgentConversationID(threadId: threadId, sessionName: sessionName)
-        }
-    }
-
-    func refreshAgentConversationID(threadId: UUID, sessionName: String) async {
-        guard let threadIndex = threads.firstIndex(where: { $0.id == threadId }) else { return }
-        guard threads[threadIndex].agentTmuxSessions.contains(sessionName) else { return }
-
-        let agentType = agentType(for: threads[threadIndex], sessionName: sessionName)
-            ?? threads[threadIndex].selectedAgentType
-        let worktreePath = threads[threadIndex].worktreePath
-
-        let conversationID: String?
-        switch agentType {
-        case .claude:
-            conversationID = latestClaudeConversationID(worktreePath: worktreePath)
-        case .codex:
-            conversationID = await latestCodexConversationID(worktreePath: worktreePath)
-        case .custom, .none:
-            conversationID = nil
-        }
-
-        guard let conversationID, !conversationID.isEmpty else { return }
-        guard threads[threadIndex].sessionConversationIDs[sessionName] != conversationID else { return }
-
-        threads[threadIndex].sessionConversationIDs[sessionName] = conversationID
-        try? persistence.saveThreads(threads)
-    }
-
-    private func latestClaudeConversationID(worktreePath: String) -> String? {
-        struct ClaudeSessionIndex: Decodable {
-            struct Entry: Decodable {
-                let sessionId: String
-                let projectPath: String?
-                let modified: String?
-                let fileMtime: Double?
-            }
-            let entries: [Entry]
-        }
-
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let encodedPath = worktreePath.replacingOccurrences(of: "/", with: "-")
-        let candidatePaths = [
-            "\(home)/.claude/projects/\(encodedPath)/sessions-index.json",
-            "\(home)/.agents/projects/\(encodedPath)/sessions-index.json",
-        ]
-
-        let isoWithFractional = ISO8601DateFormatter()
-        isoWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let isoPlain = ISO8601DateFormatter()
-        isoPlain.formatOptions = [.withInternetDateTime]
-
-        func readIndex(path: String) -> String? {
-            guard let data = FileManager.default.contents(atPath: path),
-                  let index = try? JSONDecoder().decode(ClaudeSessionIndex.self, from: data) else {
-                return nil
-            }
-
-            let scoped = index.entries.filter { entry in
-                guard let projectPath = entry.projectPath, !projectPath.isEmpty else { return true }
-                return projectPath == worktreePath
-            }
-            let entries = scoped.isEmpty ? index.entries : scoped
-            guard !entries.isEmpty else { return nil }
-
-            let sorted = entries.sorted { lhs, rhs in
-                func score(_ e: ClaudeSessionIndex.Entry) -> Double {
-                    if let modified = e.modified {
-                        if let date = isoWithFractional.date(from: modified) ?? isoPlain.date(from: modified) {
-                            return date.timeIntervalSince1970
-                        }
-                    }
-                    if let mtime = e.fileMtime {
-                        return mtime / 1000.0
-                    }
-                    return 0
-                }
-                return score(lhs) > score(rhs)
-            }
-            guard let best = sorted.first, isUUID(best.sessionId) else { return nil }
-            return best.sessionId
-        }
-
-        for path in candidatePaths {
-            if let id = readIndex(path: path) {
-                return id
-            }
-        }
-        return nil
-    }
-
-    private func latestCodexConversationID(worktreePath: String) async -> String? {
-        let codexDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
-        let dbPath = newestCodexStateDatabase(in: codexDir)
-        guard let dbPath else { return nil }
-
-        let sqlWorktree = sqlQuoted(worktreePath)
-        let query = "SELECT id FROM threads WHERE cwd = \(sqlWorktree) ORDER BY updated_at DESC LIMIT 1;"
-        let command = "sqlite3 \(ShellExecutor.shellQuote(dbPath)) \(ShellExecutor.shellQuote(query))"
-        let result = await ShellExecutor.execute(command)
-        guard result.exitCode == 0 else { return nil }
-
-        let id = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isUUID(id) else { return nil }
-        return id
-    }
-
-    private func newestCodexStateDatabase(in directoryPath: String) -> String? {
-        let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(
-            atPath: directoryPath
-        ) else {
-            return nil
-        }
-
-        let candidates = entries.filter { name in
-            name.hasPrefix("state_") && name.hasSuffix(".sqlite")
-        }
-        guard !candidates.isEmpty else { return nil }
-
-        var bestPath: String?
-        var bestDate = Date.distantPast
-        for name in candidates {
-            let path = "\(directoryPath)/\(name)"
-            let attrs = try? fm.attributesOfItem(atPath: path)
-            let modified = attrs?[.modificationDate] as? Date ?? Date.distantPast
-            if modified > bestDate {
-                bestDate = modified
-                bestPath = path
-            }
-        }
-        return bestPath
-    }
-
-    private func sqlQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "''") + "'"
-    }
-
-    private func isUUID(_ value: String) -> Bool {
-        UUID(uuidString: value.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
     }
 
     // MARK: - Session-State Rekey/Prune
@@ -490,55 +293,6 @@ extension ThreadManager {
 
     // MARK: - Codex IPC Instructions
 
-    private static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
-    private static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    private static let codexIPCVersion = "<!-- magent-ipc-v9 -->"
-
-    private static let codexIPCBlock = """
-    \(codexIPCMarkerStart)
-    \(codexIPCVersion)
-    # Magent IPC
-
-    When the `MAGENT_SOCKET` environment variable is set, you are running inside
-    a Magent-managed terminal. Use `/tmp/magent-cli` to manage threads and tabs:
-
-    ```
-    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--base-thread <name> | --base-branch <name>]
-    /tmp/magent-cli list-projects
-    /tmp/magent-cli list-threads [--project <name>]
-    /tmp/magent-cli send-prompt --thread <name> --prompt <text>
-    /tmp/magent-cli archive-thread --thread <name>
-    /tmp/magent-cli delete-thread --thread <name>
-    /tmp/magent-cli list-tabs --thread <name>
-    /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
-    /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
-    /tmp/magent-cli current-thread
-    /tmp/magent-cli auto-rename-thread --thread <name> --prompt <text>
-    /tmp/magent-cli rename-thread --thread <name> --prompt <text>
-    /tmp/magent-cli rename-branch --thread <name> --name <text>
-    /tmp/magent-cli set-description --thread <name> [--description <text> | --clear]
-    /tmp/magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>
-    /tmp/magent-cli thread-info --thread <name>
-    /tmp/magent-cli list-sections [--project <name>]
-    /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
-    /tmp/magent-cli remove-section --name <name> [--project <name>]
-    /tmp/magent-cli reorder-section --name <name> --position <n> [--project <name>]
-    /tmp/magent-cli rename-section --name <name> --new-name <text> [--color <hex>] [--project <name>]
-    /tmp/magent-cli hide-section --name <name> [--project <name>]
-    /tmp/magent-cli show-section --name <name> [--project <name>]
-    ```
-
-    Use `current-thread` to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
-    When creating threads, use `--description` to name them upfront (AI generates a slug respecting project naming rules). Only use `--name` when the user explicitly provides a literal name. Omit both for a random name.
-    To branch from an existing thread, pass `--base-thread <name>`. Use `--base-branch <name>` only when you need an exact branch literal.
-    Use `auto-rename-thread` (or its `rename-thread` alias) by default; it generates both branch name and description from one prompt.
-    Use `rename-branch` ONLY when the user specifies an exact branch name.
-    Use `set-description` to manually set or clear only the thread description.
-    Use `set-thread-icon` to manually set the thread icon type.
-    Section commands without `--project` operate on global sections. With `--project`, they operate on project-specific overrides.
-    \(codexIPCMarkerEnd)
-    """
-
     func installCodexIPCInstructions() {
         let codexDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex")
@@ -546,20 +300,23 @@ extension ThreadManager {
 
         if let existing = try? String(contentsOfFile: filePath, encoding: .utf8) {
             // Already up to date
-            if existing.contains(Self.codexIPCVersion) { return }
+            if existing.contains(IPCAgentDocs.codexIPCVersion) { return }
 
             // Replace outdated Magent section if present
-            if let startRange = existing.range(of: Self.codexIPCMarkerStart),
-               let endRange = existing.range(of: Self.codexIPCMarkerEnd),
+            if let startRange = existing.range(of: IPCAgentDocs.codexIPCMarkerStart),
+               let endRange = existing.range(of: IPCAgentDocs.codexIPCMarkerEnd),
                startRange.lowerBound <= endRange.lowerBound {
                 var updated = existing
-                updated.replaceSubrange(startRange.lowerBound..<endRange.upperBound, with: Self.codexIPCBlock)
+                updated.replaceSubrange(
+                    startRange.lowerBound..<endRange.upperBound,
+                    with: IPCAgentDocs.codexAgentsMdBlock
+                )
                 try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
             } else {
                 // Append to existing user content
                 var updated = existing
                 if !updated.hasSuffix("\n") { updated += "\n" }
-                updated += "\n" + Self.codexIPCBlock + "\n"
+                updated += "\n" + IPCAgentDocs.codexAgentsMdBlock + "\n"
                 try? updated.write(toFile: filePath, atomically: true, encoding: .utf8)
             }
         } else {
@@ -568,7 +325,7 @@ extension ThreadManager {
                 atPath: codexDir.path,
                 withIntermediateDirectories: true
             )
-            try? Self.codexIPCBlock.write(toFile: filePath, atomically: true, encoding: .utf8)
+            try? IPCAgentDocs.codexAgentsMdBlock.write(toFile: filePath, atomically: true, encoding: .utf8)
         }
     }
 
@@ -662,8 +419,7 @@ extension ThreadManager {
         projectId: UUID? = nil,
         agentType: AgentType?,
         envExports: String,
-        workingDirectory: String,
-        resumeSessionID: String? = nil
+        workingDirectory: String
     ) -> String {
         let shell = ShellExecutor.shellQuote(Self.startupShell)
         let zdotdir = ShellExecutor.shellQuote(ensureManagedZdotdir())
@@ -682,84 +438,18 @@ extension ThreadManager {
             // Pre-agent startup commands are best-effort and should not block agent launch.
             parts.append("{ \(preAgentCommand) ; } || true")
         }
-        let command = agentCommand(
-            settings: settings,
-            agentType: agentType,
-            resumeSessionID: resumeSessionID
-        )
+        var command = settings.command(for: agentType)
+        if agentType == .claude {
+            command += " --settings \(Self.claudeHooksSettingsPath)"
+            if settings.ipcPromptInjectionEnabled {
+                command += " --append-system-prompt \(ShellExecutor.shellQuote(IPCAgentDocs.claudeSystemPrompt))"
+            }
+        }
         // Wrap the agent command in a login shell so user profile files are sourced
         // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
         parts.append(command)
         let innerCmd = parts.joined(separator: " && ") + "; exec \(shell) -l"
         return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
-    }
-
-    private func agentCommand(
-        settings: AppSettings,
-        agentType: AgentType,
-        resumeSessionID: String?
-    ) -> String {
-        let fresh = freshAgentCommand(settings: settings, agentType: agentType)
-        guard let resumeSessionID = normalizedResumeID(resumeSessionID),
-              let resume = resumableAgentCommand(
-                settings: settings,
-                agentType: agentType,
-                sessionID: resumeSessionID
-              ) else {
-            return fresh
-        }
-        // Always attempt a deterministic resume first; fall back to a fresh session.
-        return "{ \(resume) || \(fresh) ; }"
-    }
-
-    private func freshAgentCommand(settings: AppSettings, agentType: AgentType) -> String {
-        var command = settings.command(for: agentType)
-        if agentType == .claude {
-            command += " --settings \(Self.claudeHooksSettingsPath)"
-            if settings.ipcPromptInjectionEnabled {
-                command += " --append-system-prompt \(ShellExecutor.shellQuote(Self.ipcAgentDocs))"
-            }
-        }
-        return command
-    }
-
-    private func resumableAgentCommand(
-        settings: AppSettings,
-        agentType: AgentType,
-        sessionID: String
-    ) -> String? {
-        let quotedID = ShellExecutor.shellQuote(sessionID)
-        switch agentType {
-        case .claude:
-            var command = settings.agentSkipPermissions
-                ? "claude --dangerously-skip-permissions"
-                : "claude"
-            command += " --resume \(quotedID)"
-            command += " --settings \(Self.claudeHooksSettingsPath)"
-            if settings.ipcPromptInjectionEnabled {
-                command += " --append-system-prompt \(ShellExecutor.shellQuote(Self.ipcAgentDocs))"
-            }
-            return command
-        case .codex:
-            if settings.agentSkipPermissions {
-                return "codex resume \(quotedID) --dangerously-bypass-approvals-and-sandbox"
-            }
-            if settings.agentSandboxEnabled {
-                return "codex resume \(quotedID) --full-auto"
-            }
-            return "codex resume \(quotedID)"
-        case .custom:
-            return nil
-        }
-    }
-
-    private func normalizedResumeID(_ value: String?) -> String? {
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !value.isEmpty,
-              isUUID(value) else {
-            return nil
-        }
-        return value
     }
 
     // MARK: - Name Availability

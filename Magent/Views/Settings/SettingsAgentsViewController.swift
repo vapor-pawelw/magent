@@ -139,7 +139,7 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         )
         ipcInjectionCheckbox.state = settings.ipcPromptInjectionEnabled ? .on : .off
         let ipcDesc = NSTextField(
-            wrappingLabelWithString: "Appends magent-cli documentation to the agent's system prompt (Claude) or AGENTS.md (Codex), enabling the agent to manage threads, tabs, and sections on your behalf. Disable to save tokens if you don't need agents to control Magent."
+            wrappingLabelWithString: "Injects a lightweight Magent IPC hint into Claude/Codex so the agent knows `/tmp/magent-cli` exists. Agents can load full guidance on demand via `magent-cli docs`. Disable to save tokens if you don't need agent-driven Magent control."
         )
         ipcDesc.font = .systemFont(ofSize: 11)
         ipcDesc.textColor = NSColor(resource: .textSecondary)

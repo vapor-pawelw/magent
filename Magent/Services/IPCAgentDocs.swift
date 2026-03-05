@@ -1,10 +1,10 @@
 import Foundation
 
-/// Single source of truth for IPC CLI command documentation injected into agents.
+/// Single source of truth for Magent IPC hints + on-demand CLI docs.
 enum IPCAgentDocs {
 
     /// CLI commands available through magent-cli.
-    private static let cliCommands = """
+    nonisolated private static let cliCommands = """
     /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--base-thread <name> | --base-branch <name>]
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
@@ -31,7 +31,7 @@ enum IPCAgentDocs {
     """
 
     /// Usage guidance appended after the command listing.
-    private static let usageNotes = """
+    nonisolated private static let usageNotes = """
     Use current-thread to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
     When creating threads, use --description to name them upfront (AI generates a slug respecting project naming rules). Only use --name when the user explicitly provides a literal name. Omit both for a random name.
     To branch from an existing thread, pass --base-thread <name>. Use --base-branch <name> only when you need an exact branch literal.
@@ -42,39 +42,43 @@ enum IPCAgentDocs {
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
     """
 
-    /// Plain-text format used for Claude's `--append-system-prompt`.
-    static let claudeSystemPrompt: String = """
-    You have access to Magent IPC. Use `/tmp/magent-cli` to manage threads and tabs:
-    \(cliCommands.split(separator: "\n").map { "  \($0)" }.joined(separator: "\n"))
+    /// On-demand CLI reference returned by `magent-cli docs`.
+    nonisolated static let cliReferenceText: String = """
+    Magent IPC is available via `/tmp/magent-cli`.
+
+    Commands:
+    \(cliCommands)
+
+    Usage guidance:
     \(usageNotes)
+    """
+
+    /// Lightweight prompt hint used for Claude's `--append-system-prompt`.
+    static let claudeSystemPrompt: String = """
+    Magent IPC is available via `/tmp/magent-cli` when needed.
+    Use it only for thread/tab/section management tasks.
+    For details on demand, run `/tmp/magent-cli docs` (full reference) or `/tmp/magent-cli help` (quick usage).
     """
 
     // MARK: - Codex AGENTS.md
 
     static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    static let codexIPCVersion = "<!-- magent-ipc-v9 -->"
+    static let codexIPCVersion = "<!-- magent-ipc-v10 -->"
 
-    /// Markdown format used for Codex's `AGENTS.md` file.
+    /// Lightweight Codex `AGENTS.md` hint that points to on-demand docs.
     static let codexAgentsMdBlock: String = """
     \(codexIPCMarkerStart)
     \(codexIPCVersion)
     # Magent IPC
 
     When the `MAGENT_SOCKET` environment variable is set, you are running inside
-    a Magent-managed terminal. Use `/tmp/magent-cli` to manage threads and tabs:
+    a Magent-managed terminal. Magent IPC is available via `/tmp/magent-cli`.
 
-    ```
-    \(cliCommands)
-    ```
-
-    Use `current-thread` to discover your thread name (do not rely on the worktree directory name — it may differ after renames).
-    When creating threads, use `--description` to name them upfront (AI generates a slug respecting project naming rules). Only use `--name` when the user explicitly provides a literal name. Omit both for a random name.
-    Use `auto-rename-thread` (or its `rename-thread` alias) by default; it generates both branch name and description from one prompt.
-    Use `rename-branch` ONLY when the user specifies an exact branch name.
-    Use `set-description` to manually set or clear only the thread description.
-    Use `set-thread-icon` to manually set the thread icon type.
-    Section commands without `--project` operate on global sections. With `--project`, they operate on project-specific overrides.
+    Use it only for Magent management tasks.
+    Load details on demand with:
+    - `/tmp/magent-cli docs` (full command reference + usage guidance)
+    - `/tmp/magent-cli help` (quick usage)
     \(codexIPCMarkerEnd)
     """
 }
