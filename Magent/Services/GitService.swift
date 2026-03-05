@@ -4,6 +4,46 @@ final class GitService {
 
     static let shared = GitService()
 
+    // Normalize git diff/status path formats (especially rename syntax) to the
+    // actual "new/current" path used by file operations and diff sections.
+    private func normalizedStatusPath(_ rawPath: String) -> String {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+
+        if let range = trimmed.range(of: " -> ") {
+            return String(trimmed[range.upperBound...])
+        }
+        return trimmed
+    }
+
+    private func normalizedNumstatPath(_ rawPath: String) -> String {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+
+        // Handles rename shapes like:
+        // - "old/path => new/path"
+        // - "src/{old.swift => new.swift}"
+        // - "{old => new}/file.swift"
+        if let openBrace = trimmed.firstIndex(of: "{"),
+           let closeBrace = trimmed.lastIndex(of: "}"),
+           openBrace < closeBrace {
+            let insideStart = trimmed.index(after: openBrace)
+            let inside = String(trimmed[insideStart..<closeBrace])
+            if let arrow = inside.range(of: " => ") {
+                let prefix = String(trimmed[..<openBrace])
+                let suffixStart = trimmed.index(after: closeBrace)
+                let suffix = String(trimmed[suffixStart...])
+                let newSegment = String(inside[arrow.upperBound...])
+                return prefix + newSegment + suffix
+            }
+        }
+
+        if let range = trimmed.range(of: " => ") {
+            return String(trimmed[range.upperBound...])
+        }
+        return trimmed
+    }
+
     // MARK: - Worktree Operations
 
     func createWorktree(repoPath: String, branchName: String, worktreePath: String, baseBranch: String? = nil) async throws -> URL {
@@ -418,7 +458,7 @@ final class GitService {
             for line in statusResult.stdout.components(separatedBy: "\n") where line.count >= 3 {
                 let indexChar = line[line.startIndex]
                 let workChar = line[line.index(after: line.startIndex)]
-                let path = String(line.dropFirst(3))
+                let path = normalizedStatusPath(String(line.dropFirst(3)))
                 guard !path.isEmpty else { continue }
 
                 if indexChar == "?" {
@@ -440,7 +480,7 @@ final class GitService {
                 guard parts.count >= 3 else { continue }
                 let additions = Int(parts[0]) ?? 0
                 let deletions = Int(parts[1]) ?? 0
-                let filePath = String(parts[2])
+                let filePath = normalizedNumstatPath(String(parts[2]))
                 guard !filePath.isEmpty else { continue }
 
                 seenPaths.insert(filePath)

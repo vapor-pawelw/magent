@@ -27,6 +27,7 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 - Double-clicking a file in the `CHANGES` panel now opens it in the default macOS app, and right-click now includes `Show in Finder`.
+- Selecting renamed files in `CHANGES` now opens and scrolls the inline diff to the correct file section.
 - Fixed sidebar row jumping while switching threads by stabilizing thread-row text measurement and trailing status-marker layout.
 - Busy threads now show a sweeping shimmer state in sidebar rows for clearer in-progress visibility.
 - Sidebar now has clearer visual separation between project headers and their `Main` thread row, making scanning and navigation easier.

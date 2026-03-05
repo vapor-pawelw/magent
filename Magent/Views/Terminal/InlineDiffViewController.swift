@@ -1277,9 +1277,13 @@ final class InlineDiffViewController: NSViewController {
     }
 
     func expandFile(_ relativePath: String, collapseOthers: Bool) {
+        let requestedPath = normalizedSelectionPath(relativePath)
+        var matchedSection: DiffSectionView?
+
         for section in sectionViews {
-            if section.filePath == relativePath {
+            if section.filePath == requestedPath {
                 section.isExpanded = true
+                matchedSection = section
             } else if collapseOthers {
                 section.isExpanded = false
             }
@@ -1288,7 +1292,7 @@ final class InlineDiffViewController: NSViewController {
         // Scroll to the expanded section
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            if let section = self.sectionViews.first(where: { $0.filePath == relativePath }) {
+            if let section = matchedSection {
                 self.scrollSectionIntoViewIfNeeded(section)
             }
         }
@@ -1366,8 +1370,35 @@ final class InlineDiffViewController: NSViewController {
     }
 
     func scrollToFile(_ relativePath: String) {
-        guard let section = sectionViews.first(where: { $0.filePath == relativePath }) else { return }
+        let requestedPath = normalizedSelectionPath(relativePath)
+        guard let section = sectionViews.first(where: { $0.filePath == requestedPath }) else { return }
         scrollSectionIntoViewIfNeeded(section)
+    }
+
+    private func normalizedSelectionPath(_ rawPath: String) -> String {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+
+        // Accept rename paths from git numstat (for example: "src/{old => new}.swift")
+        // and map them to the "new/current" path used by diff chunk headers.
+        if let openBrace = trimmed.firstIndex(of: "{"),
+           let closeBrace = trimmed.lastIndex(of: "}"),
+           openBrace < closeBrace {
+            let insideStart = trimmed.index(after: openBrace)
+            let inside = String(trimmed[insideStart..<closeBrace])
+            if let arrow = inside.range(of: " => ") {
+                let prefix = String(trimmed[..<openBrace])
+                let suffixStart = trimmed.index(after: closeBrace)
+                let suffix = String(trimmed[suffixStart...])
+                let newSegment = String(inside[arrow.upperBound...])
+                return prefix + newSegment + suffix
+            }
+        }
+
+        if let range = trimmed.range(of: " => ") {
+            return String(trimmed[range.upperBound...])
+        }
+        return trimmed
     }
 
     private func scrollSectionIntoViewIfNeeded(_ section: DiffSectionView) {
