@@ -48,6 +48,7 @@ final class ThreadListViewController: NSViewController {
     private var rateLimitStatusContainer: NSStackView!
     private var rateLimitStatusIconView: NSImageView!
     private var rateLimitStatusLabel: NSTextField!
+    private var scrollViewTopConstraint: NSLayoutConstraint?
     var diffPanelView: DiffPanelView!
     var branchMismatchView: BranchMismatchView!
     var isCreatingThread = false
@@ -56,7 +57,7 @@ final class ThreadListViewController: NSViewController {
     /// Project IDs that have at least one recognized git hosting remote (GitHub/GitLab/Bitbucket).
     var projectsWithValidRemotes: Set<UUID> = []
     private var lastMeasuredOutlineWidth: CGFloat = 0
-    private var currentScrollTopInset: CGFloat = 0
+    private var currentScrollTopOffset: CGFloat = 0
 
     // MARK: - Data Model (3-level hierarchy)
     // Level 0: SidebarProject (project name header)
@@ -185,11 +186,9 @@ final class ThreadListViewController: NSViewController {
             let summaryHeight = ceil(rateLimitStatusContainer.fittingSize.height)
             topInset = Self.rateLimitStatusTopInset + summaryHeight + Self.rateLimitStatusListSpacing
         }
-        if abs(topInset - currentScrollTopInset) > 0.5 {
-            currentScrollTopInset = topInset
-            scrollView.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 4, right: 0)
-            scrollView.scrollerInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
-            scrollView.reflectScrolledClipView(scrollView.contentView)
+        if abs(topInset - currentScrollTopOffset) > 0.5 {
+            currentScrollTopOffset = topInset
+            scrollViewTopConstraint?.constant = topInset
         }
         rebuildRateLimitStatusMenu()
     }
@@ -304,6 +303,7 @@ final class ThreadListViewController: NSViewController {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.drawsBackground = false
         scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 0)
+        scrollView.scrollerInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 
         view.addSubview(scrollView)
         if rateLimitStatusContainer.superview === view {
@@ -318,8 +318,10 @@ final class ThreadListViewController: NSViewController {
         branchMismatchView = BranchMismatchView()
         view.addSubview(branchMismatchView)
 
+        scrollViewTopConstraint = scrollView.topAnchor.constraint(equalTo: view.topAnchor)
+
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
+            scrollViewTopConstraint!,
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: diffPanelView.topAnchor),
