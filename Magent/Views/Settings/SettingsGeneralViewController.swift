@@ -7,6 +7,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     private var autoRenameBranchCheckbox: NSButton!
     private var autoSetDescriptionCheckbox: NSButton!
     private var autoSetIconFromWorkTypeCheckbox: NSButton!
+    private var autoCheckForUpdatesCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
     var terminalInjectionTextView: NSTextView!
     var agentContextTextView: NSTextView!
@@ -145,6 +146,29 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         resetReviewButton.controlSize = .small
         reviewSection.addArrangedSubview(resetReviewButton)
 
+        let (updatesCard, updatesSection) = createSectionCard(title: "Updates")
+        stackView.addArrangedSubview(updatesCard)
+
+        autoCheckForUpdatesCheckbox = NSButton(
+            checkboxWithTitle: "Automatically check for updates on launch",
+            target: self,
+            action: #selector(autoCheckForUpdatesToggled)
+        )
+        autoCheckForUpdatesCheckbox.state = settings.autoCheckForUpdates ? .on : .off
+        updatesSection.addArrangedSubview(autoCheckForUpdatesCheckbox)
+
+        let updatesDesc = NSTextField(
+            wrappingLabelWithString: "When enabled, Magent checks GitHub releases on app launch and installs newer versions automatically. Homebrew installs are updated through brew."
+        )
+        updatesDesc.font = .systemFont(ofSize: 11)
+        updatesDesc.textColor = NSColor(resource: .textSecondary)
+        updatesSection.addArrangedSubview(updatesDesc)
+
+        let checkNowButton = NSButton(title: "Check for Updates Now", target: self, action: #selector(checkForUpdatesNowTapped))
+        checkNowButton.bezelStyle = .rounded
+        checkNowButton.controlSize = .small
+        updatesSection.addArrangedSubview(checkNowButton)
+
         let envVars: [(String, String)] = [
             ("$MAGENT_WORKTREE_PATH", "Absolute path to the thread's git worktree directory"),
             ("$MAGENT_PROJECT_PATH", "Absolute path to the original git repository"),
@@ -275,6 +299,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             worktreeCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             injectionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             reviewCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            updatesCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             envCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             sectionsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
@@ -411,6 +436,17 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     @objc private func autoSetIconFromWorkTypeToggled() {
         settings.autoSetThreadIconFromWorkType = autoSetIconFromWorkTypeCheckbox.state == .on
         try? persistence.saveSettings(settings)
+    }
+
+    @objc private func autoCheckForUpdatesToggled() {
+        settings.autoCheckForUpdates = autoCheckForUpdatesCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func checkForUpdatesNowTapped() {
+        Task { @MainActor in
+            await UpdateService.shared.checkForUpdatesManually()
+        }
     }
 
     @objc private func useSectionsToggled() {

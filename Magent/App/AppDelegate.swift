@@ -41,6 +41,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let server = IPCSocketServer()
         self.ipcServer = server
         Task { await server.start() }
+        Task { @MainActor in
+            await UpdateService.shared.checkForUpdatesOnLaunchIfEnabled()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
