@@ -6,6 +6,8 @@
 
 For every user-visible change, add a short bullet under `## Unreleased` in `CHANGELOG.md`.
 
+Before any agent-driven commit, run a changelog check on the pending diff and include any needed `## Unreleased` updates in that same commit.
+
 Guidelines:
 
 - Group notes by product domain using `### <Domain>` headings (for example: `Thread`, `Sidebar`, `Settings`, `Agents`).
