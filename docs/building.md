@@ -4,12 +4,21 @@
 
 - **Xcode 26+**
 - **[mise](https://mise.jdx.dev/)** — tool version manager (installs Tuist)
+- **Zig 0.14.1** (managed via `mise`)
 
 ## Build
+
+`Libraries/GhosttyKit.xcframework/macos-arm64_x86_64/libghostty.a` is intentionally local-only and not tracked in git.
 
 ```bash
 git clone git@github.com:vapor-pawelw/magent.git
 cd magent
+
+# Install local toolchain (tuist + zig)
+mise install
+
+# Build GhosttyKit.xcframework into Libraries/ (required for first build)
+./scripts/bootstrap-ghosttykit.sh
 
 # Generate the Xcode project
 mise x -- tuist generate --no-open

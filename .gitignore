@@ -24,6 +24,7 @@ Derived/
 
 # Local binaries / objects
 *.o
+Libraries/GhosttyKit.xcframework/macos-arm64_x86_64/libghostty.a
 
 # Local assistant data
 .claude/

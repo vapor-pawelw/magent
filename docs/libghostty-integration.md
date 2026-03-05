@@ -4,9 +4,21 @@
 
 Source: https://github.com/ghostty-org/ghostty
 
+Pinned default ref for this repo bootstrap script: `v1.2.3`.
+
 **Zig version requirements (strict):**
 - Ghostty 1.0.x / 1.1.x: Zig 0.13.0
 - Ghostty 1.2.x: Zig 0.14.1
+
+**Project bootstrap command (recommended):**
+```bash
+./scripts/bootstrap-ghosttykit.sh
+```
+
+To build a different Ghostty ref:
+```bash
+GHOSTTY_REF=v1.2.3 ./scripts/bootstrap-ghosttykit.sh
+```
 
 **Build command (native macOS only):**
 ```bash
@@ -20,6 +32,11 @@ Output: `macos/GhosttyKit.xcframework`
 zig build -Doptimize=ReleaseFast -Dapp-runtime=none -Demit-xcframework
 ```
 Produces macOS universal + iOS arm64 + iOS Simulator arm64 slices.
+
+## Repository Policy
+
+`libghostty.a` is intentionally not committed to this repository.  
+`./scripts/bootstrap-ghosttykit.sh` is the canonical way to populate `Libraries/GhosttyKit.xcframework` in local dev and CI.
 
 ## Xcode Integration
 

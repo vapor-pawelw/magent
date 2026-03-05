@@ -38,6 +38,8 @@ This triggers a GitHub Actions workflow that:
 2. Creates a GitHub Release with `Magent.zip` and tag-annotation release notes
 3. Auto-updates the Homebrew cask formula with the new version, SHA, and private GitHub asset API URL
 
+The release workflow also rebuilds `Libraries/GhosttyKit.xcframework` using `./scripts/bootstrap-ghosttykit.sh` (instead of relying on git-lfs artifacts).
+
 Commits on `main` without a tag do **not** produce a release.
 
 ## Private Repo Homebrew Notes
