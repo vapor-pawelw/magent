@@ -146,9 +146,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         let availableWidth = availableDescriptionWidth(for: thread, in: outlineView)
         guard availableWidth > 0 else { return 1 }
 
-        let font: NSFont = thread.hasUnreadAgentCompletion
-            ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-            : .preferredFont(forTextStyle: .body)
+        let font: NSFont = .preferredFont(forTextStyle: .body)
 
         let textStorage = NSTextStorage(
             string: description,
@@ -171,9 +169,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     private func compactTextRowHeightIncrement(for thread: MagentThread) -> CGFloat {
-        let font: NSFont = thread.hasUnreadAgentCompletion
-            ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-            : .preferredFont(forTextStyle: .body)
+        let font: NSFont = .preferredFont(forTextStyle: .body)
         return ceil(font.ascender - font.descender + font.leading)
     }
 
@@ -220,13 +216,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if thread.showArchiveSuggestion {
             markerWidths.append(12)
         }
-        if thread.isBlockedByRateLimit {
-            markerWidths.append(10)
-        } else if thread.hasWaitingForInput || thread.hasUnreadAgentCompletion {
-            markerWidths.append(10)
-        } else if thread.hasAgentBusy {
-            markerWidths.append(14)
-        }
+        // Reserve width for the status marker regardless of current status so
+        // selecting/switching threads does not reflow descriptions and row heights.
+        markerWidths.append(14)
 
         guard !markerWidths.isEmpty else { return 0 }
         let widthsTotal = markerWidths.reduce(0, +)

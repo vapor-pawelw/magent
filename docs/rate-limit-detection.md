@@ -44,6 +44,7 @@ To avoid 3-second flapping, Magent now only auto-clears when the latest pane no 
 ## UI Indicators
 
 - **Sidebar toolbar**: Shows a summary like "Rate limits: Claude: 19m · Codex: 3h 5m"
+  - Uses an 8pt top inset and a fixed row height/gap so the thread list does not shift when the summary text updates.
 - **Sidebar toolbar context menu (right-click on Rate limits)**:
   - Lift Claude/Codex limit now
   - Lift + ignore currently visible fingerprints for Claude/Codex (so only future/new messages are tracked)

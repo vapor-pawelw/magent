@@ -21,12 +21,13 @@ All notable changes to this project will be documented in this file.
 - Added `set-thread-icon` CLI command to manually set thread icon type (`feature`, `fix`, `improvement`, `refactor`, `test`, `other`).
 
 ### Sidebar
+- Fixed sidebar row jumping while switching threads by stabilizing thread-row text measurement and trailing status-marker layout.
 - Busy threads now show a sweeping shimmer state in sidebar rows for clearer in-progress visibility.
 - Sidebar now has clearer visual separation between project headers and their `Main` thread row, making scanning and navigation easier.
 - Sidebar sections now show thread count badges.
 - Reordering sections no longer changes the default section unexpectedly.
 - Reduced excess top padding in the sidebar for a tighter layout.
-- Added a small gap between the global Rate limits summary and the first thread row to prevent overlap.
+- Increased top spacing above the global Rate limits summary to 8pt and kept a fixed gap before the first thread row.
 
 ### Settings
 - Project settings now include project reorder and visibility controls.

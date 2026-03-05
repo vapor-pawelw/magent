@@ -22,7 +22,8 @@ final class ThreadListViewController: NSViewController {
     static let sectionCountBadgeContainerIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeContainer")
     static let sectionCountBadgeLabelIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeLabel")
     static let sidebarHorizontalInset: CGFloat = 0
-    static let rateLimitStatusTopInset: CGFloat = 2
+    static let rateLimitStatusTopInset: CGFloat = 8
+    static let rateLimitStatusRowHeight: CGFloat = 14
     static let rateLimitStatusListSpacing: CGFloat = 6
     static let projectDisclosureTrailingInset: CGFloat = 8
     static let outlineIndentationPerLevel: CGFloat = 16
@@ -56,6 +57,7 @@ final class ThreadListViewController: NSViewController {
     /// Project IDs that have at least one recognized git hosting remote (GitHub/GitLab/Bitbucket).
     var projectsWithValidRemotes: Set<UUID> = []
     private var lastMeasuredOutlineWidth: CGFloat = 0
+    private var currentScrollTopInset: CGFloat = 0
 
     // MARK: - Data Model (3-level hierarchy)
     // Level 0: SidebarProject (project name header)
@@ -151,6 +153,7 @@ final class ThreadListViewController: NSViewController {
         rateLimitStatusLabel.font = .systemFont(ofSize: 11, weight: .medium)
         rateLimitStatusLabel.textColor = NSColor(resource: .textSecondary)
         rateLimitStatusLabel.lineBreakMode = .byTruncatingTail
+        rateLimitStatusLabel.maximumNumberOfLines = 1
         rateLimitStatusLabel.translatesAutoresizingMaskIntoConstraints = false
 
         rateLimitStatusContainer = NSStackView(views: [rateLimitStatusIconView, rateLimitStatusLabel])
@@ -175,15 +178,13 @@ final class ThreadListViewController: NSViewController {
         rateLimitStatusLabel.stringValue = summary ?? ""
         rateLimitStatusContainer.isHidden = (summary == nil)
         rateLimitStatusLabel.toolTip = summary
-        let topInset: CGFloat
-        if summary == nil {
-            topInset = 0
-        } else {
-            rateLimitStatusContainer.layoutSubtreeIfNeeded()
-            let statusHeight = ceil(rateLimitStatusContainer.fittingSize.height)
-            topInset = Self.rateLimitStatusTopInset + statusHeight + Self.rateLimitStatusListSpacing
+        let topInset: CGFloat = summary == nil
+            ? 0
+            : (Self.rateLimitStatusTopInset + Self.rateLimitStatusRowHeight + Self.rateLimitStatusListSpacing)
+        if abs(topInset - currentScrollTopInset) > 0.5 {
+            currentScrollTopInset = topInset
+            scrollView.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 4, right: 0)
         }
-        scrollView.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 4, right: 0)
         rebuildRateLimitStatusMenu()
     }
 
