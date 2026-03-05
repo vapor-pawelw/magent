@@ -33,6 +33,7 @@ nonisolated struct AppSettings: Codable, Sendable {
     var showSystemNotificationOnRateLimitLifted: Bool
     var notifyOnRateLimitLifted: Bool
     var rateLimitLiftedSoundName: String
+    var autoCheckForUpdates: Bool
 
     init(
         projects: [Project] = [],
@@ -63,7 +64,8 @@ nonisolated struct AppSettings: Codable, Sendable {
         rateLimitDetectedSoundName: String = "Sosumi",
         showSystemNotificationOnRateLimitLifted: Bool = true,
         notifyOnRateLimitLifted: Bool = true,
-        rateLimitLiftedSoundName: String = "Glass"
+        rateLimitLiftedSoundName: String = "Glass",
+        autoCheckForUpdates: Bool = true
     ) {
         self.projects = projects
         self.activeAgents = activeAgents
@@ -94,6 +96,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         self.showSystemNotificationOnRateLimitLifted = showSystemNotificationOnRateLimitLifted
         self.notifyOnRateLimitLifted = notifyOnRateLimitLifted
         self.rateLimitLiftedSoundName = rateLimitLiftedSoundName
+        self.autoCheckForUpdates = autoCheckForUpdates
     }
 
     init(from decoder: Decoder) throws {
@@ -130,6 +133,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         notifyOnRateLimitLifted = try container.decodeIfPresent(Bool.self, forKey: .notifyOnRateLimitLifted) ?? true
         showSystemNotificationOnRateLimitLifted = try container.decodeIfPresent(Bool.self, forKey: .showSystemNotificationOnRateLimitLifted) ?? notifyOnRateLimitLifted
         rateLimitLiftedSoundName = try container.decodeIfPresent(String.self, forKey: .rateLimitLiftedSoundName) ?? "Glass"
+        autoCheckForUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckForUpdates) ?? true
     }
 
     func encode(to encoder: Encoder) throws {
@@ -165,6 +169,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(notifyOnRateLimitLifted, forKey: .notifyOnRateLimitLifted)
         try container.encode(showSystemNotificationOnRateLimitLifted, forKey: .showSystemNotificationOnRateLimitLifted)
         try container.encode(rateLimitLiftedSoundName, forKey: .rateLimitLiftedSoundName)
+        try container.encode(autoCheckForUpdates, forKey: .autoCheckForUpdates)
     }
 
     var visibleSections: [ThreadSection] {
@@ -286,6 +291,7 @@ nonisolated struct AppSettings: Codable, Sendable {
         case showSystemNotificationOnRateLimitLifted
         case notifyOnRateLimitLifted
         case rateLimitLiftedSoundName
+        case autoCheckForUpdates
 
         // Legacy keys kept for migration.
         case agentCommand
