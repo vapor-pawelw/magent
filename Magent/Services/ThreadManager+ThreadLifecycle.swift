@@ -205,6 +205,9 @@ extension ThreadManager {
         // Inject terminal command and agent context
         let injection = effectiveInjection(for: project.id)
         injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext, initialPrompt: initialPrompt, agentType: selectedAgentType)
+        if initialPrompt?.isEmpty == false, useAgentCommand {
+            scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: tmuxSessionName)
+        }
 
         return thread
     }
@@ -317,6 +320,7 @@ extension ThreadManager {
         if let i = allThreads.firstIndex(where: { $0.id == thread.id }) {
             allThreads[i].isArchived = true
             allThreads[i].tmuxSessionNames = []
+            allThreads[i].sessionConversationIDs = [:]
         }
         try persistence.saveThreads(allThreads)
 
@@ -422,6 +426,7 @@ extension ThreadManager {
                 try? await tmux.killSession(name: sessionName)
             }
             threads[index].tmuxSessionNames = []
+            threads[index].sessionConversationIDs = [:]
             threads[index].lastSelectedTmuxSessionName = nil
 
             // Re-create the worktree

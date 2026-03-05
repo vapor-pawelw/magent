@@ -384,12 +384,14 @@ final class ThreadDetailViewController: NSViewController {
 
         let startCmd: String
         if isAgentSession, let selectedAgentType {
+            let resumeSessionID = thread.sessionConversationIDs[sessionName]
             startCmd = threadManager.agentStartCommand(
                 settings: settings,
                 projectId: thread.projectId,
                 agentType: selectedAgentType,
                 envExports: envExportsWithSocket,
-                workingDirectory: wd
+                workingDirectory: wd,
+                resumeSessionID: resumeSessionID
             )
         } else {
             startCmd = "\(envExportsWithSocket) && cd \(wd) && exec $SHELL -l"

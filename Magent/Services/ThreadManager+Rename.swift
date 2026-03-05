@@ -335,6 +335,11 @@ extension ThreadManager {
                 (sessionRenameMap[key] ?? key, value)
             }
         )
+        threads[index].sessionConversationIDs = Dictionary(
+            uniqueKeysWithValues: threads[index].sessionConversationIDs.map { key, value in
+                (sessionRenameMap[key] ?? key, value)
+            }
+        )
         // Re-key custom tab names to reflect new session names
         var newCustomTabNames: [String: String] = [:]
         for (oldKey, value) in threads[index].customTabNames {
@@ -748,6 +753,10 @@ extension ThreadManager {
         if let agentType = currentThread.sessionAgentTypes[sessionName] {
             threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
             threads[index].sessionAgentTypes[resolvedSessionName] = agentType
+        }
+        if let conversationID = currentThread.sessionConversationIDs[sessionName] {
+            threads[index].sessionConversationIDs.removeValue(forKey: sessionName)
+            threads[index].sessionConversationIDs[resolvedSessionName] = conversationID
         }
         _ = remapTransientSessionState(
             threadIndex: index,

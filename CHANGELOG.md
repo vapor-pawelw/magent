@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file.
 - Added update controls in Settings: automatic update checks on launch and a manual **Check for Updates Now** action.
 
 ### Agents
+- Recreated agent tabs now auto-resume the last Claude/Codex conversation by session ID after tmux/macOS restarts, with automatic fallback to a fresh session if resume is unavailable.
+- CLI prompt injection now waits for agent-ready startup paths and submits prompts reliably (text + Enter), avoiding dropped first submissions.
 - Project-level **Pre-Agent Command** setting in App Settings to run setup commands before the selected agent starts for new/recreated agent sessions.
 - Auto-set thread icons now rely on agent confidence-guided work-type selection, reducing unnecessary fallback to `other`.
 

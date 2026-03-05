@@ -93,6 +93,10 @@ extension ThreadManager {
         let projectPath = project?.repoPath ?? thread.worktreePath
         let projectName = project?.name ?? "project"
         let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
+        if isAgentSession {
+            await refreshAgentConversationID(threadId: thread.id, sessionName: sessionName)
+        }
+        let refreshedThread = threads.first(where: { $0.id == thread.id }) ?? thread
 
         if await tmux.hasSession(name: sessionName) {
             let sessionMatches = await sessionMatchesThreadContext(
@@ -119,9 +123,10 @@ extension ThreadManager {
         }
 
         let startCmd: String
-        let sessionAgentType = agentType(for: thread, sessionName: sessionName)
-            ?? thread.selectedAgentType
-            ?? effectiveAgentType(for: thread.projectId)
+        let sessionAgentType = agentType(for: refreshedThread, sessionName: sessionName)
+            ?? refreshedThread.selectedAgentType
+            ?? effectiveAgentType(for: refreshedThread.projectId)
+        let resumeSessionID = refreshedThread.sessionConversationIDs[sessionName]
         let envExports: String
         if thread.isMain {
             envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
@@ -134,7 +139,8 @@ extension ThreadManager {
                 projectId: thread.projectId,
                 agentType: sessionAgentType,
                 envExports: envExports,
-                workingDirectory: thread.worktreePath
+                workingDirectory: thread.worktreePath,
+                resumeSessionID: resumeSessionID
             )
         } else {
             startCmd = terminalStartCommand(

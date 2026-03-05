@@ -15,6 +15,6 @@ nonisolated enum AgentType: String, Codable, CaseIterable, Sendable {
 
     /// Whether this agent type supports the /resume command for restoring conversations.
     var supportsResume: Bool {
-        self == .claude
+        self == .claude || self == .codex
     }
 }

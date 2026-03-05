@@ -274,9 +274,15 @@ final class IPCCommandHandler {
         }
 
         do {
-            try await tmux.sendKeys(sessionName: sessionName, keys: prompt)
+            try await tmux.sendText(sessionName: sessionName, text: prompt)
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            try await tmux.sendEnter(sessionName: sessionName)
         } catch {
             return .failure("Failed to send prompt: \(error.localizedDescription)", id: request.id)
+        }
+
+        if thread.agentTmuxSessions.contains(sessionName) {
+            threadManager.scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: sessionName)
         }
 
         return .success(id: request.id)
@@ -357,10 +363,17 @@ final class IPCCommandHandler {
         }
 
         do {
+            let initialPrompt: String?
+            if useAgent, let prompt = request.prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty {
+                initialPrompt = prompt
+            } else {
+                initialPrompt = nil
+            }
             let tab = try await threadManager.addTab(
                 to: thread,
                 useAgentCommand: useAgent,
-                requestedAgentType: requestedAgent
+                requestedAgentType: requestedAgent,
+                initialPrompt: initialPrompt
             )
             // Finalize session context (bell monitoring, cwd enforcement) — same as UI path
             let latestThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
@@ -376,11 +389,6 @@ final class IPCCommandHandler {
                 isAgent: isAgent,
                 agentType: isAgent ? (requestedAgent?.rawValue ?? thread.selectedAgentType?.rawValue) : nil
             )
-
-            // Send initial prompt if provided
-            if let prompt = request.prompt, !prompt.isEmpty, isAgent {
-                try? await tmux.sendKeys(sessionName: tab.tmuxSessionName, keys: prompt)
-            }
 
             return IPCResponse(ok: true, id: request.id, tab: info)
         } catch {

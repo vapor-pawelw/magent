@@ -111,6 +111,13 @@ final class ThreadManager {
                     }
                 }
             }
+            // Keep persisted conversation IDs only for known agent sessions.
+            let validAgentSessions = Set(threads[i].agentTmuxSessions)
+            let filteredConversationIDs = threads[i].sessionConversationIDs.filter { validAgentSessions.contains($0.key) }
+            if filteredConversationIDs.count != threads[i].sessionConversationIDs.count {
+                threads[i].sessionConversationIDs = filteredConversationIDs
+                didMigrate = true
+            }
         }
 
         // Do NOT prune dead tmux session names — the attach-or-create pattern

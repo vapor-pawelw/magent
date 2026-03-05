@@ -173,6 +173,9 @@ extension ThreadManager {
             initialPrompt: initialPrompt,
             agentType: selectedAgentType
         )
+        if initialPrompt?.isEmpty == false, isAgentTab {
+            scheduleAgentConversationIDRefresh(threadId: currentThread.id, sessionName: tmuxSessionName)
+        }
 
         return tab
     }
@@ -277,6 +280,7 @@ extension ThreadManager {
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
         threads[index].agentTmuxSessions.removeAll { $0 == sessionName }
         threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
+        threads[index].sessionConversationIDs.removeValue(forKey: sessionName)
         threads[index].unreadCompletionSessions.remove(sessionName)
         threads[index].busySessions.remove(sessionName)
         threads[index].waitingForInputSessions.remove(sessionName)

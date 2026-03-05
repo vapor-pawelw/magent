@@ -143,6 +143,166 @@ extension ThreadManager {
         return nil
     }
 
+    // MARK: - Agent Conversation IDs
+
+    func conversationID(for threadId: UUID, sessionName: String) -> String? {
+        guard let thread = threads.first(where: { $0.id == threadId }) else { return nil }
+        return thread.sessionConversationIDs[sessionName]
+    }
+
+    func scheduleAgentConversationIDRefresh(
+        threadId: UUID,
+        sessionName: String,
+        delaySeconds: TimeInterval = 1.2
+    ) {
+        Task { [weak self] in
+            guard delaySeconds > 0 else {
+                await self?.refreshAgentConversationID(threadId: threadId, sessionName: sessionName)
+                return
+            }
+            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+            await self?.refreshAgentConversationID(threadId: threadId, sessionName: sessionName)
+        }
+    }
+
+    func refreshAgentConversationID(threadId: UUID, sessionName: String) async {
+        guard let threadIndex = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard threads[threadIndex].agentTmuxSessions.contains(sessionName) else { return }
+
+        let agentType = agentType(for: threads[threadIndex], sessionName: sessionName)
+            ?? threads[threadIndex].selectedAgentType
+        let worktreePath = threads[threadIndex].worktreePath
+
+        let conversationID: String?
+        switch agentType {
+        case .claude:
+            conversationID = latestClaudeConversationID(worktreePath: worktreePath)
+        case .codex:
+            conversationID = await latestCodexConversationID(worktreePath: worktreePath)
+        case .custom, .none:
+            conversationID = nil
+        }
+
+        guard let conversationID, !conversationID.isEmpty else { return }
+        guard threads[threadIndex].sessionConversationIDs[sessionName] != conversationID else { return }
+
+        threads[threadIndex].sessionConversationIDs[sessionName] = conversationID
+        try? persistence.saveThreads(threads)
+    }
+
+    private func latestClaudeConversationID(worktreePath: String) -> String? {
+        struct ClaudeSessionIndex: Decodable {
+            struct Entry: Decodable {
+                let sessionId: String
+                let projectPath: String?
+                let modified: String?
+                let fileMtime: Double?
+            }
+            let entries: [Entry]
+        }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let encodedPath = worktreePath.replacingOccurrences(of: "/", with: "-")
+        let candidatePaths = [
+            "\(home)/.claude/projects/\(encodedPath)/sessions-index.json",
+            "\(home)/.agents/projects/\(encodedPath)/sessions-index.json",
+        ]
+
+        let isoWithFractional = ISO8601DateFormatter()
+        isoWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let isoPlain = ISO8601DateFormatter()
+        isoPlain.formatOptions = [.withInternetDateTime]
+
+        func readIndex(path: String) -> String? {
+            guard let data = FileManager.default.contents(atPath: path),
+                  let index = try? JSONDecoder().decode(ClaudeSessionIndex.self, from: data) else {
+                return nil
+            }
+
+            let scoped = index.entries.filter { entry in
+                guard let projectPath = entry.projectPath, !projectPath.isEmpty else { return true }
+                return projectPath == worktreePath
+            }
+            let entries = scoped.isEmpty ? index.entries : scoped
+            guard !entries.isEmpty else { return nil }
+
+            let sorted = entries.sorted { lhs, rhs in
+                func score(_ e: ClaudeSessionIndex.Entry) -> Double {
+                    if let modified = e.modified {
+                        if let date = isoWithFractional.date(from: modified) ?? isoPlain.date(from: modified) {
+                            return date.timeIntervalSince1970
+                        }
+                    }
+                    if let mtime = e.fileMtime {
+                        return mtime / 1000.0
+                    }
+                    return 0
+                }
+                return score(lhs) > score(rhs)
+            }
+            guard let best = sorted.first, isUUID(best.sessionId) else { return nil }
+            return best.sessionId
+        }
+
+        for path in candidatePaths {
+            if let id = readIndex(path: path) {
+                return id
+            }
+        }
+        return nil
+    }
+
+    private func latestCodexConversationID(worktreePath: String) async -> String? {
+        let codexDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
+        let dbPath = newestCodexStateDatabase(in: codexDir)
+        guard let dbPath else { return nil }
+
+        let sqlWorktree = sqlQuoted(worktreePath)
+        let query = "SELECT id FROM threads WHERE cwd = \(sqlWorktree) ORDER BY updated_at DESC LIMIT 1;"
+        let command = "sqlite3 \(ShellExecutor.shellQuote(dbPath)) \(ShellExecutor.shellQuote(query))"
+        let result = await ShellExecutor.execute(command)
+        guard result.exitCode == 0 else { return nil }
+
+        let id = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isUUID(id) else { return nil }
+        return id
+    }
+
+    private func newestCodexStateDatabase(in directoryPath: String) -> String? {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            atPath: directoryPath
+        ) else {
+            return nil
+        }
+
+        let candidates = entries.filter { name in
+            name.hasPrefix("state_") && name.hasSuffix(".sqlite")
+        }
+        guard !candidates.isEmpty else { return nil }
+
+        var bestPath: String?
+        var bestDate = Date.distantPast
+        for name in candidates {
+            let path = "\(directoryPath)/\(name)"
+            let attrs = try? fm.attributesOfItem(atPath: path)
+            let modified = attrs?[.modificationDate] as? Date ?? Date.distantPast
+            if modified > bestDate {
+                bestDate = modified
+                bestPath = path
+            }
+        }
+        return bestPath
+    }
+
+    private func sqlQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "''") + "'"
+    }
+
+    private func isUUID(_ value: String) -> Bool {
+        UUID(uuidString: value.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+    }
+
     // MARK: - Session-State Rekey/Prune
 
     /// Rekeys transient, session-scoped state after tmux session renames.
@@ -502,7 +662,8 @@ extension ThreadManager {
         projectId: UUID? = nil,
         agentType: AgentType?,
         envExports: String,
-        workingDirectory: String
+        workingDirectory: String,
+        resumeSessionID: String? = nil
     ) -> String {
         let shell = ShellExecutor.shellQuote(Self.startupShell)
         let zdotdir = ShellExecutor.shellQuote(ensureManagedZdotdir())
@@ -521,6 +682,37 @@ extension ThreadManager {
             // Pre-agent startup commands are best-effort and should not block agent launch.
             parts.append("{ \(preAgentCommand) ; } || true")
         }
+        let command = agentCommand(
+            settings: settings,
+            agentType: agentType,
+            resumeSessionID: resumeSessionID
+        )
+        // Wrap the agent command in a login shell so user profile files are sourced
+        // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
+        parts.append(command)
+        let innerCmd = parts.joined(separator: " && ") + "; exec \(shell) -l"
+        return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
+    }
+
+    private func agentCommand(
+        settings: AppSettings,
+        agentType: AgentType,
+        resumeSessionID: String?
+    ) -> String {
+        let fresh = freshAgentCommand(settings: settings, agentType: agentType)
+        guard let resumeSessionID = normalizedResumeID(resumeSessionID),
+              let resume = resumableAgentCommand(
+                settings: settings,
+                agentType: agentType,
+                sessionID: resumeSessionID
+              ) else {
+            return fresh
+        }
+        // Always attempt a deterministic resume first; fall back to a fresh session.
+        return "{ \(resume) || \(fresh) ; }"
+    }
+
+    private func freshAgentCommand(settings: AppSettings, agentType: AgentType) -> String {
         var command = settings.command(for: agentType)
         if agentType == .claude {
             command += " --settings \(Self.claudeHooksSettingsPath)"
@@ -528,11 +720,46 @@ extension ThreadManager {
                 command += " --append-system-prompt \(ShellExecutor.shellQuote(Self.ipcAgentDocs))"
             }
         }
-        // Wrap the agent command in a login shell so user profile files are sourced
-        // (sets up PATH, user aliases, etc.) before the agent binary is resolved.
-        parts.append(command)
-        let innerCmd = parts.joined(separator: " && ") + "; exec \(shell) -l"
-        return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -l -c \(ShellExecutor.shellQuote(innerCmd))"
+        return command
+    }
+
+    private func resumableAgentCommand(
+        settings: AppSettings,
+        agentType: AgentType,
+        sessionID: String
+    ) -> String? {
+        let quotedID = ShellExecutor.shellQuote(sessionID)
+        switch agentType {
+        case .claude:
+            var command = settings.agentSkipPermissions
+                ? "claude --dangerously-skip-permissions"
+                : "claude"
+            command += " --resume \(quotedID)"
+            command += " --settings \(Self.claudeHooksSettingsPath)"
+            if settings.ipcPromptInjectionEnabled {
+                command += " --append-system-prompt \(ShellExecutor.shellQuote(Self.ipcAgentDocs))"
+            }
+            return command
+        case .codex:
+            if settings.agentSkipPermissions {
+                return "codex resume \(quotedID) --dangerously-bypass-approvals-and-sandbox"
+            }
+            if settings.agentSandboxEnabled {
+                return "codex resume \(quotedID) --full-auto"
+            }
+            return "codex resume \(quotedID)"
+        case .custom:
+            return nil
+        }
+    }
+
+    private func normalizedResumeID(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              isUUID(value) else {
+            return nil
+        }
+        return value
     }
 
     // MARK: - Name Availability

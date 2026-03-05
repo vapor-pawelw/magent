@@ -83,6 +83,7 @@ extension ThreadManager {
             }
             changed = true
             changedThreadIds.insert(threads[index].id)
+            scheduleAgentConversationIDRefresh(threadId: threads[index].id, sessionName: session)
 
             let projectName = settings.projects.first(where: { $0.id == threads[index].projectId })?.name ?? "Project"
             sendAgentCompletionNotification(for: threads[index], projectName: projectName, playSound: playSound, sessionName: session)

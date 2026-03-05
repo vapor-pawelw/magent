@@ -79,6 +79,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var tmuxSessionNames: [String]
     var agentTmuxSessions: [String]
     var sessionAgentTypes: [String: AgentType]
+    var sessionConversationIDs: [String: String]
     var pinnedTmuxSessions: [String]
     let createdAt: Date
     var isArchived: Bool
@@ -180,7 +181,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, projectId, name, worktreePath, branchName
-        case tmuxSessionNames, agentTmuxSessions, sessionAgentTypes, pinnedTmuxSessions
+        case tmuxSessionNames, agentTmuxSessions, sessionAgentTypes, sessionConversationIDs, pinnedTmuxSessions
         case createdAt, isArchived, sectionId, isMain
         case selectedAgentType, lastSelectedTmuxSessionName
         case agentHasRun, isPinned, lastAgentCompletionAt
@@ -205,6 +206,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         tmuxSessionNames: [String] = [],
         agentTmuxSessions: [String] = [],
         sessionAgentTypes: [String: AgentType] = [:],
+        sessionConversationIDs: [String: String] = [:],
         pinnedTmuxSessions: [String] = [],
         createdAt: Date = Date(),
         isArchived: Bool = false,
@@ -233,6 +235,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.tmuxSessionNames = tmuxSessionNames
         self.agentTmuxSessions = agentTmuxSessions
         self.sessionAgentTypes = sessionAgentTypes
+        self.sessionConversationIDs = sessionConversationIDs
         self.pinnedTmuxSessions = pinnedTmuxSessions
         self.createdAt = createdAt
         self.isArchived = isArchived
@@ -264,6 +267,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         tmuxSessionNames = try container.decode([String].self, forKey: .tmuxSessionNames)
         agentTmuxSessions = try container.decodeIfPresent([String].self, forKey: .agentTmuxSessions) ?? []
         sessionAgentTypes = try container.decodeIfPresent([String: AgentType].self, forKey: .sessionAgentTypes) ?? [:]
+        sessionConversationIDs = try container.decodeIfPresent([String: String].self, forKey: .sessionConversationIDs) ?? [:]
         pinnedTmuxSessions = try container.decodeIfPresent([String].self, forKey: .pinnedTmuxSessions) ?? []
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         isArchived = try container.decode(Bool.self, forKey: .isArchived)
@@ -304,6 +308,9 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(agentTmuxSessions, forKey: .agentTmuxSessions)
         if !sessionAgentTypes.isEmpty {
             try container.encode(sessionAgentTypes, forKey: .sessionAgentTypes)
+        }
+        if !sessionConversationIDs.isEmpty {
+            try container.encode(sessionConversationIDs, forKey: .sessionConversationIDs)
         }
         try container.encode(pinnedTmuxSessions, forKey: .pinnedTmuxSessions)
         try container.encode(createdAt, forKey: .createdAt)

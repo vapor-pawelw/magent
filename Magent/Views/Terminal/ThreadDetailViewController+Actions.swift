@@ -201,6 +201,15 @@ extension ThreadDetailViewController {
             handleRename(updated)
         }
 
+        if updated.agentTmuxSessions.contains(sessionName) {
+            threadManager.scheduleAgentConversationIDRefresh(threadId: updated.id, sessionName: sessionName)
+        } else if currentTabIndex < updated.tmuxSessionNames.count {
+            let resolvedSession = updated.tmuxSessionNames[currentTabIndex]
+            if updated.agentTmuxSessions.contains(resolvedSession) {
+                threadManager.scheduleAgentConversationIDRefresh(threadId: updated.id, sessionName: resolvedSession)
+            }
+        }
+
         // Generate task description independently (fire-and-forget)
         let threadId = thread.id
         Task {

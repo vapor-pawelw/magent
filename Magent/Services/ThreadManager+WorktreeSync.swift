@@ -176,6 +176,11 @@ extension ThreadManager {
                     (renameMap[key] ?? key, value)
                 }
             )
+            threads[i].sessionConversationIDs = Dictionary(
+                uniqueKeysWithValues: threads[i].sessionConversationIDs.map { key, value in
+                    (renameMap[key] ?? key, value)
+                }
+            )
             var newCustomTabNames: [String: String] = [:]
             for (key, value) in threads[i].customTabNames {
                 newCustomTabNames[renameMap[key] ?? key] = value
