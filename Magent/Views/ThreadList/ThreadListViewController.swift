@@ -22,6 +22,8 @@ final class ThreadListViewController: NSViewController {
     static let sectionCountBadgeContainerIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeContainer")
     static let sectionCountBadgeLabelIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeLabel")
     static let sidebarHorizontalInset: CGFloat = 0
+    static let rateLimitStatusTopInset: CGFloat = 2
+    static let rateLimitStatusListSpacing: CGFloat = 6
     static let projectDisclosureTrailingInset: CGFloat = 8
     static let outlineIndentationPerLevel: CGFloat = 16
     static let disclosureButtonSize: CGFloat = 16
@@ -162,7 +164,7 @@ final class ThreadListViewController: NSViewController {
         rebuildRateLimitStatusMenu()
 
         NSLayoutConstraint.activate([
-            rateLimitStatusContainer.topAnchor.constraint(equalTo: view.topAnchor, constant: 2),
+            rateLimitStatusContainer.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.rateLimitStatusTopInset),
             rateLimitStatusContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
             rateLimitStatusContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -8),
         ])
@@ -173,7 +175,14 @@ final class ThreadListViewController: NSViewController {
         rateLimitStatusLabel.stringValue = summary ?? ""
         rateLimitStatusContainer.isHidden = (summary == nil)
         rateLimitStatusLabel.toolTip = summary
-        let topInset: CGFloat = summary == nil ? 0 : 16
+        let topInset: CGFloat
+        if summary == nil {
+            topInset = 0
+        } else {
+            rateLimitStatusContainer.layoutSubtreeIfNeeded()
+            let statusHeight = ceil(rateLimitStatusContainer.fittingSize.height)
+            topInset = Self.rateLimitStatusTopInset + statusHeight + Self.rateLimitStatusListSpacing
+        }
         scrollView.contentInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 4, right: 0)
         rebuildRateLimitStatusMenu()
     }

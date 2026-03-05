@@ -26,6 +26,7 @@ All notable changes to this project will be documented in this file.
 - Sidebar sections now show thread count badges.
 - Reordering sections no longer changes the default section unexpectedly.
 - Reduced excess top padding in the sidebar for a tighter layout.
+- Added a small gap between the global Rate limits summary and the first thread row to prevent overlap.
 
 ### Settings
 - Project settings now include project reorder and visibility controls.
