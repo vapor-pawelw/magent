@@ -6,6 +6,11 @@ Magent monitors agent terminal sessions for rate-limit messages and surfaces the
 
 Every few seconds, Magent reads the last portion of each agent terminal pane and looks for rate-limit phrases (e.g., "rate limited", "too many requests", "try again in 35m", "resets 4pm"). When found, it parses the reset time and displays a countdown in the sidebar and on affected tabs.
 
+### Agent-Specific Parsing
+
+- **Codex**: Detection is scoped to the latest pane block after the last separator line (`────…`) when present, to avoid stale matches from older output. If no separator is present, Magent scans the full captured tail.
+- **Claude**: Detection does not rely on separator scoping for the interactive limit menu. When the pane shows `1. Stop and wait for limit to reset`, Magent scans the lines directly above that choice to find and parse the reset deadline (for example, `You've hit your limit · resets Mar 6 at 10am`).
+
 ### Mandatory Reset Time
 
 Detection only triggers when a **concrete reset time** can be parsed from the terminal text. If the message contains rate-limit keywords but no parseable time (e.g., just "rate limited" with no "resets at..." or "try again in..."), Magent ignores it. This prevents false positives from code discussions or agent output that mentions rate limits without being blocked.
@@ -23,6 +28,7 @@ On subsequent checks:
 
 This persistence means:
 - Restarting Magent doesn't re-detect stale messages as new rate limits
+- Session recreation or app relaunch keeps the same concrete reset deadline for the same fingerprint instead of recalculating from freshly captured text
 - Overnight sessions with old "resets 8 PM" text won't incorrectly show a countdown for today's 8 PM — the cached time points to yesterday's 8 PM, which is already expired
 
 ### Bare-Time Cap (8 Hours)

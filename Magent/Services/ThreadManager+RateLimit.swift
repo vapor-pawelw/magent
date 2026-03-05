@@ -132,7 +132,7 @@ extension ThreadManager {
                 }
 
                 guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
-                      let detection = rateLimitDetection(from: paneContent, now: now) else {
+                      let detection = rateLimitDetection(from: paneContent, now: now, agent: sessionAgent) else {
                     if detectionEnabled {
                         // Preserve prompt-based markers — they are managed by
                         // syncBusySessionsFromProcessState, not by this function.
@@ -420,7 +420,7 @@ extension ThreadManager {
             for sessionName in thread.agentTmuxSessions {
                 guard agentType(for: thread, sessionName: sessionName) == agent else { continue }
                 guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
-                      let detection = rateLimitDetection(from: paneContent, now: now) else {
+                      let detection = rateLimitDetection(from: paneContent, now: now, agent: agent) else {
                     continue
                 }
                 let effectiveResetAt = rateLimitFingerprintCache[detection.fingerprint] ?? detection.info.resetAt
@@ -446,7 +446,7 @@ extension ThreadManager {
     func paneHasActiveNonIgnoredRateLimit(for agent: AgentType, paneContent: String, now: Date = Date()) -> Bool {
         guard isRateLimitTrackable(agent: agent) else { return false }
         ensureRateLimitCachesLoaded()
-        guard let detection = rateLimitDetection(from: paneContent, now: now) else { return false }
+        guard let detection = rateLimitDetection(from: paneContent, now: now, agent: agent) else { return false }
         guard !isIgnoredRateLimitFingerprint(detection.fingerprint, for: agent) else { return false }
 
         if let cachedResetAt = rateLimitFingerprintCache[detection.fingerprint] {
@@ -499,60 +499,43 @@ extension ThreadManager {
     private static let rateLimitIndicatorWindowLineCount = 10
     private static let rateLimitFocusContextBeforeLines = 2
     private static let rateLimitFocusContextAfterLines = 8
+    private static let claudePromptDeadlineLookbackLines = 14
     private static let maxRateLimitFingerprintLength = 512
 
-    private func rateLimitDetection(from paneContent: String, now: Date) -> RateLimitDetection? {
-        let tail = rateLimitTail(from: paneContent)
+    private func rateLimitDetection(from paneContent: String, now: Date, agent: AgentType) -> RateLimitDetection? {
+        let tail = rateLimitTail(from: paneContent, agent: agent)
+        if agent == .claude,
+           let claudePromptDetection = claudeInteractiveRateLimitDetection(in: tail, now: now) {
+            return claudePromptDetection
+        }
+
         guard let indicatorAnchor = latestRateLimitIndicatorAnchor(in: tail) else { return nil }
 
         let focusText = rateLimitFocusText(from: tail, anchorIndex: indicatorAnchor)
-        let relativeResetAt = parseRelativeResetDate(from: focusText, now: now)
-        let explicitResult = parseExplicitResetDate(from: focusText, now: now)
-        let fullDateResetAt = parseFullDateResetDate(from: focusText)
-        let absoluteResetAt = parseAbsoluteResetDate(from: focusText, now: now)
-
-        let resetAt: Date
-        let hasExplicitDateAnchor: Bool
-        if let rel = relativeResetAt {
-            resetAt = rel
-            hasExplicitDateAnchor = true // relative durations are anchored to "now"
-        } else if let exp = explicitResult {
-            resetAt = exp.date
-            hasExplicitDateAnchor = exp.hasDayToken
-        } else if let fullDate = fullDateResetAt {
-            resetAt = fullDate
-            hasExplicitDateAnchor = true
-        } else if let abs = absoluteResetAt {
-            resetAt = abs
-            hasExplicitDateAnchor = focusTextHasDateMarkers(focusText)
-        } else {
-            // No parseable reset time — skip detection entirely (resetAt is mandatory).
-            return nil
-        }
-
-        // Cap bare-time resets at 8 hours to avoid stale overnight detections
-        // (e.g. "resets 4pm" parsed as today's 4pm when the message is from yesterday).
-        let maxBareTimeDuration: TimeInterval = 8 * 3600
-        if !hasExplicitDateAnchor && resetAt > now.addingTimeInterval(maxBareTimeDuration) {
-            return nil
-        }
+        guard let parsed = parseResetDate(from: focusText, now: now) else { return nil }
 
         let resetDescription = extractRateLimitResetDescription(from: focusText)
         let fingerprint = rateLimitFingerprint(from: focusText, fallback: resetDescription)
         return RateLimitDetection(
-            info: AgentRateLimitInfo(resetAt: resetAt, resetDescription: resetDescription, detectedAt: now),
+            info: AgentRateLimitInfo(resetAt: parsed.resetAt, resetDescription: resetDescription, detectedAt: now),
             fingerprint: fingerprint,
-            hasRelativeReset: relativeResetAt != nil,
-            hasExplicitDateAnchor: hasExplicitDateAnchor
+            hasRelativeReset: parsed.hasRelativeReset,
+            hasExplicitDateAnchor: parsed.hasExplicitDateAnchor
         )
     }
 
-    private func rateLimitTail(from paneContent: String) -> [String] {
+    private func rateLimitTail(from paneContent: String, agent: AgentType) -> [String] {
         let lines = paneContent
             .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
             .map(String.init)
         let tail = Array(lines.suffix(Self.rateLimitTailLineCount))
+        guard agent == .codex else {
+            // Claude output often prints the reset timestamp immediately above
+            // an options separator; keep the full tail for Claude parsing.
+            return tail
+        }
         guard let scopeSeparatorIndex = tail.lastIndex(where: { isRateLimitScopeSeparator($0) }) else {
+            // No separator in the latest pane block — inspect the full tail.
             return tail
         }
 
@@ -565,6 +548,104 @@ extension ThreadManager {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard trimmed.count >= 20 else { return false }
         return trimmed.allSatisfy { $0 == "─" || $0 == "-" }
+    }
+
+    private func claudeInteractiveRateLimitDetection(in tail: [String], now: Date) -> RateLimitDetection? {
+        guard let choiceIndex = tail.lastIndex(where: { line in
+            let normalized = line
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return normalized.contains("1. stop and wait for limit to reset")
+                || normalized.contains("1. stop and wait for limits to reset")
+        }) else {
+            return nil
+        }
+
+        let lookbackStart = max(tail.startIndex, choiceIndex - Self.claudePromptDeadlineLookbackLines)
+        guard lookbackStart < choiceIndex else { return nil }
+
+        for candidateIndex in stride(from: choiceIndex - 1, through: lookbackStart, by: -1) {
+            let deadlineLine = tail[candidateIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !deadlineLine.isEmpty else { continue }
+
+            let normalized = deadlineLine.lowercased()
+            let hasResetKeyword = normalized.contains("reset")
+                || normalized.contains("try again")
+                || normalized.contains("retry")
+                || normalized.contains("available")
+                || normalized.contains("until")
+            guard hasResetKeyword else { continue }
+
+            var focusLines = [deadlineLine, "1. Stop and wait for limit to reset"]
+            if let contextIndex = stride(from: candidateIndex, through: lookbackStart, by: -1).first(where: { idx in
+                let context = tail[idx].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                return context.contains("limit") || context.contains("rate")
+            }) {
+                let contextLine = tail[contextIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+                if !contextLine.isEmpty, contextLine != deadlineLine {
+                    focusLines.insert(contextLine, at: 0)
+                }
+            }
+
+            let focusText = focusLines.joined(separator: "\n")
+            guard let parsed = parseResetDate(from: focusText, now: now) else { continue }
+
+            let resetDescription = extractRateLimitResetDescription(from: focusText)
+            let fingerprint = rateLimitFingerprint(
+                from: "\(deadlineLine)\n1. Stop and wait for limit to reset",
+                fallback: resetDescription
+            )
+            return RateLimitDetection(
+                info: AgentRateLimitInfo(resetAt: parsed.resetAt, resetDescription: resetDescription, detectedAt: now),
+                fingerprint: fingerprint,
+                hasRelativeReset: parsed.hasRelativeReset,
+                hasExplicitDateAnchor: parsed.hasExplicitDateAnchor
+            )
+        }
+        return nil
+    }
+
+    private func parseResetDate(
+        from focusText: String,
+        now: Date
+    ) -> (resetAt: Date, hasExplicitDateAnchor: Bool, hasRelativeReset: Bool)? {
+        let relativeResetAt = parseRelativeResetDate(from: focusText, now: now)
+        let explicitResult = parseExplicitResetDate(from: focusText, now: now)
+        let fullDateResetAt = parseFullDateResetDate(from: focusText)
+        let absoluteResetAt = parseAbsoluteResetDate(from: focusText, now: now)
+
+        let resetAt: Date
+        let hasExplicitDateAnchor: Bool
+        let hasRelativeReset: Bool
+        if let rel = relativeResetAt {
+            resetAt = rel
+            hasExplicitDateAnchor = true // relative durations are anchored to "now"
+            hasRelativeReset = true
+        } else if let exp = explicitResult {
+            resetAt = exp.date
+            hasExplicitDateAnchor = exp.hasDayToken
+            hasRelativeReset = false
+        } else if let fullDate = fullDateResetAt {
+            resetAt = fullDate
+            hasExplicitDateAnchor = true
+            hasRelativeReset = false
+        } else if let abs = absoluteResetAt {
+            resetAt = abs
+            hasExplicitDateAnchor = focusTextHasDateMarkers(focusText)
+            hasRelativeReset = false
+        } else {
+            // No parseable reset time — skip detection entirely (resetAt is mandatory).
+            return nil
+        }
+
+        // Cap bare-time resets at 8 hours to avoid stale overnight detections
+        // (e.g. "resets 4pm" parsed as today's 4pm when the message is from yesterday).
+        let maxBareTimeDuration: TimeInterval = 8 * 3600
+        if !hasExplicitDateAnchor && resetAt > now.addingTimeInterval(maxBareTimeDuration) {
+            return nil
+        }
+
+        return (resetAt: resetAt, hasExplicitDateAnchor: hasExplicitDateAnchor, hasRelativeReset: hasRelativeReset)
     }
 
     private func latestRateLimitIndicatorAnchor(in tail: [String]) -> Int? {
