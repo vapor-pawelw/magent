@@ -160,6 +160,9 @@ extension ThreadDetailViewController {
             if promptText.range(of: #"^\d+\."#, options: .regularExpression) != nil { continue }
             let lowerPrompt = promptText.lowercased()
             if lowerPrompt == "yes" || lowerPrompt == "no" { continue }
+            // Exclude generic suggestion templates (for example: "Implement (feature)")
+            // that can appear in the composer area but were not actually submitted.
+            if isPlaceholderSuggestionPrompt(promptText) { continue }
 
             candidates.append(
                 PromptPaneCandidate(
@@ -253,6 +256,35 @@ extension ThreadDetailViewController {
             break
         }
         return candidates.filter { $0.lineIndex < cutoff }
+    }
+
+    private func isPlaceholderSuggestionPrompt(_ promptText: String) -> Bool {
+        let trimmed = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasSuffix(")"), let openParen = trimmed.lastIndex(of: "(") else { return false }
+
+        let prefix = trimmed[..<openParen].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prefix.isEmpty else { return false }
+
+        let placeholderStart = trimmed.index(after: openParen)
+        let placeholderEnd = trimmed.index(before: trimmed.endIndex)
+        guard placeholderStart < placeholderEnd else { return false }
+
+        let placeholder = trimmed[placeholderStart..<placeholderEnd]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !placeholder.isEmpty else { return false }
+        guard placeholder.range(of: #"^[a-z][a-z0-9 _/\-]{1,24}$"#, options: .regularExpression) != nil else { return false }
+
+        let prefixWordCount = prefix.split(whereSeparator: \.isWhitespace).count
+        guard (1...4).contains(prefixWordCount) else { return false }
+
+        switch placeholder {
+        case "feature", "bug", "fix", "refactor", "improvement", "task", "issue",
+             "test", "tests", "doc", "docs", "documentation", "ui", "ux", "api":
+            return true
+        default:
+            return false
+        }
     }
 
     private func handlePromptTOCSelection(entryIndex: Int) {

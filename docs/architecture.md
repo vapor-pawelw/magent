@@ -98,6 +98,7 @@ This manual path intentionally skips first-prompt eligibility gates (for example
 
 Prompt TOC content is submission-driven, not pane-marker-driven. Persist per-session submitted prompt history and use it as the source of truth for TOC rows.
 When session names are renamed/migrated, re-key this prompt history together with other session-scoped maps; when sessions are removed, prune it. Parser-based pane scanning is fallback-only for legacy sessions without stored history.
+Fallback parsing must also reject generic composer suggestion templates (for example `Implement (feature)`), so non-submitted placeholder prompts never appear in TOC rows.
 
 ### 5. Persistence Model
 
