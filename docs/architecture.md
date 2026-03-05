@@ -89,6 +89,11 @@ Each thread is 1:1 with a git worktree:
 Thread rename updates branch/session names, but running agent processes cannot have their cwd/env rewritten in-place.
 The underlying worktree directory is not moved. To keep active sessions stable, rename creates a compatibility symlink from the new thread-name path to the existing worktree path and updates tmux session environment for future shells/panes.
 
+### 4.2 Prompt-Based Rename Reuse
+
+Manual `Rename...` from the non-main thread context menu reuses the same model payload path as first-prompt auto-rename so branch slug generation, task description generation, and icon suggestion stay behaviorally aligned.
+This manual path intentionally skips first-prompt eligibility gates (for example "already auto-renamed") so users can explicitly request a regenerated name/description/icon at any time.
+
 ### 5. Persistence Model
 
 Thread state persisted as JSON in app's Application Support directory:

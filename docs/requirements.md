@@ -99,6 +99,16 @@ For non-main threads, naming and labels in the sidebar follow these rules:
 - `taskDescription` is optional; it can be generated from the first agent prompt or set manually.
 - Generated description should be short (2-8 words) and naturally cased (not forced Title Case).
 
+### Non-Main Thread Rename Actions
+
+- Context menu order for non-main threads starts with `Pin/Unpin`, then `Rename...`, then a separator.
+- `Rename...` is prompt-based: user enters a natural-language task prompt, and Magent generates:
+  - branch slug candidate(s)
+  - short task description
+  - suggested thread icon/work type
+- Prompt-based rename uses the same AI behavior as first-prompt auto-rename and is allowed even if the thread was already renamed before.
+- Exact branch rename remains available via `Rename branch...` and uses user-provided branch text directly.
+
 ### Line 1 / Line 2 Layout
 
 - If `taskDescription` exists:

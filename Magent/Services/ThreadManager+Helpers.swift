@@ -762,10 +762,12 @@ extension Notification.Name {
 enum ThreadManagerError: LocalizedError {
     case threadNotFound
     case invalidName
+    case invalidPrompt
     case invalidDescription
     case duplicateName
     case invalidTabIndex
     case cannotDeleteMainThread
+    case cannotRenameMainThread
     case nameGenerationFailed
     case worktreePathConflict([String])
     case noExpectedBranch
@@ -776,6 +778,8 @@ enum ThreadManagerError: LocalizedError {
             return "Thread not found"
         case .invalidName:
             return "Invalid name. Name must not be empty or contain slashes."
+        case .invalidPrompt:
+            return "Prompt must not be empty."
         case .invalidDescription:
             return "Invalid description. Use 1-8 words with at least one letter."
         case .duplicateName:
@@ -784,6 +788,8 @@ enum ThreadManagerError: LocalizedError {
             return "Invalid tab index."
         case .cannotDeleteMainThread:
             return "Main threads cannot be deleted."
+        case .cannotRenameMainThread:
+            return "Main threads cannot be renamed."
         case .nameGenerationFailed:
             return "Could not generate a unique thread name. Try again or clean up unused worktrees/branches."
         case .worktreePathConflict(let names):

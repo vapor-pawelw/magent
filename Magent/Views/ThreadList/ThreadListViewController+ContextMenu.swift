@@ -19,6 +19,13 @@ extension ThreadListViewController {
         pinItem.image = NSImage(systemSymbolName: thread.isPinned ? "pin.slash" : "pin", accessibilityDescription: nil)
         pinItem.representedObject = thread.id
         menu.addItem(pinItem)
+
+        let promptRenameItem = NSMenuItem(title: "Rename...", action: #selector(renameThreadFromPrompt(_:)), keyEquivalent: "")
+        promptRenameItem.target = self
+        promptRenameItem.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
+        promptRenameItem.representedObject = thread
+        menu.addItem(promptRenameItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let descriptionItem = NSMenuItem(title: "Set description...", action: #selector(setThreadDescription(_:)), keyEquivalent: "")
@@ -43,6 +50,8 @@ extension ThreadListViewController {
         ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
         iconItem.submenu = buildThreadIconSubmenu(for: thread)
         menu.addItem(iconItem)
+
+        menu.addItem(NSMenuItem.separator())
 
         // Move to... submenu
         let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
@@ -375,6 +384,47 @@ extension ThreadListViewController {
             errorAlert.alertStyle = .warning
             errorAlert.addButton(withTitle: "OK")
             errorAlert.runModal()
+        }
+    }
+
+    @objc private func renameThreadFromPrompt(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Rename Thread"
+        alert.informativeText = "Describe the task. Magent will generate a branch name, description, and icon."
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        textField.placeholderString = "e.g. Fix sidebar chevron padding"
+        alert.accessoryView = textField
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        let prompt = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return }
+
+        Task {
+            do {
+                let didRename = try await threadManager.renameThreadFromPrompt(thread, prompt: prompt)
+                guard didRename else { return }
+                await MainActor.run {
+                    if let updated = self.threadManager.threads.first(where: { $0.id == thread.id }) {
+                        self.delegate?.threadList(self, didRenameThread: updated)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    let errorAlert = NSAlert()
+                    errorAlert.messageText = "Rename Failed"
+                    errorAlert.informativeText = error.localizedDescription
+                    errorAlert.alertStyle = .warning
+                    errorAlert.addButton(withTitle: "OK")
+                    errorAlert.runModal()
+                }
+            }
         }
     }
 

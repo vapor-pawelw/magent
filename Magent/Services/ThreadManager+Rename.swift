@@ -282,11 +282,7 @@ extension ThreadManager {
         for candidateAgent in normalCandidates {
             switch await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId) {
             case .slug(let slug):
-                var candidates = [slug]
-                for i in 2...9 {
-                    candidates.append("\(slug)-\(i)")
-                }
-                return .candidates(candidates)
+                return .candidates(renameCandidates(from: slug))
             case .question:
                 // A question classification (SLUG: EMPTY) should short-circuit.
                 // Retry slug generation only on the next submitted user prompt.
@@ -297,6 +293,94 @@ extension ThreadManager {
         }
 
         return .failed
+    }
+
+    private func renameCandidates(from slug: String) -> [String] {
+        var candidates = [slug]
+        for i in 2...9 {
+            candidates.append("\(slug)-\(i)")
+        }
+        return candidates
+    }
+
+    @discardableResult
+    private func applyGeneratedRenameMetadataIfNeeded(
+        threadId: UUID,
+        generatedTaskDescription: GeneratedTaskDescription?
+    ) async -> Bool {
+        guard let generatedTaskDescription else { return false }
+        guard let currentIndex = threads.firstIndex(where: { $0.id == threadId }) else { return false }
+        guard threads[currentIndex].taskDescription == nil else { return false }
+
+        threads[currentIndex].taskDescription = generatedTaskDescription.description
+        let settings = persistence.loadSettings()
+        if settings.autoSetThreadIconFromWorkType,
+           !threads[currentIndex].isThreadIconManuallySet {
+            threads[currentIndex].threadIcon = generatedTaskDescription.suggestedIcon
+        }
+        try? persistence.saveThreads(threads)
+        await MainActor.run {
+            delegate?.threadManager(self, didUpdateThreads: threads)
+        }
+        return true
+    }
+
+    /// Prompt-based rename (manual trigger): generate slug + description + icon
+    /// using the same model prompt as first-prompt auto-rename, without
+    /// first-prompt eligibility checks.
+    @discardableResult
+    func renameThreadFromPrompt(
+        _ thread: MagentThread,
+        prompt: String,
+        preferredAgent: AgentType? = nil
+    ) async throws -> Bool {
+        guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+        let currentThread = threads[index]
+        guard !currentThread.isMain else {
+            throw ThreadManagerError.cannotRenameMainThread
+        }
+
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else {
+            throw ThreadManagerError.invalidPrompt
+        }
+
+        let selectedAgent = preferredAgent ?? currentThread.selectedAgentType
+        let payloadResult = await generateFirstPromptRenamePayloadViaAgent(
+            from: trimmedPrompt,
+            agentType: selectedAgent,
+            projectId: currentThread.projectId
+        )
+
+        let slug: String
+        let generatedTaskDescription: GeneratedTaskDescription?
+        switch payloadResult {
+        case .generated(let generatedSlug, let description):
+            slug = generatedSlug
+            generatedTaskDescription = description
+        case .question:
+            return false
+        case .failed:
+            throw ThreadManagerError.nameGenerationFailed
+        }
+
+        let candidates = renameCandidates(from: slug).filter { $0 != currentThread.name }
+        for candidate in candidates {
+            do {
+                try await renameThread(currentThread, to: candidate, markFirstPromptRenameHandled: false)
+                _ = await applyGeneratedRenameMetadataIfNeeded(
+                    threadId: currentThread.id,
+                    generatedTaskDescription: generatedTaskDescription
+                )
+                return true
+            } catch ThreadManagerError.duplicateName {
+                continue
+            }
+        }
+
+        throw ThreadManagerError.duplicateName
     }
 
     func renameThread(
@@ -497,10 +581,7 @@ extension ThreadManager {
             // Let the separate description path run as a fallback.
             return false
         }
-        var candidates = [slug]
-        for i in 2...9 {
-            candidates.append("\(slug)-\(i)")
-        }
+        let candidates = renameCandidates(from: slug)
 
         autoRenameInProgress.insert(thread.id)
         defer { autoRenameInProgress.remove(thread.id) }
@@ -508,20 +589,10 @@ extension ThreadManager {
         for candidate in candidates where candidate != thread.name {
             do {
                 try await renameThread(thread, to: candidate, markFirstPromptRenameHandled: true)
-                if let generatedTaskDescription,
-                   let currentIndex = threads.firstIndex(where: { $0.id == thread.id }),
-                   threads[currentIndex].taskDescription == nil {
-                    threads[currentIndex].taskDescription = generatedTaskDescription.description
-                    let settings = persistence.loadSettings()
-                    if settings.autoSetThreadIconFromWorkType,
-                       !threads[currentIndex].isThreadIconManuallySet {
-                        threads[currentIndex].threadIcon = generatedTaskDescription.suggestedIcon
-                    }
-                    try? persistence.saveThreads(threads)
-                    await MainActor.run {
-                        delegate?.threadManager(self, didUpdateThreads: threads)
-                    }
-                }
+                _ = await applyGeneratedRenameMetadataIfNeeded(
+                    threadId: thread.id,
+                    generatedTaskDescription: generatedTaskDescription
+                )
                 return true
             } catch ThreadManagerError.duplicateName {
                 continue
