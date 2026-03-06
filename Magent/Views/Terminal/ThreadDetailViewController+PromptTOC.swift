@@ -127,6 +127,7 @@ extension ThreadDetailViewController {
             ?? thread.selectedAgentType
             ?? threadManager.effectiveAgentType(for: thread.projectId)
         let previousSessionName = promptTOCSessionName
+        let previousEntryCount = promptTOCSessionName == sessionName ? promptTOCEntries.count : 0
         promptTOCCanShowForCurrentTab = true
         updatePromptTOCToggleButtonState(canShow: true)
         promptTOCView?.isHidden = isPromptTOCManuallyHidden
@@ -150,6 +151,24 @@ extension ThreadDetailViewController {
         )
         promptTOCSessionName = sessionName
         promptTOCEntries = entries
+
+        if !thread.didAutoRenameFromFirstPrompt, entries.count > previousEntryCount, let lastEntry = entries.last {
+            let threadId = thread.id
+            let prompt = lastEntry.displayText
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let previousThread = self.thread
+                _ = await self.threadManager.autoRenameThreadAfterFirstPromptIfNeeded(
+                    threadId: threadId,
+                    sessionName: sessionName,
+                    prompt: prompt
+                )
+                guard let updated = self.threadManager.threads.first(where: { $0.id == threadId }) else { return }
+                if updated.name != previousThread.name || updated.worktreePath != previousThread.worktreePath {
+                    self.handleRename(updated)
+                }
+            }
+        }
         promptTOCView?.setEntries(entries, agentType: agentType)
         promptTOCView?.isHidden = isPromptTOCManuallyHidden
         if previousSessionName != sessionName {

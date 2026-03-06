@@ -282,34 +282,18 @@ extension ThreadDetailViewController {
             threadManager.markSessionBusy(threadId: thread.id, sessionName: sessionName)
         }
 
-        let previousThread = thread
-        let didHandleTaskDescriptionInRenameFlow = await threadManager.autoRenameThreadAfterFirstPromptIfNeeded(
-            threadId: thread.id,
-            sessionName: sessionName,
-            prompt: trimmed
-        )
-
-        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
-        if updated.name != previousThread.name || updated.worktreePath != previousThread.worktreePath {
-            handleRename(updated)
-        }
-
-        if updated.agentTmuxSessions.contains(sessionName) {
-            threadManager.scheduleAgentConversationIDRefresh(threadId: updated.id, sessionName: sessionName)
-        } else if currentTabIndex < updated.tmuxSessionNames.count {
-            let resolvedSession = updated.tmuxSessionNames[currentTabIndex]
-            if updated.agentTmuxSessions.contains(resolvedSession) {
-                threadManager.scheduleAgentConversationIDRefresh(threadId: updated.id, sessionName: resolvedSession)
+        if thread.agentTmuxSessions.contains(sessionName) {
+            threadManager.scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: sessionName)
+        } else if currentTabIndex < thread.tmuxSessionNames.count {
+            let resolvedSession = thread.tmuxSessionNames[currentTabIndex]
+            if thread.agentTmuxSessions.contains(resolvedSession) {
+                threadManager.scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: resolvedSession)
             }
         }
 
-        // Generate task description independently (fire-and-forget) only when
-        // first-prompt rename flow did not already cover it.
-        if !didHandleTaskDescriptionInRenameFlow {
-            let threadId = thread.id
-            Task {
-                await threadManager.generateTaskDescriptionIfNeeded(threadId: threadId, prompt: trimmed)
-            }
+        let threadId = thread.id
+        Task {
+            await threadManager.generateTaskDescriptionIfNeeded(threadId: threadId, prompt: trimmed)
         }
 
         if thread.lastSelectedTmuxSessionName == sessionName {
