@@ -190,6 +190,15 @@ User Action (+ button)
         └──► PersistenceService.save()
 ```
 
+## tmux Session Ownership
+
+Each tmux session created by Magent is tagged with `MAGENT_THREAD_ID` (the owning thread's UUID) via `tmux set-environment`. This tag is set in:
+- `ThreadManager+ThreadLifecycle.swift` — initial thread creation (both regular and main threads)
+- `ThreadManager+TabManagement.swift` — new tab creation
+- `ThreadManager+SessionRecreation.swift` — session recreation/recovery
+
+**Why this matters**: Worktree names are reused when a thread is archived and a new thread is opened on the same branch/worktree name. Without ownership tracking, the old stale tmux session would be adopted by the new thread, restoring the previous agent session. The fix in `isValidExistingSession(...)` checks `MAGENT_THREAD_ID` first; if absent (old sessions), it falls back to comparing `session_created` timestamp against `thread.createdAt` — sessions older than the thread are rejected.
+
 ## Platform Scope
 
 - **macOS**: Full experience — sidebar + terminal + tabs, keyboard-driven
