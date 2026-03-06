@@ -52,16 +52,15 @@ public final class GhosttyAppManager {
 
         // Create runtime config with callbacks (top-level functions,
         // naturally nonisolated since this module has no default actor isolation)
-        var runtimeConfig = ghostty_runtime_config_s(
-            userdata: Unmanaged.passUnretained(self).toOpaque(),
-            supports_selection_clipboard: false,
-            wakeup_cb: ghosttyWakeupCallback,
-            action_cb: ghosttyActionCallback,
-            read_clipboard_cb: ghosttyReadClipboardCallback,
-            confirm_read_clipboard_cb: ghosttyConfirmReadClipboardCallback,
-            write_clipboard_cb: ghosttyWriteClipboardCallback,
-            close_surface_cb: ghosttyCloseSurfaceCallback
-        )
+        var runtimeConfig = ghostty_runtime_config_s()
+        runtimeConfig.userdata = Unmanaged.passUnretained(self).toOpaque()
+        runtimeConfig.supports_selection_clipboard = false
+        runtimeConfig.wakeup_cb = ghosttyWakeupCallback
+        runtimeConfig.action_cb = ghosttyActionCallback
+        runtimeConfig.read_clipboard_cb = ghosttyReadClipboardCallback
+        runtimeConfig.confirm_read_clipboard_cb = ghosttyConfirmReadClipboardCallback
+        runtimeConfig.write_clipboard_cb = ghosttyWriteClipboardCallback
+        runtimeConfig.close_surface_cb = ghosttyCloseSurfaceCallback
 
         app = ghostty_app_new(&runtimeConfig, config)
         Self.log("app created: \(app != nil)")
@@ -220,12 +219,24 @@ private func ghosttyConfirmReadClipboardCallback(
 
 private func ghosttyWriteClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
-    _ str: UnsafePointer<CChar>?,
     _ location: ghostty_clipboard_e,
+    _ content: UnsafePointer<ghostty_clipboard_content_s>?,
+    _ count: Int,
     _ confirm: Bool
 ) {
-    guard let str else { return }
-    let text = String(cString: str)
+    guard let content, count > 0 else { return }
+
+    // Prefer text/plain when available, otherwise fall back to first item.
+    let entries = UnsafeBufferPointer(start: content, count: count)
+    let selectedEntry = entries.first { entry in
+        guard let mime = entry.mime else { return false }
+        return String(cString: mime).lowercased().contains("text/plain")
+    } ?? entries.first
+
+    guard let selectedEntry,
+          let dataPtr = selectedEntry.data else { return }
+
+    let text = String(cString: dataPtr)
     Task { @MainActor in
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
