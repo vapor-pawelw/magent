@@ -1429,10 +1429,13 @@ final class InlineDiffViewController: NSViewController {
             }
         }
         syncExpandCollapseState()
-        // Scroll to the expanded section
+        // Force layout before scrolling: section frames may be stale (fresh creation)
+        // or pending (constraint change from isExpanded toggle). Without this,
+        // section.convert(bounds, to: sectionsStackView) returns wrong/zero rects.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if let section = matchedSection {
+                self.view.layoutSubtreeIfNeeded()
                 self.scrollSectionIntoViewIfNeeded(section)
             }
         }
