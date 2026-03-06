@@ -8,6 +8,55 @@ extension ThreadDetailViewController {
 
     // MARK: - Setup
 
+    // MARK: - Scroll Overlay (bottom-right draggable pill)
+
+    func setupScrollOverlay() {
+        let overlay = scrollOverlay
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+        overlay.onScrollUp       = { [weak self] in self?.scrollTerminalPageUpTapped() }
+        overlay.onScrollDown     = { [weak self] in self?.scrollTerminalPageDownTapped() }
+        overlay.onScrollToBottom = { [weak self] in self?.scrollTerminalToBottomTapped() }
+
+        // Add to root view (not terminalContainer) so it floats above Metal surfaces.
+        view.addSubview(overlay)
+
+        let trailing = overlay.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16)
+        let bottom   = overlay.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -16)
+        scrollOverlayTrailingConstraint = trailing
+        scrollOverlayBottomConstraint   = bottom
+        NSLayoutConstraint.activate([trailing, bottom])
+
+        let pan = NSPanGestureRecognizer(target: self, action: #selector(handleScrollOverlayPan(_:)))
+        overlay.addGestureRecognizer(pan)
+    }
+
+    @objc func handleScrollOverlayPan(_ gesture: NSPanGestureRecognizer) {
+        guard let trailing = scrollOverlayTrailingConstraint,
+              let bottom   = scrollOverlayBottomConstraint else { return }
+
+        switch gesture.state {
+        case .began:
+            // Store current offsets as positive distances from the edges.
+            scrollOverlayDragStartTrailing = -trailing.constant
+            scrollOverlayDragStartBottom   = -bottom.constant
+
+        case .changed:
+            let t = gesture.translation(in: view)
+            // Positive x → moved right → trailing offset decreases (overlay moves right).
+            let newTrailing = scrollOverlayDragStartTrailing - t.x
+            // Positive y → moved up (AppKit coords) → bottom offset increases.
+            let newBottom   = scrollOverlayDragStartBottom + t.y
+
+            let size = scrollOverlay.frame.size
+            let topBarClearance: CGFloat = 44 // keep below toolbar
+            trailing.constant = -min(max(8, newTrailing), view.bounds.width  - size.width  - 8)
+            bottom.constant   = -min(max(8, newBottom),   view.bounds.height - size.height - topBarClearance)
+
+        default:
+            break
+        }
+    }
+
     func setupScrollFAB() {
         let btn = floatingScrollToBottomButton
         btn.translatesAutoresizingMaskIntoConstraints = false
@@ -88,7 +137,7 @@ extension ThreadDetailViewController {
             terminalViews[currentTabIndex].bindingAction("scroll_to_bottom")
         }
 
-        // Also cancel tmux copy-mode in case page-up toolbar buttons were used.
+        // Also cancel tmux copy-mode in case scroll overlay page-up was used.
         scrollTerminalToBottomTapped()
     }
 }

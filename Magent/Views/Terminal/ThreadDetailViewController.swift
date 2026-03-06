@@ -24,9 +24,7 @@ final class ThreadDetailViewController: NSViewController {
     let archiveThreadButton = NSButton()
     let reviewButton = NSButton()
     let exportContextButton = NSButton()
-    let scrollPageUpButton = NSButton()
-    let scrollPageDownButton = NSButton()
-    let scrollToBottomButton = NSButton()
+    let scrollOverlay = TerminalScrollOverlayView()
     let togglePromptTOCButton = NSButton()
     let addTabButton = NSButton()
     let floatingScrollToBottomButton = NSButton()
@@ -50,6 +48,11 @@ final class ThreadDetailViewController: NSViewController {
     var promptTOCRefreshTask: Task<Void, Never>?
     var promptTOCEntries: [PromptTOCEntry] = []
     var promptTOCSessionName: String?
+    var scrollOverlayTrailingConstraint: NSLayoutConstraint?
+    var scrollOverlayBottomConstraint: NSLayoutConstraint?
+    var scrollOverlayDragStartTrailing: CGFloat = 16
+    var scrollOverlayDragStartBottom: CGFloat = 16
+
     var promptTOCDragStartOrigin: NSPoint = .zero
     var promptTOCResizeStartSize: NSSize = .zero
     var promptTOCResizeStartTop: CGFloat = 0
@@ -251,30 +254,6 @@ final class ThreadDetailViewController: NSViewController {
         exportContextButton.action = #selector(exportContextButtonTapped)
         exportContextButton.toolTip = "Export terminal context as Markdown"
 
-        scrollPageUpButton.bezelStyle = .texturedRounded
-        scrollPageUpButton.image = NSImage(systemSymbolName: "chevron.up", accessibilityDescription: "Scroll Up")
-        scrollPageUpButton.imageScaling = .scaleProportionallyDown
-        scrollPageUpButton.target = self
-        scrollPageUpButton.action = #selector(scrollTerminalPageUpTapped)
-        scrollPageUpButton.toolTip = "Scroll terminal up one page via tmux history"
-        scrollPageUpButton.isEnabled = false
-
-        scrollPageDownButton.bezelStyle = .texturedRounded
-        scrollPageDownButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Scroll Down")
-        scrollPageDownButton.imageScaling = .scaleProportionallyDown
-        scrollPageDownButton.target = self
-        scrollPageDownButton.action = #selector(scrollTerminalPageDownTapped)
-        scrollPageDownButton.toolTip = "Scroll terminal down one page via tmux history"
-        scrollPageDownButton.isEnabled = false
-
-        scrollToBottomButton.bezelStyle = .texturedRounded
-        scrollToBottomButton.image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Jump to Bottom")
-        scrollToBottomButton.imageScaling = .scaleProportionallyDown
-        scrollToBottomButton.target = self
-        scrollToBottomButton.action = #selector(scrollTerminalToBottomTapped)
-        scrollToBottomButton.toolTip = "Jump back to live terminal output"
-        scrollToBottomButton.isEnabled = false
-
         togglePromptTOCButton.bezelStyle = .texturedRounded
         togglePromptTOCButton.imageScaling = .scaleProportionallyDown
         togglePromptTOCButton.target = self
@@ -294,7 +273,7 @@ final class ThreadDetailViewController: NSViewController {
         separator.setContentHuggingPriority(.required, for: .vertical)
         separator.setContentCompressionResistancePriority(.required, for: .vertical)
 
-        let topBar = NSStackView(views: [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, scrollPageUpButton, scrollPageDownButton, scrollToBottomButton, togglePromptTOCButton, separator, archiveThreadButton])
+        let topBar = NSStackView(views: [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, togglePromptTOCButton, separator, archiveThreadButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
@@ -323,6 +302,7 @@ final class ThreadDetailViewController: NSViewController {
         ])
 
         setupScrollFAB()
+        setupScrollOverlay()
     }
 
     // MARK: - Tab Setup
@@ -425,10 +405,7 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     func updateTerminalScrollControlsState() {
-        let hasSession = currentSessionName() != nil
-        scrollPageUpButton.isEnabled = hasSession
-        scrollPageDownButton.isEnabled = hasSession
-        scrollToBottomButton.isEnabled = hasSession
+        scrollOverlay.isScrollEnabled = currentSessionName() != nil
     }
 
     func makeTerminalView(for sessionName: String) -> TerminalSurfaceView {
