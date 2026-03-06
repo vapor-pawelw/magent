@@ -101,6 +101,10 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var isThreadIconManuallySet: Bool
     /// Persisted per-session history of TOC-confirmed prompts (newest at end).
     var submittedPromptsBySession: [String: [String]]
+    /// Snapshot of project local sync paths taken when the thread was created.
+    /// `nil` means the thread predates path snapshotting and should fall back to
+    /// current project settings during archive.
+    var localFileSyncPathsSnapshot: [String]?
 
     // Transient (not persisted) — tracks which agent sessions are currently working
     var busySessions: Set<String> = []
@@ -198,6 +202,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case threadIcon
         case isThreadIconManuallySet
         case submittedPromptsBySession
+        case localFileSyncPathsSnapshot
     }
 
     init(
@@ -229,7 +234,8 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         taskDescription: String? = nil,
         threadIcon: ThreadIcon = .other,
         isThreadIconManuallySet: Bool = false,
-        submittedPromptsBySession: [String: [String]] = [:]
+        submittedPromptsBySession: [String: [String]] = [:],
+        localFileSyncPathsSnapshot: [String]? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -260,6 +266,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.threadIcon = threadIcon
         self.isThreadIconManuallySet = isThreadIconManuallySet
         self.submittedPromptsBySession = submittedPromptsBySession
+        self.localFileSyncPathsSnapshot = localFileSyncPathsSnapshot
     }
 
     init(from decoder: Decoder) throws {
@@ -293,6 +300,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isThreadIconManuallySet = try container.decodeIfPresent(Bool.self, forKey: .isThreadIconManuallySet)
             ?? (threadIcon != .other)
         submittedPromptsBySession = try container.decodeIfPresent([String: [String]].self, forKey: .submittedPromptsBySession) ?? [:]
+        localFileSyncPathsSnapshot = try container.decodeIfPresent([String].self, forKey: .localFileSyncPathsSnapshot)
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -342,6 +350,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         if !submittedPromptsBySession.isEmpty {
             try container.encode(submittedPromptsBySession, forKey: .submittedPromptsBySession)
         }
+        try container.encodeIfPresent(localFileSyncPathsSnapshot, forKey: .localFileSyncPathsSnapshot)
     }
 }
 

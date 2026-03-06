@@ -93,8 +93,13 @@ extension ThreadManager {
             baseBranch: baseBranch
         )
 
+        let localFileSyncPathsSnapshot = project.normalizedLocalFileSyncPaths
         do {
-            try await syncConfiguredLocalPathsIntoWorktree(project: project, worktreePath: worktreePath)
+            try await syncConfiguredLocalPathsIntoWorktree(
+                project: project,
+                worktreePath: worktreePath,
+                syncPaths: localFileSyncPathsSnapshot
+            )
         } catch {
             try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: worktreePath)
             throw error
@@ -184,6 +189,7 @@ extension ThreadManager {
             lastSelectedTmuxSessionName: tmuxSessionName,
             customTabNames: [tmuxSessionName: firstTabDisplayName],
             baseBranch: baseBranch,
+            localFileSyncPathsSnapshot: localFileSyncPathsSnapshot,
             submittedPromptsBySession: {
                 guard useAgentCommand,
                       let initialPrompt,
@@ -322,18 +328,33 @@ extension ThreadManager {
 
     // MARK: - Archive Thread
 
-    func archiveThread(_ thread: MagentThread, promptForLocalSyncConflicts: Bool = false) async throws {
+    func archiveThread(
+        _ thread: MagentThread,
+        promptForLocalSyncConflicts: Bool = false,
+        force: Bool = false
+    ) async throws -> String? {
         guard !thread.isMain else {
             throw ThreadManagerError.cannotDeleteMainThread
         }
 
+        var archiveWarning: String?
         let settings = persistence.loadSettings()
         if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
-            try await syncConfiguredLocalPathsFromWorktree(
-                project: project,
-                worktreePath: thread.worktreePath,
-                promptForConflicts: promptForLocalSyncConflicts
-            )
+            do {
+                try await syncConfiguredLocalPathsFromWorktree(
+                    project: project,
+                    worktreePath: thread.worktreePath,
+                    syncPaths: effectiveLocalSyncPaths(for: thread, project: project),
+                    promptForConflicts: promptForLocalSyncConflicts
+                )
+            } catch ThreadManagerError.archiveCancelled {
+                throw ThreadManagerError.archiveCancelled
+            } catch ThreadManagerError.localFileSyncFailed(let message) {
+                guard force else {
+                    throw ThreadManagerError.localFileSyncFailed(message)
+                }
+                archiveWarning = "Archived without completing local sync: \(message)"
+            }
         }
 
         if let ticketKey = thread.jiraTicketKey {
@@ -369,6 +390,8 @@ extension ThreadManager {
 
         cleanupAllBrokenSymlinks()
         await cleanupStaleMagentSessions()
+
+        return archiveWarning
     }
 
     // MARK: - Delete Thread

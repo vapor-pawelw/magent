@@ -20,6 +20,7 @@ nonisolated struct IPCRequest: Codable, Sendable {
     var sectionName: String?
     var sectionColor: String?
     var position: Int?
+    var force: Bool?
 }
 
 // MARK: - Response
@@ -28,6 +29,7 @@ nonisolated struct IPCResponse: Encodable, Sendable {
     let ok: Bool
     var id: String?
     var error: String?
+    var warning: String?
     var thread: IPCThreadInfo?
     var threads: [IPCThreadInfo]?
     var projects: [IPCProjectInfo]?
@@ -37,8 +39,8 @@ nonisolated struct IPCResponse: Encodable, Sendable {
     var section: IPCSectionInfo?
     var activeAgents: [String]?
 
-    static func success(id: String? = nil) -> IPCResponse {
-        IPCResponse(ok: true, id: id)
+    static func success(id: String? = nil, warning: String? = nil) -> IPCResponse {
+        IPCResponse(ok: true, id: id, warning: warning)
     }
 
     static func failure(_ error: String, id: String? = nil) -> IPCResponse {

@@ -154,10 +154,10 @@ magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refac
 
 Archive a thread (removes worktree, keeps git branch).
 
-When project `Local Sync Paths` are configured, archive performs merge-back from the thread worktree to the repo root before worktree removal. Files unchanged in the thread since creation are skipped. In non-interactive CLI mode, conflicting overwrite targets are skipped.
+When project `Local Sync Paths` are configured, archive performs merge-back from the thread's snapshotted path list to the repo root before worktree removal. Files unchanged in the thread since creation are skipped. In non-interactive CLI mode, conflicting overwrite targets are skipped. Pass `--force` to continue archiving even if local sync fails for a non-conflict reason.
 
 ```bash
-magent-cli archive-thread --thread <name>
+magent-cli archive-thread --thread <name> [--force]
 ```
 
 ### delete-thread

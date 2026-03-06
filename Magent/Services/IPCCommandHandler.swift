@@ -296,12 +296,11 @@ final class IPCCommandHandler {
         }
 
         do {
-            try await threadManager.archiveThread(thread)
+            let warning = try await threadManager.archiveThread(thread, force: request.force ?? false)
+            return .success(id: request.id, warning: warning)
         } catch {
             return .failure("Failed to archive thread: \(error.localizedDescription)", id: request.id)
         }
-
-        return .success(id: request.id)
     }
 
     private func deleteThread(_ request: IPCRequest) async -> IPCResponse {

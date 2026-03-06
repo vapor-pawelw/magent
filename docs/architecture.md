@@ -120,8 +120,8 @@ Navigation behavior:
 
 Projects can define repo-relative local sync paths (files or directories).
 
-- On thread creation, configured paths are copied from repo root into the new worktree.
-- On thread archive, configured paths are merged back from worktree to repo root before worktree removal.
+- On thread creation, configured paths are copied from repo root into the new worktree and snapshotted onto the thread.
+- On thread archive, the thread's snapshotted paths are merged back from worktree to repo root before worktree removal.
 - Merge-back is additive/safe: do not delete destination files that are missing in worktree.
 - If a copy would overwrite an existing destination (including file-vs-directory collisions at intermediate paths), require explicit user choice in UI archive flows:
   - `Override`
@@ -129,6 +129,7 @@ Projects can define repo-relative local sync paths (files or directories).
   - `Ignore`
   - `Cancel Archive`
 - CLI/non-interactive archive paths should avoid destructive overwrite prompts and skip conflicting targets by default.
+- Force archive is allowed for local sync failures: continue archiving with a warning, but still keep sync non-destructive.
 
 ### 5. Persistence Model
 

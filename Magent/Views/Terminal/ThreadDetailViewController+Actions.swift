@@ -49,12 +49,51 @@ extension ThreadDetailViewController {
                 // crashes if a sheet is being presented on the same window.
                 Task {
                     do {
-                        try await self.threadManager.archiveThread(
+                        let warning = try await self.threadManager.archiveThread(
                             threadToArchive,
                             promptForLocalSyncConflicts: true
                         )
+                        if let warning {
+                            await MainActor.run {
+                                BannerManager.shared.show(message: warning, style: .warning, duration: nil)
+                            }
+                        }
                     } catch ThreadManagerError.archiveCancelled {
                         return
+                    } catch ThreadManagerError.localFileSyncFailed(let message) {
+                        await MainActor.run {
+                            let alert = NSAlert()
+                            alert.messageText = "Local Sync Failed"
+                            alert.informativeText = "\(message)\n\nForce Archive will remove the worktree anyway and leave any unsynced local files behind."
+                            alert.alertStyle = .warning
+                            alert.addButton(withTitle: "Force Archive")
+                            alert.addButton(withTitle: "Cancel")
+
+                            let response = alert.runModal()
+                            guard response == .alertFirstButtonReturn else { return }
+
+                            Task {
+                                do {
+                                    let warning = try await self.threadManager.archiveThread(
+                                        threadToArchive,
+                                        promptForLocalSyncConflicts: false,
+                                        force: true
+                                    ) ?? "Archived without completing local sync."
+                                    await MainActor.run {
+                                        BannerManager.shared.show(message: warning, style: .warning, duration: nil)
+                                    }
+                                } catch ThreadManagerError.archiveCancelled {
+                                    return
+                                } catch {
+                                    await MainActor.run {
+                                        BannerManager.shared.show(
+                                            message: "Archive failed: \(error.localizedDescription)",
+                                            style: .error
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     } catch {
                         await MainActor.run {
                             BannerManager.shared.show(

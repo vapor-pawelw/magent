@@ -50,7 +50,7 @@ Before the app is usable, the user must complete a configuration step:
 2. If **1 project** is configured → immediately create thread for that project
 3. If **multiple projects** → show a project selection menu first
 4. A new git worktree is created for the selected project
-5. If the project has local sync paths configured, those repo-relative files/directories are copied from the repo root into the new worktree
+5. If the project has local sync paths configured, those repo-relative files/directories are copied from the repo root into the new worktree and snapshotted onto the thread
 6. A tmux session is started in the worktree directory
 7. The configured agent is launched inside tmux
 8. The terminal is displayed in the main pane
@@ -58,7 +58,7 @@ Before the app is usable, the user must complete a configuration step:
 ### Archiving a Thread
 
 1. User triggers archive action on a thread
-2. If the project has local sync paths configured, files/directories from the worktree are merged back into the repo root before removal
+2. If the project has local sync paths configured, the thread's snapshotted files/directories are merged back into the repo root before removal
 3. Existing files in the repo that are not present in the worktree are preserved (no delete sync)
 4. If merge-back would overwrite an existing target, user can choose `Override`, `Override All`, `Ignore`, or `Cancel Archive`
 5. The git worktree is removed/pruned

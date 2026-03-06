@@ -17,13 +17,15 @@ Per-project `Local Sync Paths` let users keep selected local-only files/director
 
 After `git worktree add`, Magent copies each configured path from the project repo root into the new worktree.
 
+The thread also stores a snapshot of that normalized path list at creation time. Later project setting changes only affect newly created threads.
+
 - Missing source path in repo root: skipped
 - Existing destination in new worktree: overwritten for configured path contents
 - If sync-in fails, thread creation rolls back by removing the newly created worktree
 
 ## Archive Behavior
 
-Before removing a thread worktree, Magent merges each configured path back into the project repo root.
+Before removing a thread worktree, Magent merges each snapshotted path for that thread back into the project repo root.
 
 - Missing source path in thread worktree: skipped
 - Files unchanged in the thread since creation are skipped (no copy-back)
@@ -33,6 +35,8 @@ Before removing a thread worktree, Magent merges each configured path back into 
   - only touches files/directories covered by configured paths
 
 This preserves files created in the main repo while a thread was active.
+
+Because archive uses the thread's own snapshot, paths added to project settings after a thread was created are not applied retroactively to that existing thread.
 
 ## Conflict Handling
 
@@ -50,6 +54,14 @@ Interactive archive (UI) offers:
 - `Cancel Archive` (abort archive)
 
 Non-interactive archive flows skip conflicting targets by default (no destructive overwrite prompt).
+
+## Force Archive
+
+When local sync fails for a non-conflict reason, UI archive offers `Force Archive`, and CLI archive supports `--force`.
+
+- Force archive continues archiving even if local sync cannot complete
+- Conflicting overwrite targets are still skipped in non-interactive flows
+- Force archive never makes local sync destructive; it only allows archive to continue with a warning
 
 ## Error Feedback
 

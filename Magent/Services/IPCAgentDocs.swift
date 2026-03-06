@@ -9,7 +9,7 @@ enum IPCAgentDocs {
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
     /tmp/magent-cli send-prompt --thread <name> --prompt <text>
-    /tmp/magent-cli archive-thread --thread <name>
+    /tmp/magent-cli archive-thread --thread <name> [--force]
     /tmp/magent-cli delete-thread --thread <name>
     /tmp/magent-cli list-tabs --thread <name>
     /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]

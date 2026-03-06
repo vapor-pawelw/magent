@@ -40,8 +40,11 @@ extension ThreadManager {
 
     // MARK: - Local Sync In (Repo -> Worktree)
 
-    func syncConfiguredLocalPathsIntoWorktree(project: Project, worktreePath: String) async throws {
-        let syncPaths = project.normalizedLocalFileSyncPaths
+    func syncConfiguredLocalPathsIntoWorktree(
+        project: Project,
+        worktreePath: String,
+        syncPaths: [String]
+    ) async throws {
         guard !syncPaths.isEmpty else { return }
 
         var overwriteAll = true
@@ -84,9 +87,9 @@ extension ThreadManager {
     func syncConfiguredLocalPathsFromWorktree(
         project: Project,
         worktreePath: String,
+        syncPaths: [String],
         promptForConflicts: Bool
     ) async throws {
-        let syncPaths = project.normalizedLocalFileSyncPaths
         guard !syncPaths.isEmpty else { return }
 
         let baselineHashes = await loadLocalSyncBaselineFileHashes(worktreePath: worktreePath)
@@ -115,6 +118,13 @@ extension ThreadManager {
                 )
             }
         }
+    }
+
+    func effectiveLocalSyncPaths(for thread: MagentThread, project: Project) -> [String] {
+        if let snapshot = thread.localFileSyncPathsSnapshot {
+            return Project.normalizeLocalFileSyncPaths(snapshot)
+        }
+        return project.normalizedLocalFileSyncPaths
     }
 
     // MARK: - Merge Copy
