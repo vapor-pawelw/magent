@@ -93,12 +93,7 @@ extension ThreadDetailViewController {
             let sessionName = thread.tmuxSessionNames[index]
             let canShowTOC = thread.agentTmuxSessions.contains(sessionName)
             promptTOCCanShowForCurrentTab = canShowTOC
-            updatePromptTOCToggleButtonState(canShow: canShowTOC)
-            if !canShowTOC {
-                promptTOCView?.isHidden = true
-            } else if !isPromptTOCManuallyHidden {
-                promptTOCView?.isHidden = false
-            }
+            applyPromptTOCVisibility()
             if thread.lastSelectedTmuxSessionName != sessionName {
                 thread.lastSelectedTmuxSessionName = sessionName
                 threadManager.updateLastSelectedSession(for: thread.id, sessionName: sessionName)
@@ -125,9 +120,8 @@ extension ThreadDetailViewController {
     func showEmptyState() {
         guard emptyStateView == nil else { return }
         promptTOCCanShowForCurrentTab = false
-        updatePromptTOCToggleButtonState(canShow: false)
+        applyPromptTOCVisibility()
         updateTerminalScrollControlsState()
-        promptTOCView?.isHidden = true
 
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false

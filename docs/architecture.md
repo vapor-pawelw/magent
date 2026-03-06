@@ -109,6 +109,10 @@ Prompt TOC geometry is session-scoped UI state:
 - Restore size first, then restore position, and clamp both against current terminal container bounds.
 - Keep minimum size fixed at `320x250` (the original default panel dimensions).
 
+Prompt TOC visibility is shared app-scoped UI state:
+- Persist a single show/hide preference in `UserDefaults`, not per controller or per session.
+- When one `ThreadDetailViewController` toggles TOC visibility, broadcast that change so other open thread panels apply the same state immediately instead of waiting for relaunch/reselection.
+
 Prompt row interaction/visual rules:
 - Row hit target is the full row (not only text), so clicking anywhere in the row triggers navigation.
 - Row labels can wrap up to 3 lines and then truncate.

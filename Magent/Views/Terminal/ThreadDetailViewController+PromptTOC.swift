@@ -52,6 +52,10 @@ private enum PromptANSIForeground: Equatable {
 
 extension ThreadDetailViewController {
 
+    var isPromptTOCManuallyHidden: Bool {
+        UserDefaults.standard.bool(forKey: Self.promptTOCVisibilityDefaultsKey)
+    }
+
     func setupPromptTOCOverlay() {
         let tocView = PromptTableOfContentsView()
         tocView.translatesAutoresizingMaskIntoConstraints = false
@@ -111,8 +115,7 @@ extension ThreadDetailViewController {
             promptTOCSessionName = nil
             promptTOCEntries = []
             promptTOCCanShowForCurrentTab = false
-            updatePromptTOCToggleButtonState(canShow: false)
-            promptTOCView?.isHidden = true
+            applyPromptTOCVisibility()
             return
         }
 
@@ -121,8 +124,7 @@ extension ThreadDetailViewController {
             promptTOCSessionName = nil
             promptTOCEntries = []
             promptTOCCanShowForCurrentTab = false
-            updatePromptTOCToggleButtonState(canShow: false)
-            promptTOCView?.isHidden = true
+            applyPromptTOCVisibility()
             return
         }
 
@@ -132,8 +134,7 @@ extension ThreadDetailViewController {
         let previousSessionName = promptTOCSessionName
         let previousEntryCount = promptTOCSessionName == sessionName ? promptTOCEntries.count : 0
         promptTOCCanShowForCurrentTab = true
-        updatePromptTOCToggleButtonState(canShow: true)
-        promptTOCView?.isHidden = isPromptTOCManuallyHidden
+        applyPromptTOCVisibility()
         promptTOCView?.setLoading(agentType: agentType)
 
         let paneContent = await TmuxService.shared.captureFullPane(
@@ -173,11 +174,11 @@ extension ThreadDetailViewController {
             }
         }
         promptTOCView?.setEntries(entries, agentType: agentType)
-        promptTOCView?.isHidden = isPromptTOCManuallyHidden
         if previousSessionName != sessionName {
             restorePromptTOCSize(for: sessionName)
             restorePromptTOCPosition(for: sessionName)
         }
+        applyPromptTOCVisibility(restoringPosition: previousSessionName != sessionName)
         bringPromptTOCOverlayToFront()
         clampPromptTOCPositionIfNeeded()
     }
@@ -799,19 +800,31 @@ extension ThreadDetailViewController {
         togglePromptTOCButton.toolTip = isShown ? "Hide Table of Contents" : "Show Table of Contents"
     }
 
+    func applyPromptTOCVisibility(restoringPosition: Bool = false) {
+        updatePromptTOCToggleButtonState(canShow: promptTOCCanShowForCurrentTab)
+
+        let shouldShow = promptTOCCanShowForCurrentTab && !isPromptTOCManuallyHidden
+        promptTOCView?.isHidden = !shouldShow
+
+        guard shouldShow else { return }
+
+        bringPromptTOCOverlayToFront()
+        if restoringPosition, let sessionName = promptTOCSessionName {
+            restorePromptTOCPosition(for: sessionName)
+        }
+        clampPromptTOCPositionIfNeeded()
+    }
+
     func togglePromptTOCVisibility() {
         guard promptTOCCanShowForCurrentTab else { return }
-        isPromptTOCManuallyHidden.toggle()
-        promptTOCView?.isHidden = isPromptTOCManuallyHidden
-        updatePromptTOCToggleButtonState(canShow: true)
+        let nextHiddenState = !isPromptTOCManuallyHidden
+        UserDefaults.standard.set(nextHiddenState, forKey: Self.promptTOCVisibilityDefaultsKey)
+        NotificationCenter.default.post(name: .magentPromptTOCVisibilityChanged, object: nil)
+        applyPromptTOCVisibility(restoringPosition: !nextHiddenState)
+    }
 
-        if !isPromptTOCManuallyHidden {
-            bringPromptTOCOverlayToFront()
-            if let sessionName = promptTOCSessionName {
-                restorePromptTOCPosition(for: sessionName)
-            }
-            clampPromptTOCPositionIfNeeded()
-        }
+    @objc func handlePromptTOCVisibilityChanged(_ notification: Notification) {
+        applyPromptTOCVisibility(restoringPosition: !isPromptTOCManuallyHidden)
     }
 
     private func savePromptTOCPosition(for sessionName: String) {

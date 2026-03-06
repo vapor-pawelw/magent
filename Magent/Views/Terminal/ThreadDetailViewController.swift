@@ -9,6 +9,7 @@ final class ThreadDetailViewController: NSViewController {
     static let lastOpenedSessionDefaultsKey = "MagentLastOpenedSessionName"
     static let promptTOCPositionDefaultsPrefix = "MagentPromptTOCPosition"
     static let promptTOCSizeDefaultsPrefix = "MagentPromptTOCSize"
+    static let promptTOCVisibilityDefaultsKey = "MagentPromptTOCVisibilityHidden"
     static let promptTOCMinimumWidth: CGFloat = 320
     static let promptTOCMinimumHeight: CGFloat = 250
 
@@ -54,7 +55,6 @@ final class ThreadDetailViewController: NSViewController {
     var promptTOCResizeStartTop: CGFloat = 0
     var promptTOCResizeStartTrailing: CGFloat = 0
     var promptTOCCanShowForCurrentTab = false
-    var isPromptTOCManuallyHidden = false
 
     // MARK: - Inline Diff Viewer
     var diffVC: InlineDiffViewController?
@@ -149,6 +149,12 @@ final class ThreadDetailViewController: NSViewController {
             self,
             selector: #selector(handlePullRequestInfoChanged),
             name: .magentPullRequestInfoChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePromptTOCVisibilityChanged),
+            name: .magentPromptTOCVisibilityChanged,
             object: nil
         )
 
