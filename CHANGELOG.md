@@ -42,6 +42,7 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 - Selecting a thread no longer causes the sidebar to resize or task descriptions to rewrap between one and two lines.
 - Fixed project-row trailing `+` create-thread control so clicks reliably trigger thread creation, including Option-click on the full visible icon frame instead of only the glyph pixels.
+- Pulled the enlarged project-row `+` create-thread control closer to the trailing edge so it stays easier to scan and hit.
 - Fixed sidebar row jumping while switching threads by stabilizing thread-row text measurement and trailing status-marker layout.
 - Busy threads now show a sweeping shimmer state in sidebar rows for clearer in-progress visibility.
 - Sidebar now has clearer visual separation between project headers and their `Main` thread row, making scanning and navigation easier.

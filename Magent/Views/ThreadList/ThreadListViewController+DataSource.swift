@@ -426,7 +426,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         addButton.heightAnchor.constraint(equalToConstant: Self.projectHeaderActionButtonSize),
                         addButton.trailingAnchor.constraint(
                             equalTo: c.trailingAnchor,
-                            constant: -Self.projectDisclosureTrailingInset
+                            constant: -Self.projectAddButtonTrailingInset
                         ),
                     ])
                     return c
