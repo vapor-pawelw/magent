@@ -118,7 +118,7 @@ Navigation behavior:
 - Terminal scrollback fallback controls in the thread top bar must also route through tmux copy-mode commands (`page-up`, `page-down-and-cancel`, cancel-to-bottom) instead of relying on Ghostty wheel events, because in-agent wheel handling can be captured by the running tool.
 - Keep tmux pane scrollbars in `modal` mode so users get a visible history indicator while using those fallback controls.
 
-### 4.4 Project Local File Sync Paths
+### 4.5 Project Local File Sync Paths
 
 Projects can define repo-relative local sync paths (files or directories).
 
@@ -132,6 +132,14 @@ Projects can define repo-relative local sync paths (files or directories).
   - `Cancel Archive`
 - CLI/non-interactive archive paths should avoid destructive overwrite prompts and skip conflicting targets by default.
 - Force archive is allowed for local sync failures: continue archiving with a warning, but still keep sync non-destructive.
+
+### 4.6 Sidebar Split View Stability
+
+The main window's sidebar/detail `NSSplitView` structure should remain stable while switching threads.
+
+- Create the sidebar split item and the detail/content split item once at startup.
+- When the selected thread changes, swap the child view controller inside a persistent content container instead of removing/re-adding split view items.
+- Recreating split view items during selection can make AppKit renegotiate divider positions, which causes visible sidebar width jumps and sidebar row reflow (for example task descriptions toggling between one and two lines).
 
 ### 5. Persistence Model
 

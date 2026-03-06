@@ -92,8 +92,8 @@ extension ThreadDetailViewController {
                 }
 
                 // Archive directly without a spinner sheet. The delegate-driven
-                // reloadData()/showEmptyState() modifies split view items, which
-                // crashes if a sheet is being presented on the same window.
+                // reloadData()/showEmptyState() swaps the main content controller,
+                // which has been unsafe while a sheet is presented on the same window.
                 Task {
                     do {
                         let warning = try await self.threadManager.archiveThread(

@@ -1,5 +1,35 @@
 import Cocoa
 
+private final class SplitContentContainerViewController: NSViewController {
+    private var currentChild: NSViewController?
+
+    override func loadView() {
+        view = NSView()
+    }
+
+    func setContent(_ child: NSViewController) {
+        if currentChild === child { return }
+
+        if let currentChild {
+            currentChild.view.removeFromSuperview()
+            currentChild.removeFromParent()
+        }
+
+        addChild(child)
+        let childView = child.view
+        childView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(childView)
+        NSLayoutConstraint.activate([
+            childView.topAnchor.constraint(equalTo: view.topAnchor),
+            childView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            childView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            childView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+
+        currentChild = child
+    }
+}
+
 final class SplitViewController: NSSplitViewController {
 
     private static let sidebarWidthDefaultsKey = "MagentSidebarWidth"
@@ -7,6 +37,7 @@ final class SplitViewController: NSSplitViewController {
 
     private let threadListVC = ThreadListViewController()
     private let emptyStateVC = EmptyStateViewController()
+    private let contentContainerVC = SplitContentContainerViewController()
     private var currentDetailVC: ThreadDetailViewController?
     private var settingsWindowController: NSWindowController?
     private var sidebarItem: NSSplitViewItem?
@@ -23,7 +54,8 @@ final class SplitViewController: NSSplitViewController {
         self.sidebarItem = sidebarItem
         addSplitViewItem(sidebarItem)
 
-        let contentItem = NSSplitViewItem(contentListWithViewController: emptyStateVC)
+        contentContainerVC.setContent(emptyStateVC)
+        let contentItem = NSSplitViewItem(contentListWithViewController: contentContainerVC)
         addSplitViewItem(contentItem)
 
         splitView.dividerStyle = .thin
@@ -130,12 +162,7 @@ final class SplitViewController: NSSplitViewController {
         let detailVC = ThreadDetailViewController(thread: thread)
         currentDetailVC = detailVC
 
-        // Replace the content split view item
-        if splitViewItems.count > 1 {
-            removeSplitViewItem(splitViewItems[1])
-        }
-        let contentItem = NSSplitViewItem(contentListWithViewController: detailVC)
-        addSplitViewItem(contentItem)
+        contentContainerVC.setContent(detailVC)
 
         if thread.jiraUnassigned {
             BannerManager.shared.show(
@@ -265,11 +292,7 @@ final class SplitViewController: NSSplitViewController {
     private func showEmptyState() {
         currentDetailVC = nil
         ThreadManager.shared.setActiveThread(nil)
-        if splitViewItems.count > 1 {
-            removeSplitViewItem(splitViewItems[1])
-        }
-        let contentItem = NSSplitViewItem(contentListWithViewController: emptyStateVC)
-        addSplitViewItem(contentItem)
+        contentContainerVC.setContent(emptyStateVC)
     }
 }
 

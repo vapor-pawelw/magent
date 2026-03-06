@@ -35,6 +35,7 @@ All notable changes to this project will be documented in this file.
 - Added `set-thread-icon` CLI command to manually set thread icon type (`feature`, `fix`, `improvement`, `refactor`, `test`, `other`).
 
 ### Sidebar
+- Selecting a thread no longer causes the sidebar to resize or task descriptions to rewrap between one and two lines.
 - Fixed project-row trailing `+` create-thread control so the full visible icon frame is clickable (not only the glyph pixels).
 - Double-clicking a file in the `CHANGES` panel now opens it in the default macOS app, and right-click now includes `Show in Finder`.
 - Selecting files in `CHANGES` now opens and scrolls the inline diff to the correct file section, including renamed files and paths that Git would otherwise quote.
