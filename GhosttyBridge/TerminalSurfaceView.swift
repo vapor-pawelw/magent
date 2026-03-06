@@ -683,6 +683,15 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         }
     }
 
+    /// Invokes a named ghostty binding action on this surface (e.g. "scroll_to_bottom").
+    @discardableResult
+    public func bindingAction(_ actionName: String) -> Bool {
+        guard let surface else { return false }
+        return actionName.withCString { ptr in
+            ghostty_surface_binding_action(surface, ptr, UInt(actionName.utf8.count))
+        }
+    }
+
     private func pasteDroppedText(_ text: String) -> Bool {
         guard let surface, !text.isEmpty else { return false }
 

@@ -28,6 +28,7 @@ final class ThreadDetailViewController: NSViewController {
     let scrollToBottomButton = NSButton()
     let togglePromptTOCButton = NSButton()
     let addTabButton = NSButton()
+    let floatingScrollToBottomButton = NSButton()
 
     var tabItems: [TabItemView] = []
     var terminalViews: [TerminalSurfaceView] = []
@@ -160,6 +161,14 @@ final class ThreadDetailViewController: NSViewController {
             self,
             selector: #selector(handleHideDiffViewerNotification),
             name: .magentHideDiffViewer,
+            object: nil
+        )
+
+        // Observe ghostty scrollbar updates to show/hide floating scroll-to-bottom button
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleScrollbarUpdate(_:)),
+            name: GhosttyAppManager.ghosttyScrollbarUpdated,
             object: nil
         )
 
@@ -304,6 +313,8 @@ final class ThreadDetailViewController: NSViewController {
             terminalContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             terminalBottomToView!,
         ])
+
+        setupScrollFAB()
     }
 
     // MARK: - Tab Setup

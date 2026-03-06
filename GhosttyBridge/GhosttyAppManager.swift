@@ -142,6 +142,7 @@ public final class GhosttyAppManager {
     // MARK: - Notification Names
 
     public static let ghosttySurfaceClosed = Notification.Name("ghosttySurfaceClosed")
+    public static let ghosttyScrollbarUpdated = Notification.Name("ghosttyScrollbarUpdated")
 }
 
 // MARK: - C callbacks
@@ -174,6 +175,23 @@ private func ghosttyActionCallback(
          GHOSTTY_ACTION_RING_BELL,
          GHOSTTY_ACTION_PWD,
          GHOSTTY_ACTION_OPEN_URL:
+        return true
+    case GHOSTTY_ACTION_SCROLLBAR:
+        guard target.tag == GHOSTTY_TARGET_SURFACE else { return false }
+        let surfaceAddr = Int(bitPattern: target.target.surface)
+        let scrollbar = action.action.scrollbar
+        Task { @MainActor in
+            NotificationCenter.default.post(
+                name: GhosttyAppManager.ghosttyScrollbarUpdated,
+                object: nil,
+                userInfo: [
+                    "surfaceAddr": surfaceAddr,
+                    "total": scrollbar.total,
+                    "offset": scrollbar.offset,
+                    "len": scrollbar.len,
+                ]
+            )
+        }
         return true
     default:
         return false
