@@ -44,8 +44,8 @@ This cap does **not** apply when the message includes:
 
 Rate limits are tracked **per agent type** (Claude, Codex), not per session. When one session detects a Claude rate limit, the same status is shown across all Claude sessions since rate limits apply at the account level.
 
-When any session detects that its agent has resumed work (producing output after being blocked), the rate limit is cleared globally for that agent.
-To avoid 3-second flapping, Magent now only auto-clears when the latest pane no longer shows an active non-ignored rate-limit fingerprint.
+Once Magent has matched a non-ignored rate-limit fingerprint and anchored a concrete `resetAt`, that rate limit stays active until the timer expires or you lift it manually.
+Newer pane output such as `/status` must not auto-clear an already-anchored limit just because the latest block no longer shows the original rate-limit text.
 
 ## UI Indicators
 

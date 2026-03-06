@@ -54,6 +54,14 @@ extension ThreadManager {
         return ignoredRateLimitFingerprintsByAgent[agent]?.contains(normalized) ?? false
     }
 
+    private func hasUnexpiredConcreteRateLimit(
+        _ info: AgentRateLimitInfo?,
+        now: Date
+    ) -> Bool {
+        guard let info, !info.isPromptBased else { return false }
+        return info.resetAt > now
+    }
+
     private func persistIgnoredRateLimitCacheIfNeeded() {
         guard ignoredRateLimitCacheDirty else { return }
         ignoredRateLimitCacheDirty = false
@@ -104,7 +112,6 @@ extension ThreadManager {
         var changedThreadIds = Set<UUID>()
         var didChangeGlobalCache = pruneExpiredGlobalRateLimits(now: now, changedThreadIds: &changedThreadIds)
         var newlyDetectedAgents = Set<AgentType>()
-        var activelyDetectedAgents = Set<AgentType>()
 
         // Lazy-load persisted rate-limit caches on first use.
         ensureRateLimitCachesLoaded()
@@ -134,10 +141,12 @@ extension ThreadManager {
                 guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
                       let detection = rateLimitDetection(from: paneContent, now: now, agent: sessionAgent) else {
                     if detectionEnabled {
-                        // Preserve prompt-based markers — they are managed by
-                        // syncBusySessionsFromProcessState, not by this function.
-                        if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
-                            // keep prompt-based marker
+                        let existing = updatedRateLimits[sessionName]
+                        // Concrete fingerprint-based limits stay active until
+                        // resetAt expires or the user clears them manually.
+                        if (existing?.isPromptBased == true)
+                            || hasUnexpiredConcreteRateLimit(existing, now: now) {
+                            // keep existing marker
                         } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
                             changedThreadIds.insert(threadId)
                         }
@@ -183,7 +192,6 @@ extension ThreadManager {
                         globalAgentRateLimits[sessionAgent] = info
                         didChangeGlobalCache = true
                     }
-                    activelyDetectedAgents.insert(sessionAgent)
                     continue
                 }
 
@@ -218,7 +226,6 @@ extension ThreadManager {
                 if !hadActiveGlobalRateLimit {
                     newlyDetectedAgents.insert(sessionAgent)
                 }
-                activelyDetectedAgents.insert(sessionAgent)
             }
 
             for sessionName in Array(updatedRateLimits.keys) where !validSessions.contains(sessionName) {
@@ -231,18 +238,6 @@ extension ThreadManager {
                updatedRateLimits != threads[j].rateLimitedSessions {
                 threads[j].rateLimitedSessions = updatedRateLimits
                 changedThreadIds.insert(threadId)
-            }
-        }
-
-        if detectionEnabled {
-            let staleGlobalAgents = globalAgentRateLimits.keys.filter { agent in
-                isRateLimitTrackable(agent: agent) && !activelyDetectedAgents.contains(agent)
-            }
-            if !staleGlobalAgents.isEmpty {
-                for agent in staleGlobalAgents {
-                    globalAgentRateLimits.removeValue(forKey: agent)
-                }
-                didChangeGlobalCache = true
             }
         }
 
@@ -474,6 +469,11 @@ extension ThreadManager {
         guard hadSessionMarker || hadGlobalMarker else { return [] }
 
         let now = Date()
+        if hasUnexpiredConcreteRateLimit(thread.rateLimitedSessions[sessionName], now: now)
+            || activeGlobalRateLimit(for: agent, now: now) != nil {
+            return []
+        }
+
         let latestPaneContent: String?
         if let paneContent {
             latestPaneContent = paneContent

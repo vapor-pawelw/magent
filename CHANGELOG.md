@@ -53,6 +53,7 @@ All notable changes to this project will be documented in this file.
 - CLI prompt injection now waits for agent-ready startup paths and submits prompts reliably (text + Enter), avoiding dropped first submissions.
 - Project-level **Pre-Agent Command** setting in App Settings to run setup commands before the selected agent starts for new/recreated agent sessions.
 - Auto-set thread icons now rely on agent confidence-guided work-type selection, reducing unnecessary fallback to `other`.
+- Codex rate-limit timers now stay active until the cached reset time expires or you lift them manually, even if newer pane output like `/status` replaces the original limit message.
 - Rate-limit parsing now handles Claude’s interactive “Stop and wait for limit to reset” prompt reliably by reading the reset deadline shown above the options list.
 - Codex rate-limit parsing now keeps latest-scope separator filtering, while still falling back to full-tail parsing when no separator is present.
 
