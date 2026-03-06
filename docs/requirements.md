@@ -102,6 +102,8 @@ Before the app is usable, the user must complete a configuration step:
 
 - TOC entries must represent only user-submitted prompts for the active agent tab.
 - Do not include non-submitted composer content, placeholder suggestions, or interactive selector rows.
+- Treat a prompt as TOC-eligible only after later terminal activity shows it is no longer the active bottom composer text.
+- Ignore pinned bottom chrome/status rows (for example model/usage/path lines) when deciding whether a prompt was actually submitted.
 - Switching threads/tabs must not surface stale non-submitted prompt text in TOC.
 - TOC entry ordering follows actual submission order for that session.
 - TOC panel must be draggable and resizable by the user.

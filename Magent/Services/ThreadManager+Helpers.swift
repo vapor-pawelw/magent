@@ -270,24 +270,25 @@ extension ThreadManager {
 
     private static let maxSubmittedPromptsPerSession = 250
 
-    func submittedPromptHistory(threadId: UUID, sessionName: String) -> [String] {
-        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return [] }
-        return threads[index].submittedPromptsBySession[sessionName] ?? []
-    }
-
-    func recordSubmittedPrompt(threadId: UUID, sessionName: String, prompt: String) {
+    func replaceSubmittedPromptHistory(threadId: UUID, sessionName: String, prompts: [String]) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[index].agentTmuxSessions.contains(sessionName) else { return }
 
-        let normalized = normalizedSubmittedPrompt(prompt)
-        guard !normalized.isEmpty else { return }
-
-        var history = threads[index].submittedPromptsBySession[sessionName] ?? []
-        history.append(normalized)
+        var history = prompts
+            .map(normalizedSubmittedPrompt(_:))
+            .filter { !$0.isEmpty }
         if history.count > Self.maxSubmittedPromptsPerSession {
-            history.removeFirst(history.count - Self.maxSubmittedPromptsPerSession)
+            history = Array(history.suffix(Self.maxSubmittedPromptsPerSession))
         }
-        threads[index].submittedPromptsBySession[sessionName] = history
+
+        let existing = threads[index].submittedPromptsBySession[sessionName] ?? []
+        guard history != existing else { return }
+
+        if history.isEmpty {
+            threads[index].submittedPromptsBySession.removeValue(forKey: sessionName)
+        } else {
+            threads[index].submittedPromptsBySession[sessionName] = history
+        }
         try? persistence.saveThreads(threads)
     }
 
