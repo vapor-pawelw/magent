@@ -317,15 +317,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             case .name:
                 setProjectCollapsed(project, isCollapsed: !isProjectCollapsed(project))
                 reloadData()
-            case .add:
-                let row = outlineView.row(forItem: project)
-                guard row >= 0,
-                      let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView,
-                      let addButton = cell.subviews.first(where: { $0.identifier == Self.projectAddButtonIdentifier }) as? NSButton else {
-                    return false
-                }
-                addThreadForProjectTapped(addButton)
-            case .disclosure, .other:
+            case .add, .disclosure, .other:
                 break
             }
             return false
@@ -397,6 +389,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     addButton.imagePosition = .imageOnly
                     addButton.focusRingType = .none
                     addButton.setButtonType(.momentaryChange)
+                    addButton.sendAction(on: [.leftMouseUp])
+                    addButton.target = self
+                    addButton.action = #selector(addThreadForProjectTapped(_:))
                     c.addSubview(addButton)
 
                     tf.setContentCompressionResistancePriority(.required, for: .horizontal)

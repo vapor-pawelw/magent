@@ -96,13 +96,15 @@ Before the app is usable, the user must complete a configuration step:
 
 ### Project Header Controls
 
-- In each project header row, the trailing `+` create-thread control must treat the entire visible icon frame as clickable, not just the drawn plus glyph.
+- In each project header row, the trailing `+` create-thread control must treat the entire visible icon frame as clickable, and both normal click and Option-click must reliably trigger from that full hit area instead of only the drawn plus glyph.
 
 ## Prompt Table of Contents (TOC)
 
 - TOC entries must represent only user-submitted prompts for the active agent tab.
 - Do not include non-submitted composer content, placeholder suggestions, or interactive selector rows.
 - Treat a prompt as TOC-eligible only after later terminal activity shows it is no longer the active bottom composer text.
+- Placeholder/draft composer text should be filtered using pane styling when available (for example dim/grey prompt text), not only string heuristics.
+- Prompt extraction must preserve wrapped continuation lines that belong to the same submitted input block.
 - Ignore pinned bottom chrome/status rows (for example model/usage/path lines) when deciding whether a prompt was actually submitted.
 - Switching threads/tabs must not surface stale non-submitted prompt text in TOC.
 - TOC entry ordering follows actual submission order for that session.

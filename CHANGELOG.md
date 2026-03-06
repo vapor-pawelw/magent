@@ -25,6 +25,7 @@ All notable changes to this project will be documented in this file.
 - GhosttyKit bootstrap now auto-recovers from stale iTerm2 themes dependency URLs: it retries once by patching to Ghostty's maintained mirror when the initial build fails with the known `ghostty-themes.tgz` `404`.
 - Agent IPC guidance injection is now lightweight by default, with full `magent-cli` docs loaded only on demand (`magent-cli docs`) to reduce token usage.
 - First-prompt auto-rename now generates branch slug and thread description in one AI call, reducing duplicate background model usage.
+- Prompt TOC now rejects dim/grey placeholder composer text, requires later agent output before confirming a submitted prompt, and keeps full-width 3-line rows with selection highlighting plus an inline close button.
 - Prompt TOC now includes only prompts that were actually submitted, excluding placeholder/suggestion rows and stale non-submitted composer text after thread/tab switches.
 - Prompt TOC now filters generic suggestion templates like `Implement (feature)` so they do not appear as submitted entries.
 - Prompt TOC now also filters brace-style suggestion templates like `Implement {feature}` and avoids re-falling back to parser rows once submitted-history exists for a session.
@@ -35,7 +36,7 @@ All notable changes to this project will be documented in this file.
 - Added `set-thread-icon` CLI command to manually set thread icon type (`feature`, `fix`, `improvement`, `refactor`, `test`, `other`).
 
 ### Sidebar
-- Fixed project-row trailing `+` create-thread control so the full visible icon frame is clickable (not only the glyph pixels).
+- Fixed project-row trailing `+` create-thread control so clicks reliably trigger thread creation, including Option-click on the full visible icon frame instead of only the glyph pixels.
 - Double-clicking a file in the `CHANGES` panel now opens it in the default macOS app, and right-click now includes `Show in Finder`.
 - Selecting files in `CHANGES` now opens and scrolls the inline diff to the correct file section, including renamed files and paths that Git would otherwise quote.
 - Fixed sidebar row jumping while switching threads by stabilizing thread-row text measurement and trailing status-marker layout.
