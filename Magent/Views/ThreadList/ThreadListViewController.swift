@@ -27,6 +27,7 @@ final class ThreadListViewController: NSViewController {
     static let projectDisclosureTrailingInset: CGFloat = 8
     static let outlineIndentationPerLevel: CGFloat = 16
     static let disclosureButtonSize: CGFloat = 16
+    static let projectHeaderActionButtonSize: CGFloat = 24
     static let projectHeaderVerticalPadding: CGFloat = 8
     static let projectHeaderRowHeight: CGFloat = disclosureButtonSize + (projectHeaderVerticalPadding * 2) + 2
     static let projectSpacerDividerVerticalSpacing: CGFloat = 8
