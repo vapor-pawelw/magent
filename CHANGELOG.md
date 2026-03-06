@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file.
 - First-prompt auto-rename now generates branch slug and thread description in one AI call, reducing duplicate background model usage.
 - Prompt TOC now includes only prompts that were actually submitted, excluding placeholder/suggestion rows and stale non-submitted composer text after thread/tab switches.
 - Prompt TOC now filters generic suggestion templates like `Implement (feature)` so they do not appear as submitted entries.
+- Prompt TOC now also filters brace-style suggestion templates like `Implement {feature}` and avoids re-falling back to parser rows once submitted-history exists for a session.
+- Prompt TOC confirmation now waits for pane evidence that a prompt moved past the active bottom composer area, and ignores pinned bottom chrome like `gpt-5.4 high · ...` instead of storing raw keystroke submissions immediately.
 - Reordering sections no longer changes the default section unexpectedly.
 - Auto-generated task descriptions now use cleaner capitalization for better readability.
 - Added an `Improvement` thread icon type.

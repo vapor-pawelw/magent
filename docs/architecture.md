@@ -96,9 +96,9 @@ This manual path intentionally skips first-prompt eligibility gates (for example
 
 ### 4.3 Prompt TOC Source of Truth
 
-Prompt TOC content is submission-driven, not pane-marker-driven. Persist per-session submitted prompt history and use it as the source of truth for TOC rows.
-When session names are renamed/migrated, re-key this prompt history together with other session-scoped maps; when sessions are removed, prune it. Parser-based pane scanning is fallback-only for legacy sessions without stored history.
-Fallback parsing must also reject generic composer suggestion templates (for example `Implement (feature)`), so non-submitted placeholder prompts never appear in TOC rows.
+Prompt TOC content is confirmation-driven, not raw-keystroke-driven. Persist per-session TOC-confirmed prompt history only after pane evidence shows the prompt is no longer just active bottom composer text.
+The parser must exclude the active bottom input cluster (prompt line plus pinned status/helper rows such as model/usage lines) so draft text like `Implement {feature}` and pinned chrome like `gpt-5.4 high · ...` never enter confirmed history.
+When session names are renamed/migrated, re-key this confirmed prompt history together with other session-scoped maps; when sessions are removed, prune it.
 
 ### 4.4 Prompt TOC Layout + Interaction Persistence
 

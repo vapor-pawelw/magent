@@ -8,7 +8,6 @@ struct PromptTOCEntry: Sendable {
 private struct PromptPaneCandidate {
     let lineIndex: Int
     let promptText: String
-    let normalizedPromptText: String
 }
 
 extension ThreadDetailViewController {
@@ -93,14 +92,14 @@ extension ThreadDetailViewController {
         guard !Task.isCancelled else { return }
         guard currentTabIndex < thread.tmuxSessionNames.count, thread.tmuxSessionNames[currentTabIndex] == sessionName else { return }
 
-        let latestThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
-        let submittedPrompts = threadManager.submittedPromptHistory(threadId: thread.id, sessionName: sessionName)
-        let isWaitingForInput = latestThread.waitingForInputSessions.contains(sessionName)
         let entries = parsePromptEntries(
             from: paneContent,
-            agentType: agentType,
-            submittedPrompts: submittedPrompts,
-            isWaitingForInput: isWaitingForInput
+            agentType: agentType
+        )
+        threadManager.replaceSubmittedPromptHistory(
+            threadId: thread.id,
+            sessionName: sessionName,
+            prompts: entries.map(\.displayText)
         )
         promptTOCSessionName = sessionName
         promptTOCEntries = entries
@@ -115,32 +114,20 @@ extension ThreadDetailViewController {
 
     private func parsePromptEntries(
         from paneContent: String,
-        agentType: AgentType?,
-        submittedPrompts: [String],
-        isWaitingForInput: Bool
+        agentType: AgentType?
     ) -> [PromptTOCEntry] {
-        let (candidates, lineCount) = parsePromptCandidates(from: paneContent, agentType: agentType)
+        let (candidates, lines) = parsePromptCandidates(from: paneContent, agentType: agentType)
         if candidates.isEmpty { return [] }
 
-        let normalizedSubmitted = submittedPrompts
-            .map(normalizedPromptText(_:))
-            .filter { !$0.isEmpty }
-        if !normalizedSubmitted.isEmpty {
-            return entriesFromSubmittedPrompts(
-                candidates: candidates,
-                normalizedSubmittedPrompts: normalizedSubmitted
-            )
-        }
-
-        // Legacy fallback when prompt history has not been captured yet.
-        var fallback = candidates
-        if isWaitingForInput {
-            fallback = removingTrailingComposerCandidates(from: fallback, lineCount: lineCount)
-        }
-        return entriesFromCandidates(fallback)
+        let cutoff = activeBottomClusterStartIndex(
+            in: lines,
+            candidates: candidates
+        )
+        let confirmedCandidates = candidates.filter { $0.lineIndex < cutoff }
+        return entriesFromCandidates(confirmedCandidates)
     }
 
-    private func parsePromptCandidates(from paneContent: String, agentType: AgentType?) -> ([PromptPaneCandidate], Int) {
+    private func parsePromptCandidates(from paneContent: String, agentType: AgentType?) -> ([PromptPaneCandidate], [String]) {
         let codexPromptMarker = "\u{203A}" // ›
         let claudePromptMarker = "\u{276F}" // ❯
 
@@ -163,51 +150,19 @@ extension ThreadDetailViewController {
             if promptText.range(of: #"^\d+\."#, options: .regularExpression) != nil { continue }
             let lowerPrompt = promptText.lowercased()
             if lowerPrompt == "yes" || lowerPrompt == "no" { continue }
-            // Exclude generic suggestion templates (for example: "Implement (feature)")
+            // Exclude generic suggestion templates (for example: "Implement {feature}")
             // that can appear in the composer area but were not actually submitted.
             if isPlaceholderSuggestionPrompt(promptText) { continue }
 
             candidates.append(
                 PromptPaneCandidate(
                     lineIndex: lineIndex,
-                    promptText: promptText,
-                    normalizedPromptText: normalizedPromptText(promptText)
+                    promptText: promptText
                 )
             )
         }
 
-        return (candidates, lines.count)
-    }
-
-    private func entriesFromSubmittedPrompts(
-        candidates: [PromptPaneCandidate],
-        normalizedSubmittedPrompts: [String]
-    ) -> [PromptTOCEntry] {
-        var matched: [PromptTOCEntry] = []
-        var searchStart = 0
-
-        for submitted in normalizedSubmittedPrompts {
-            guard !submitted.isEmpty else { continue }
-            while searchStart < candidates.count {
-                let candidate = candidates[searchStart]
-                if promptsMatch(submittedPrompt: submitted, candidatePrompt: candidate.normalizedPromptText) {
-                    matched.append(
-                        PromptTOCEntry(
-                            lineIndex: candidate.lineIndex,
-                            displayText: candidate.promptText
-                        )
-                    )
-                    searchStart += 1
-                    break
-                }
-                searchStart += 1
-            }
-        }
-
-        if matched.count > 250 {
-            matched = Array(matched.suffix(250))
-        }
-        return matched
+        return (candidates, lines)
     }
 
     private func entriesFromCandidates(_ candidates: [PromptPaneCandidate]) -> [PromptTOCEntry] {
@@ -223,54 +178,46 @@ extension ThreadDetailViewController {
         return entries
     }
 
-    private func promptsMatch(submittedPrompt: String, candidatePrompt: String) -> Bool {
-        if submittedPrompt.caseInsensitiveCompare(candidatePrompt) == .orderedSame {
-            return true
-        }
-        return submittedPrompt.hasPrefix(candidatePrompt) || candidatePrompt.hasPrefix(submittedPrompt)
-    }
+    private func activeBottomClusterStartIndex(
+        in lines: [String],
+        candidates: [PromptPaneCandidate]
+    ) -> Int {
+        guard !lines.isEmpty else { return 0 }
 
-    private func normalizedPromptText(_ text: String) -> String {
-        text
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+        let candidateLineIndexes = Set(candidates.map(\.lineIndex))
+        var cutoff = lines.count
+        var sawBottomClusterContent = false
 
-    private func removingTrailingComposerCandidates(from candidates: [PromptPaneCandidate], lineCount: Int) -> [PromptPaneCandidate] {
-        guard !candidates.isEmpty else { return candidates }
-
-        var cutoff = min(lineCount, candidates.last!.lineIndex)
-        var previousLineIndex = candidates.last!.lineIndex
-        for candidate in candidates.dropLast().reversed() {
-            // Treat tightly clustered prompt-marker rows near the bottom as the active
-            // composer/suggestion area and exclude them from fallback TOC parsing.
-            if previousLineIndex - candidate.lineIndex <= 2 {
-                cutoff = candidate.lineIndex
-                previousLineIndex = candidate.lineIndex
+        for lineIndex in stride(from: lines.count - 1, through: 0, by: -1) {
+            let trimmed = lines[lineIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                if sawBottomClusterContent {
+                    cutoff = lineIndex
+                }
                 continue
             }
+
+            let isCandidateLine = candidateLineIndexes.contains(lineIndex)
+            let isBottomAuxiliary = isBottomPinnedAuxiliaryLine(trimmed)
+
+            if isCandidateLine || isBottomAuxiliary {
+                sawBottomClusterContent = true
+                cutoff = lineIndex
+                continue
+            }
+
             break
         }
-        return candidates.filter { $0.lineIndex < cutoff }
+        return cutoff
     }
 
     private func isPlaceholderSuggestionPrompt(_ promptText: String) -> Bool {
         let trimmed = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasSuffix(")"), let openParen = trimmed.lastIndex(of: "(") else { return false }
-
-        let prefix = trimmed[..<openParen].trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prefix.isEmpty else { return false }
-
-        let placeholderStart = trimmed.index(after: openParen)
-        let placeholderEnd = trimmed.index(before: trimmed.endIndex)
-        guard placeholderStart < placeholderEnd else { return false }
-
-        let placeholder = trimmed[placeholderStart..<placeholderEnd]
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
+        let placeholder = extractTemplatePlaceholder(from: trimmed)?.lowercased() ?? ""
         guard !placeholder.isEmpty else { return false }
         guard placeholder.range(of: #"^[a-z][a-z0-9 _/\-]{1,24}$"#, options: .regularExpression) != nil else { return false }
 
+        guard let prefix = templatePlaceholderPrefix(from: trimmed), !prefix.isEmpty else { return false }
         let prefixWordCount = prefix.split(whereSeparator: \.isWhitespace).count
         guard (1...4).contains(prefixWordCount) else { return false }
 
@@ -281,6 +228,60 @@ extension ThreadDetailViewController {
         default:
             return false
         }
+    }
+
+    private func isBottomPinnedAuxiliaryLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        let lower = trimmed.lowercased()
+        if lower.contains("tab to cycle")
+            || lower.contains("enter to submit")
+            || lower.contains("shift+tab")
+            || lower.contains("ctrl+c to stop")
+            || lower.contains("esc to interrupt") {
+            return true
+        }
+
+        let isModelStatusLine = trimmed.range(
+            of: #"^(gpt|o[1-9]|claude|codex)[a-z0-9 .\-]*\s+·\s+.*\bleft\b.*(?:~/|/Users/|/[A-Za-z0-9._-]+/)"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+        if isModelStatusLine {
+            return true
+        }
+
+        return false
+    }
+
+    private func templatePlaceholderPrefix(from promptText: String) -> String? {
+        for (open, close) in [("(", ")"), ("{", "}"), ("[", "]"), ("<", ">")] {
+            guard let openCharacter = open.first,
+                  promptText.hasSuffix(close),
+                  let openIndex = promptText.lastIndex(of: openCharacter) else { continue }
+            let prefix = promptText[..<openIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !prefix.isEmpty {
+                return prefix
+            }
+        }
+        return nil
+    }
+
+    private func extractTemplatePlaceholder(from promptText: String) -> String? {
+        for (open, close) in [("(", ")"), ("{", "}"), ("[", "]"), ("<", ">")] {
+            guard let openCharacter = open.first,
+                  promptText.hasSuffix(close),
+                  let openIndex = promptText.lastIndex(of: openCharacter) else { continue }
+            let placeholderStart = promptText.index(after: openIndex)
+            let placeholderEnd = promptText.index(before: promptText.endIndex)
+            guard placeholderStart < placeholderEnd else { continue }
+            let placeholder = promptText[placeholderStart..<placeholderEnd]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !placeholder.isEmpty {
+                return placeholder
+            }
+        }
+        return nil
     }
 
     private func handlePromptTOCSelection(entryIndex: Int) {

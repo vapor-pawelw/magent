@@ -99,7 +99,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var taskDescription: String?
     var threadIcon: ThreadIcon
     var isThreadIconManuallySet: Bool
-    /// Persisted per-session history of user-submitted prompts (newest at end).
+    /// Persisted per-session history of TOC-confirmed prompts (newest at end).
     var submittedPromptsBySession: [String: [String]]
 
     // Transient (not persisted) — tracks which agent sessions are currently working
