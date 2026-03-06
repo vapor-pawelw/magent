@@ -124,7 +124,7 @@ extension ThreadDetailViewController {
         }
 
         let agentType = thread.sessionAgentTypes[sessionName]
-            ?? thread.selectedAgentType
+            ?? thread.effectiveAgentType
             ?? threadManager.effectiveAgentType(for: thread.projectId)
         let previousSessionName = promptTOCSessionName
         promptTOCCanShowForCurrentTab = true

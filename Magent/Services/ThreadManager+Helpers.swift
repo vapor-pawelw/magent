@@ -101,7 +101,7 @@ extension ThreadManager {
             return mapped
         }
         if thread.agentTmuxSessions.contains(sessionName) {
-            return thread.selectedAgentType
+            return thread.effectiveAgentType
         }
         return nil
     }
@@ -133,7 +133,7 @@ extension ThreadManager {
         guard threads[threadIndex].agentTmuxSessions.contains(sessionName) else { return }
 
         let agentType = agentType(for: threads[threadIndex], sessionName: sessionName)
-            ?? threads[threadIndex].selectedAgentType
+            ?? threads[threadIndex].effectiveAgentType
         let worktreePath = threads[threadIndex].worktreePath
 
         let conversationID: String?

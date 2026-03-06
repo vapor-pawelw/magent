@@ -330,7 +330,7 @@ final class IPCCommandHandler {
 
         let tabs = thread.tmuxSessionNames.enumerated().map { index, sessionName in
             let isAgent = thread.agentTmuxSessions.contains(sessionName)
-            let agentType: String? = isAgent ? (thread.selectedAgentType?.rawValue ?? "unknown") : nil
+            let agentType: String? = isAgent ? (thread.sessionAgentTypes[sessionName]?.rawValue ?? thread.effectiveAgentType?.rawValue ?? "unknown") : nil
             return IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent, agentType: agentType)
         }
         return IPCResponse(ok: true, id: request.id, tabs: tabs)
@@ -357,8 +357,8 @@ final class IPCCommandHandler {
             }
         } else {
             // Default to thread's agent type
-            useAgent = thread.selectedAgentType != nil
-            requestedAgent = thread.selectedAgentType
+            useAgent = !thread.agentTmuxSessions.isEmpty
+            requestedAgent = thread.effectiveAgentType
         }
 
         do {
@@ -386,7 +386,7 @@ final class IPCCommandHandler {
                 index: tab.index,
                 sessionName: tab.tmuxSessionName,
                 isAgent: isAgent,
-                agentType: isAgent ? (requestedAgent?.rawValue ?? thread.selectedAgentType?.rawValue) : nil
+                agentType: isAgent ? (requestedAgent?.rawValue ?? thread.effectiveAgentType?.rawValue) : nil
             )
 
             return IPCResponse(ok: true, id: request.id, tab: info)
@@ -411,7 +411,7 @@ final class IPCCommandHandler {
 
         let renameResult = await threadManager.autoRenameCandidates(
             from: prompt,
-            agentType: thread.selectedAgentType,
+            agentType: thread.effectiveAgentType,
             projectId: thread.projectId
         )
         guard case .candidates(let candidates) = renameResult else {
@@ -569,7 +569,7 @@ final class IPCCommandHandler {
         // Build tab list
         let tabs = thread.tmuxSessionNames.enumerated().map { index, sessionName in
             let isAgent = thread.agentTmuxSessions.contains(sessionName)
-            let agentType: String? = isAgent ? (thread.selectedAgentType?.rawValue ?? "unknown") : nil
+            let agentType: String? = isAgent ? (thread.sessionAgentTypes[sessionName]?.rawValue ?? thread.effectiveAgentType?.rawValue ?? "unknown") : nil
             return IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent, agentType: agentType)
         }
 

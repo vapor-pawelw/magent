@@ -85,7 +85,6 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     var isArchived: Bool
     var sectionId: UUID?
     var isMain: Bool
-    var selectedAgentType: AgentType?
     var lastSelectedTmuxSessionName: String?
     var agentHasRun: Bool
     var isPinned: Bool
@@ -134,6 +133,12 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             return sid
         }
         return fallback
+    }
+
+    /// The effective agent type for this thread, derived from per-session tracking.
+    /// Returns the agent type of the most recently added agent session.
+    var effectiveAgentType: AgentType? {
+        agentTmuxSessions.reversed().compactMap { sessionAgentTypes[$0] }.first
     }
 
     var hasUnreadAgentCompletion: Bool {
@@ -189,7 +194,7 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case id, projectId, name, worktreePath, branchName
         case tmuxSessionNames, agentTmuxSessions, sessionAgentTypes, sessionConversationIDs, pinnedTmuxSessions
         case createdAt, isArchived, sectionId, isMain
-        case selectedAgentType, lastSelectedTmuxSessionName
+        case lastSelectedTmuxSessionName
         case agentHasRun, isPinned, lastAgentCompletionAt
         case unreadCompletionSessions
         case hasUnreadAgentCompletion // migration only
@@ -220,7 +225,6 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isArchived: Bool = false,
         sectionId: UUID? = nil,
         isMain: Bool = false,
-        selectedAgentType: AgentType? = nil,
         lastSelectedTmuxSessionName: String? = nil,
         agentHasRun: Bool = false,
         isPinned: Bool = false,
@@ -251,7 +255,6 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.isArchived = isArchived
         self.sectionId = sectionId
         self.isMain = isMain
-        self.selectedAgentType = selectedAgentType
         self.lastSelectedTmuxSessionName = lastSelectedTmuxSessionName
         self.agentHasRun = agentHasRun
         self.isPinned = isPinned
@@ -285,7 +288,6 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isArchived = try container.decode(Bool.self, forKey: .isArchived)
         sectionId = try container.decodeIfPresent(UUID.self, forKey: .sectionId)
         isMain = try container.decodeIfPresent(Bool.self, forKey: .isMain) ?? false
-        selectedAgentType = try container.decodeIfPresent(AgentType.self, forKey: .selectedAgentType)
         lastSelectedTmuxSessionName = try container.decodeIfPresent(String.self, forKey: .lastSelectedTmuxSessionName)
         agentHasRun = try container.decodeIfPresent(Bool.self, forKey: .agentHasRun) ?? false
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
@@ -331,7 +333,6 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(isArchived, forKey: .isArchived)
         try container.encodeIfPresent(sectionId, forKey: .sectionId)
         try container.encode(isMain, forKey: .isMain)
-        try container.encodeIfPresent(selectedAgentType, forKey: .selectedAgentType)
         try container.encodeIfPresent(lastSelectedTmuxSessionName, forKey: .lastSelectedTmuxSessionName)
         try container.encode(agentHasRun, forKey: .agentHasRun)
         try container.encode(isPinned, forKey: .isPinned)

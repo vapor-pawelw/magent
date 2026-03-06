@@ -24,7 +24,7 @@ extension ThreadManager {
         let startCmd: String
         let tabDisplayName: String
 
-        var selectedAgentType = currentThread.selectedAgentType
+        var selectedAgentType = currentThread.effectiveAgentType
         let requestedTabBaseName: String
         let repoSlug = Self.repoSlug(from:
             settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
@@ -76,7 +76,7 @@ extension ThreadManager {
             if useAgentCommand {
                 selectedAgentType = resolveAgentType(
                     for: currentThread.projectId,
-                    requestedAgentType: requestedAgentType ?? currentThread.selectedAgentType,
+                    requestedAgentType: requestedAgentType ?? currentThread.effectiveAgentType,
                     settings: settings
                 )
                 startCmd = agentStartCommand(
@@ -148,9 +148,6 @@ extension ThreadManager {
                 threads[index].sessionAgentTypes[tmuxSessionName] = selectedAgentType
             }
             threads[index].agentHasRun = true
-        }
-        if selectedAgentType != nil {
-            threads[index].selectedAgentType = selectedAgentType
         }
         try persistence.saveThreads(threads)
         let tab = Tab(

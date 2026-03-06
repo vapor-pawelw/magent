@@ -238,7 +238,6 @@ extension ThreadManager {
                 guard let paneState = paneStates[session] else { continue }
                 guard let ti = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                 let sessionAgent = agentType(for: threads[ti], sessionName: session)
-                    ?? threads[ti].selectedAgentType
                     ?? effectiveAgentType(for: threads[ti].projectId)
 
                 // Codex busy semantics: only a live status token in the latest

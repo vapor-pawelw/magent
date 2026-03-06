@@ -88,7 +88,7 @@ nonisolated struct IPCThreadInfo: Encodable, Sendable {
         self.projectName = projectName
         self.worktreePath = thread.worktreePath
         self.tmuxSession = thread.tmuxSessionNames.first ?? ""
-        self.agentType = thread.selectedAgentType?.rawValue
+        self.agentType = thread.effectiveAgentType?.rawValue
         self.isMain = thread.isMain
         self.taskDescription = thread.taskDescription
     }
@@ -99,7 +99,7 @@ nonisolated struct IPCThreadInfo: Encodable, Sendable {
         self.projectName = projectName
         self.worktreePath = thread.worktreePath
         self.tmuxSession = thread.tmuxSessionNames.first ?? ""
-        self.agentType = thread.selectedAgentType?.rawValue
+        self.agentType = thread.effectiveAgentType?.rawValue
         self.isMain = thread.isMain
         self.taskDescription = thread.taskDescription
         self.sectionName = sectionName

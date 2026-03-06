@@ -342,7 +342,7 @@ extension ThreadManager {
             throw ThreadManagerError.invalidPrompt
         }
 
-        let selectedAgent = preferredAgent ?? currentThread.selectedAgentType
+        let selectedAgent = preferredAgent ?? currentThread.effectiveAgentType
         let payloadResult = await generateFirstPromptRenamePayloadViaAgent(
             from: trimmedPrompt,
             agentType: selectedAgent,
@@ -554,7 +554,7 @@ extension ThreadManager {
             return false
         }
 
-        let preferredAgent = thread.sessionAgentTypes[sessionName] ?? thread.selectedAgentType
+        let preferredAgent = thread.sessionAgentTypes[sessionName] ?? thread.effectiveAgentType
 
         let result = await generateFirstPromptRenamePayloadViaAgent(
             from: prompt,
@@ -755,7 +755,7 @@ extension ThreadManager {
 
         let settings = persistence.loadSettings()
         let shouldAutoSetIcon = settings.autoSetThreadIconFromWorkType
-        let agentOrder = slugGenerationAgentOrder(preferred: thread.selectedAgentType, projectId: thread.projectId)
+        let agentOrder = slugGenerationAgentOrder(preferred: thread.effectiveAgentType, projectId: thread.projectId)
         guard !agentOrder.allTrackable.isEmpty, !agentOrder.available.isEmpty else { return nil }
 
         for candidateAgent in agentOrder.available {
