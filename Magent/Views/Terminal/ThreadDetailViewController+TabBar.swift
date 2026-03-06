@@ -87,6 +87,7 @@ extension ThreadDetailViewController {
 
         view.window?.makeFirstResponder(terminalView)
         currentTabIndex = index
+        updateTerminalScrollControlsState()
 
         if index < thread.tmuxSessionNames.count {
             let sessionName = thread.tmuxSessionNames[index]
@@ -125,6 +126,7 @@ extension ThreadDetailViewController {
         guard emptyStateView == nil else { return }
         promptTOCCanShowForCurrentTab = false
         updatePromptTOCToggleButtonState(canShow: false)
+        updateTerminalScrollControlsState()
         promptTOCView?.isHidden = true
 
         let container = NSView()
@@ -174,6 +176,7 @@ extension ThreadDetailViewController {
     func hideEmptyState() {
         emptyStateView?.removeFromSuperview()
         emptyStateView = nil
+        updateTerminalScrollControlsState()
         schedulePromptTOCRefresh()
     }
 

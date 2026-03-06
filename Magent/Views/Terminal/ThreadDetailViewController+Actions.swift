@@ -3,7 +3,54 @@ import GhosttyBridge
 
 extension ThreadDetailViewController {
 
+    private enum TerminalScrollAction {
+        case pageUp
+        case pageDown
+        case bottom
+    }
+
     // MARK: - Add Tab
+
+    @objc func scrollTerminalPageUpTapped() {
+        scrollCurrentTerminal(.pageUp)
+    }
+
+    @objc func scrollTerminalPageDownTapped() {
+        scrollCurrentTerminal(.pageDown)
+    }
+
+    @objc func scrollTerminalToBottomTapped() {
+        scrollCurrentTerminal(.bottom)
+    }
+
+    private func scrollCurrentTerminal(_ action: TerminalScrollAction) {
+        guard let sessionName = currentSessionName() else { return }
+        let currentIndex = currentTabIndex
+
+        Task {
+            do {
+                switch action {
+                case .pageUp:
+                    try await TmuxService.shared.scrollPageUp(sessionName: sessionName)
+                case .pageDown:
+                    try await TmuxService.shared.scrollPageDown(sessionName: sessionName)
+                case .bottom:
+                    try await TmuxService.shared.scrollToBottom(sessionName: sessionName)
+                }
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: "Terminal scroll failed: \(error.localizedDescription)",
+                        style: .error
+                    )
+                }
+            }
+        }
+
+        if currentIndex < terminalViews.count {
+            view.window?.makeFirstResponder(terminalViews[currentIndex])
+        }
+    }
 
     @objc func archiveThreadTapped() {
         guard !thread.isMain else { return }

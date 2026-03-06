@@ -115,6 +115,8 @@ Prompt row interaction/visual rules:
 
 Navigation behavior:
 - TOC selection uses tmux copy-mode positioning (`scrollHistoryLineToTop`) so the selected prompt line is anchored at the top of the viewport whenever enough lines exist below it.
+- Terminal scrollback fallback controls in the thread top bar must also route through tmux copy-mode commands (`page-up`, `page-down-and-cancel`, cancel-to-bottom) instead of relying on Ghostty wheel events, because in-agent wheel handling can be captured by the running tool.
+- Keep tmux pane scrollbars in `modal` mode so users get a visible history indicator while using those fallback controls.
 
 ### 4.4 Project Local File Sync Paths
 

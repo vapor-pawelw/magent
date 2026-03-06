@@ -30,6 +30,9 @@ final class TmuxService {
         // Click anywhere to clear selection but stay in copy-mode (preserves scroll position)
         _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode MouseDown1Pane send-keys -X clear-selection")
         _ = try? await ShellExecutor.run("tmux bind-key -T copy-mode-vi MouseDown1Pane send-keys -X clear-selection")
+        // Show tmux's built-in scrollbar while browsing history.
+        _ = try? await ShellExecutor.run("tmux set-option -g pane-scrollbars modal")
+        _ = try? await ShellExecutor.run("tmux set-option -g pane-scrollbars-position right")
         await configureBellMonitoring(resetEventLog: true)
     }
 
@@ -361,6 +364,24 @@ final class TmuxService {
             command += "; tmux send-keys -t \(shellQuote(sessionName)) -X -N \(downCount) cursor-down"
         }
         _ = try await ShellExecutor.run(command)
+    }
+
+    func scrollPageUp(sessionName: String) async throws {
+        _ = try await ShellExecutor.run(
+            "tmux copy-mode -e -t \(shellQuote(sessionName)); tmux send-keys -t \(shellQuote(sessionName)) -X page-up"
+        )
+    }
+
+    func scrollPageDown(sessionName: String) async throws {
+        _ = try await ShellExecutor.run(
+            "tmux copy-mode -e -t \(shellQuote(sessionName)); tmux send-keys -t \(shellQuote(sessionName)) -X page-down-and-cancel"
+        )
+    }
+
+    func scrollToBottom(sessionName: String) async throws {
+        _ = try await ShellExecutor.run(
+            "tmux send-keys -t \(shellQuote(sessionName)) -X cancel"
+        )
     }
 
     /// Captures the last N lines of the active pane in a tmux session.
