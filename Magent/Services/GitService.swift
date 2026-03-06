@@ -442,13 +442,13 @@ final class GitService {
 
         // Get numstat for all changes from merge-base to working tree (includes uncommitted)
         let numstatResult = await ShellExecutor.execute(
-            "git diff --numstat \(shellQuote(mergeBase))",
+            "git -c core.quotePath=false diff --numstat \(shellQuote(mergeBase))",
             workingDirectory: worktreePath
         )
 
         // Get working tree status for coloring
         let statusResult = await ShellExecutor.execute(
-            "git status --porcelain",
+            "git -c core.quotePath=false status --porcelain",
             workingDirectory: worktreePath
         )
 
@@ -512,14 +512,14 @@ final class GitService {
         guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return nil }
 
         let diffResult = await ShellExecutor.execute(
-            "git diff --no-color \(shellQuote(mergeBase))",
+            "git -c core.quotePath=false diff --no-color \(shellQuote(mergeBase))",
             workingDirectory: worktreePath
         )
         guard diffResult.exitCode == 0 else { return nil }
 
         // Also get content of untracked files as pseudo-diffs
         let statusResult = await ShellExecutor.execute(
-            "git status --porcelain",
+            "git -c core.quotePath=false status --porcelain",
             workingDirectory: worktreePath
         )
         var untrackedDiff = ""
@@ -550,7 +550,7 @@ final class GitService {
         guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return nil }
 
         let diffResult = await ShellExecutor.execute(
-            "git diff --no-color \(shellQuote(mergeBase)) -- \(shellQuote(relativePath))",
+            "git -c core.quotePath=false diff --no-color \(shellQuote(mergeBase)) -- \(shellQuote(relativePath))",
             workingDirectory: worktreePath
         )
         let output = diffResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -560,7 +560,7 @@ final class GitService {
 
         // Check if it's an untracked file
         let statusResult = await ShellExecutor.execute(
-            "git status --porcelain -- \(shellQuote(relativePath))",
+            "git -c core.quotePath=false status --porcelain -- \(shellQuote(relativePath))",
             workingDirectory: worktreePath
         )
         if statusResult.exitCode == 0 && statusResult.stdout.hasPrefix("?? ") {

@@ -25,11 +25,151 @@ private func detectImageDiffState(from chunk: String) -> ImageDiffMode {
     return .modified
 }
 
+private func decodeQuotedGitPath(_ rawPath: String) -> String {
+    let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.count >= 2, trimmed.first == "\"", trimmed.last == "\"" else { return trimmed }
+
+    let body = trimmed.dropFirst().dropLast()
+    var result = ""
+    var index = body.startIndex
+
+    while index < body.endIndex {
+        let char = body[index]
+        guard char == "\\" else {
+            result.append(char)
+            index = body.index(after: index)
+            continue
+        }
+
+        let escapeIndex = body.index(after: index)
+        guard escapeIndex < body.endIndex else {
+            result.append("\\")
+            break
+        }
+
+        let escape = body[escapeIndex]
+        switch escape {
+        case "\\":
+            result.append("\\")
+        case "\"":
+            result.append("\"")
+        case "t":
+            result.append("\t")
+        case "n":
+            result.append("\n")
+        case "r":
+            result.append("\r")
+        case "0"..."7":
+            var octal = String(escape)
+            var octalIndex = body.index(after: escapeIndex)
+            while octalIndex < body.endIndex, octal.count < 3 {
+                let digit = body[octalIndex]
+                guard ("0"..."7").contains(digit) else { break }
+                octal.append(digit)
+                octalIndex = body.index(after: octalIndex)
+            }
+            if let scalar = UInt8(octal, radix: 8) {
+                result.append(Character(UnicodeScalar(scalar)))
+            }
+            index = octalIndex
+            continue
+        default:
+            result.append(escape)
+        }
+
+        index = body.index(after: escapeIndex)
+    }
+
+    return result
+}
+
+private func normalizedGitPatchPath(_ rawPath: String, preferredPrefix: Character? = nil) -> String? {
+    let decoded = decodeQuotedGitPath(rawPath)
+    guard !decoded.isEmpty, decoded != "/dev/null" else { return nil }
+
+    if let preferredPrefix, decoded.hasPrefix("\(preferredPrefix)/") {
+        return String(decoded.dropFirst(2))
+    }
+    if decoded.hasPrefix("a/") || decoded.hasPrefix("b/") {
+        return String(decoded.dropFirst(2))
+    }
+    return decoded
+}
+
+private func parseGitDiffHeaderPaths(_ line: String) -> (oldPath: String?, newPath: String?) {
+    guard line.hasPrefix("diff --git ") else { return (nil, nil) }
+    let remainder = line.dropFirst("diff --git ".count)
+    var index = remainder.startIndex
+
+    func consumePathToken() -> Substring? {
+        while index < remainder.endIndex, remainder[index] == " " {
+            index = remainder.index(after: index)
+        }
+        guard index < remainder.endIndex else { return nil }
+
+        let start = index
+        if remainder[index] == "\"" {
+            index = remainder.index(after: index)
+            while index < remainder.endIndex {
+                if remainder[index] == "\"" {
+                    let backslashCount = remainder[..<index].reversed().prefix { $0 == "\\" }.count
+                    if backslashCount.isMultiple(of: 2) {
+                        let token = remainder[start...index]
+                        index = remainder.index(after: index)
+                        return token
+                    }
+                }
+                index = remainder.index(after: index)
+            }
+            return remainder[start..<remainder.endIndex]
+        }
+
+        while index < remainder.endIndex, remainder[index] != " " {
+            index = remainder.index(after: index)
+        }
+        return remainder[start..<index]
+    }
+
+    let oldToken = consumePathToken().map(String.init)
+    let newToken = consumePathToken().map(String.init)
+    return (
+        oldPath: oldToken.flatMap { normalizedGitPatchPath($0, preferredPrefix: "a") },
+        newPath: newToken.flatMap { normalizedGitPatchPath($0, preferredPrefix: "b") }
+    )
+}
+
+private func pathForDiffChunk(_ chunk: String) -> String? {
+    var deletedPath: String?
+
+    for line in chunk.components(separatedBy: "\n") {
+        if line.hasPrefix("rename to ") {
+            return normalizedGitPatchPath(String(line.dropFirst("rename to ".count)))
+        }
+        if line.hasPrefix("+++ ") {
+            if let path = normalizedGitPatchPath(String(line.dropFirst(4)), preferredPrefix: "b") {
+                return path
+            }
+        }
+        if line.hasPrefix("--- "), deletedPath == nil {
+            deletedPath = normalizedGitPatchPath(String(line.dropFirst(4)), preferredPrefix: "a")
+        }
+        if line.hasPrefix("diff --git ") {
+            let headerPaths = parseGitDiffHeaderPaths(line)
+            deletedPath = deletedPath ?? headerPaths.oldPath
+            if let newPath = headerPaths.newPath, chunk.contains("Binary files") {
+                return newPath
+            }
+        }
+    }
+
+    return deletedPath
+}
+
 /// Extracts the old path from a `rename from <path>` line in a diff chunk.
 private func extractRenameFrom(_ chunk: String) -> String? {
     for line in chunk.components(separatedBy: "\n") {
         if line.hasPrefix("rename from ") {
-            return String(line.dropFirst("rename from ".count))
+            return normalizedGitPatchPath(String(line.dropFirst("rename from ".count)))
         }
     }
     return nil
@@ -1412,18 +1552,17 @@ final class InlineDiffViewController: NSViewController {
         var chunks: [(path: String, content: String)] = []
         let lines = rawDiff.components(separatedBy: "\n")
 
-        var currentPath = ""
         var currentLines: [String] = []
 
         for line in lines {
             if line.hasPrefix("diff --git") {
                 // Save previous chunk if any
-                if !currentPath.isEmpty {
-                    chunks.append((path: currentPath, content: currentLines.joined(separator: "\n")))
+                if !currentLines.isEmpty {
+                    let content = currentLines.joined(separator: "\n")
+                    if let path = pathForDiffChunk(content) {
+                        chunks.append((path: path, content: content))
+                    }
                 }
-                // Extract path from "diff --git a/path b/path"
-                let parts = line.components(separatedBy: " b/")
-                currentPath = parts.count >= 2 ? (parts.last ?? "") : ""
                 currentLines = [line]
             } else {
                 currentLines.append(line)
@@ -1431,8 +1570,11 @@ final class InlineDiffViewController: NSViewController {
         }
 
         // Save last chunk
-        if !currentPath.isEmpty {
-            chunks.append((path: currentPath, content: currentLines.joined(separator: "\n")))
+        if !currentLines.isEmpty {
+            let content = currentLines.joined(separator: "\n")
+            if let path = pathForDiffChunk(content) {
+                chunks.append((path: path, content: content))
+            }
         }
 
         return chunks
