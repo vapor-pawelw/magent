@@ -82,14 +82,6 @@ final class ThreadManager {
                 threads[i].agentTmuxSessions = [threads[i].tmuxSessionNames[0]]
                 didMigrate = true
             }
-            if threads[i].selectedAgentType == nil && !threads[i].agentTmuxSessions.isEmpty {
-                threads[i].selectedAgentType = resolveAgentType(
-                    for: threads[i].projectId,
-                    requestedAgentType: nil,
-                    settings: settings
-                )
-                didMigrate = true
-            }
             // Migrate: existing threads with agent sessions must have had the agent run.
             if !threads[i].agentHasRun && !threads[i].agentTmuxSessions.isEmpty {
                 threads[i].agentHasRun = true
@@ -97,12 +89,11 @@ final class ThreadManager {
             }
             // Migrate: record per-session agent type for existing agent tabs.
             if !threads[i].agentTmuxSessions.isEmpty {
-                let fallbackAgent = threads[i].selectedAgentType
-                    ?? resolveAgentType(
-                        for: threads[i].projectId,
-                        requestedAgentType: nil,
-                        settings: settings
-                    )
+                let fallbackAgent = resolveAgentType(
+                    for: threads[i].projectId,
+                    requestedAgentType: nil,
+                    settings: settings
+                )
                 if let fallbackAgent {
                     for sessionName in threads[i].agentTmuxSessions
                     where threads[i].sessionAgentTypes[sessionName] == nil {

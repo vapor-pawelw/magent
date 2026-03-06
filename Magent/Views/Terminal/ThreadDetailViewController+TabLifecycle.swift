@@ -282,7 +282,7 @@ extension ThreadDetailViewController {
         let slug = TmuxSessionNaming.repoSlug(from:
             settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
         )
-        let overlaySelectedAgentType = thread.selectedAgentType ?? threadManager.effectiveAgentType(for: thread.projectId)
+        let overlaySelectedAgentType = thread.effectiveAgentType ?? threadManager.effectiveAgentType(for: thread.projectId)
         let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(TmuxSessionNaming.defaultTabDisplayName(for: overlaySelectedAgentType))
         if thread.isMain {
             sessionName = thread.tmuxSessionNames.first ?? TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
@@ -292,7 +292,7 @@ extension ThreadDetailViewController {
         loadingOverlaySessionName = sessionName
         let startTime = Date()
         let maxWait: TimeInterval = 15
-        let overlayAgentType = thread.sessionAgentTypes[sessionName] ?? thread.selectedAgentType
+        let overlayAgentType = thread.sessionAgentTypes[sessionName] ?? thread.effectiveAgentType
 
         loadingPollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
             guard let self else { timer.invalidate(); return }

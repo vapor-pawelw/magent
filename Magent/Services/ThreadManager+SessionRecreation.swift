@@ -162,7 +162,6 @@ extension ThreadManager {
 
         let startCmd: String
         let sessionAgentType = agentType(for: refreshedThread, sessionName: sessionName)
-            ?? refreshedThread.selectedAgentType
             ?? effectiveAgentType(for: refreshedThread.projectId)
         let resumeSessionID = refreshedThread.sessionConversationIDs[sessionName]
         let envExports: String

@@ -327,7 +327,7 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         let settings = PersistenceService.shared.loadSettings()
-        let selectedAgentType = thread.selectedAgentType ?? threadManager.effectiveAgentType(for: thread.projectId)
+        let selectedAgentType = thread.effectiveAgentType ?? threadManager.effectiveAgentType(for: thread.projectId)
 
         // Determine tab order with pinned tabs first
         let pinnedSet = Set(thread.pinnedTmuxSessions)
@@ -445,7 +445,7 @@ final class ThreadDetailViewController: NSViewController {
     private func buildTmuxCommand(for sessionName: String) -> String {
         let settings = PersistenceService.shared.loadSettings()
         let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
-        let selectedAgentType = thread.selectedAgentType ?? threadManager.effectiveAgentType(for: thread.projectId)
+        let selectedAgentType = thread.effectiveAgentType ?? threadManager.effectiveAgentType(for: thread.projectId)
 
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let projectName = project?.name ?? "project"

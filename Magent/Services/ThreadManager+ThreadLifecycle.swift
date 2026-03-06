@@ -188,7 +188,6 @@ extension ThreadManager {
             agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
             sessionAgentTypes: sessionAgentTypes,
             sectionId: settings.defaultSection(for: project.id)?.id,
-            selectedAgentType: selectedAgentType,
             lastSelectedTmuxSessionName: tmuxSessionName,
             customTabNames: [tmuxSessionName: firstTabDisplayName],
             baseBranch: baseBranch,
@@ -304,7 +303,6 @@ extension ThreadManager {
             agentTmuxSessions: selectedAgentType != nil ? [tmuxSessionName] : [],
             sessionAgentTypes: mainSessionAgentTypes,
             isMain: true,
-            selectedAgentType: selectedAgentType,
             lastSelectedTmuxSessionName: tmuxSessionName,
             customTabNames: [tmuxSessionName: firstTabDisplayName]
         )
@@ -517,7 +515,7 @@ extension ThreadManager {
             }
 
             // Trust the directory for the agent if needed
-            trustDirectoryIfNeeded(thread.worktreePath, agentType: thread.selectedAgentType)
+            trustDirectoryIfNeeded(thread.worktreePath, agentType: thread.effectiveAgentType)
 
             // Persist updated threads
             try persistence.saveThreads(threads)

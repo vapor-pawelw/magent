@@ -339,7 +339,7 @@ extension ThreadDetailViewController {
     func continueTabInAgent(at index: Int, targetAgent: AgentType) {
         guard index < thread.tmuxSessionNames.count else { return }
         let sessionName = thread.tmuxSessionNames[index]
-        let sourceAgent = thread.agentTmuxSessions.contains(sessionName) ? thread.selectedAgentType : nil
+        let sourceAgent = thread.sessionAgentTypes[sessionName]
         let settings = PersistenceService.shared.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let projectName = project?.name ?? "project"
@@ -380,7 +380,7 @@ extension ThreadDetailViewController {
     func exportTabContext(at index: Int) {
         guard index < thread.tmuxSessionNames.count else { return }
         let sessionName = thread.tmuxSessionNames[index]
-        let sourceAgent = thread.agentTmuxSessions.contains(sessionName) ? thread.selectedAgentType : nil
+        let sourceAgent = thread.sessionAgentTypes[sessionName]
         let settings = PersistenceService.shared.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let projectName = project?.name ?? "project"
