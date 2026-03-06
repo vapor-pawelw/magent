@@ -59,6 +59,9 @@ extension ThreadDetailViewController {
         tocView.onSelectEntry = { [weak self] entryIndex in
             self?.handlePromptTOCSelection(entryIndex: entryIndex)
         }
+        tocView.onRenameFromEntry = { [weak self] entryIndex in
+            self?.handlePromptTOCRenameFromEntry(entryIndex: entryIndex)
+        }
         tocView.onCloseRequested = { [weak self] in
             self?.togglePromptTOCVisibility()
         }
@@ -608,6 +611,24 @@ extension ThreadDetailViewController {
         }
     }
 
+    private func handlePromptTOCRenameFromEntry(entryIndex: Int) {
+        guard entryIndex >= 0, entryIndex < promptTOCEntries.count else { return }
+        let entry = promptTOCEntries[entryIndex]
+        let thread = self.thread
+        Task {
+            do {
+                _ = try await threadManager.renameThreadFromPrompt(thread, prompt: entry.displayText)
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: "Rename failed: \(error.localizedDescription)",
+                        style: .error
+                    )
+                }
+            }
+        }
+    }
+
     private func handlePromptTOCDrag(_ gesture: NSPanGestureRecognizer) {
         guard let tocView = promptTOCView else { return }
         guard !isPromptTOCManuallyHidden else { return }
@@ -879,11 +900,17 @@ private final class PromptTOCEntryRowView: NSView {
         }
     }
 
+    var onRightClick: ((Int, NSEvent) -> Void)?
+
     init(entryIndex: Int, text: String) {
         self.entryIndex = entryIndex
         self.label = PromptTOCLabel(wrappingLabelWithString: text)
         super.init(frame: .zero)
         setupUI()
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        onRightClick?(entryIndex, event)
     }
 
     @available(*, unavailable)
@@ -951,6 +978,7 @@ enum TOCResizeCorner {
 
 final class PromptTableOfContentsView: NSView {
     var onSelectEntry: ((Int) -> Void)?
+    var onRenameFromEntry: ((Int) -> Void)?
     var onCloseRequested: (() -> Void)?
     var onDragGesture: ((NSPanGestureRecognizer) -> Void)?
     var onResizeGesture: ((NSPanGestureRecognizer, TOCResizeCorner) -> Void)?
@@ -1007,6 +1035,9 @@ final class PromptTableOfContentsView: NSView {
 
             let tap = NSClickGestureRecognizer(target: self, action: #selector(handleEntryRowTap(_:)))
             row.addGestureRecognizer(tap)
+            row.onRightClick = { [weak self] index, event in
+                self?.showRenameContextMenu(for: index, event: event)
+            }
 
             rowsStack.addArrangedSubview(row)
             rowViews.append(row)
@@ -1188,6 +1219,25 @@ final class PromptTableOfContentsView: NSView {
         guard let row = gesture.view as? PromptTOCEntryRowView else { return }
         updateSelection(for: row.entryIndex)
         onSelectEntry?(row.entryIndex)
+    }
+
+    private func showRenameContextMenu(for entryIndex: Int, event: NSEvent) {
+        let menu = NSMenu()
+        let item = NSMenuItem(
+            title: "Rename thread from this prompt",
+            action: #selector(handleRenameFromContextMenu(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        item.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
+        item.representedObject = NSNumber(value: entryIndex)
+        menu.addItem(item)
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func handleRenameFromContextMenu(_ sender: NSMenuItem) {
+        guard let index = (sender.representedObject as? NSNumber)?.intValue else { return }
+        onRenameFromEntry?(index)
     }
 
     @objc private func handleDrag(_ gesture: NSPanGestureRecognizer) {
