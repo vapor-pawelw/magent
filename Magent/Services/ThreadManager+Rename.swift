@@ -217,12 +217,12 @@ extension ThreadManager {
         let aiPrompt = """
             \(instruction) \
             Also generate a short task description (2-8 words) with first letter uppercase. \
-            Icon types: feature (new functionality), fix (bug/regression), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
+            Icon types: feature (new functionality), fix (bug/regression), improvement (non-breaking polish/performance/quality), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
             Evaluate all icon types and use other when no icon type is above 70% confidence. \
             Output exactly three lines and nothing else: \
             SLUG: <slug or EMPTY> \
             DESC: <description or EMPTY> \
-            TYPE: <feature|fix|refactor|test|other> \
+            TYPE: <feature|fix|improvement|refactor|test|other> \
             Use SLUG: EMPTY and DESC: EMPTY for pure knowledge questions with no implied action. \
             Bug reports, observations about broken behavior, and feature requests are actionable — always generate a slug. \
             Task: \(truncated)

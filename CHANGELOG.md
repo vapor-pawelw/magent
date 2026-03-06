@@ -57,6 +57,7 @@ All notable changes to this project will be documented in this file.
 - Restored Claude/Codex session auto-resume when recreating or reopening agent tabs, ensuring persisted conversation IDs are applied again after startup/recovery flows.
 - CLI prompt injection now waits for agent-ready startup paths and submits prompts reliably (text + Enter), avoiding dropped first submissions.
 - Project-level **Pre-Agent Command** setting in App Settings to run setup commands before the selected agent starts for new/recreated agent sessions.
+- First-prompt rename generation now considers the `Improvement` icon type when auto-setting thread icons from AI work-type classification.
 - Auto-set thread icons now rely on agent confidence-guided work-type selection, reducing unnecessary fallback to `other`.
 - Codex rate-limit timers now stay active until the cached reset time expires or you lift them manually, even if newer pane output like `/status` replaces the original limit message.
 - Rate-limit parsing now handles Claude’s interactive “Stop and wait for limit to reset” prompt reliably by reading the reset deadline shown above the options list.
