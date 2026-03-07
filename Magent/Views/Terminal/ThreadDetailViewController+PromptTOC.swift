@@ -781,6 +781,10 @@ extension ThreadDetailViewController {
     }
 
     func clampPromptTOCPositionIfNeeded() {
+        // Skip clamping while the diff viewer is open — terminalContainer is shorter
+        // during that time, and clamping would shift the TOC to a position that
+        // persists incorrectly once the diff viewer is closed.
+        guard diffVC == nil else { return }
         guard let tocView = promptTOCView, !tocView.isHidden else { return }
         guard let top = promptTOCTopConstraint, let trailing = promptTOCTrailingConstraint else { return }
         guard tocView.frame.width > 0, tocView.frame.height > 0 else { return }
@@ -834,6 +838,9 @@ extension ThreadDetailViewController {
     }
 
     private func savePromptTOCPosition(for sessionName: String) {
+        // Don't persist position while diff viewer is open — bounds are reduced and
+        // the saved normalized values would be wrong relative to the full container.
+        guard diffVC == nil else { return }
         guard let tocView = promptTOCView else { return }
         let availableWidth = max(1, terminalContainer.bounds.width - tocView.frame.width)
         let availableHeight = max(1, terminalContainer.bounds.height - tocView.frame.height)
