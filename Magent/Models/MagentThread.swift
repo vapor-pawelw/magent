@@ -179,6 +179,14 @@ nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         return "Resets \(latest.formatted(date: .abbreviated, time: .shortened))"
     }
 
+    /// True when the thread is technically rate-limited but the concrete reset time has already passed,
+    /// meaning the user can resume the agent without waiting.
+    var isRateLimitExpiredAndResumable: Bool {
+        guard isBlockedByRateLimit else { return false }
+        guard let liftAt = rateLimitLiftAt else { return false }
+        return liftAt <= Date()
+    }
+
     func displayName(for sessionName: String, at index: Int) -> String {
         if let custom = customTabNames[sessionName], !custom.isEmpty {
             return custom
