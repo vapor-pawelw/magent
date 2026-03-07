@@ -118,9 +118,12 @@ The Ghostty macOS app source is the definitive reference:
 
 ## Overlay Z-Order Contract (mAgent)
 
-When terminal overlays are enabled (for example, the prompt Table of Contents), they must remain visible above terminal content during tab switches and session view recreation.
+When terminal overlays are enabled (for example, the prompt Table of Contents or the scroll controls pill), they must remain visible above terminal content during tab switches and session view recreation.
 
-Implementation note:
-- `TerminalSurfaceView` hosts a Metal-backed surface, and terminal views are often added/re-added to the same container during tab lifecycle events.
-- Keep overlay views above terminal surfaces by assigning a higher layer z-position (or explicitly bringing overlays to front after terminal subview updates).
-- If this contract is broken, UI toggles may report "shown" while the overlay is visually hidden behind terminal surfaces.
+### Critical gotcha: overlays must be added to `terminalContainer`, not the parent `view`
+
+`TerminalSurfaceView` uses `CAMetalLayer` for rendering. Metal content does **not** composite correctly with NSViews that are siblings of the Metal view's container — i.e. views added to `view` (the parent of `terminalContainer`) do not render above the Metal surface, even if they appear later in the subview array.
+
+**Rule**: Any overlay that must float above the terminal must be added directly to `terminalContainer` (the same container that hosts `TerminalSurfaceView` instances), not to the view controller's root `view`.
+
+**Bring-to-front after lazy tab add**: Terminal views are added lazily on first tab selection. After adding a new `TerminalSurfaceView` to `terminalContainer`, call `addSubview(_:positioned:above:relativeTo: nil)` on every overlay to keep them on top. See `bringPromptTOCOverlayToFront()` and `bringScrollOverlaysToFront()` in `ThreadDetailViewController+PromptTOC.swift` and `ThreadDetailViewController+ScrollFAB.swift`.

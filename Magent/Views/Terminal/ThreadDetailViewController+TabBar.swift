@@ -80,6 +80,7 @@ extension ThreadDetailViewController {
             ])
         }
         bringPromptTOCOverlayToFront()
+        bringScrollOverlaysToFront()
 
         for (i, tv) in terminalViews.enumerated() {
             tv.isHidden = (i != index)

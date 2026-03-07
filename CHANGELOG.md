@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Expanded auto-generated thread name pool from 85 to 403 Pokémon, covering Generations 1–4 in order.
 - A floating "Scroll to bottom" button now appears at the bottom-left of the terminal when scrolled up 3+ lines; clicking it snaps back to live output and fades away.
 - Terminal scroll controls (page-up, page-down, jump-to-bottom) are now a compact draggable pill overlay in the bottom-right corner of the terminal panel; it fades to semi-transparent when idle and becomes opaque on hover, keeping the top bar uncluttered.
+- Fixed scroll controls overlay and "Scroll to bottom" button not appearing (they were added to the wrong view layer and rendered behind the Metal terminal surface).
 - Archive now supports project-scoped local file sync merge-back from worktree to repo root with changed-file-only sync, UI conflict prompts (`Override`, `Override All`, `Ignore`, `Cancel Archive`), and safe non-interactive/CLI conflict skipping so existing repo files are not lost.
 - Threads now snapshot their project local-sync path list at creation, so later project setting changes do not retroactively change what an already-open thread syncs on archive.
 - Archive now supports forced completion after non-conflict local-sync failures, with a UI `Force Archive` path and CLI `archive-thread --force`.

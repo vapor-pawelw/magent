@@ -10,6 +10,15 @@ extension ThreadDetailViewController {
 
     // MARK: - Scroll Overlay (bottom-right draggable pill)
 
+    func bringScrollOverlaysToFront() {
+        if scrollOverlay.superview === terminalContainer {
+            terminalContainer.addSubview(scrollOverlay, positioned: .above, relativeTo: nil)
+        }
+        if floatingScrollToBottomButton.superview === terminalContainer {
+            terminalContainer.addSubview(floatingScrollToBottomButton, positioned: .above, relativeTo: nil)
+        }
+    }
+
     func setupScrollOverlay() {
         let overlay = scrollOverlay
         overlay.translatesAutoresizingMaskIntoConstraints = false
@@ -17,11 +26,10 @@ extension ThreadDetailViewController {
         overlay.onScrollDown     = { [weak self] in self?.scrollTerminalPageDownTapped() }
         overlay.onScrollToBottom = { [weak self] in self?.scrollTerminalToBottomTapped() }
 
-        // Add to root view (not terminalContainer) so it floats above Metal surfaces.
-        view.addSubview(overlay)
+        terminalContainer.addSubview(overlay)
 
-        let trailing = overlay.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16)
-        let bottom   = overlay.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -16)
+        let trailing = overlay.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor, constant: -16)
+        let bottom   = overlay.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor, constant: -16)
         scrollOverlayTrailingConstraint = trailing
         scrollOverlayBottomConstraint   = bottom
         NSLayoutConstraint.activate([trailing, bottom])
@@ -48,9 +56,8 @@ extension ThreadDetailViewController {
             let newBottom   = scrollOverlayDragStartBottom + t.y
 
             let size = scrollOverlay.frame.size
-            let topBarClearance: CGFloat = 44 // keep below toolbar
-            trailing.constant = -min(max(8, newTrailing), view.bounds.width  - size.width  - 8)
-            bottom.constant   = -min(max(8, newBottom),   view.bounds.height - size.height - topBarClearance)
+            trailing.constant = -min(max(8, newTrailing), terminalContainer.bounds.width  - size.width  - 8)
+            bottom.constant   = -min(max(8, newBottom),   terminalContainer.bounds.height - size.height - 8)
 
         default:
             break
@@ -78,8 +85,7 @@ extension ThreadDetailViewController {
         btn.wantsLayer = true
         btn.shadow = shadow
 
-        // Add to the root view (not terminalContainer) so it floats above Metal surfaces.
-        view.addSubview(btn)
+        terminalContainer.addSubview(btn)
         NSLayoutConstraint.activate([
             btn.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor, constant: 16),
             btn.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor, constant: -16),
