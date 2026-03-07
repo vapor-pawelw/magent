@@ -341,16 +341,28 @@ extension ThreadListViewController {
     }
 
     func refreshDiffPanel(for thread: MagentThread) {
+        guard !thread.isMain else {
+            diffPanelView.clear()
+            refreshBranchMismatchView(for: thread)
+            return
+        }
         Task {
-            let entries = await threadManager.refreshDiffStats(for: thread.id)
             let current = self.threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
             let baseBranch = self.threadManager.resolveBaseBranch(for: current)
+            async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
+            async let commitsTask = GitService.shared.commitLog(
+                worktreePath: current.worktreePath,
+                baseBranch: baseBranch
+            )
+            let entries = await entriesTask
+            let commits = await commitsTask
             await MainActor.run {
                 self.diffPanelView.update(
                     with: entries,
+                    commits: commits,
                     worktreePath: current.worktreePath,
-                    branchName: current.isMain ? nil : (current.actualBranch ?? current.branchName),
-                    baseBranch: current.isMain ? nil : baseBranch
+                    branchName: current.actualBranch ?? current.branchName,
+                    baseBranch: baseBranch
                 )
             }
         }

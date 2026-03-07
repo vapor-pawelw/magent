@@ -403,7 +403,7 @@ public final class GitService: Sendable {
         return false
     }
 
-    // MARK: - Merge Base & File Data
+    // MARK: - Merge Base, Commit Log & File Data
 
     /// Returns the merge-base commit hash between `baseBranch` and HEAD.
     public func mergeBase(worktreePath: String, baseBranch: String) async -> String? {
@@ -414,6 +414,29 @@ public final class GitService: Sendable {
         let hash = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         guard result.exitCode == 0, !hash.isEmpty else { return nil }
         return hash
+    }
+
+    /// Returns commits on HEAD that are not reachable from `baseBranch`, ordered newest-first.
+    func commitLog(worktreePath: String, baseBranch: String) async -> [BranchCommit] {
+        let sep = "\u{1F}"  // unit separator unlikely to appear in commit messages
+        let fmt = "%h\(sep)%s\(sep)%an\(sep)%ad"
+        let result = await ShellExecutor.execute(
+            "git log \(shellQuote(baseBranch))..HEAD --format=\(shellQuote(fmt)) --date=short",
+            workingDirectory: worktreePath
+        )
+        guard result.exitCode == 0 else { return [] }
+        return result.stdout
+            .components(separatedBy: "\n")
+            .compactMap { line -> BranchCommit? in
+                let parts = line.components(separatedBy: sep)
+                guard parts.count == 4 else { return nil }
+                return BranchCommit(
+                    shortHash: parts[0],
+                    subject: parts[1],
+                    authorName: parts[2],
+                    date: parts[3]
+                )
+            }
     }
 
     /// Returns the raw file contents at a given git ref (commit, branch, tag).

@@ -173,3 +173,10 @@ public nonisolated struct FileDiffEntry: Sendable {
         self.workingStatus = workingStatus
     }
 }
+
+nonisolated struct BranchCommit: Sendable {
+    let shortHash: String
+    let subject: String
+    let authorName: String
+    let date: String
+}
