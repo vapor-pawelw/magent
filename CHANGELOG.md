@@ -9,7 +9,6 @@ All notable changes to this project will be documented in this file.
 - Expanded auto-generated thread name pool from 85 to 403 Pokémon, covering Generations 1–4 in order.
 - A floating "Scroll to bottom" button now appears at the bottom-left of the terminal when scrolled up 3+ lines; clicking it snaps back to live output and fades away.
 - Terminal scroll controls (page-up, page-down, jump-to-bottom) are now a compact draggable pill overlay in the bottom-right corner of the terminal panel; it fades to semi-transparent when idle and becomes opaque on hover, keeping the top bar uncluttered.
-- Fixed scroll controls overlay and "Scroll to bottom" button not appearing (they were added to the wrong view layer and rendered behind the Metal terminal surface).
 - Scroll overlay resting opacity increased and bottom clearance raised to 32 pt so it no longer sits flush with the bottom edge.
 - Archive now supports project-scoped local file sync merge-back from worktree to repo root with changed-file-only sync, UI conflict prompts (`Override`, `Override All`, `Ignore`, `Cancel Archive`), and safe non-interactive/CLI conflict skipping so existing repo files are not lost.
 - Threads now snapshot their project local-sync path list at creation, so later project setting changes do not retroactively change what an already-open thread syncs on archive.
@@ -40,7 +39,6 @@ All notable changes to this project will be documented in this file.
 - Prompt TOC now auto-refreshes when the agent finishes responding, so newly submitted prompts appear without requiring a tab switch.
 - Right-clicking a prompt in the Table of Contents now offers "Rename thread from this prompt", which feeds the selected prompt directly to the rename agent without requiring a separate input dialog.
 - First-prompt auto-rename now triggers from the Prompt TOC when a confirmed prompt appears, rather than on keystroke, so it no longer fires prematurely before a prompt is actually submitted.
-- Fixed a Prompt TOC interaction regression where the panel could appear visible but remain unclickable behind terminal content after tab/session view updates.
 - Fixed Prompt TOC not detecting Claude prompts due to ANSI color 7 (white) being incorrectly treated as placeholder-gray; "Tool loaded." lines emitted by Claude Code are now also filtered out.
 - Prompt TOC prompt rows are now label-like instead of selectable text, and selecting one no longer rewraps a 3-line entry into 4 lines.
 - Prompt TOC now rejects dim/grey placeholder composer text, requires later agent output before confirming a submitted prompt, and keeps full-width 3-line rows with selection highlighting plus an inline close button.
