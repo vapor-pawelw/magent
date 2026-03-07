@@ -163,6 +163,7 @@ extension ThreadDetailViewController {
         let menu = NSMenu()
         AgentMenuBuilder.populate(
             menu: menu,
+            menuTitle: "New Tab",
             defaultAgentName: threadManager.effectiveAgentType(for: thread.projectId)?.displayName,
             activeAgents: settings.availableActiveAgents,
             target: self,

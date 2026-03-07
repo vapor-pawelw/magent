@@ -14,12 +14,25 @@ enum AgentMenuBuilder {
     ///   - Plus any entries from `extraData`.
     static func populate(
         menu: NSMenu,
+        menuTitle: String? = nil,
         defaultAgentName: String?,
         activeAgents: [AgentType],
         target: AnyObject,
         action: Selector,
         extraData: [String: String] = [:]
     ) {
+        if let title = menuTitle {
+            let headerItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            headerItem.isEnabled = false
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold),
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ]
+            headerItem.attributedTitle = NSAttributedString(string: title, attributes: attrs)
+            menu.addItem(headerItem)
+            menu.addItem(.separator())
+        }
+
         if let name = defaultAgentName {
             let item = NSMenuItem(
                 title: "Use Project Default (\(name))",
