@@ -29,7 +29,7 @@ extension ThreadDetailViewController {
         terminalContainer.addSubview(overlay)
 
         let trailing = overlay.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor, constant: -16)
-        let bottom   = overlay.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor, constant: -16)
+        let bottom   = overlay.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor, constant: -32)
         scrollOverlayTrailingConstraint = trailing
         scrollOverlayBottomConstraint   = bottom
         NSLayoutConstraint.activate([trailing, bottom])
