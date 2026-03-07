@@ -467,9 +467,12 @@ extension ThreadManager {
         let newPinnedSessions = currentThread.pinnedTmuxSessions.map { sessionRenameMap[$0] ?? $0 }
         let newAgentSessions = currentThread.agentTmuxSessions.map { sessionRenameMap[$0] ?? $0 }
 
-        // Re-setup bell pipe with new session names for agent sessions
+        // Re-setup bell pipe with new session names for agent sessions.
+        // Use forceSetupBellPipe: the old pipe survives the tmux session rename and keeps
+        // writing the pre-rename name to the event log. Stopping it first ensures subsequent
+        // bell events are attributed to the new session name.
         for agentSession in newAgentSessions {
-            await tmux.setupBellPipe(for: agentSession)
+            await tmux.forceSetupBellPipe(for: agentSession)
         }
 
         // 5. Update thread name env var on each session (worktree path unchanged)

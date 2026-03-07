@@ -55,6 +55,20 @@ final class TmuxService {
         )
     }
 
+    /// Like `setupBellPipe(for:)` but always replaces an existing pipe.
+    /// Use after tmux session rename: the old pipe survives the rename and keeps writing
+    /// the pre-rename session name to the event log. Stopping it first and starting fresh
+    /// ensures subsequent bell events are attributed to the correct (new) session name.
+    func forceSetupBellPipe(for sessionName: String) async {
+        installBellWatcherScript()
+        // Stop any existing pipe on this session (idempotent; no-op if already stopped).
+        _ = try? await ShellExecutor.run("tmux pipe-pane -t \(shellQuote(sessionName))")
+        // Start fresh pipe without -o so it always takes effect.
+        _ = try? await ShellExecutor.run(
+            "tmux pipe-pane -t \(shellQuote(sessionName)) \(shellQuote("\(bellWatcherScriptPath) \(sessionName)"))"
+        )
+    }
+
     private var bellWatcherScriptPath: String {
         "/tmp/magent-bell-watcher.sh"
     }
