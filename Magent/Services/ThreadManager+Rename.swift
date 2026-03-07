@@ -547,6 +547,11 @@ extension ThreadManager {
         guard thread.agentTmuxSessions.contains(sessionName) else { return false }
         guard !autoRenameInProgress.contains(thread.id) else { return false }
 
+        // Lock before the first await so concurrent TOC-refresh callbacks cannot
+        // both slip through the guard above and start duplicate AI calls.
+        autoRenameInProgress.insert(thread.id)
+        defer { autoRenameInProgress.remove(thread.id) }
+
         // If the current git branch was already renamed to a custom value
         // (for example outside Magent), skip first-prompt auto-rename and
         // mark it handled so we do not keep retrying on each submitted prompt.
@@ -557,33 +562,38 @@ extension ThreadManager {
             return false
         }
 
+        // Try agents in preferred-first order; fall back to other built-in generators
+        // (Claude/Codex) if the preferred one fails — per AGENTS.md fallback convention.
         let preferredAgent = thread.sessionAgentTypes[sessionName] ?? thread.effectiveAgentType
+        let agentOrder = slugGenerationAgentOrder(preferred: preferredAgent, projectId: thread.projectId)
 
-        let result = await generateFirstPromptRenamePayloadViaAgent(
-            from: prompt,
-            agentType: preferredAgent,
-            projectId: thread.projectId
-        )
-        let slug: String
-        let generatedTaskDescription: GeneratedTaskDescription?
-        switch result {
-        case .generated(let generatedSlug, let description):
-            slug = generatedSlug
-            generatedTaskDescription = description
-        case .question:
-            // Treated as handled for this prompt to avoid a second model call.
-            return true
-        case .failed:
-            // Keep first-prompt auto-rename one-time and avoid noisy warnings when
-            // optional background slug generation fails for environment/model reasons.
+        var slug: String?
+        var generatedTaskDescription: GeneratedTaskDescription?
+        for candidateAgent in agentOrder.available {
+            switch await generateFirstPromptRenamePayloadViaAgent(
+                from: prompt,
+                agentType: candidateAgent,
+                projectId: thread.projectId
+            ) {
+            case .generated(let generatedSlug, let description):
+                slug = generatedSlug
+                generatedTaskDescription = description
+            case .question:
+                // Treated as handled for this prompt to avoid a second model call.
+                return true
+            case .failed:
+                continue
+            }
+            break
+        }
+
+        guard let resolvedSlug = slug else {
+            // All agents failed; mark handled and let separate description path run as fallback.
             markFirstPromptAutoRenameHandled(threadId: thread.id)
-            // Let the separate description path run as a fallback.
             return false
         }
-        let candidates = renameCandidates(from: slug)
 
-        autoRenameInProgress.insert(thread.id)
-        defer { autoRenameInProgress.remove(thread.id) }
+        let candidates = renameCandidates(from: resolvedSlug)
 
         for candidate in candidates where candidate != thread.name {
             do {

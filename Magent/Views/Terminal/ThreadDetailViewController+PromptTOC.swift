@@ -160,9 +160,12 @@ extension ThreadDetailViewController {
         promptTOCSessionName = sessionName
         promptTOCEntries = entries
 
-        if !thread.didAutoRenameFromFirstPrompt, entries.count > previousEntryCount, let lastEntry = entries.last {
+        if !thread.didAutoRenameFromFirstPrompt, entries.count > previousEntryCount {
+            // Use the first newly-confirmed entry as the rename prompt, not the most
+            // recent one, so multi-prompt batches still name from the triggering prompt.
+            let firstNewEntry = entries[previousEntryCount]
             let threadId = thread.id
-            let prompt = lastEntry.displayText
+            let prompt = firstNewEntry.displayText
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let previousThread = self.thread
