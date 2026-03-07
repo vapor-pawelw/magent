@@ -392,7 +392,18 @@ final class ThreadCell: NSTableCellView {
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
-        if thread.isBlockedByRateLimit {
+        if thread.isRateLimitExpiredAndResumable {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
+            rateLimitImageView?.image = NSImage(systemSymbolName: "arrow.clockwise.circle.fill", accessibilityDescription: "Rate limit lifted")
+            rateLimitImageView?.contentTintColor = .systemGreen
+            rateLimitImageView?.toolTip = "Rate limit lifted — ready to resume"
+            rateLimitImageView?.isHidden = false
+            completionImageView?.image = nil
+            completionImageView?.toolTip = nil
+            completionImageView?.isHidden = true
+        } else if thread.isBlockedByRateLimit {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
@@ -454,6 +465,7 @@ final class ThreadCell: NSTableCellView {
         isWaitingForInput: Bool = false,
         isDirty: Bool = false,
         isBlockedByRateLimit: Bool = false,
+        isRateLimitExpiredAndResumable: Bool = false,
         rateLimitTooltip: String? = nil,
         hasBranchMismatch: Bool = false,
         actualBranch: String? = nil,
@@ -491,7 +503,18 @@ final class ThreadCell: NSTableCellView {
         setDirtyDot(primaryDirtyDot, visible: false)
         setDirtyDot(secondaryDirtyDot, visible: false)
 
-        if isBlockedByRateLimit {
+        if isRateLimitExpiredAndResumable {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
+            rateLimitImageView?.image = NSImage(systemSymbolName: "arrow.clockwise.circle.fill", accessibilityDescription: "Rate limit lifted")
+            rateLimitImageView?.contentTintColor = .systemGreen
+            rateLimitImageView?.toolTip = "Rate limit lifted — ready to resume"
+            rateLimitImageView?.isHidden = false
+            completionImageView?.image = nil
+            completionImageView?.toolTip = nil
+            completionImageView?.isHidden = true
+        } else if isBlockedByRateLimit {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
@@ -570,7 +593,9 @@ final class ThreadCell: NSTableCellView {
             statuses.append("Dirty")
         }
 
-        if thread.isBlockedByRateLimit {
+        if thread.isRateLimitExpiredAndResumable {
+            statuses.append("Ready to resume")
+        } else if thread.isBlockedByRateLimit {
             if let detail = thread.rateLimitLiftDescription, !detail.isEmpty {
                 statuses.append("Rate limited (\(detail))")
             } else {

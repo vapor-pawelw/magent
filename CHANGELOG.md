@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Thread
+- Rate-limited threads whose reset time has passed now show a green "ready to resume" indicator instead of the red hourglass, so it's clear the thread can be resumed without waiting.
 - Fixed "agent needs input" marker appearing while the agent is actively busy — the waiting-for-input detector now correctly ignores waiting-style phrases when the Claude Code "esc to interrupt" status bar is visible.
 - Expanded auto-generated thread name pool from 85 to 403 Pokémon, covering Generations 1–4 in order.
 - A floating "Scroll to bottom" button now appears at the bottom-left of the terminal when scrolled up 3+ lines; clicking it snaps back to live output and fades away.
