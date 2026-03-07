@@ -196,6 +196,12 @@ User Action (+ button)
         └──► PersistenceService.save()
 ```
 
+## Review Button Agent Selection
+
+- The top-right Review button reuses the same active-agent menu model as `+` buttons so the available agents stay aligned with `AppSettings.activeAgents`.
+- Unlike `+`, the Review button must not offer `Terminal`; every review launch should open an agent tab with the configured review prompt.
+- Option-click on Review should bypass the menu and launch immediately with the resolved default agent for the thread's project, matching the quick-create behavior used by project and tab `+` controls.
+
 ## Session Reopen / Recovery
 
 - `ThreadDetailViewController` always calls `ThreadManager.recreateSessionIfNeeded(...)` before attaching a tab so reopened views can reuse a live tmux session or recover a missing/mismatched one.
