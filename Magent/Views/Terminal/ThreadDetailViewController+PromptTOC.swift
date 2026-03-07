@@ -1039,8 +1039,8 @@ final class PromptTableOfContentsView: NSView {
     private var selectedEntryIndex: Int?
     private var isHovered = false
 
-    private static let backgroundAlphaDefault: CGFloat = 0.35
-    private static let backgroundAlphaHovered: CGFloat = 0.95
+    private static let normalAlpha: CGFloat = 0.55
+    private static let hoverAlpha: CGFloat = 0.95
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1125,16 +1125,15 @@ final class PromptTableOfContentsView: NSView {
     }
 
     private func updateBackground(animated: Bool) {
-        let alpha = isHovered ? Self.backgroundAlphaHovered : Self.backgroundAlphaDefault
-        let newColor = NSColor(resource: .surface).withAlphaComponent(alpha).cgColor
-        if animated, let layer {
-            let anim = CABasicAnimation(keyPath: "backgroundColor")
-            anim.fromValue = layer.backgroundColor
-            anim.toValue = newColor
-            anim.duration = 0.15
-            layer.add(anim, forKey: "backgroundColor")
+        let target = isHovered ? Self.hoverAlpha : Self.normalAlpha
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = isHovered ? 0.15 : 0.22
+                self.animator().alphaValue = target
+            }
+        } else {
+            alphaValue = target
         }
-        layer?.backgroundColor = newColor
     }
 
     private func setupUI() {
@@ -1142,8 +1141,8 @@ final class PromptTableOfContentsView: NSView {
         // Keep TOC above terminal surfaces that are added later.
         layer?.zPosition = 10
         layer?.cornerRadius = 8
-        layer?.backgroundColor = NSColor(resource: .surface)
-            .withAlphaComponent(Self.backgroundAlphaDefault).cgColor
+        layer?.backgroundColor = NSColor(resource: .surface).cgColor
+        alphaValue = Self.normalAlpha
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
 
@@ -1240,7 +1239,7 @@ final class PromptTableOfContentsView: NSView {
         for handle in cornerHandles { addSubview(handle) }
 
         NSLayoutConstraint.activate([
-            closeButton.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            closeButton.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
 
             headerStack.topAnchor.constraint(equalTo: topAnchor, constant: 8),

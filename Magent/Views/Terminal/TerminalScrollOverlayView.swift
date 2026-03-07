@@ -22,7 +22,7 @@ final class TerminalScrollOverlayView: NSView {
     private let toBottomButton = NSButton()
     private var trackingArea: NSTrackingArea?
 
-    private static let normalAlpha: CGFloat = 0.38
+    private static let normalAlpha: CGFloat = 0.55
     private static let hoverAlpha: CGFloat = 0.90
 
     override init(frame: NSRect) {
