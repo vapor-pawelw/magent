@@ -49,6 +49,7 @@ All notable changes to this project will be documented in this file.
 ### Diff Viewer
 - Double-clicking a file in the `CHANGES` panel now opens it in the default macOS app, and right-click now includes `Show in Finder`.
 - Selecting files in `CHANGES` now opens and scrolls the inline diff to the correct file section, including renamed files and paths that Git would otherwise quote.
+- Fixed diff viewer scrolling to the wrong position when selecting files: clicking a file lower in the list no longer scrolls the viewer further up than a higher file.
 
 ### Sidebar
 - Selecting a thread no longer causes the sidebar to resize or task descriptions to rewrap between one and two lines.

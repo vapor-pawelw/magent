@@ -1545,8 +1545,12 @@ final class InlineDiffViewController: NSViewController {
     }
 
     private func scrollSectionIntoViewIfNeeded(_ section: DiffSectionView) {
-        let sectionFrame = section.convert(section.bounds, to: sectionsStackView)
-        scrollView.contentView.scrollToVisible(sectionFrame)
+        // Convert to clip-view coordinates to avoid the document/flip coordinate mismatch:
+        // sectionsStackView is non-flipped (Y=0 at bottom) but contentView is flipped (Y=0 at top).
+        // Passing sectionsStackView-space coords to scrollToVisible on the clip view inverts the Y
+        // axis, causing files lower in the list to scroll further up. Use section.scrollToVisible
+        // to let AppKit handle all coordinate conversion correctly.
+        section.scrollToVisible(section.bounds)
     }
 
     // MARK: - Diff Splitting
