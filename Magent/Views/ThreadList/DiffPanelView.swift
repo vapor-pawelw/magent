@@ -71,6 +71,7 @@ final class DiffPanelView: NSView {
     private let handleView = DiffPanelResizeHandle()
     private let separatorView = NSView()
     private let headerButton = NSButton()
+    private let infoButton = NSButton()
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
     private let branchInfoLabel = NSTextField(labelWithString: "")
@@ -125,6 +126,17 @@ final class DiffPanelView: NSView {
         headerButton.translatesAutoresizingMaskIntoConstraints = false
         addSubview(headerButton)
 
+        // Info button — shows color legend popover
+        let infoConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
+        infoButton.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Color legend")?.withSymbolConfiguration(infoConfig)
+        infoButton.isBordered = false
+        infoButton.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.6)
+        infoButton.target = self
+        infoButton.action = #selector(infoButtonTapped)
+        infoButton.translatesAutoresizingMaskIntoConstraints = false
+        infoButton.toolTip = "Color legend"
+        addSubview(infoButton)
+
         // Stack view for file entries
         stackView.orientation = .vertical
         stackView.alignment = .leading
@@ -169,7 +181,10 @@ final class DiffPanelView: NSView {
 
             headerButton.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4),
             headerButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            headerButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            headerButton.trailingAnchor.constraint(lessThanOrEqualTo: infoButton.leadingAnchor, constant: -4),
+
+            infoButton.centerYAnchor.constraint(equalTo: headerButton.centerYAnchor),
+            infoButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
 
             scrollView.topAnchor.constraint(equalTo: headerButton.bottomAnchor, constant: 4),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -396,6 +411,61 @@ final class DiffPanelView: NSView {
         headerButton.title = "CHANGES"
         branchInfoLabel.isHidden = true
         setPanelVisible(false)
+    }
+
+    @objc private func infoButtonTapped() {
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentViewController = makeLegendViewController()
+        popover.show(relativeTo: infoButton.bounds, of: infoButton, preferredEdge: .minY)
+    }
+
+    private func makeLegendViewController() -> NSViewController {
+        let items: [(NSColor, String)] = [
+            (NSColor(red: 0.35, green: 0.65, blue: 0.35, alpha: 1.0), "Staged — changes staged for commit"),
+            (NSColor(red: 0.78, green: 0.3, blue: 0.3, alpha: 1.0),   "Unstaged — modified, not yet staged"),
+            (NSColor(red: 0.76, green: 0.65, blue: 0.42, alpha: 1.0), "Untracked — new file"),
+            (.secondaryLabelColor,                                      "Committed — part of branch diff"),
+        ]
+
+        let outerStack = NSStackView()
+        outerStack.orientation = .vertical
+        outerStack.alignment = .leading
+        outerStack.spacing = 6
+        outerStack.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 16)
+        outerStack.translatesAutoresizingMaskIntoConstraints = false
+
+        for (color, label) in items {
+            let dot = NSView()
+            dot.wantsLayer = true
+            dot.layer?.backgroundColor = color.cgColor
+            dot.layer?.cornerRadius = 4
+            dot.translatesAutoresizingMaskIntoConstraints = false
+            dot.widthAnchor.constraint(equalToConstant: 8).isActive = true
+            dot.heightAnchor.constraint(equalToConstant: 8).isActive = true
+
+            let text = NSTextField(labelWithString: label)
+            text.font = .systemFont(ofSize: 11)
+            text.textColor = .labelColor
+
+            let row = NSStackView(views: [dot, text])
+            row.orientation = .horizontal
+            row.spacing = 7
+            row.alignment = .centerY
+            outerStack.addArrangedSubview(row)
+        }
+
+        let vc = NSViewController()
+        let container = NSView()
+        container.addSubview(outerStack)
+        NSLayoutConstraint.activate([
+            outerStack.topAnchor.constraint(equalTo: container.topAnchor),
+            outerStack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            outerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            outerStack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        vc.view = container
+        return vc
     }
 
     @objc private func headerTapped() {
