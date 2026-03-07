@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - The `+` add-tab menu now shows a "New Tab" header so its purpose is clear at a glance.
 - Fixed "agent needs input" marker appearing while the agent is actively busy — the waiting-for-input detector now correctly ignores waiting-style phrases when the Claude Code "esc to interrupt" status bar is visible.
 - Expanded auto-generated thread name pool from 85 to 403 Pokémon, covering Generations 1–4 in order.
+- Fixed a spurious "Terminal scroll failed: not in a mode" error banner when tapping scroll-to-bottom while the terminal is not in copy-mode.
 - A floating "Scroll to bottom" button now appears at the bottom-left of the terminal when scrolled up 3+ lines; clicking it snaps back to live output and fades away.
 - Terminal scroll controls (page-up, page-down, jump-to-bottom) are now a compact draggable pill overlay in the bottom-right corner of the terminal panel; it fades to semi-transparent when idle and becomes opaque on hover, keeping the top bar uncluttered.
 - Scroll overlay resting opacity increased and bottom clearance raised to 32 pt so it no longer sits flush with the bottom edge.

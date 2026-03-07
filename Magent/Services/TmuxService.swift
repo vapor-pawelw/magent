@@ -392,7 +392,8 @@ final class TmuxService {
     }
 
     func scrollToBottom(sessionName: String) async throws {
-        _ = try await ShellExecutor.run(
+        // Ignore "not in a mode" — pane is already at the bottom (not in copy-mode), which is fine.
+        _ = try? await ShellExecutor.run(
             "tmux send-keys -t \(shellQuote(sessionName)) -X cancel"
         )
     }
