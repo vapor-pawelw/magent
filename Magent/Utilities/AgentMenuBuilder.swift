@@ -17,6 +17,7 @@ enum AgentMenuBuilder {
         menuTitle: String? = nil,
         defaultAgentName: String?,
         activeAgents: [AgentType],
+        includeTerminal: Bool = true,
         target: AnyObject,
         action: Selector,
         extraData: [String: String] = [:]
@@ -54,14 +55,16 @@ enum AgentMenuBuilder {
             menu.addItem(item)
         }
 
-        if !menu.items.isEmpty {
+        if includeTerminal, !menu.items.isEmpty {
             menu.addItem(.separator())
         }
 
-        let terminalItem = NSMenuItem(title: "Terminal", action: action, keyEquivalent: "")
-        terminalItem.target = target
-        terminalItem.representedObject = extraData.merging(["mode": "terminal"]) { _, new in new }
-        menu.addItem(terminalItem)
+        if includeTerminal {
+            let terminalItem = NSMenuItem(title: "Terminal", action: action, keyEquivalent: "")
+            terminalItem.target = target
+            terminalItem.representedObject = extraData.merging(["mode": "terminal"]) { _, new in new }
+            menu.addItem(terminalItem)
+        }
     }
 
     /// Parses the selection from a menu item's `representedObject`.

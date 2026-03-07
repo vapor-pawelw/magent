@@ -245,7 +245,7 @@ final class ThreadDetailViewController: NSViewController {
         reviewButton.image = NSImage(systemSymbolName: "eye", accessibilityDescription: "Review Changes")
         reviewButton.target = self
         reviewButton.action = #selector(reviewButtonTapped)
-        reviewButton.toolTip = "Open a new agent tab to review branch changes"
+        reviewButton.toolTip = "Review branch changes in a new agent tab. Option-click to use the default agent."
         reviewButton.isHidden = true
 
         exportContextButton.bezelStyle = .texturedRounded

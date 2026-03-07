@@ -305,10 +305,62 @@ extension ThreadDetailViewController {
     // MARK: - Review
 
     @objc func reviewButtonTapped() {
+        let settings = PersistenceService.shared.loadSettings()
+        let activeAgents = settings.availableActiveAgents
+        guard !activeAgents.isEmpty else {
+            BannerManager.shared.show(message: "Enable an agent in Settings to review changes.", style: .warning)
+            return
+        }
+
+        if NSApp.currentEvent?.modifierFlags.contains(.option) == true {
+            startReview(using: defaultReviewAgentType(from: settings))
+            return
+        }
+
+        let menu = NSMenu()
+        AgentMenuBuilder.populate(
+            menu: menu,
+            menuTitle: "Review Changes",
+            defaultAgentName: defaultReviewAgentType(from: settings)?.displayName,
+            activeAgents: activeAgents,
+            includeTerminal: false,
+            target: self,
+            action: #selector(reviewMenuItemTapped(_:))
+        )
+        menu.popUp(positioning: nil, at: NSPoint(x: reviewButton.bounds.minX, y: reviewButton.bounds.minY), in: reviewButton)
+    }
+
+    @objc private func reviewMenuItemTapped(_ sender: NSMenuItem) {
+        guard let selection = AgentMenuBuilder.parseSelection(from: sender) else { return }
+
+        switch selection.mode {
+        case .agent(let agentType):
+            startReview(using: agentType)
+        case .projectDefault:
+            let settings = PersistenceService.shared.loadSettings()
+            startReview(using: defaultReviewAgentType(from: settings))
+        case .terminal:
+            return
+        }
+    }
+
+    private func startReview(using agentType: AgentType?) {
+        guard let agentType else {
+            BannerManager.shared.show(message: "Enable an agent in Settings to review changes.", style: .warning)
+            return
+        }
+
+        addTab(using: agentType, useAgentCommand: true, initialPrompt: reviewPrompt())
+    }
+
+    private func defaultReviewAgentType(from settings: AppSettings) -> AgentType? {
+        threadManager.resolveAgentType(for: thread.projectId, requestedAgentType: nil, settings: settings)
+    }
+
+    private func reviewPrompt() -> String {
         let baseBranch = threadManager.resolveBaseBranch(for: thread)
         let settings = PersistenceService.shared.loadSettings()
-        let prompt = settings.reviewPrompt.replacingOccurrences(of: "{baseBranch}", with: baseBranch)
-        addTab(using: nil, useAgentCommand: true, initialPrompt: prompt)
+        return settings.reviewPrompt.replacingOccurrences(of: "{baseBranch}", with: baseBranch)
     }
 
     // MARK: - Context Transfer
