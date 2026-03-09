@@ -51,8 +51,14 @@ let package = Package(
             path: "Sources/JiraCore"
         ),
         .target(
+            name: "IPCCore",
+            dependencies: ["MagentModels"],
+            path: "Sources/IPCCore"
+        ),
+        .target(
             name: "MagentCore",
             dependencies: [
+                "IPCCore",
                 "MagentModels",
                 "ShellInfra",
                 "GitCore",

@@ -1,4 +1,5 @@
 import Foundation
+import MagentModels
 
 // MARK: - Request
 
