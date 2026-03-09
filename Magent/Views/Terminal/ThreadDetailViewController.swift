@@ -28,7 +28,7 @@ final class ThreadDetailViewController: NSViewController {
     let scrollOverlay = TerminalScrollOverlayView()
     let togglePromptTOCButton = NSButton()
     let addTabButton = NSButton()
-    let floatingScrollToBottomButton = NSButton()
+    let floatingScrollToBottomButton = TerminalScrollToBottomPillButton()
 
     var tabItems: [TabItemView] = []
     var terminalViews: [TerminalSurfaceView] = []

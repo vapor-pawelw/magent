@@ -7,6 +7,10 @@ extension ThreadDetailViewController {
     // This prevents the button from flashing on minor incidental scrolls near live output.
     private static let scrollFABThreshold: UInt64 = 12
     private static let scrollFABRefreshDelayNanoseconds: UInt64 = 120_000_000
+    private static let scrollOverlayDefaultBottomInset: CGFloat = 48
+    private static let scrollFABFadeInDuration: TimeInterval = 0.22
+    private static let scrollFABFadeOutDuration: TimeInterval = 0.18
+    private static let scrollFABVerticalTravel: CGFloat = 24
 
     // MARK: - Setup
 
@@ -31,7 +35,10 @@ extension ThreadDetailViewController {
         terminalContainer.addSubview(overlay)
 
         let trailing = overlay.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor, constant: -16)
-        let bottom   = overlay.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor, constant: -32)
+        let bottom   = overlay.bottomAnchor.constraint(
+            equalTo: terminalContainer.bottomAnchor,
+            constant: -Self.scrollOverlayDefaultBottomInset
+        )
         scrollOverlayTrailingConstraint = trailing
         scrollOverlayBottomConstraint   = bottom
         NSLayoutConstraint.activate([trailing, bottom])
@@ -71,35 +78,15 @@ extension ThreadDetailViewController {
         btn.translatesAutoresizingMaskIntoConstraints = false
         btn.isHidden = true
         btn.alphaValue = 0
-        btn.setButtonType(.momentaryPushIn)
-        btn.isBordered = false
-        btn.focusRingType = .none
-        btn.title = " Przewin w dol"
-        btn.image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: nil)
-        btn.imagePosition = .imageLeading
-        btn.imageScaling = .scaleProportionallyDown
-        btn.font = .systemFont(ofSize: 12, weight: .semibold)
-        btn.contentTintColor = NSColor.labelColor
-        btn.toolTip = "Przewin do live output"
-        btn.target = self
-        btn.action = #selector(floatingScrollToBottomTapped)
-        btn.imageHugsTitle = true
-
-        let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.25)
-        shadow.shadowOffset = NSSize(width: 0, height: -2)
-        shadow.shadowBlurRadius = 6
-        btn.wantsLayer = true
-        btn.shadow = shadow
-        btn.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.96).cgColor
-        btn.layer?.cornerRadius = 18
-        btn.layer?.borderWidth = 1
-        btn.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
+        btn.onTap = { [weak self] in self?.floatingScrollToBottomTapped() }
 
         terminalContainer.addSubview(btn)
         NSLayoutConstraint.activate([
             btn.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor, constant: 18),
-            btn.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor, constant: -18),
+            btn.bottomAnchor.constraint(
+                equalTo: terminalContainer.bottomAnchor,
+                constant: -Self.scrollOverlayDefaultBottomInset
+            ),
         ])
     }
 
@@ -109,20 +96,56 @@ extension ThreadDetailViewController {
         if visible && floatingScrollToBottomButton.isHidden {
             floatingScrollToBottomButton.alphaValue = 0
             floatingScrollToBottomButton.isHidden = false
+            setScrollFABTranslationY(-Self.scrollFABVerticalTravel)
+            animateScrollFABTranslationY(
+                from: -Self.scrollFABVerticalTravel,
+                to: 0,
+                duration: Self.scrollFABFadeInDuration,
+                timingFunctionName: .easeOut
+            )
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.18
-                self.floatingScrollToBottomButton.animator().alphaValue = 1
+                ctx.duration = Self.scrollFABFadeInDuration
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                self.floatingScrollToBottomButton.animator().alphaValue = TerminalScrollToBottomPillButton.restingAlpha
             }
         } else if !visible && !floatingScrollToBottomButton.isHidden {
+            animateScrollFABTranslationY(
+                from: 0,
+                to: -Self.scrollFABVerticalTravel,
+                duration: Self.scrollFABFadeOutDuration,
+                timingFunctionName: .easeInEaseOut
+            )
             NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.12
+                ctx.duration = Self.scrollFABFadeOutDuration
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 self.floatingScrollToBottomButton.animator().alphaValue = 0
             }, completionHandler: {
                 Task { @MainActor [weak self] in
+                    self?.setScrollFABTranslationY(0)
                     self?.floatingScrollToBottomButton.isHidden = true
                 }
             })
         }
+    }
+
+    private func animateScrollFABTranslationY(
+        from fromTranslationY: CGFloat,
+        to translationY: CGFloat,
+        duration: TimeInterval,
+        timingFunctionName: CAMediaTimingFunctionName
+    ) {
+        guard let layer = floatingScrollToBottomButton.layer else { return }
+        layer.transform = CATransform3DMakeTranslation(0, fromTranslationY, 0)
+
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(duration)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: timingFunctionName))
+        layer.transform = CATransform3DMakeTranslation(0, translationY, 0)
+        CATransaction.commit()
+    }
+
+    private func setScrollFABTranslationY(_ translationY: CGFloat) {
+        floatingScrollToBottomButton.layer?.transform = CATransform3DMakeTranslation(0, translationY, 0)
     }
 
     func scheduleScrollFABVisibilityRefresh() {

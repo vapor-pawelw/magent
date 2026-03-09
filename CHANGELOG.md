@@ -14,9 +14,8 @@ All notable changes to this project will be documented in this file.
 - Fixed "agent needs input" marker appearing while the agent is actively busy — the waiting-for-input detector now correctly ignores waiting-style phrases when the Claude Code "esc to interrupt" status bar is visible.
 - Expanded auto-generated thread name pool from 85 to 403 Pokémon, covering Generations 1–4 in order.
 - Fixed a spurious "Terminal scroll failed: not in a mode" error banner when tapping scroll-to-bottom while the terminal is not in copy-mode.
-- A floating `Przewin w dol` button now appears at the bottom-left of the terminal only after you scroll a bit away from live output, and reliably returns to the bottom even when Ghostty scrollbar updates lag behind tmux state.
-- Terminal scroll controls (page-up, page-down, jump-to-bottom) are now a compact draggable pill overlay in the bottom-right corner of the terminal panel; it fades to semi-transparent when idle and becomes opaque on hover, keeping the top bar uncluttered.
-- Scroll overlay resting opacity increased and bottom clearance raised to 32 pt so it no longer sits flush with the bottom edge.
+- A floating `Scroll to bottom` pill now appears only after you scroll meaningfully away from live output, matches the terminal overlay hover/transparency treatment, and eases in/out with a subtle slide from 24 pt below its resting position.
+- Terminal scroll controls (page-up, page-down, jump-to-bottom) are now a compact draggable pill overlay in the bottom-right corner of the terminal panel with shared semi-transparent idle styling and 48 pt bottom clearance, keeping the top bar uncluttered.
 - Archive now supports project-scoped local file sync merge-back from worktree to repo root with changed-file-only sync, UI conflict prompts (`Override`, `Override All`, `Ignore`, `Cancel Archive`), and safe non-interactive/CLI conflict skipping so existing repo files are not lost.
 - Threads now snapshot their project local-sync path list at creation, so later project setting changes do not retroactively change what an already-open thread syncs on archive.
 - Archive now supports forced completion after non-conflict local-sync failures, with a UI `Force Archive` path and CLI `archive-thread --force`.
