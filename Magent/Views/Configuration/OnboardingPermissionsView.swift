@@ -11,12 +11,12 @@ final class OnboardingPermissionsView: NSView {
     }
 
     private let skipPermissionsCheckbox = NSButton(
-        checkboxWithTitle: "Skip permission prompts",
+        checkboxWithTitle: String(localized: .ConfigurationStrings.permissionsSkipPrompts),
         target: nil,
         action: nil
     )
     private let sandboxCheckbox = NSButton(
-        checkboxWithTitle: "Enable sandbox",
+        checkboxWithTitle: String(localized: .ConfigurationStrings.permissionsEnableSandbox),
         target: nil,
         action: nil
     )
@@ -37,35 +37,35 @@ final class OnboardingPermissionsView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     private func setupUI() {
-        let titleLabel = NSTextField(labelWithString: "Agent Permissions")
+        let titleLabel = NSTextField(labelWithString: String(localized: .ConfigurationStrings.permissionsTitle))
         titleLabel.font = .preferredFont(forTextStyle: .headline)
 
         let descLabel = NSTextField(
-            wrappingLabelWithString: "Control how agents handle permissions and sandboxing. Only applies to Claude and Codex."
+            wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsDescription)
         )
         descLabel.font = .systemFont(ofSize: 11)
         descLabel.textColor = NSColor(resource: .textSecondary)
 
         skipPermissionsCheckbox.state = .on
         let skipDesc = NSTextField(
-            wrappingLabelWithString: "Agents run without asking for approval. Claude uses --dangerously-skip-permissions, Codex uses --yolo."
+            wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsSkipPromptsDescription)
         )
         skipDesc.font = .systemFont(ofSize: 11)
         skipDesc.textColor = NSColor(resource: .textSecondary)
 
         sandboxCheckbox.state = .off
         let sandboxDesc = NSTextField(
-            wrappingLabelWithString: "Restrict agent filesystem access to the workspace. Codex uses --full-auto."
+            wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsEnableSandboxDescriptionOnboarding)
         )
         sandboxDesc.font = .systemFont(ofSize: 11)
         sandboxDesc.textColor = NSColor(resource: .textSecondary)
 
         // FDA section
-        let fdaLabel = NSTextField(labelWithString: "Full Disk Access")
+        let fdaLabel = NSTextField(labelWithString: String(localized: .ConfigurationStrings.permissionsFullDiskAccessTitle))
         fdaLabel.font = .systemFont(ofSize: 13, weight: .semibold)
 
         let fdaDesc = NSTextField(
-            wrappingLabelWithString: "Grant Full Disk Access so agents can read and modify files outside the workspace (e.g. ~/.zshrc, ~/Library)."
+            wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsFullDiskAccessDescriptionShort)
         )
         fdaDesc.font = .systemFont(ofSize: 11)
         fdaDesc.textColor = NSColor(resource: .textSecondary)
@@ -78,7 +78,7 @@ final class OnboardingPermissionsView: NSView {
         fdaStatusLabel.font = .systemFont(ofSize: 12)
         fdaStatusRow.addArrangedSubview(fdaStatusLabel)
 
-        let fdaButton = NSButton(title: "Open System Settings", target: self, action: #selector(openFDASettings))
+        let fdaButton = NSButton(title: String(localized: .CommonStrings.commonOpenSystemSettings), target: self, action: #selector(openFDASettings))
         fdaButton.bezelStyle = .push
         fdaButton.controlSize = .small
         fdaStatusRow.addArrangedSubview(fdaButton)
@@ -127,10 +127,10 @@ final class OnboardingPermissionsView: NSView {
     private func refreshFDAStatus() {
         let granted = SystemAccessChecker.isFullDiskAccessGranted()
         if granted {
-            fdaStatusLabel.stringValue = "\u{2705} Granted"
+            fdaStatusLabel.stringValue = String(localized: .ConfigurationStrings.permissionsFullDiskAccessGranted)
             fdaStatusLabel.textColor = .systemGreen
         } else {
-            fdaStatusLabel.stringValue = "\u{274C} Not Granted"
+            fdaStatusLabel.stringValue = String(localized: .ConfigurationStrings.permissionsFullDiskAccessNotGranted)
             fdaStatusLabel.textColor = .secondaryLabelColor
         }
     }

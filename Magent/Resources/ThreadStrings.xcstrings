@@ -1,0 +1,842 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "tabCloseMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will close the terminal session. Are you sure?"
+          }
+        }
+      }
+    },
+    "tabCloseTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Tab"
+          }
+        }
+      }
+    },
+    "tabRenameMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a new name for this tab"
+          }
+        }
+      }
+    },
+    "tabRenameTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Tab"
+          }
+        }
+      }
+    },
+    "tabStartingAgent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting agent..."
+          }
+        }
+      }
+    },
+    "tabsCloseLeftMessageMany": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will close %lld tabs to the left. Are you sure?"
+          }
+        }
+      }
+    },
+    "tabsCloseLeftMessageOne": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will close %lld tab to the left. Are you sure?"
+          }
+        }
+      }
+    },
+    "tabsCloseLeftTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Tabs to the Left"
+          }
+        }
+      }
+    },
+    "tabsCloseRightMessageMany": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will close %lld tabs to the right. Are you sure?"
+          }
+        }
+      }
+    },
+    "tabsCloseRightMessageOne": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will close %lld tab to the right. Are you sure?"
+          }
+        }
+      }
+    },
+    "tabsCloseRightTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Tabs to the Right"
+          }
+        }
+      }
+    },
+    "tabsNoOpenTabs": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No open tabs"
+          }
+        }
+      }
+    },
+    "tabsNoOpenTabsHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press + in the top right to add a tab"
+          }
+        }
+      }
+    },
+    "terminalScrollFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal scroll failed: %@"
+          }
+        }
+      }
+    },
+    "threadArchiveBusyMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent in \"%@\" is currently busy. Archiving will terminate the running agent and remove the worktree directory. The git branch \"%@\" will be kept."
+          }
+        }
+      }
+    },
+    "threadArchiveCompletedWithoutLocalSync": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archived without completing local sync."
+          }
+        }
+      }
+    },
+    "threadArchiveConflictCancelArchive": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel Archive"
+          }
+        }
+      }
+    },
+    "threadArchiveConflictDirectoryBlocksFile": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A directory exists where a file is needed:\n%@\n\nChoose how to proceed."
+          }
+        }
+      }
+    },
+    "threadArchiveConflictFileBlocksDirectory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A file exists where a directory is needed:\n%@\n\nChoose how to proceed."
+          }
+        }
+      }
+    },
+    "threadArchiveConflictFileDifferent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A different file already exists at:\n%@\n\nChoose how to proceed."
+          }
+        }
+      }
+    },
+    "threadArchiveConflictIgnore": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignore"
+          }
+        }
+      }
+    },
+    "threadArchiveConflictOverride": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Override"
+          }
+        }
+      }
+    },
+    "threadArchiveConflictOverrideAll": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Override All"
+          }
+        }
+      }
+    },
+    "threadArchiveConflictTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive Conflict: %@"
+          }
+        }
+      }
+    },
+    "threadArchiveFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive failed: %@"
+          }
+        }
+      }
+    },
+    "threadArchiveLocalSyncFailedMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@\n\nForce Archive will remove the worktree anyway and leave any unsynced local files behind."
+          }
+        }
+      }
+    },
+    "threadArchiveLocalSyncFailedTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local Sync Failed"
+          }
+        }
+      }
+    },
+    "threadArchiveMenuTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive..."
+          }
+        }
+      }
+    },
+    "threadArchiveReasonCommitsNotIn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "commits not in %@"
+          }
+        }
+      }
+    },
+    "threadArchiveReasonUncommittedChanges": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "uncommitted changes"
+          }
+        }
+      }
+    },
+    "threadArchiveReasonsMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The thread \"%@\" has %@. Archiving will remove its worktree directory but keep the git branch \"%@\"."
+          }
+        }
+      }
+    },
+    "threadArchiveTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive Thread"
+          }
+        }
+      }
+    },
+    "threadCouldNotConstructRemoteURL": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not construct URL for remote %@"
+          }
+        }
+      }
+    },
+    "threadCouldNotSaveDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could Not Save Description"
+          }
+        }
+      }
+    },
+    "threadCouldNotSaveIcon": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could Not Save Icon"
+          }
+        }
+      }
+    },
+    "threadCreateFromThisBranch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create Thread from This Branch"
+          }
+        }
+      }
+    },
+    "threadDefaultTabName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab %lld"
+          }
+        }
+      }
+    },
+    "threadDeleteFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete failed: %@"
+          }
+        }
+      }
+    },
+    "threadDeleteMenuTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete..."
+          }
+        }
+      }
+    },
+    "threadDeleteMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will permanently delete the thread \"%@\", including its worktree directory and git branch \"%@\". This action cannot be undone."
+          }
+        }
+      }
+    },
+    "threadDeleteTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Thread"
+          }
+        }
+      }
+    },
+    "threadIconFeature": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feature"
+          }
+        }
+      }
+    },
+    "threadIconFix": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fix"
+          }
+        }
+      }
+    },
+    "threadIconImprovement": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Improvement"
+          }
+        }
+      }
+    },
+    "threadIconOther": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other"
+          }
+        }
+      }
+    },
+    "threadIconRefactor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refactor"
+          }
+        }
+      }
+    },
+    "threadIconTest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test"
+          }
+        }
+      }
+    },
+    "threadMoveTo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to..."
+          }
+        }
+      }
+    },
+    "threadNewTabMenuTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Tab"
+          }
+        }
+      }
+    },
+    "threadNoGitRemotesFound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No git remotes found"
+          }
+        }
+      }
+    },
+    "threadOpenInFinder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Finder"
+          }
+        }
+      }
+    },
+    "threadOpenInFinderMissingDirectory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not open %@ in Finder because the directory is missing."
+          }
+        }
+      }
+    },
+    "threadOpenInJira": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Jira"
+          }
+        }
+      }
+    },
+    "threadOpenJiraBoard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Jira Board"
+          }
+        }
+      }
+    },
+    "threadOpenJiraProject": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Jira Project"
+          }
+        }
+      }
+    },
+    "threadOpenProject": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open project"
+          }
+        }
+      }
+    },
+    "threadOpenProjectRootInFinder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Project Root in Finder"
+          }
+        }
+      }
+    },
+    "threadOpenPullRequestLabel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open %@"
+          }
+        }
+      }
+    },
+    "threadOpenTicketInJira": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Ticket in Jira"
+          }
+        }
+      }
+    },
+    "threadOpenWorktreeInFinder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Worktree in Finder"
+          }
+        }
+      }
+    },
+    "threadProjectRoot": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "project root"
+          }
+        }
+      }
+    },
+    "threadRateLimitResets": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resets %@"
+          }
+        }
+      }
+    },
+    "threadRenameBranch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename branch..."
+          }
+        }
+      }
+    },
+    "threadRenameBranchMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a new branch name"
+          }
+        }
+      }
+    },
+    "threadRenameBranchTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Branch"
+          }
+        }
+      }
+    },
+    "threadRenameMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Describe the task. Magent will generate a branch name, description, and icon."
+          }
+        }
+      }
+    },
+    "threadRenamePlaceholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "e.g. Fix sidebar chevron padding"
+          }
+        }
+      }
+    },
+    "threadRenameTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Thread"
+          }
+        }
+      }
+    },
+    "threadRenameWithAgent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename..."
+          }
+        }
+      }
+    },
+    "threadSetDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set description..."
+          }
+        }
+      }
+    },
+    "threadSetDescriptionMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a short description (max 8 words). Leave empty to clear."
+          }
+        }
+      }
+    },
+    "threadSetDescriptionTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Description"
+          }
+        }
+      }
+    },
+    "threadSetIcon": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set icon"
+          }
+        }
+      }
+    },
+    "threadShowOpenPullRequests": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Open Pull Requests"
+          }
+        }
+      }
+    },
+    "threadShowPullRequest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Pull Request"
+          }
+        }
+      }
+    },
+    "threadWorktree": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "worktree"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

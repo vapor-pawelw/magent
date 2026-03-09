@@ -1,0 +1,347 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "contextCaptureTerminalFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to capture terminal content"
+          }
+        }
+      }
+    },
+    "contextExport": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Context"
+          }
+        }
+      }
+    },
+    "contextExportFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to export: %@"
+          }
+        }
+      }
+    },
+    "contextExportPanelTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Terminal Context"
+          }
+        }
+      }
+    },
+    "contextExported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Context exported to %@"
+          }
+        }
+      }
+    },
+    "contextWriteFileFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to write context file"
+          }
+        }
+      }
+    },
+    "notificationsAgentCompletionDescriptionOnboarding": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When an agent finishes a command, Magent can send a system notification and play a sound."
+          }
+        }
+      }
+    },
+    "notificationsAgentCompletionDescriptionSettings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When an agent finishes a command, Magent can send a system notification, play a sound, and move the thread to the top of its section."
+          }
+        }
+      }
+    },
+    "notificationsAgentCompletionTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent Completion"
+          }
+        }
+      }
+    },
+    "notificationsAgentFinishedTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent Finished"
+          }
+        }
+      }
+    },
+    "notificationsAgentNeedsInputTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent Needs Input"
+          }
+        }
+      }
+    },
+    "notificationsMoveCompletedThreadsToTop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move completed threads to top automatically"
+          }
+        }
+      }
+    },
+    "notificationsOpenSystemSettings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Notification Settings"
+          }
+        }
+      }
+    },
+    "notificationsPlayRateLimitDetectedSound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play sound when rate limit is detected"
+          }
+        }
+      }
+    },
+    "notificationsPlayRateLimitLiftedSound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play sound when rate limit is lifted"
+          }
+        }
+      }
+    },
+    "notificationsPlaySound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play sound"
+          }
+        }
+      }
+    },
+    "notificationsRateLimitLiftedBodyMany": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ are ready to use again"
+          }
+        }
+      }
+    },
+    "notificationsRateLimitLiftedBodyOne": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is ready to use again"
+          }
+        }
+      }
+    },
+    "notificationsRateLimitLiftedTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate Limit Lifted"
+          }
+        }
+      }
+    },
+    "notificationsRateLimitsDescriptionOnboarding": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get notified when an agent's rate limit is lifted. Rate limit notifications require \"Track agent rate limits\" in Settings > Agents."
+          }
+        }
+      }
+    },
+    "notificationsRateLimitsDescriptionSettings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When rate limit tracking is enabled, Magent can notify you when the countdown reaches zero and the agent is ready to use again. Requires \"Track agent rate limits\" in Settings > Agents."
+          }
+        }
+      }
+    },
+    "notificationsRateLimitsTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate Limits"
+          }
+        }
+      }
+    },
+    "notificationsShowRateLimitLiftedNotification": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show system notification when rate limit is lifted"
+          }
+        }
+      }
+    },
+    "notificationsShowSystemBanners": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show system banners"
+          }
+        }
+      }
+    },
+    "notificationsSoundLabel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sound:"
+          }
+        }
+      }
+    },
+    "notificationsStatusChecking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications: Checking..."
+          }
+        }
+      }
+    },
+    "notificationsStatusDisabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications: Disabled - enable in System Settings"
+          }
+        }
+      }
+    },
+    "notificationsStatusEnabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications: Enabled"
+          }
+        }
+      }
+    },
+    "reviewButtonTooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review branch changes in a new agent tab. Option-click to use the default agent."
+          }
+        }
+      }
+    },
+    "reviewChanges": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review Changes"
+          }
+        }
+      }
+    },
+    "reviewEnableAgentWarning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable an agent in Settings to review changes."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

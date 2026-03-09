@@ -18,11 +18,11 @@ extension ThreadDetailViewController {
         if hasJiraConfig {
             openInJiraButton.image = jiraButtonImage()
             if thread.jiraTicketKey != nil {
-                openInJiraButton.toolTip = "Open Ticket in Jira"
+                openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenTicketInJira)
             } else if thread.isMain {
-                openInJiraButton.toolTip = "Open Jira Board"
+                openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenJiraBoard)
             } else {
-                openInJiraButton.toolTip = "Open Jira Project"
+                openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenJiraProject)
             }
         }
     }
@@ -34,7 +34,7 @@ extension ThreadDetailViewController {
             sized.isTemplate = false
             return sized
         }
-        return NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira") ?? NSImage()
+        return NSImage(systemSymbolName: "ticket", accessibilityDescription: String(localized: .JiraStrings.jiraTitle)) ?? NSImage()
     }
 
     @objc func openInJiraTapped() {
@@ -64,7 +64,7 @@ extension ThreadDetailViewController {
             NSWorkspace.shared.open(url)
         } else {
             BannerManager.shared.show(
-                message: "Could not build Jira URL — check project Jira settings",
+                message: String(localized: .JiraStrings.jiraCouldNotBuildURL),
                 style: .warning,
                 duration: 5.0
             )

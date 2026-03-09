@@ -62,14 +62,14 @@ final class SettingsNotificationsViewController: NSViewController {
         ])
         statusRow.addArrangedSubview(notificationStatusDot)
 
-        notificationStatusLabel = NSTextField(labelWithString: "Notifications: Checking...")
+        notificationStatusLabel = NSTextField(labelWithString: String(localized: .NotificationStrings.notificationsStatusChecking))
         notificationStatusLabel.font = .systemFont(ofSize: 12)
         statusRow.addArrangedSubview(notificationStatusLabel)
 
         permissionSection.addArrangedSubview(statusRow)
 
         let openNotifSettingsButton = NSButton(
-            title: "Open Notification Settings",
+            title: String(localized: .NotificationStrings.notificationsOpenSystemSettings),
             target: self,
             action: #selector(openSystemNotificationSettings)
         )
@@ -83,13 +83,13 @@ final class SettingsNotificationsViewController: NSViewController {
 
         // --- Agent Completion card ---
         let (agentCard, agentStack) = createSectionCard(
-            title: "Agent Completion",
-            description: "When an agent finishes a command, Magent can send a system notification, play a sound, and move the thread to the top of its section."
+            title: String(localized: .NotificationStrings.notificationsAgentCompletionTitle),
+            description: String(localized: .NotificationStrings.notificationsAgentCompletionDescriptionSettings)
         )
         completionCard = agentCard
 
         showBannersCheckbox = NSButton(
-            checkboxWithTitle: "Show system banners",
+            checkboxWithTitle: String(localized: .NotificationStrings.notificationsShowSystemBanners),
             target: self,
             action: #selector(showBannersToggled)
         )
@@ -97,7 +97,7 @@ final class SettingsNotificationsViewController: NSViewController {
         agentStack.addArrangedSubview(showBannersCheckbox)
 
         completionSoundCheckbox = NSButton(
-            checkboxWithTitle: "Play sound",
+            checkboxWithTitle: String(localized: .NotificationStrings.notificationsPlaySound),
             target: self,
             action: #selector(completionSoundToggled)
         )
@@ -109,7 +109,7 @@ final class SettingsNotificationsViewController: NSViewController {
         soundPickerRow.alignment = .centerY
         soundPickerRow.spacing = 8
 
-        let soundLabel = NSTextField(labelWithString: "Sound:")
+        let soundLabel = NSTextField(labelWithString: String(localized: .NotificationStrings.notificationsSoundLabel))
         soundLabel.font = .systemFont(ofSize: 12)
         soundPickerRow.addArrangedSubview(soundLabel)
 
@@ -126,7 +126,7 @@ final class SettingsNotificationsViewController: NSViewController {
         agentStack.addArrangedSubview(soundPickerRow)
 
         autoReorderOnCompletionCheckbox = NSButton(
-            checkboxWithTitle: "Move completed threads to top automatically",
+            checkboxWithTitle: String(localized: .NotificationStrings.notificationsMoveCompletedThreadsToTop),
             target: self,
             action: #selector(autoReorderOnCompletionToggled)
         )
@@ -137,13 +137,13 @@ final class SettingsNotificationsViewController: NSViewController {
 
         // --- Rate Limits card ---
         let (rlCard, rlStack) = createSectionCard(
-            title: "Rate Limits",
-            description: "When rate limit tracking is enabled, Magent can notify you when the countdown reaches zero and the agent is ready to use again. Requires \"Track agent rate limits\" in Settings > Agents."
+            title: String(localized: .NotificationStrings.notificationsRateLimitsTitle),
+            description: String(localized: .NotificationStrings.notificationsRateLimitsDescriptionSettings)
         )
         rateLimitCard = rlCard
 
         rateLimitSystemNotificationCheckbox = NSButton(
-            checkboxWithTitle: "Show system notification when rate limit is lifted",
+            checkboxWithTitle: String(localized: .NotificationStrings.notificationsShowRateLimitLiftedNotification),
             target: self,
             action: #selector(rateLimitSystemNotificationToggled)
         )
@@ -151,7 +151,7 @@ final class SettingsNotificationsViewController: NSViewController {
         rlStack.addArrangedSubview(rateLimitSystemNotificationCheckbox)
 
         rateLimitNotifyCheckbox = NSButton(
-            checkboxWithTitle: "Play sound when rate limit is lifted",
+            checkboxWithTitle: String(localized: .NotificationStrings.notificationsPlayRateLimitLiftedSound),
             target: self,
             action: #selector(rateLimitNotifyToggled)
         )
@@ -163,7 +163,7 @@ final class SettingsNotificationsViewController: NSViewController {
         rateLimitSoundPickerRow.alignment = .centerY
         rateLimitSoundPickerRow.spacing = 8
 
-        let rateLimitSoundLabel = NSTextField(labelWithString: "Sound:")
+        let rateLimitSoundLabel = NSTextField(labelWithString: String(localized: .NotificationStrings.notificationsSoundLabel))
         rateLimitSoundLabel.font = .systemFont(ofSize: 12)
         rateLimitSoundPickerRow.addArrangedSubview(rateLimitSoundLabel)
 
@@ -180,7 +180,7 @@ final class SettingsNotificationsViewController: NSViewController {
         rlStack.addArrangedSubview(rateLimitSoundPickerRow)
 
         rateLimitDetectedSoundCheckbox = NSButton(
-            checkboxWithTitle: "Play sound when rate limit is detected",
+            checkboxWithTitle: String(localized: .NotificationStrings.notificationsPlayRateLimitDetectedSound),
             target: self,
             action: #selector(rateLimitDetectedSoundToggled)
         )
@@ -192,7 +192,7 @@ final class SettingsNotificationsViewController: NSViewController {
         rateLimitDetectedSoundPickerRow.alignment = .centerY
         rateLimitDetectedSoundPickerRow.spacing = 8
 
-        let rateLimitDetectedSoundLabel = NSTextField(labelWithString: "Sound:")
+        let rateLimitDetectedSoundLabel = NSTextField(labelWithString: String(localized: .NotificationStrings.notificationsSoundLabel))
         rateLimitDetectedSoundLabel.font = .systemFont(ofSize: 12)
         rateLimitDetectedSoundPickerRow.addArrangedSubview(rateLimitDetectedSoundLabel)
 
@@ -417,8 +417,8 @@ final class SettingsNotificationsViewController: NSViewController {
                     ? NSColor.systemGreen.cgColor
                     : NSColor.systemRed.cgColor
                 self.notificationStatusLabel.stringValue = authorized
-                    ? "Notifications: Enabled"
-                    : "Notifications: Disabled \u{2014} enable in System Settings"
+                    ? String(localized: .NotificationStrings.notificationsStatusEnabled)
+                    : String(localized: .NotificationStrings.notificationsStatusDisabled)
                 self.notificationStatusLabel.textColor = authorized
                     ? .labelColor
                     : .systemRed

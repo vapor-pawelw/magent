@@ -15,11 +15,11 @@ extension ThreadDetailViewController {
         let sessionName = thread.tmuxSessionNames[index]
 
         let alert = NSAlert()
-        alert.messageText = "Close Tab"
-        alert.informativeText = "This will close the terminal session. Are you sure?"
+        alert.messageText = String(localized: .ThreadStrings.tabCloseTitle)
+        alert.informativeText = String(localized: .ThreadStrings.tabCloseMessage)
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Close")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonClose))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
@@ -61,10 +61,10 @@ extension ThreadDetailViewController {
             } catch {
                 await MainActor.run {
                     let alert = NSAlert()
-                    alert.messageText = "Error"
+                    alert.messageText = String(localized: .CommonStrings.commonError)
                     alert.informativeText = error.localizedDescription
                     alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
                     alert.runModal()
                 }
             }
@@ -79,11 +79,13 @@ extension ThreadDetailViewController {
         let tabCount = count - index - 1
 
         let alert = NSAlert()
-        alert.messageText = "Close Tabs to the Right"
-        alert.informativeText = "This will close \(tabCount) tab\(tabCount == 1 ? "" : "s") to the right. Are you sure?"
+        alert.messageText = String(localized: .ThreadStrings.tabsCloseRightTitle)
+        alert.informativeText = tabCount == 1
+            ? String(localized: .ThreadStrings.tabsCloseRightMessageOne(tabCount))
+            : String(localized: .ThreadStrings.tabsCloseRightMessageMany(tabCount))
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Close")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonClose))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
@@ -98,11 +100,13 @@ extension ThreadDetailViewController {
         let tabCount = index
 
         let alert = NSAlert()
-        alert.messageText = "Close Tabs to the Left"
-        alert.informativeText = "This will close \(tabCount) tab\(tabCount == 1 ? "" : "s") to the left. Are you sure?"
+        alert.messageText = String(localized: .ThreadStrings.tabsCloseLeftTitle)
+        alert.informativeText = tabCount == 1
+            ? String(localized: .ThreadStrings.tabsCloseLeftMessageOne(tabCount))
+            : String(localized: .ThreadStrings.tabsCloseLeftMessageMany(tabCount))
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Close")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonClose))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
@@ -175,10 +179,10 @@ extension ThreadDetailViewController {
         let defaultName = MagentThread.defaultDisplayName(at: index)
 
         let alert = NSAlert()
-        alert.messageText = "Rename Tab"
-        alert.informativeText = "Enter a new name for this tab"
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = String(localized: .ThreadStrings.tabRenameTitle)
+        alert.informativeText = String(localized: .ThreadStrings.tabRenameMessage)
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonRename))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
         textField.stringValue = currentCustomName ?? ""
@@ -215,10 +219,10 @@ extension ThreadDetailViewController {
             } catch {
                 await MainActor.run {
                     let alert = NSAlert()
-                    alert.messageText = "Rename Failed"
+                    alert.messageText = String(localized: .CommonStrings.commonRenameFailed)
                     alert.informativeText = error.localizedDescription
                     alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
                     alert.runModal()
                 }
             }
@@ -239,7 +243,7 @@ extension ThreadDetailViewController {
         spinner.translatesAutoresizingMaskIntoConstraints = false
         spinner.startAnimation(nil)
 
-        let label = NSTextField(labelWithString: "Starting agent...")
+        let label = NSTextField(labelWithString: String(localized: .ThreadStrings.tabStartingAgent))
         label.font = .systemFont(ofSize: 13)
         label.textColor = NSColor(resource: .textSecondary)
         label.translatesAutoresizingMaskIntoConstraints = false

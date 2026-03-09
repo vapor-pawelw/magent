@@ -97,11 +97,11 @@ enum SettingsCategory: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .general: return "General"
-        case .agents: return "Agents"
-        case .notifications: return "Notifications"
-        case .projects: return "Projects"
-        case .jira: return "Jira"
+        case .general: return String(localized: .CommonStrings.settingsCategoryGeneral)
+        case .agents: return String(localized: .CommonStrings.settingsCategoryAgents)
+        case .notifications: return String(localized: .CommonStrings.settingsCategoryNotifications)
+        case .projects: return String(localized: .CommonStrings.settingsCategoryProjects)
+        case .jira: return String(localized: .CommonStrings.settingsCategoryJira)
         }
     }
 
@@ -250,7 +250,7 @@ final class SettingsSidebarViewController: NSViewController {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(scrollView)
 
-        let doneButton = NSButton(title: "Done", target: self, action: #selector(doneTapped))
+        let doneButton = NSButton(title: String(localized: .CommonStrings.commonDone), target: self, action: #selector(doneTapped))
         doneButton.bezelStyle = .rounded
         doneButton.keyEquivalent = "\r"
         doneButton.translatesAutoresizingMaskIntoConstraints = false

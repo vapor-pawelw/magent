@@ -437,23 +437,23 @@ extension ThreadManager {
     private func presentLocalSyncConflictAlert(_ conflict: LocalSyncConflict) -> LocalSyncConflictChoice {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Archive Conflict: \(conflict.relativePath)"
+        alert.messageText = String(localized: .ThreadStrings.threadArchiveConflictTitle(conflict.relativePath))
 
         let destinationPath = conflict.destinationPath
             .replacingOccurrences(of: NSHomeDirectory(), with: "~")
         switch conflict.kind {
         case .fileDifferent:
-            alert.informativeText = "A different file already exists at:\n\(destinationPath)\n\nChoose how to proceed."
+            alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictFileDifferent(destinationPath))
         case .fileBlocksDirectory:
-            alert.informativeText = "A file exists where a directory is needed:\n\(destinationPath)\n\nChoose how to proceed."
+            alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictFileBlocksDirectory(destinationPath))
         case .directoryBlocksFile:
-            alert.informativeText = "A directory exists where a file is needed:\n\(destinationPath)\n\nChoose how to proceed."
+            alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictDirectoryBlocksFile(destinationPath))
         }
 
-        alert.addButton(withTitle: "Override")
-        alert.addButton(withTitle: "Override All")
-        alert.addButton(withTitle: "Ignore")
-        alert.addButton(withTitle: "Cancel Archive")
+        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictOverride))
+        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictOverrideAll))
+        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictIgnore))
+        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictCancelArchive))
 
         switch alert.runModal() {
         case .alertFirstButtonReturn:

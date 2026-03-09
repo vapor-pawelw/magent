@@ -43,7 +43,7 @@ extension ThreadDetailViewController {
             } catch {
                 await MainActor.run {
                     BannerManager.shared.show(
-                        message: "Terminal scroll failed: \(error.localizedDescription)",
+                        message: String(localized: .ThreadStrings.terminalScrollFailed(error.localizedDescription)),
                         style: .error
                     )
                 }
@@ -71,24 +71,35 @@ extension ThreadDetailViewController {
 
                 if agentBusy {
                     let alert = NSAlert()
-                    alert.messageText = "Archive Thread"
-                    alert.informativeText = "An agent in \"\(threadToArchive.name)\" is currently busy. Archiving will terminate the running agent and remove the worktree directory. The git branch \"\(threadToArchive.branchName)\" will be kept."
+                    alert.messageText = String(localized: .ThreadStrings.threadArchiveTitle)
+                    alert.informativeText = String(
+                        localized: .ThreadStrings.threadArchiveBusyMessage(
+                            threadToArchive.name,
+                            threadToArchive.branchName
+                        )
+                    )
                     alert.alertStyle = .warning
-                    alert.addButton(withTitle: "Archive Anyway")
-                    alert.addButton(withTitle: "Cancel")
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonArchiveAnyway))
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
                     let response = alert.runModal()
                     guard response == .alertFirstButtonReturn else { return }
                 } else if !clean || !merged {
                     let alert = NSAlert()
-                    alert.messageText = "Archive Thread"
+                    alert.messageText = String(localized: .ThreadStrings.threadArchiveTitle)
                     var reasons: [String] = []
-                    if !clean { reasons.append("uncommitted changes") }
-                    if !merged { reasons.append("commits not in \(baseBranch)") }
-                    alert.informativeText = "The thread \"\(threadToArchive.name)\" has \(reasons.joined(separator: " and ")). Archiving will remove its worktree directory but keep the git branch \"\(threadToArchive.branchName)\"."
+                    if !clean { reasons.append(String(localized: .ThreadStrings.threadArchiveReasonUncommittedChanges)) }
+                    if !merged { reasons.append(String(localized: .ThreadStrings.threadArchiveReasonCommitsNotIn(baseBranch))) }
+                    alert.informativeText = String(
+                        localized: .ThreadStrings.threadArchiveReasonsMessage(
+                            threadToArchive.name,
+                            reasons.joined(separator: String(localized: .CommonStrings.commonJoinAnd)),
+                            threadToArchive.branchName
+                        )
+                    )
                     alert.alertStyle = .informational
-                    alert.addButton(withTitle: "Archive")
-                    alert.addButton(withTitle: "Cancel")
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonArchive))
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
                     let response = alert.runModal()
                     guard response == .alertFirstButtonReturn else { return }
@@ -113,11 +124,11 @@ extension ThreadDetailViewController {
                     } catch ThreadManagerError.localFileSyncFailed(let message) {
                         await MainActor.run {
                             let alert = NSAlert()
-                            alert.messageText = "Local Sync Failed"
-                            alert.informativeText = "\(message)\n\nForce Archive will remove the worktree anyway and leave any unsynced local files behind."
+                            alert.messageText = String(localized: .ThreadStrings.threadArchiveLocalSyncFailedTitle)
+                            alert.informativeText = String(localized: .ThreadStrings.threadArchiveLocalSyncFailedMessage(message))
                             alert.alertStyle = .warning
-                            alert.addButton(withTitle: "Force Archive")
-                            alert.addButton(withTitle: "Cancel")
+                            alert.addButton(withTitle: String(localized: .CommonStrings.commonForceArchive))
+                            alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
                             let response = alert.runModal()
                             guard response == .alertFirstButtonReturn else { return }
@@ -128,7 +139,7 @@ extension ThreadDetailViewController {
                                         threadToArchive,
                                         promptForLocalSyncConflicts: false,
                                         force: true
-                                    ) ?? "Archived without completing local sync."
+                                    ) ?? String(localized: .ThreadStrings.threadArchiveCompletedWithoutLocalSync)
                                     await MainActor.run {
                                         BannerManager.shared.show(message: warning, style: .warning, duration: nil)
                                     }
@@ -137,7 +148,7 @@ extension ThreadDetailViewController {
                                 } catch {
                                     await MainActor.run {
                                         BannerManager.shared.show(
-                                            message: "Archive failed: \(error.localizedDescription)",
+                                            message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
                                             style: .error
                                         )
                                     }
@@ -147,7 +158,7 @@ extension ThreadDetailViewController {
                     } catch {
                         await MainActor.run {
                             BannerManager.shared.show(
-                                message: "Archive failed: \(error.localizedDescription)",
+                                message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
                                 style: .error
                             )
                         }
@@ -166,7 +177,7 @@ extension ThreadDetailViewController {
         let menu = NSMenu()
         AgentMenuBuilder.populate(
             menu: menu,
-            menuTitle: "New Tab",
+            menuTitle: String(localized: .ThreadStrings.threadNewTabMenuTitle),
             defaultAgentName: threadManager.effectiveAgentType(for: thread.projectId)?.displayName,
             activeAgents: settings.availableActiveAgents,
             target: self,
@@ -218,10 +229,10 @@ extension ThreadDetailViewController {
             } catch {
                 await MainActor.run {
                     let alert = NSAlert()
-                    alert.messageText = "Error"
+                    alert.messageText = String(localized: .CommonStrings.commonError)
                     alert.informativeText = error.localizedDescription
                     alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
                     alert.runModal()
                 }
             }
@@ -311,7 +322,7 @@ extension ThreadDetailViewController {
         let settings = PersistenceService.shared.loadSettings()
         let activeAgents = settings.availableActiveAgents
         guard !activeAgents.isEmpty else {
-            BannerManager.shared.show(message: "Enable an agent in Settings to review changes.", style: .warning)
+            BannerManager.shared.show(message: String(localized: .NotificationStrings.reviewEnableAgentWarning), style: .warning)
             return
         }
 
@@ -349,7 +360,7 @@ extension ThreadDetailViewController {
 
     private func startReview(using agentType: AgentType?) {
         guard let agentType else {
-            BannerManager.shared.show(message: "Enable an agent in Settings to review changes.", style: .warning)
+            BannerManager.shared.show(message: String(localized: .NotificationStrings.reviewEnableAgentWarning), style: .warning)
             return
         }
 
@@ -387,7 +398,7 @@ extension ThreadDetailViewController {
         Task {
             guard let rawContent = await TmuxService.shared.captureFullPane(sessionName: sessionName) else {
                 await MainActor.run {
-                    BannerManager.shared.show(message: "Failed to capture terminal content", style: .error)
+                    BannerManager.shared.show(message: String(localized: .NotificationStrings.contextCaptureTerminalFailed), style: .error)
                 }
                 return
             }
@@ -404,7 +415,7 @@ extension ThreadDetailViewController {
                 in: thread.worktreePath
             ) else {
                 await MainActor.run {
-                    BannerManager.shared.show(message: "Failed to write context file", style: .error)
+                    BannerManager.shared.show(message: String(localized: .NotificationStrings.contextWriteFileFailed), style: .error)
                 }
                 return
             }
@@ -428,7 +439,7 @@ extension ThreadDetailViewController {
         Task {
             guard let rawContent = await TmuxService.shared.captureFullPane(sessionName: sessionName) else {
                 await MainActor.run {
-                    BannerManager.shared.show(message: "Failed to capture terminal content", style: .error)
+                    BannerManager.shared.show(message: String(localized: .NotificationStrings.contextCaptureTerminalFailed), style: .error)
                 }
                 return
             }
@@ -444,16 +455,16 @@ extension ThreadDetailViewController {
                 let panel = NSSavePanel()
                 panel.allowedContentTypes = [.init(filenameExtension: "md")!]
                 panel.nameFieldStringValue = "context-\(self.thread.name).md"
-                panel.title = "Export Terminal Context"
+                panel.title = String(localized: .NotificationStrings.contextExportPanelTitle)
 
                 let response = panel.runModal()
                 guard response == .OK, let url = panel.url else { return }
 
                 do {
                     try markdown.write(to: url, atomically: true, encoding: .utf8)
-                    BannerManager.shared.show(message: "Context exported to \(url.lastPathComponent)", style: .info)
+                    BannerManager.shared.show(message: String(localized: .NotificationStrings.contextExported(url.lastPathComponent)), style: .info)
                 } catch {
-                    BannerManager.shared.show(message: "Failed to export: \(error.localizedDescription)", style: .error)
+                    BannerManager.shared.show(message: String(localized: .NotificationStrings.contextExportFailed(error.localizedDescription)), style: .error)
                 }
             }
         }

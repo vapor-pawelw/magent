@@ -46,12 +46,12 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         stackView.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
         let (selectionCard, selectionStack) = createSectionCard(
-            title: "Agent Selection",
-            description: "Enable agents that can be launched in new chats. If multiple are enabled, choose a default."
+            title: String(localized: .SettingsStrings.settingsAgentsSelectionTitle),
+            description: String(localized: .SettingsStrings.settingsAgentsSelectionDescription)
         )
         stackView.addArrangedSubview(selectionCard)
 
-        let activeLabel = NSTextField(labelWithString: "Active Agents")
+        let activeLabel = NSTextField(labelWithString: String(localized: .SettingsStrings.settingsAgentsActiveAgents))
         activeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         selectionStack.addArrangedSubview(activeLabel)
 
@@ -75,11 +75,11 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         defaultAgentSection.alignment = .leading
         defaultAgentSection.spacing = 4
 
-        let defaultLabel = NSTextField(labelWithString: "Default Agent")
+        let defaultLabel = NSTextField(labelWithString: String(localized: .SettingsStrings.settingsAgentsDefaultAgent))
         defaultLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         defaultAgentSection.addArrangedSubview(defaultLabel)
 
-        let defaultDesc = NSTextField(labelWithString: "Used when no agent is explicitly selected for a new chat.")
+        let defaultDesc = NSTextField(labelWithString: String(localized: .SettingsStrings.settingsAgentsDefaultAgentDescription))
         defaultDesc.font = .systemFont(ofSize: 11)
         defaultDesc.textColor = NSColor(resource: .textSecondary)
         defaultAgentSection.addArrangedSubview(defaultDesc)
@@ -99,19 +99,19 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
 
         // Agent Permissions
         let (permissionsCard, permissionsSection) = createSectionCard(
-            title: "Agent Permissions",
-            description: "Control how agents handle permissions and sandboxing. Only applies to Claude and Codex."
+            title: String(localized: .ConfigurationStrings.permissionsTitle),
+            description: String(localized: .ConfigurationStrings.permissionsDescription)
         )
         stackView.addArrangedSubview(permissionsCard)
 
         skipPermissionsCheckbox = NSButton(
-            checkboxWithTitle: "Skip permission prompts",
+            checkboxWithTitle: String(localized: .ConfigurationStrings.permissionsSkipPrompts),
             target: self,
             action: #selector(permissionsSettingChanged)
         )
         skipPermissionsCheckbox.state = settings.agentSkipPermissions ? .on : .off
         let skipDesc = NSTextField(
-            wrappingLabelWithString: "Agents run without asking for approval. Claude uses --dangerously-skip-permissions, Codex uses --yolo."
+            wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsSkipPromptsDescription)
         )
         skipDesc.font = .systemFont(ofSize: 11)
         skipDesc.textColor = NSColor(resource: .textSecondary)
@@ -119,13 +119,13 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         permissionsSection.addArrangedSubview(skipDesc)
 
         sandboxCheckbox = NSButton(
-            checkboxWithTitle: "Enable sandbox",
+            checkboxWithTitle: String(localized: .ConfigurationStrings.permissionsEnableSandbox),
             target: self,
             action: #selector(permissionsSettingChanged)
         )
         sandboxCheckbox.state = settings.agentSandboxEnabled ? .on : .off
         let sandboxDesc = NSTextField(
-            wrappingLabelWithString: "Restrict agent filesystem access to the workspace. Codex uses --full-auto. Only applies to Codex (Claude sandboxes by default when permissions are not skipped)."
+            wrappingLabelWithString: String(localized: .ConfigurationStrings.permissionsEnableSandboxDescriptionSettings)
         )
         sandboxDesc.font = .systemFont(ofSize: 11)
         sandboxDesc.textColor = NSColor(resource: .textSecondary)
@@ -133,13 +133,13 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         permissionsSection.addArrangedSubview(sandboxDesc)
 
         ipcInjectionCheckbox = NSButton(
-            checkboxWithTitle: "Inject Magent IPC instructions into agent prompts",
+            checkboxWithTitle: String(localized: .SettingsStrings.settingsAgentsInjectIPC),
             target: self,
             action: #selector(permissionsSettingChanged)
         )
         ipcInjectionCheckbox.state = settings.ipcPromptInjectionEnabled ? .on : .off
         let ipcDesc = NSTextField(
-            wrappingLabelWithString: "Injects a lightweight Magent IPC hint into Claude/Codex so the agent knows `/tmp/magent-cli` exists. Agents can load full guidance on demand via `magent-cli docs`. Disable to save tokens if you don't need agent-driven Magent control."
+            wrappingLabelWithString: String(localized: .SettingsStrings.settingsAgentsInjectIPCDescription)
         )
         ipcDesc.font = .systemFont(ofSize: 11)
         ipcDesc.textColor = NSColor(resource: .textSecondary)
@@ -147,13 +147,13 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         permissionsSection.addArrangedSubview(ipcDesc)
 
         rateLimitDetectionCheckbox = NSButton(
-            checkboxWithTitle: "Track agent rate limits",
+            checkboxWithTitle: String(localized: .SettingsStrings.settingsAgentsTrackRateLimits),
             target: self,
             action: #selector(rateLimitDetectionToggled)
         )
         rateLimitDetectionCheckbox.state = settings.enableRateLimitDetection ? .on : .off
         let rateLimitDesc = NSTextField(
-            wrappingLabelWithString: "Parse rate-limit reset times from terminal output and show a countdown in the sidebar. When off, rate-limit icons still appear while the agent is blocked but disappear once the conversation resumes."
+            wrappingLabelWithString: String(localized: .SettingsStrings.settingsAgentsTrackRateLimitsDescription)
         )
         rateLimitDesc.font = .systemFont(ofSize: 11)
         rateLimitDesc.textColor = NSColor(resource: .textSecondary)
@@ -162,8 +162,8 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
 
         // Full Disk Access
         let (fdaCard, fdaSection) = createSectionCard(
-            title: "Full Disk Access",
-            description: "Grant Full Disk Access to Magent so agents can read and modify files outside the workspace (e.g. ~/.zshrc, ~/Library). Useful when agents need to inspect shell configs, install tools, or access protected directories. Without it, macOS may silently block file access."
+            title: String(localized: .ConfigurationStrings.permissionsFullDiskAccessTitle),
+            description: String(localized: .ConfigurationStrings.permissionsFullDiskAccessDescriptionLong)
         )
         stackView.addArrangedSubview(fdaCard)
 
@@ -176,7 +176,7 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         fdaStatusLabel.font = .systemFont(ofSize: 12)
         fdaStatusRow.addArrangedSubview(fdaStatusLabel)
 
-        let fdaButton = NSButton(title: "Open System Settings", target: self, action: #selector(openFullDiskAccessSettings))
+        let fdaButton = NSButton(title: String(localized: .CommonStrings.commonOpenSystemSettings), target: self, action: #selector(openFullDiskAccessSettings))
         fdaButton.bezelStyle = .push
         fdaButton.controlSize = .small
         fdaStatusRow.addArrangedSubview(fdaButton)
@@ -202,16 +202,16 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
 
         // Custom Agent Command (only shown when Custom is active)
         let (customCard, customStack) = createSectionCard(
-            title: "Custom Agent",
-            description: "Command used when the active agent is set to Custom."
+            title: String(localized: .SettingsStrings.settingsAgentsCustomAgentTitle),
+            description: String(localized: .SettingsStrings.settingsAgentsCustomAgentDescription)
         )
         customAgentCard = customCard
         customAgentSection = customStack
 
         customAgentCommandTextView = createTextEditorSection(
             in: customStack,
-            title: "Custom Agent Command",
-            description: "Command used when the active agent is set to Custom.",
+            title: String(localized: .SettingsStrings.settingsAgentsCustomAgentCommandTitle),
+            description: String(localized: .SettingsStrings.settingsAgentsCustomAgentCommandDescription),
             value: settings.customAgentCommand,
             font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
@@ -398,10 +398,10 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     private func refreshFDAStatus() {
         let granted = Self.isFullDiskAccessGranted()
         if granted {
-            fdaStatusLabel.stringValue = "\u{2705} Granted"
+            fdaStatusLabel.stringValue = String(localized: .ConfigurationStrings.permissionsFullDiskAccessGranted)
             fdaStatusLabel.textColor = .systemGreen
         } else {
-            fdaStatusLabel.stringValue = "\u{274C} Not Granted"
+            fdaStatusLabel.stringValue = String(localized: .ConfigurationStrings.permissionsFullDiskAccessNotGranted)
             fdaStatusLabel.textColor = .secondaryLabelColor
         }
     }

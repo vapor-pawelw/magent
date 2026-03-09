@@ -220,14 +220,14 @@ final class ThreadDetailViewController: NSViewController {
         openInJiraButton.imageScaling = .scaleProportionallyDown
         openInJiraButton.target = self
         openInJiraButton.action = #selector(openInJiraTapped)
-        openInJiraButton.toolTip = "Open in Jira"
+        openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenInJira)
         openInJiraButton.isHidden = true
 
         openInXcodeButton.bezelStyle = .texturedRounded
         openInXcodeButton.imageScaling = .scaleProportionallyDown
         openInXcodeButton.target = self
         openInXcodeButton.action = #selector(openInXcodeTapped)
-        openInXcodeButton.toolTip = "Open project"
+        openInXcodeButton.toolTip = String(localized: .ThreadStrings.threadOpenProject)
         openInXcodeButton.isHidden = true
 
         openInFinderButton.bezelStyle = .texturedRounded
@@ -235,23 +235,28 @@ final class ThreadDetailViewController: NSViewController {
         openInFinderButton.imageScaling = .scaleProportionallyDown
         openInFinderButton.target = self
         openInFinderButton.action = #selector(openInFinderTapped)
-        openInFinderButton.toolTip = thread.isMain ? "Open Project Root in Finder" : "Open Worktree in Finder"
+        openInFinderButton.toolTip = thread.isMain
+            ? String(localized: .ThreadStrings.threadOpenProjectRootInFinder)
+            : String(localized: .ThreadStrings.threadOpenWorktreeInFinder)
 
         archiveThreadButton.bezelStyle = .texturedRounded
-        archiveThreadButton.image = NSImage(systemSymbolName: "archivebox", accessibilityDescription: "Archive Thread")
+        archiveThreadButton.image = NSImage(
+            systemSymbolName: "archivebox",
+            accessibilityDescription: String(localized: .ThreadStrings.threadArchiveTitle)
+        )
         archiveThreadButton.target = self
         archiveThreadButton.action = #selector(archiveThreadTapped)
         archiveThreadButton.isHidden = thread.isMain
 
         reviewButton.bezelStyle = .texturedRounded
-        reviewButton.image = NSImage(systemSymbolName: "eye", accessibilityDescription: "Review Changes")
+        reviewButton.image = NSImage(systemSymbolName: "eye", accessibilityDescription: String(localized: .NotificationStrings.reviewChanges))
         reviewButton.target = self
         reviewButton.action = #selector(reviewButtonTapped)
-        reviewButton.toolTip = "Review branch changes in a new agent tab. Option-click to use the default agent."
+        reviewButton.toolTip = String(localized: .NotificationStrings.reviewButtonTooltip)
         reviewButton.isHidden = true
 
         exportContextButton.bezelStyle = .texturedRounded
-        exportContextButton.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Export Context")
+        exportContextButton.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: String(localized: .NotificationStrings.contextExport))
         exportContextButton.target = self
         exportContextButton.action = #selector(exportContextButtonTapped)
         exportContextButton.toolTip = "Export terminal context as Markdown"

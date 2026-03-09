@@ -126,7 +126,7 @@ extension ThreadManager {
 
         if settings.showSystemBanners {
             let content = UNMutableNotificationContent()
-            content.title = "Agent Finished"
+            content.title = String(localized: .NotificationStrings.notificationsAgentFinishedTitle)
             content.body = "\(projectName) · \(thread.taskDescription ?? thread.name)"
             if playSound {
                 content.sound = UNNotificationSound(named: UNNotificationSoundName(settings.agentCompletionSoundName))

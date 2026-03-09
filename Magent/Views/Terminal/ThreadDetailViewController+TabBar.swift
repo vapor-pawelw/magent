@@ -133,13 +133,13 @@ extension ThreadDetailViewController {
         icon.translatesAutoresizingMaskIntoConstraints = false
         icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 36, weight: .thin)
 
-        let label = NSTextField(labelWithString: "No open tabs")
+        let label = NSTextField(labelWithString: String(localized: .ThreadStrings.tabsNoOpenTabs))
         label.font = .systemFont(ofSize: 15, weight: .medium)
         label.textColor = .secondaryLabelColor
         label.alignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
 
-        let hint = NSTextField(labelWithString: "Press + in the top right to add a tab")
+        let hint = NSTextField(labelWithString: String(localized: .ThreadStrings.tabsNoOpenTabsHint))
         hint.font = .systemFont(ofSize: 12)
         hint.textColor = .tertiaryLabelColor
         hint.alignment = .center

@@ -282,7 +282,7 @@ final class SplitViewController: NSSplitViewController {
 
         let settingsVC = SettingsSplitViewController()
         let window = NSWindow(contentViewController: settingsVC)
-        window.title = "Settings"
+        window.title = String(localized: .AppStrings.settingsWindowTitle)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.setContentSize(NSSize(width: 900, height: 640))
         window.minSize = NSSize(width: 700, height: 500)
@@ -366,9 +366,10 @@ extension SplitViewController: NSToolbarDelegate {
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         if itemIdentifier == Self.settingsToolbarItemId {
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-            item.label = "Settings"
-            item.toolTip = "Settings"
-            item.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
+            let settingsTitle = String(localized: .CommonStrings.commonSettings)
+            item.label = settingsTitle
+            item.toolTip = settingsTitle
+            item.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: settingsTitle)
             item.target = self
             item.action = #selector(settingsTapped)
             return item

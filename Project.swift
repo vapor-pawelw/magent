@@ -28,6 +28,7 @@ let project = Project(
             resources: [
                 "Magent/Resources/Assets.xcassets",
                 "Magent/Resources/AppIcon.icon",
+                "Magent/Resources/**/*.xcstrings",
             ],
             entitlements: .file(path: "Magent/Magent.entitlements"),
             dependencies: [
@@ -42,6 +43,9 @@ let project = Project(
                     "OTHER_LDFLAGS": "$(inherited) -lc++ -framework Carbon",
                     "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
                     "ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS": "YES",
+                    "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS": "YES",
+                    "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
+                    "STRING_CATALOG_GENERATE_SYMBOLS": "YES",
                 ]
             )
         ),

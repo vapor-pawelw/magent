@@ -12,7 +12,7 @@ final class OnboardingNotificationsView: NSView {
     }
 
     var completionSoundName: String {
-        soundPickerPopup.selectedItem?.title ?? "Ping"
+        soundPickerPopup.selectedItem?.title ?? String(localized: .CommonStrings.soundPing)
     }
 
     var showSystemNotificationOnRateLimitLifted: Bool {
@@ -24,7 +24,7 @@ final class OnboardingNotificationsView: NSView {
     }
 
     var rateLimitLiftedSoundName: String {
-        rateLimitSoundPickerPopup.selectedItem?.title ?? "Glass"
+        rateLimitSoundPickerPopup.selectedItem?.title ?? String(localized: .CommonStrings.soundGlass)
     }
 
     var playSoundOnRateLimitDetected: Bool {
@@ -32,37 +32,37 @@ final class OnboardingNotificationsView: NSView {
     }
 
     var rateLimitDetectedSoundName: String {
-        rateLimitDetectedSoundPickerPopup.selectedItem?.title ?? "Sosumi"
+        rateLimitDetectedSoundPickerPopup.selectedItem?.title ?? String(localized: .CommonStrings.soundSosumi)
     }
 
     private let notificationStatusDot = NSView()
-    private let notificationStatusLabel = NSTextField(labelWithString: "Notifications: Checking...")
+    private let notificationStatusLabel = NSTextField(labelWithString: String(localized: .NotificationStrings.notificationsStatusChecking))
     private let showBannersCheckbox = NSButton(
-        checkboxWithTitle: "Show system banners",
+        checkboxWithTitle: String(localized: .NotificationStrings.notificationsShowSystemBanners),
         target: nil,
         action: nil
     )
     private let completionSoundCheckbox = NSButton(
-        checkboxWithTitle: "Play sound",
+        checkboxWithTitle: String(localized: .NotificationStrings.notificationsPlaySound),
         target: nil,
         action: nil
     )
     private let soundPickerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private var soundPickerRow: NSStackView!
     private let rateLimitSystemNotificationCheckbox = NSButton(
-        checkboxWithTitle: "Show system notification when rate limit is lifted",
+        checkboxWithTitle: String(localized: .NotificationStrings.notificationsShowRateLimitLiftedNotification),
         target: nil,
         action: nil
     )
     private let rateLimitNotifyCheckbox = NSButton(
-        checkboxWithTitle: "Play sound when rate limit is lifted",
+        checkboxWithTitle: String(localized: .NotificationStrings.notificationsPlayRateLimitLiftedSound),
         target: nil,
         action: nil
     )
     private let rateLimitSoundPickerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private var rateLimitSoundPickerRow: NSStackView!
     private let rateLimitDetectedSoundCheckbox = NSButton(
-        checkboxWithTitle: "Play sound when rate limit is detected",
+        checkboxWithTitle: String(localized: .NotificationStrings.notificationsPlayRateLimitDetectedSound),
         target: nil,
         action: nil
     )
@@ -85,7 +85,7 @@ final class OnboardingNotificationsView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     private func setupUI() {
-        let titleLabel = NSTextField(labelWithString: "Notifications")
+        let titleLabel = NSTextField(labelWithString: String(localized: .ConfigurationStrings.configurationStepNotifications))
         titleLabel.font = .preferredFont(forTextStyle: .headline)
 
         // Permission status row
@@ -107,7 +107,7 @@ final class OnboardingNotificationsView: NSView {
         statusRow.addArrangedSubview(notificationStatusLabel)
 
         let openNotifButton = NSButton(
-            title: "Open Notification Settings",
+            title: String(localized: .NotificationStrings.notificationsOpenSystemSettings),
             target: self,
             action: #selector(openNotificationSettings)
         )
@@ -117,8 +117,8 @@ final class OnboardingNotificationsView: NSView {
 
         // --- Agent Completion card ---
         let (completionCard, completionStack) = createSectionCard(
-            title: "Agent Completion",
-            description: "When an agent finishes a command, Magent can send a system notification and play a sound."
+            title: String(localized: .NotificationStrings.notificationsAgentCompletionTitle),
+            description: String(localized: .NotificationStrings.notificationsAgentCompletionDescriptionOnboarding)
         )
 
         showBannersCheckbox.state = .on
@@ -135,7 +135,7 @@ final class OnboardingNotificationsView: NSView {
         soundPickerRow.spacing = 8
         soundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
 
-        let soundLabel = NSTextField(labelWithString: "Sound:")
+        let soundLabel = NSTextField(labelWithString: String(localized: .NotificationStrings.notificationsSoundLabel))
         soundLabel.font = .systemFont(ofSize: 12)
         soundPickerRow.addArrangedSubview(soundLabel)
 
@@ -149,8 +149,8 @@ final class OnboardingNotificationsView: NSView {
 
         // --- Rate Limits card ---
         let (rlCard, rlStack) = createSectionCard(
-            title: "Rate Limits",
-            description: "Get notified when an agent's rate limit is lifted. Rate limit notifications require \"Track agent rate limits\" in Settings > Agents."
+            title: String(localized: .NotificationStrings.notificationsRateLimitsTitle),
+            description: String(localized: .NotificationStrings.notificationsRateLimitsDescriptionOnboarding)
         )
 
         rateLimitSystemNotificationCheckbox.state = .on
@@ -167,7 +167,7 @@ final class OnboardingNotificationsView: NSView {
         rateLimitSoundPickerRow.spacing = 8
         rateLimitSoundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
 
-        let rateLimitSoundLabel = NSTextField(labelWithString: "Sound:")
+        let rateLimitSoundLabel = NSTextField(labelWithString: String(localized: .NotificationStrings.notificationsSoundLabel))
         rateLimitSoundLabel.font = .systemFont(ofSize: 12)
         rateLimitSoundPickerRow.addArrangedSubview(rateLimitSoundLabel)
 
@@ -190,7 +190,7 @@ final class OnboardingNotificationsView: NSView {
         rateLimitDetectedSoundPickerRow.spacing = 8
         rateLimitDetectedSoundPickerRow.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0)
 
-        let rateLimitDetectedSoundLabel = NSTextField(labelWithString: "Sound:")
+        let rateLimitDetectedSoundLabel = NSTextField(labelWithString: String(localized: .NotificationStrings.notificationsSoundLabel))
         rateLimitDetectedSoundLabel.font = .systemFont(ofSize: 12)
         rateLimitDetectedSoundPickerRow.addArrangedSubview(rateLimitDetectedSoundLabel)
 
@@ -290,7 +290,7 @@ final class OnboardingNotificationsView: NSView {
         for name in soundNames {
             soundPickerPopup.addItem(withTitle: name)
         }
-        if let index = soundNames.firstIndex(of: "Ping") {
+        if let index = soundNames.firstIndex(of: String(localized: .CommonStrings.soundPing)) {
             soundPickerPopup.selectItem(at: index)
         }
     }
@@ -304,8 +304,8 @@ final class OnboardingNotificationsView: NSView {
                     ? NSColor.systemGreen.cgColor
                     : NSColor.systemRed.cgColor
                 self.notificationStatusLabel.stringValue = authorized
-                    ? "Notifications: Enabled"
-                    : "Notifications: Disabled \u{2014} enable in System Settings"
+                    ? String(localized: .NotificationStrings.notificationsStatusEnabled)
+                    : String(localized: .NotificationStrings.notificationsStatusDisabled)
                 self.notificationStatusLabel.textColor = authorized
                     ? .labelColor
                     : .systemRed

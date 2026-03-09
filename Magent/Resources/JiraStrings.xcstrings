@@ -1,0 +1,28 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "jiraCouldNotBuildURL": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not build Jira URL - check project Jira settings"
+          }
+        }
+      }
+    },
+    "jiraTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jira"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

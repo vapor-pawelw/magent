@@ -1,0 +1,149 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "settingsAgentsActiveAgents": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active Agents"
+          }
+        }
+      }
+    },
+    "settingsAgentsCustomAgentCommandDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command used when the active agent is set to Custom."
+          }
+        }
+      }
+    },
+    "settingsAgentsCustomAgentCommandTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom Agent Command"
+          }
+        }
+      }
+    },
+    "settingsAgentsCustomAgentDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command used when the active agent is set to Custom."
+          }
+        }
+      }
+    },
+    "settingsAgentsCustomAgentTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom Agent"
+          }
+        }
+      }
+    },
+    "settingsAgentsDefaultAgent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default Agent"
+          }
+        }
+      }
+    },
+    "settingsAgentsDefaultAgentDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used when no agent is explicitly selected for a new chat."
+          }
+        }
+      }
+    },
+    "settingsAgentsInjectIPC": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inject Magent IPC instructions into agent prompts"
+          }
+        }
+      }
+    },
+    "settingsAgentsInjectIPCDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Injects a lightweight Magent IPC hint into Claude/Codex so the agent knows `/tmp/magent-cli` exists. Agents can load full guidance on demand via `magent-cli docs`. Disable to save tokens if you don't need agent-driven Magent control."
+          }
+        }
+      }
+    },
+    "settingsAgentsSelectionDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable agents that can be launched in new chats. If multiple are enabled, choose a default."
+          }
+        }
+      }
+    },
+    "settingsAgentsSelectionTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent Selection"
+          }
+        }
+      }
+    },
+    "settingsAgentsTrackRateLimits": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track agent rate limits"
+          }
+        }
+      }
+    },
+    "settingsAgentsTrackRateLimitsDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parse rate-limit reset times from terminal output and show a countdown in the sidebar. When off, rate-limit icons still appear while the agent is blocked but disappear once the conversation resumes."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

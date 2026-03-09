@@ -13,14 +13,14 @@ extension ThreadListViewController {
         }
 
         // Pin/Unpin
-        let pinTitle = thread.isPinned ? "Unpin" : "Pin"
+        let pinTitle = thread.isPinned ? String(localized: .CommonStrings.commonUnpin) : String(localized: .CommonStrings.commonPin)
         let pinItem = NSMenuItem(title: pinTitle, action: #selector(toggleThreadPin(_:)), keyEquivalent: "")
         pinItem.target = self
         pinItem.image = NSImage(systemSymbolName: thread.isPinned ? "pin.slash" : "pin", accessibilityDescription: nil)
         pinItem.representedObject = thread.id
         menu.addItem(pinItem)
 
-        let promptRenameItem = NSMenuItem(title: "Rename...", action: #selector(renameThreadFromPrompt(_:)), keyEquivalent: "")
+        let promptRenameItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameWithAgent), action: #selector(renameThreadFromPrompt(_:)), keyEquivalent: "")
         promptRenameItem.target = self
         promptRenameItem.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
         promptRenameItem.representedObject = thread
@@ -28,7 +28,7 @@ extension ThreadListViewController {
 
         menu.addItem(NSMenuItem.separator())
 
-        let descriptionItem = NSMenuItem(title: "Set description...", action: #selector(setThreadDescription(_:)), keyEquivalent: "")
+        let descriptionItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetDescription), action: #selector(setThreadDescription(_:)), keyEquivalent: "")
         descriptionItem.target = self
         descriptionItem.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
         descriptionItem.representedObject = thread
@@ -37,13 +37,13 @@ extension ThreadListViewController {
         let settings = persistence.loadSettings()
 
         // Rename branch
-        let renameItem = NSMenuItem(title: "Rename branch...", action: #selector(renameThread(_:)), keyEquivalent: "")
+        let renameItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameBranch), action: #selector(renameThread(_:)), keyEquivalent: "")
         renameItem.target = self
         renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
         renameItem.representedObject = thread
         menu.addItem(renameItem)
 
-        let iconItem = NSMenuItem(title: "Set icon", action: nil, keyEquivalent: "")
+        let iconItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetIcon), action: nil, keyEquivalent: "")
         iconItem.image = NSImage(
             systemSymbolName: thread.threadIcon.symbolName,
             accessibilityDescription: thread.threadIcon.accessibilityDescription
@@ -64,7 +64,7 @@ extension ThreadListViewController {
             moveSubmenu.addItem(item)
         }
 
-        let moveItem = NSMenuItem(title: "Move to...", action: nil, keyEquivalent: "")
+        let moveItem = NSMenuItem(title: String(localized: .ThreadStrings.threadMoveTo), action: nil, keyEquivalent: "")
         moveItem.submenu = moveSubmenu
         moveItem.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
         menu.addItem(moveItem)
@@ -82,7 +82,7 @@ extension ThreadListViewController {
         }
         
         // Open in Finder
-        let finderItem = NSMenuItem(title: "Open in Finder", action: #selector(openThreadInFinder(_:)), keyEquivalent: "")
+        let finderItem = NSMenuItem(title: String(localized: .ThreadStrings.threadOpenInFinder), action: #selector(openThreadInFinder(_:)), keyEquivalent: "")
         finderItem.target = self
         finderItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
         finderItem.representedObject = thread
@@ -90,7 +90,7 @@ extension ThreadListViewController {
 
         // Show Pull Request (only for projects with a recognized hosting provider)
         if projectsWithValidRemotes.contains(thread.projectId) {
-            let prTitle = thread.pullRequestInfo.map { "Open \($0.displayLabel)" } ?? "Show Pull Request"
+            let prTitle = thread.pullRequestInfo.map { String(localized: .ThreadStrings.threadOpenPullRequestLabel($0.displayLabel)) } ?? String(localized: .ThreadStrings.threadShowPullRequest)
             let prItem = NSMenuItem(title: prTitle, action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
             prItem.target = self
             prItem.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: nil)
@@ -106,14 +106,14 @@ extension ThreadListViewController {
         menu.addItem(NSMenuItem.separator())
 
         // Archive
-        let archiveItem = NSMenuItem(title: "Archive...", action: #selector(archiveThread(_:)), keyEquivalent: "")
+        let archiveItem = NSMenuItem(title: String(localized: .ThreadStrings.threadArchiveMenuTitle), action: #selector(archiveThread(_:)), keyEquivalent: "")
         archiveItem.target = self
         archiveItem.image = NSImage(systemSymbolName: "archivebox", accessibilityDescription: nil)
         archiveItem.representedObject = thread
         menu.addItem(archiveItem)
 
         // Delete (destructive)
-        let deleteItem = NSMenuItem(title: "Delete...", action: #selector(deleteThread(_:)), keyEquivalent: "")
+        let deleteItem = NSMenuItem(title: String(localized: .ThreadStrings.threadDeleteMenuTitle), action: #selector(deleteThread(_:)), keyEquivalent: "")
         deleteItem.target = self
         deleteItem.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(paletteColors: [.systemRed]))
@@ -122,7 +122,7 @@ extension ThreadListViewController {
             .foregroundColor: NSColor.systemRed,
             .font: NSFont.menuFont(ofSize: 0)
         ]
-        deleteItem.attributedTitle = NSAttributedString(string: "Delete...", attributes: redAttributes)
+        deleteItem.attributedTitle = NSAttributedString(string: String(localized: .ThreadStrings.threadDeleteMenuTitle), attributes: redAttributes)
         menu.addItem(deleteItem)
 
         return menu
@@ -151,7 +151,7 @@ extension ThreadListViewController {
         let menu = NSMenu()
 
         // Open in Finder
-        let finderItem = NSMenuItem(title: "Open in Finder", action: #selector(openThreadInFinder(_:)), keyEquivalent: "")
+        let finderItem = NSMenuItem(title: String(localized: .ThreadStrings.threadOpenInFinder), action: #selector(openThreadInFinder(_:)), keyEquivalent: "")
         finderItem.target = self
         finderItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
         finderItem.representedObject = thread
@@ -170,7 +170,7 @@ extension ThreadListViewController {
 
         // Show open pull requests (only for projects with a recognized hosting provider)
         if projectsWithValidRemotes.contains(thread.projectId) {
-            let mainPrTitle = thread.pullRequestInfo.map { "Open \($0.displayLabel)" } ?? "Show Open Pull Requests"
+            let mainPrTitle = thread.pullRequestInfo.map { String(localized: .ThreadStrings.threadOpenPullRequestLabel($0.displayLabel)) } ?? String(localized: .ThreadStrings.threadShowOpenPullRequests)
             let prItem = NSMenuItem(title: mainPrTitle, action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
             prItem.target = self
             prItem.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: nil)
@@ -187,7 +187,7 @@ extension ThreadListViewController {
     }
     
     private func createMenuItemForOpenProject(for thread: MagentThread, xcodePath: String) -> NSMenuItem {
-        let xcodeItem = NSMenuItem(title: "Open project", action: #selector(openThreadInXcode(_:)), keyEquivalent: "")
+        let xcodeItem = NSMenuItem(title: String(localized: .ThreadStrings.threadOpenProject), action: #selector(openThreadInXcode(_:)), keyEquivalent: "")
         xcodeItem.target = self
         let xcodeIcon = NSWorkspace.shared.icon(forFile: xcodePath)
         xcodeIcon.size = NSSize(width: 16, height: 16)
@@ -202,7 +202,7 @@ extension ThreadListViewController {
             return nil
         }
 
-        let item = NSMenuItem(title: "Create Thread from This Branch", action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: String(localized: .ThreadStrings.threadCreateFromThisBranch), action: nil, keyEquivalent: "")
         item.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)
         item.submenu = buildAgentSubmenu(for: project, extraData: ["baseBranch": baseBranch])
         return item
@@ -288,11 +288,11 @@ extension ThreadListViewController {
 
         let title: String
         if thread.jiraTicketKey != nil {
-            title = "Open Ticket in Jira"
+            title = String(localized: .ThreadStrings.threadOpenTicketInJira)
         } else if thread.isMain {
-            title = "Open Jira Board"
+            title = String(localized: .ThreadStrings.threadOpenJiraBoard)
         } else {
-            title = "Open in Jira"
+            title = String(localized: .ThreadStrings.threadOpenInJira)
         }
 
         let item = NSMenuItem(title: title, action: #selector(openThreadInJira(_:)), keyEquivalent: "")
@@ -339,7 +339,7 @@ extension ThreadListViewController {
 
     private func buildProjectContextMenu(for project: SidebarProject) -> NSMenu {
         let menu = NSMenu()
-        let pinTitle = project.isPinned ? "Unpin" : "Pin"
+        let pinTitle = project.isPinned ? String(localized: .CommonStrings.commonUnpin) : String(localized: .CommonStrings.commonPin)
         let pinItem = NSMenuItem(title: pinTitle, action: #selector(toggleProjectPin(_:)), keyEquivalent: "")
         pinItem.target = self
         pinItem.image = NSImage(systemSymbolName: project.isPinned ? "pin.slash" : "pin", accessibilityDescription: nil)
@@ -379,10 +379,10 @@ extension ThreadListViewController {
             try threadManager.setThreadIcon(threadId: threadId, icon: icon)
         } catch {
             let errorAlert = NSAlert()
-            errorAlert.messageText = "Could Not Save Icon"
+            errorAlert.messageText = String(localized: .ThreadStrings.threadCouldNotSaveIcon)
             errorAlert.informativeText = error.localizedDescription
             errorAlert.alertStyle = .warning
-            errorAlert.addButton(withTitle: "OK")
+            errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
             errorAlert.runModal()
         }
     }
@@ -391,13 +391,13 @@ extension ThreadListViewController {
         guard let thread = sender.representedObject as? MagentThread else { return }
 
         let alert = NSAlert()
-        alert.messageText = "Rename Thread"
-        alert.informativeText = "Describe the task. Magent will generate a branch name, description, and icon."
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = String(localized: .ThreadStrings.threadRenameTitle)
+        alert.informativeText = String(localized: .ThreadStrings.threadRenameMessage)
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonRename))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        textField.placeholderString = "e.g. Fix sidebar chevron padding"
+        textField.placeholderString = String(localized: .ThreadStrings.threadRenamePlaceholder)
         alert.accessoryView = textField
 
         let response = alert.runModal()
@@ -418,10 +418,10 @@ extension ThreadListViewController {
             } catch {
                 await MainActor.run {
                     let errorAlert = NSAlert()
-                    errorAlert.messageText = "Rename Failed"
+                    errorAlert.messageText = String(localized: .CommonStrings.commonRenameFailed)
                     errorAlert.informativeText = error.localizedDescription
                     errorAlert.alertStyle = .warning
-                    errorAlert.addButton(withTitle: "OK")
+                    errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
                     errorAlert.runModal()
                 }
             }
@@ -432,10 +432,10 @@ extension ThreadListViewController {
         guard let thread = sender.representedObject as? MagentThread else { return }
 
         let alert = NSAlert()
-        alert.messageText = "Rename Branch"
-        alert.informativeText = "Enter a new branch name"
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = String(localized: .ThreadStrings.threadRenameBranchTitle)
+        alert.informativeText = String(localized: .ThreadStrings.threadRenameBranchMessage)
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonRename))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
         textField.stringValue = thread.name
@@ -458,10 +458,10 @@ extension ThreadListViewController {
             } catch {
                 await MainActor.run {
                     let alert = NSAlert()
-                    alert.messageText = "Rename Failed"
+                    alert.messageText = String(localized: .CommonStrings.commonRenameFailed)
                     alert.informativeText = error.localizedDescription
                     alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
                     alert.runModal()
                 }
             }
@@ -472,10 +472,10 @@ extension ThreadListViewController {
         guard let thread = sender.representedObject as? MagentThread else { return }
 
         let alert = NSAlert()
-        alert.messageText = "Set Description"
-        alert.informativeText = "Enter a short description (max 8 words). Leave empty to clear."
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = String(localized: .ThreadStrings.threadSetDescriptionTitle)
+        alert.informativeText = String(localized: .ThreadStrings.threadSetDescriptionMessage)
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonSave))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         textField.stringValue = thread.taskDescription ?? ""
@@ -489,10 +489,10 @@ extension ThreadListViewController {
             try threadManager.setTaskDescription(threadId: thread.id, description: requestedDescription)
         } catch {
             let errorAlert = NSAlert()
-            errorAlert.messageText = "Could Not Save Description"
+            errorAlert.messageText = String(localized: .ThreadStrings.threadCouldNotSaveDescription)
             errorAlert.informativeText = error.localizedDescription
             errorAlert.alertStyle = .warning
-            errorAlert.addButton(withTitle: "OK")
+            errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
             errorAlert.runModal()
         }
     }
@@ -513,8 +513,11 @@ extension ThreadListViewController {
         let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
 
         guard exists, isDirectory.boolValue else {
-            let targetName = thread.isMain ? "project root" : "worktree"
-            BannerManager.shared.show(message: "Could not open \(targetName) in Finder because the directory is missing.", style: .warning)
+            let targetName = thread.isMain ? String(localized: .ThreadStrings.threadProjectRoot) : String(localized: .ThreadStrings.threadWorktree)
+            BannerManager.shared.show(
+                message: String(localized: .ThreadStrings.threadOpenInFinderMissingDirectory(targetName)),
+                style: .warning
+            )
             return
         }
 
@@ -537,7 +540,7 @@ extension ThreadListViewController {
             let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
             guard !remotes.isEmpty else {
                 await MainActor.run {
-                    BannerManager.shared.show(message: "No git remotes found", style: .warning)
+                    BannerManager.shared.show(message: String(localized: .ThreadStrings.threadNoGitRemotesFound), style: .warning)
                 }
                 return
             }
@@ -562,7 +565,7 @@ extension ThreadListViewController {
                 }
 
                 guard let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.openPullRequestsURL ?? remote.repoWebURL else {
-                    BannerManager.shared.show(message: "Could not construct URL for remote \(remote.name)", style: .warning)
+                    BannerManager.shared.show(message: String(localized: .ThreadStrings.threadCouldNotConstructRemoteURL(remote.name)), style: .warning)
                     return
                 }
                 NSWorkspace.shared.open(url)
@@ -590,24 +593,30 @@ extension ThreadListViewController {
 
                 if agentBusy {
                     let alert = NSAlert()
-                    alert.messageText = "Archive Thread"
-                    alert.informativeText = "An agent in \"\(thread.name)\" is currently busy. Archiving will terminate the running agent and remove the worktree directory. The git branch \"\(thread.branchName)\" will be kept."
+                    alert.messageText = String(localized: .ThreadStrings.threadArchiveTitle)
+                    alert.informativeText = String(localized: .ThreadStrings.threadArchiveBusyMessage(thread.name, thread.branchName))
                     alert.alertStyle = .warning
-                    alert.addButton(withTitle: "Archive Anyway")
-                    alert.addButton(withTitle: "Cancel")
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonArchiveAnyway))
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
                     let response = alert.runModal()
                     guard response == .alertFirstButtonReturn else { return }
                 } else if !clean || !merged {
                     let alert = NSAlert()
-                    alert.messageText = "Archive Thread"
+                    alert.messageText = String(localized: .ThreadStrings.threadArchiveTitle)
                     var reasons: [String] = []
-                    if !clean { reasons.append("uncommitted changes") }
-                    if !merged { reasons.append("commits not in \(baseBranch)") }
-                    alert.informativeText = "The thread \"\(thread.name)\" has \(reasons.joined(separator: " and ")). Archiving will remove its worktree directory but keep the git branch \"\(thread.branchName)\"."
+                    if !clean { reasons.append(String(localized: .ThreadStrings.threadArchiveReasonUncommittedChanges)) }
+                    if !merged { reasons.append(String(localized: .ThreadStrings.threadArchiveReasonCommitsNotIn(baseBranch))) }
+                    alert.informativeText = String(
+                        localized: .ThreadStrings.threadArchiveReasonsMessage(
+                            thread.name,
+                            reasons.joined(separator: String(localized: .CommonStrings.commonJoinAnd)),
+                            thread.branchName
+                        )
+                    )
                     alert.alertStyle = .informational
-                    alert.addButton(withTitle: "Archive")
-                    alert.addButton(withTitle: "Cancel")
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonArchive))
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
                     let response = alert.runModal()
                     guard response == .alertFirstButtonReturn else { return }
@@ -632,11 +641,11 @@ extension ThreadListViewController {
                     } catch ThreadManagerError.localFileSyncFailed(let message) {
                         await MainActor.run {
                             let alert = NSAlert()
-                            alert.messageText = "Local Sync Failed"
-                            alert.informativeText = "\(message)\n\nForce Archive will remove the worktree anyway and leave any unsynced local files behind."
+                            alert.messageText = String(localized: .ThreadStrings.threadArchiveLocalSyncFailedTitle)
+                            alert.informativeText = String(localized: .ThreadStrings.threadArchiveLocalSyncFailedMessage(message))
                             alert.alertStyle = .warning
-                            alert.addButton(withTitle: "Force Archive")
-                            alert.addButton(withTitle: "Cancel")
+                            alert.addButton(withTitle: String(localized: .CommonStrings.commonForceArchive))
+                            alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
                             let response = alert.runModal()
                             guard response == .alertFirstButtonReturn else { return }
@@ -647,7 +656,7 @@ extension ThreadListViewController {
                                         thread,
                                         promptForLocalSyncConflicts: false,
                                         force: true
-                                    ) ?? "Archived without completing local sync."
+                                    ) ?? String(localized: .ThreadStrings.threadArchiveCompletedWithoutLocalSync)
                                     await MainActor.run {
                                         BannerManager.shared.show(message: warning, style: .warning, duration: nil)
                                     }
@@ -656,7 +665,7 @@ extension ThreadListViewController {
                                 } catch {
                                     await MainActor.run {
                                         BannerManager.shared.show(
-                                            message: "Archive failed: \(error.localizedDescription)",
+                                            message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
                                             style: .error
                                         )
                                     }
@@ -666,7 +675,7 @@ extension ThreadListViewController {
                     } catch {
                         await MainActor.run {
                             BannerManager.shared.show(
-                                message: "Archive failed: \(error.localizedDescription)",
+                                message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
                                 style: .error
                             )
                         }
@@ -680,11 +689,11 @@ extension ThreadListViewController {
         guard let thread = sender.representedObject as? MagentThread else { return }
 
         let alert = NSAlert()
-        alert.messageText = "Delete Thread"
-        alert.informativeText = "This will permanently delete the thread \"\(thread.name)\", including its worktree directory and git branch \"\(thread.branchName)\". This action cannot be undone."
+        alert.messageText = String(localized: .ThreadStrings.threadDeleteTitle)
+        alert.informativeText = String(localized: .ThreadStrings.threadDeleteMessage(thread.name, thread.branchName))
         alert.alertStyle = .critical
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonDelete))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
         alert.buttons.first?.hasDestructiveAction = true
 
         let response = alert.runModal()
@@ -696,7 +705,7 @@ extension ThreadListViewController {
             } catch {
                 await MainActor.run {
                     BannerManager.shared.show(
-                        message: "Delete failed: \(error.localizedDescription)",
+                        message: String(localized: .ThreadStrings.threadDeleteFailed(error.localizedDescription)),
                         style: .error
                     )
                 }

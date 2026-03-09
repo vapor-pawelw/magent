@@ -69,10 +69,10 @@ final class AppCoordinator {
                     await MainActor.run {
                         let names = invalidProjects.map(\.name).joined(separator: ", ")
                         BannerManager.shared.show(
-                            message: "Invalid project paths: \(names). Update them in Settings.",
+                            message: String(localized: .AppStrings.projectInvalidPathsWarning(names)),
                             style: .warning,
                             isDismissible: true,
-                            actions: [BannerAction(title: "Settings") {
+                            actions: [BannerAction(title: String(localized: .CommonStrings.commonSettings)) {
                                 NotificationCenter.default.post(name: .magentOpenSettings, object: nil)
                             }]
                         )

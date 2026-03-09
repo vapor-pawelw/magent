@@ -18,8 +18,8 @@ final class ConfigurationViewController: NSViewController {
     private let notificationsView = OnboardingNotificationsView()
     private let addProjectView = AddProjectView()
 
-    private let backButton = NSButton(title: "Back", target: nil, action: nil)
-    private let nextButton = NSButton(title: "Next", target: nil, action: nil)
+    private let backButton = NSButton(title: String(localized: .CommonStrings.commonBack), target: nil, action: nil)
+    private let nextButton = NSButton(title: String(localized: .CommonStrings.commonNext), target: nil, action: nil)
 
     private let totalSteps = 5
 
@@ -29,7 +29,7 @@ final class ConfigurationViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "Welcome to Magent"
+        title = String(localized: .ConfigurationStrings.configurationWelcomeTitle)
 
         backButton.target = self
         backButton.action = #selector(previousStep)
@@ -94,20 +94,20 @@ final class ConfigurationViewController: NSViewController {
 
         switch step {
         case 0:
-            title = "Check Dependencies"
-            nextButton.title = "Next"
+            title = String(localized: .ConfigurationStrings.configurationStepCheckDependencies)
+            nextButton.title = String(localized: .CommonStrings.commonNext)
         case 1:
-            title = "Select Agents"
-            nextButton.title = "Next"
+            title = String(localized: .ConfigurationStrings.configurationStepSelectAgents)
+            nextButton.title = String(localized: .CommonStrings.commonNext)
         case 2:
-            title = "Permissions"
-            nextButton.title = "Next"
+            title = String(localized: .ConfigurationStrings.configurationStepPermissions)
+            nextButton.title = String(localized: .CommonStrings.commonNext)
         case 3:
-            title = "Notifications"
-            nextButton.title = "Next"
+            title = String(localized: .ConfigurationStrings.configurationStepNotifications)
+            nextButton.title = String(localized: .CommonStrings.commonNext)
         case 4:
-            title = "Add Project"
-            nextButton.title = "Done"
+            title = String(localized: .ConfigurationStrings.configurationStepAddProject)
+            nextButton.title = String(localized: .CommonStrings.commonDone)
         default:
             break
         }
@@ -124,7 +124,10 @@ final class ConfigurationViewController: NSViewController {
             showStep(1)
         case 1:
             if agentSelectionView.selectedAgents.isEmpty {
-                showAlert(title: "No Agent Selected", message: "Please enable at least one agent.")
+                showAlert(
+                    title: String(localized: .ConfigurationStrings.configurationAlertNoAgentSelectedTitle),
+                    message: String(localized: .ConfigurationStrings.configurationAlertNoAgentSelectedMessage)
+                )
                 return
             }
             showStep(2)
@@ -134,7 +137,10 @@ final class ConfigurationViewController: NSViewController {
             showStep(4)
         case 4:
             if settings.projects.isEmpty {
-                showAlert(title: "No Project", message: "Please add at least one git repository.")
+                showAlert(
+                    title: String(localized: .ConfigurationStrings.configurationAlertNoProjectTitle),
+                    message: String(localized: .ConfigurationStrings.configurationAlertNoProjectMessage)
+                )
                 return
             }
             finishConfiguration()
@@ -181,7 +187,7 @@ final class ConfigurationViewController: NSViewController {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.message = "Select a git repository folder"
+        panel.message = String(localized: .ConfigurationStrings.configurationSelectRepositoryFolder)
 
         panel.beginSheetModal(for: view.window!) { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
@@ -205,7 +211,10 @@ final class ConfigurationViewController: NSViewController {
                     settings.projects.append(project)
                     addProjectView.addProject(project)
                 } else {
-                    showAlert(title: "Not a Git Repository", message: "The selected folder is not a git repository.")
+                    showAlert(
+                        title: String(localized: .ConfigurationStrings.configurationAlertNotGitRepositoryTitle),
+                        message: String(localized: .ConfigurationStrings.configurationAlertNotGitRepositoryMessage)
+                    )
                 }
             }
         }
@@ -216,7 +225,7 @@ final class ConfigurationViewController: NSViewController {
         alert.messageText = title
         alert.informativeText = message
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
         alert.runModal()
     }
 }
@@ -236,7 +245,7 @@ final class DependencyCheckView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     private func setupUI() {
-        titleLabel.stringValue = "Checking required dependencies..."
+        titleLabel.stringValue = String(localized: .ConfigurationStrings.configurationCheckingDependencies)
         titleLabel.font = .preferredFont(forTextStyle: .headline)
 
         stack.orientation = .vertical
@@ -262,7 +271,7 @@ final class DependencyCheckView: NSView {
 
     func update(with statuses: [DependencyStatus]) {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        titleLabel.stringValue = "Dependencies"
+        titleLabel.stringValue = String(localized: .ConfigurationStrings.configurationDependenciesTitle)
 
         for status in statuses {
             let row = NSStackView()
@@ -279,8 +288,8 @@ final class DependencyCheckView: NSView {
 
             let label = NSTextField(labelWithString: "")
             label.stringValue = status.isInstalled
-                ? "\(status.name) — installed at \(status.path ?? "unknown")"
-                : "\(status.name) — not found. \(status.installHint)"
+                ? String(localized: .ConfigurationStrings.configurationDependencyInstalled(status.name, status.path ?? String(localized: .CommonStrings.commonUnknown)))
+                : String(localized: .ConfigurationStrings.configurationDependencyNotFound(status.name, status.installHint))
             label.font = .preferredFont(forTextStyle: .body)
             label.maximumNumberOfLines = 0
 
@@ -296,7 +305,7 @@ final class AddProjectView: NSView {
     var onAddProject: (() -> Void)?
 
     private let titleLabel = NSTextField(labelWithString: "")
-    private let addButton = NSButton(title: "Select Repository Folder...", target: nil, action: nil)
+    private let addButton = NSButton(title: String(localized: .ConfigurationStrings.configurationSelectRepositoryFolderEllipsis), target: nil, action: nil)
     private let projectsStack = NSStackView()
 
     override init(frame: NSRect) {
@@ -307,7 +316,7 @@ final class AddProjectView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     private func setupUI() {
-        titleLabel.stringValue = "Add a git repository to manage worktrees for."
+        titleLabel.stringValue = String(localized: .ConfigurationStrings.configurationAddProjectDescription)
         titleLabel.font = .preferredFont(forTextStyle: .headline)
         titleLabel.maximumNumberOfLines = 0
 

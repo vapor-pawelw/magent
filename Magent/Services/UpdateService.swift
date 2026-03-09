@@ -126,7 +126,7 @@ final class UpdateService {
     private func checkForUpdates(trigger: CheckTrigger) async {
         guard !isChecking else {
             if trigger == .manual {
-                BannerManager.shared.show(message: "Update check already in progress.", style: .info)
+                BannerManager.shared.show(message: String(localized: .UpdateStrings.updateCheckAlreadyInProgress), style: .info)
             }
             return
         }
@@ -138,7 +138,7 @@ final class UpdateService {
             guard let available = try await fetchAvailableUpdate() else {
                 if trigger == .manual {
                     BannerManager.shared.show(
-                        message: "Magent is up to date (\(currentVersionString())).",
+                        message: String(localized: .UpdateStrings.updateUpToDate(currentVersionString())),
                         style: .info
                     )
                 }
@@ -152,11 +152,11 @@ final class UpdateService {
                 let availableVersion = available.version.displayString
                 let currentVersion = currentVersionString()
                 BannerManager.shared.show(
-                    message: "Update available: \(currentVersion) -> \(availableVersion)",
+                    message: String(localized: .UpdateStrings.updateAvailable(currentVersion, availableVersion)),
                     style: .info,
                     duration: nil,
                     actions: [
-                        BannerAction(title: "Update Now") {
+                        BannerAction(title: String(localized: .UpdateStrings.updateNow)) {
                             Task { @MainActor in
                                 await UpdateService.shared.installUpdate(available)
                             }

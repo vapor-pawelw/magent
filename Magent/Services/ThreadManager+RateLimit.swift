@@ -300,14 +300,14 @@ extension ThreadManager {
         let shouldPlaySound = settings.notifyOnRateLimitLifted
         guard shouldShowSystemNotification || shouldPlaySound else { return }
 
-        let agentNames = agents.map(\.rawValue).joined(separator: ", ")
+        let agentNames = agents.map(\.displayName).joined(separator: ", ")
 
         if shouldShowSystemNotification && settings.showSystemBanners {
             let content = UNMutableNotificationContent()
-            content.title = "Rate Limit Lifted"
+            content.title = String(localized: .NotificationStrings.notificationsRateLimitLiftedTitle)
             content.body = agents.count == 1
-                ? "\(agents[0].rawValue.capitalized) is ready to use again"
-                : "\(agentNames) are ready to use again"
+                ? String(localized: .NotificationStrings.notificationsRateLimitLiftedBodyOne(agents[0].displayName))
+                : String(localized: .NotificationStrings.notificationsRateLimitLiftedBodyMany(agentNames))
             if shouldPlaySound {
                 content.sound = UNNotificationSound(named: UNNotificationSoundName(settings.rateLimitLiftedSoundName))
             }
