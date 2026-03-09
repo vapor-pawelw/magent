@@ -203,6 +203,39 @@ private let diffContextColor = NSColor(resource: .textSecondary)
 private let statsAddColor = NSColor(red: 0.35, green: 0.65, blue: 0.35, alpha: 1.0)
 private let statsDelColor = NSColor(red: 0.78, green: 0.3, blue: 0.3, alpha: 1.0)
 
+private final class DiffTextView: NSTextView {
+    override var acceptsFirstResponder: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.mouseDown(with: event)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers == .command, event.charactersIgnoringModifiers == "c" else {
+            return super.performKeyEquivalent(with: event)
+        }
+        guard selectedRange().length > 0 else {
+            return super.performKeyEquivalent(with: event)
+        }
+        copy(nil)
+        return true
+    }
+
+    override func copy(_ sender: Any?) {
+        let selection = selectedRange()
+        guard selection.length > 0 else {
+            super.copy(sender)
+            return
+        }
+        let selectedString = (string as NSString).substring(with: selection)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(selectedString, forType: .string)
+    }
+}
+
 /// Parses an array of diff lines into a colored attributed string.
 private func parseDiffLines(_ lines: [String]) -> NSAttributedString {
     let result = NSMutableAttributedString()
@@ -525,7 +558,7 @@ private final class ImageDiffContentView: NSView {
 /// Always visible (no expand/collapse).
 private final class HunkView: NSView {
 
-    private let contentTextView = NSTextView()
+    private let contentTextView = DiffTextView()
     private var contentHeightConstraint: NSLayoutConstraint!
 
     init(content: NSAttributedString) {
@@ -633,7 +666,7 @@ private final class ContextGapView: NSView {
         isExpanded = true
         expandButton.isHidden = true
 
-        let textView = NSTextView()
+        let textView = DiffTextView()
         textView.isEditable = false
         textView.isSelectable = true
         textView.isRichText = true
@@ -877,7 +910,7 @@ private final class DiffSectionView: NSView {
         if !preambleLines.isEmpty && !preambleLines.allSatisfy({ $0.isEmpty }) {
             let preambleAttr = parseDiffLines(preambleLines)
             if preambleAttr.length > 0 {
-                let textView = NSTextView()
+                let textView = DiffTextView()
                 textView.isEditable = false
                 textView.isSelectable = true
                 textView.isRichText = true

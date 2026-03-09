@@ -64,6 +64,7 @@ All notable changes to this project will be documented in this file.
 - Fixed Prompt TOC shifting position when the diff viewer is opened or closed; position is now frozen while the diff panel is visible and restored correctly when it closes.
 
 ### Diff Viewer
+- Selecting text in the inline diff viewer now supports standard `Cmd+C` copy to the macOS clipboard.
 - Left-clicking an image diff now opens an enlarged animated overlay with background dimming; click anywhere (or press Escape) to dismiss it without disturbing the current diff scroll position.
 - Image diffs now stay fully visible while capping preview height to the diff pane, avoiding clipped previews and overly tall image blocks.
 - The `CHANGES` panel now has an `ⓘ` button in the top-right corner that shows a color legend explaining what each file color means (staged, unstaged, untracked, committed).
