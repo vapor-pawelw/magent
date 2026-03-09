@@ -1183,6 +1183,13 @@ final class PromptTableOfContentsView: NSView {
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
 
+        let headerBackgroundView = NSView()
+        headerBackgroundView.translatesAutoresizingMaskIntoConstraints = false
+        headerBackgroundView.wantsLayer = true
+        headerBackgroundView.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.14).cgColor
+        headerBackgroundView.layer?.cornerRadius = 8
+        headerBackgroundView.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+
         let headerIcon = NSImageView()
         headerIcon.image = NSImage(systemSymbolName: "list.bullet.rectangle.portrait", accessibilityDescription: nil)
         headerIcon.contentTintColor = NSColor(resource: .textSecondary)
@@ -1269,6 +1276,7 @@ final class PromptTableOfContentsView: NSView {
         let cornerSize: CGFloat = 18
         let cornerHandles = makeCornerHandles(size: cornerSize)
 
+        addSubview(headerBackgroundView)
         addSubview(headerStack)
         addSubview(closeButton)
         addSubview(scrollView)
@@ -1276,6 +1284,11 @@ final class PromptTableOfContentsView: NSView {
         for handle in cornerHandles { addSubview(handle) }
 
         NSLayoutConstraint.activate([
+            headerBackgroundView.topAnchor.constraint(equalTo: topAnchor),
+            headerBackgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            headerBackgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            headerBackgroundView.bottomAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 8),
+
             closeButton.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
 
