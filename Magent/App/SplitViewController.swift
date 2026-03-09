@@ -47,6 +47,8 @@ final class SplitViewController: NSSplitViewController {
     private var settingsWindowController: NSWindowController?
     private var sidebarItem: NSSplitViewItem?
     private var didApplyInitialSidebarWidth = false
+    private var preferredSidebarWidth: CGFloat = defaultSidebarWidth
+    private var enforcedSidebarWidth: CGFloat?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -125,6 +127,7 @@ final class SplitViewController: NSSplitViewController {
         let savedWidth = UserDefaults.standard.object(forKey: Self.sidebarWidthDefaultsKey) as? Double
         let targetWidth = CGFloat(savedWidth ?? Double(Self.defaultSidebarWidth))
         let clampedWidth = min(max(targetWidth, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+        preferredSidebarWidth = clampedWidth
         splitView.setPosition(clampedWidth, ofDividerAt: 0)
     }
 
@@ -132,7 +135,17 @@ final class SplitViewController: NSSplitViewController {
         guard let sidebarItem else { return }
         let width = sidebarItem.viewController.view.frame.width
         guard width.isFinite, width > 0 else { return }
-        UserDefaults.standard.set(Double(width), forKey: Self.sidebarWidthDefaultsKey)
+        let clampedWidth = min(max(width, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+
+        if let enforcedSidebarWidth {
+            if abs(clampedWidth - enforcedSidebarWidth) > 0.5 {
+                restoreSidebarWidth(enforcedSidebarWidth)
+            }
+            return
+        }
+
+        preferredSidebarWidth = clampedWidth
+        UserDefaults.standard.set(Double(clampedWidth), forKey: Self.sidebarWidthDefaultsKey)
     }
 
     private func newTabShortcut() {
@@ -305,11 +318,17 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func preserveSidebarWidthDuringContentChange(_ change: () -> Void) {
-        let preservedWidth = currentSidebarWidth()
+        let preservedWidth = currentSidebarWidth() ?? preferredSidebarWidth
+        enforcedSidebarWidth = preservedWidth
         change()
         restoreSidebarWidth(preservedWidth)
         DispatchQueue.main.async { [weak self] in
             self?.restoreSidebarWidth(preservedWidth)
+            DispatchQueue.main.async { [weak self] in
+                if self?.enforcedSidebarWidth == preservedWidth {
+                    self?.enforcedSidebarWidth = nil
+                }
+            }
         }
     }
 
@@ -322,9 +341,23 @@ final class SplitViewController: NSSplitViewController {
 
     private func restoreSidebarWidth(_ width: CGFloat?) {
         guard let width else { return }
+        guard let sidebarItem else { return }
         guard splitViewItems.count >= 2 else { return }
+        let clampedWidth = min(max(width, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+        preferredSidebarWidth = clampedWidth
         splitView.layoutSubtreeIfNeeded()
-        splitView.setPosition(width, ofDividerAt: 0)
+        splitView.setPosition(clampedWidth, ofDividerAt: 0)
+    }
+
+    override func splitView(
+        _ splitView: NSSplitView,
+        constrainSplitPosition proposedPosition: CGFloat,
+        ofSubviewAt dividerIndex: Int
+    ) -> CGFloat {
+        guard dividerIndex == 0, let enforcedSidebarWidth else {
+            return proposedPosition
+        }
+        return enforcedSidebarWidth
     }
 }
 

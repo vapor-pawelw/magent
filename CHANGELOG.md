@@ -73,7 +73,7 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 - The `+` create-thread menu now shows a header (e.g. "New Thread in ios-apps") so its purpose is immediately clear.
-- Selecting a thread no longer causes the sidebar to resize or task descriptions to rewrap between one and two lines.
+- Selecting a thread no longer causes the sidebar to resize, gradually shrink, or rewrap task descriptions between one and two lines.
 - Fixed project-row trailing `+` create-thread control so clicks reliably trigger thread creation, including Option-click on the full visible icon frame instead of only the glyph pixels.
 - Pulled the enlarged project-row `+` create-thread control closer to the trailing edge so it stays easier to scan and hit.
 - Fixed sidebar row jumping while switching threads by stabilizing thread-row text measurement and trailing status-marker layout.
