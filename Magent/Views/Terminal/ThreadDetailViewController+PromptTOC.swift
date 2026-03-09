@@ -184,7 +184,11 @@ extension ThreadDetailViewController {
                 }
             }
         }
-        promptTOCView?.setEntries(entries, agentType: agentType)
+        promptTOCView?.setEntries(
+            entries,
+            agentType: agentType,
+            preserveBottomIfAppending: previousSessionName == sessionName && entries.count > previousEntryCount
+        )
         if previousSessionName != sessionName {
             restorePromptTOCSize(for: sessionName)
             restorePromptTOCPosition(for: sessionName)
@@ -1055,9 +1059,11 @@ final class PromptTableOfContentsView: NSView {
     private var rowViews: [PromptTOCEntryRowView] = []
     private var selectedEntryIndex: Int?
     private var isHovered = false
+    private var shouldRestoreScrollToBottomAfterReload = false
 
     private static let normalAlpha: CGFloat = 0.55
     private static let hoverAlpha: CGFloat = 0.95
+    private static let bottomScrollTolerance: CGFloat = 2
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1070,6 +1076,7 @@ final class PromptTableOfContentsView: NSView {
     }
 
     func setLoading(agentType: AgentType?) {
+        shouldRestoreScrollToBottomAfterReload = isScrolledToBottom()
         subtitleLabel.stringValue = subtitle(forCount: nil, agentType: agentType)
         spinner.isHidden = false
         spinner.startAnimation(nil)
@@ -1077,8 +1084,13 @@ final class PromptTableOfContentsView: NSView {
         clearRows()
     }
 
-    func setEntries(_ entries: [PromptTOCEntry], agentType: AgentType?) {
+    func setEntries(
+        _ entries: [PromptTOCEntry],
+        agentType: AgentType?,
+        preserveBottomIfAppending: Bool = false
+    ) {
         let previousSelection = selectedEntryIndex
+        let shouldScrollToBottom = preserveBottomIfAppending && shouldRestoreScrollToBottomAfterReload
         subtitleLabel.stringValue = subtitle(forCount: entries.count, agentType: agentType)
         spinner.stopAnimation(nil)
         spinner.isHidden = true
@@ -1088,6 +1100,7 @@ final class PromptTableOfContentsView: NSView {
             selectedEntryIndex = nil
             emptyLabel.stringValue = "No prompts yet"
             emptyLabel.isHidden = false
+            shouldRestoreScrollToBottomAfterReload = false
             return
         }
 
@@ -1118,6 +1131,13 @@ final class PromptTableOfContentsView: NSView {
         } else {
             selectedEntryIndex = nil
         }
+
+        layoutSubtreeIfNeeded()
+        scrollView.layoutSubtreeIfNeeded()
+        if shouldScrollToBottom {
+            scrollToBottom()
+        }
+        shouldRestoreScrollToBottomAfterReload = false
     }
 
     override func updateTrackingAreas() {
@@ -1301,6 +1321,20 @@ final class PromptTableOfContentsView: NSView {
             rowsStack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
+    }
+
+    private func isScrolledToBottom() -> Bool {
+        guard let documentView = scrollView.documentView else { return true }
+        let visibleRect = scrollView.contentView.bounds
+        return visibleRect.maxY >= documentView.frame.maxY - Self.bottomScrollTolerance
+    }
+
+    private func scrollToBottom() {
+        guard let documentView = scrollView.documentView else { return }
+        let contentView = scrollView.contentView
+        let maxOffsetY = max(0, documentView.frame.height - contentView.bounds.height)
+        contentView.scroll(to: NSPoint(x: 0, y: maxOffsetY))
+        scrollView.reflectScrolledClipView(contentView)
     }
 
     private func subtitle(forCount count: Int?, agentType: AgentType?) -> String {

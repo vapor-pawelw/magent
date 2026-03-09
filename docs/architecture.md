@@ -119,6 +119,7 @@ Prompt row interaction/visual rules:
 - Row hit target is the full row (not only text), so clicking anywhere in the row triggers navigation.
 - Row labels can wrap up to 3 lines and then truncate.
 - Apply subtle alternating row backgrounds to improve scanability without dominating the terminal UI.
+- If the TOC was pinned to the bottom before a same-session append refresh, restore it to the bottom after repopulating rows; do not force-scroll when the user was reading older entries.
 - Keep the TOC overlay frontmost in the AppKit subview order whenever terminal surfaces are attached/switched/refreshed; layer `zPosition` alone is not sufficient for mouse hit-testing against embedded Ghostty views.
 
 Navigation behavior:

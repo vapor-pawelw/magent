@@ -109,6 +109,7 @@ Before the app is usable, the user must complete a configuration step:
 - Ignore pinned bottom chrome/status rows (for example model/usage/path lines) when deciding whether a prompt was actually submitted.
 - Switching threads/tabs must not surface stale non-submitted prompt text in TOC.
 - TOC entry ordering follows actual submission order for that session.
+- If the TOC is already scrolled to the bottom, appending a newly confirmed prompt must keep the list pinned to the bottom.
 - TOC panel must be draggable and resizable by the user.
 - The minimum TOC size is the original default size (320x250).
 - TOC visibility is a single app-wide preference: toggling show/hide in one thread panel must immediately apply to other open thread panels and persist across app relaunches.
