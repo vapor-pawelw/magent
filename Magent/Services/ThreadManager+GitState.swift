@@ -160,7 +160,7 @@ extension ThreadManager {
             }
         }
         if persistedChanged {
-            try? persistence.saveThreads(threads)
+            try? persistence.saveActiveThreads(threads)
         }
         if changed {
             await MainActor.run {
@@ -199,7 +199,7 @@ extension ThreadManager {
             }
         } else {
             threads[index].branchName = actual
-            try? persistence.saveThreads(threads)
+            try? persistence.saveActiveThreads(threads)
         }
 
         threads[index].expectedBranch = actual

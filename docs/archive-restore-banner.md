@@ -24,8 +24,10 @@
 - Ensured fallback session registration assigns a default first-tab label after restore/session reset.
 - Added a Threads-settings history card that lists recent archived threads and reuses the same restore path as the banner action.
 - Added persisted archive timestamps so recent archived-thread ordering stays stable across relaunches and worktree-sync auto-archive paths.
+- Fixed archived threads being wiped from disk on every active-thread save: added `PersistenceService.saveActiveThreads(_:)` and migrated all `saveThreads(threads)` call sites to it across all `ThreadManager` extensions.
+- Polished the Settings recently-archived row UI: each row now shows the thread's SF Symbol icon, rows are separated by `NSBox` dividers, and rows have vertical padding with center-Y alignment.
 
 ## Gotchas
 
-- `PersistenceService.saveThreads(...)` writes the full `threads.json` payload. Restore code must merge changes into the persisted archived-thread array instead of saving only the active in-memory `threads` list.
+- **Use `saveActiveThreads` for active-only saves.** `ThreadManager` keeps only non-archived threads in its in-memory `threads` array. Calling `PersistenceService.saveThreads(threads)` with that list overwrites `threads.json` with active-only data and silently wipes all archived threads from disk. Always call `PersistenceService.saveActiveThreads(_:)` instead — it merges the incoming active list with the existing archived threads on disk before writing. Archive/restore flows that already build a complete `allThreads` array should continue to call `saveThreads(allThreads)` directly.
 - If a new active thread already reuses the archived thread's name, restore currently fails with the normal duplicate-name path rather than silently renaming the restored thread.

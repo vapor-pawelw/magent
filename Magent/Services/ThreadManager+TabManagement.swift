@@ -147,7 +147,7 @@ extension ThreadManager {
             threads[index].agentTmuxSessions.append(tmuxSessionName)
             threads[index].agentHasRun = true
         }
-        try persistence.saveThreads(threads)
+        try persistence.saveActiveThreads(threads)
         let tab = Tab(
             threadId: currentThread.id,
             tmuxSessionName: tmuxSessionName,
@@ -202,7 +202,7 @@ extension ThreadManager {
     func reorderTabs(for threadId: UUID, newOrder: [String]) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         threads[index].tmuxSessionNames = newOrder
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
     }
 
     /// Registers a fallback session name for a thread that had no sessions.
@@ -218,7 +218,7 @@ extension ThreadManager {
         }
         threads[index].customTabNames[sessionName] = TmuxSessionNaming.defaultTabDisplayName(for: agentType)
         threads[index].lastSelectedTmuxSessionName = sessionName
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
     }
 
     // MARK: - Tab Pinning & Selection
@@ -226,14 +226,14 @@ extension ThreadManager {
     func updatePinnedTabs(for threadId: UUID, pinnedSessions: [String]) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         threads[index].pinnedTmuxSessions = pinnedSessions
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
     }
 
     func updateLastSelectedSession(for threadId: UUID, sessionName: String?) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         if threads[index].lastSelectedTmuxSessionName == sessionName { return }
         threads[index].lastSelectedTmuxSessionName = sessionName
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
     }
 
     @MainActor
@@ -286,7 +286,7 @@ extension ThreadManager {
         if threads[index].lastSelectedTmuxSessionName == sessionName {
             threads[index].lastSelectedTmuxSessionName = threads[index].tmuxSessionNames.first
         }
-        try persistence.saveThreads(threads)
+        try persistence.saveActiveThreads(threads)
 
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)

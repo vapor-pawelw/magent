@@ -316,7 +316,7 @@ extension ThreadManager {
            !threads[currentIndex].isThreadIconManuallySet {
             threads[currentIndex].threadIcon = generatedTaskDescription.suggestedIcon
         }
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
         }
@@ -518,7 +518,7 @@ extension ThreadManager {
             threads[index].didAutoRenameFromFirstPrompt = true
         }
 
-        try persistence.saveThreads(threads)
+        try persistence.saveActiveThreads(threads)
 
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
@@ -628,7 +628,7 @@ extension ThreadManager {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard !threads[index].didAutoRenameFromFirstPrompt else { return }
         threads[index].didAutoRenameFromFirstPrompt = true
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
     }
 
     // MARK: - Task Description
@@ -791,7 +791,7 @@ extension ThreadManager {
                 if shouldAutoSetIcon, !threads[currentIndex].isThreadIconManuallySet {
                     threads[currentIndex].threadIcon = generated.suggestedIcon
                 }
-                try? persistence.saveThreads(threads)
+                try? persistence.saveActiveThreads(threads)
                 await MainActor.run {
                     delegate?.threadManager(self, didUpdateThreads: threads)
                 }
@@ -840,7 +840,7 @@ extension ThreadManager {
         }
 
         threads[index].taskDescription = normalizedDescription
-        try persistence.saveThreads(threads)
+        try persistence.saveActiveThreads(threads)
 
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
@@ -859,7 +859,7 @@ extension ThreadManager {
         if markAsManualOverride {
             threads[index].isThreadIconManuallySet = true
         }
-        try persistence.saveThreads(threads)
+        try persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
@@ -896,7 +896,7 @@ extension ThreadManager {
         guard newSessionName != sessionName else {
             // Display name changed but session name is the same — just update the display name
             threads[index].customTabNames[sessionName] = trimmed
-            try persistence.saveThreads(threads)
+            try persistence.saveActiveThreads(threads)
             await MainActor.run {
                 delegate?.threadManager(self, didUpdateThreads: threads)
             }
@@ -961,7 +961,7 @@ extension ThreadManager {
             await tmux.setupBellPipe(for: resolvedSessionName)
         }
 
-        try persistence.saveThreads(threads)
+        try persistence.saveActiveThreads(threads)
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
         }

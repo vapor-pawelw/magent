@@ -45,6 +45,14 @@ public final class PersistenceService {
         try data.write(to: threadsURL, options: .atomic)
     }
 
+    /// Saves the active (non-archived) threads while preserving any archived threads
+    /// already on disk. Use this instead of `saveThreads(_:)` when `threads` only
+    /// contains active threads (the normal ThreadManager in-memory list).
+    public func saveActiveThreads(_ activeThreads: [MagentThread]) throws {
+        let existingArchived = loadThreads().filter { $0.isArchived }
+        try saveThreads(activeThreads + existingArchived)
+    }
+
     // MARK: - Settings
 
     public func loadSettings() -> AppSettings {

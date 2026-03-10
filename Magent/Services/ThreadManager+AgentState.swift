@@ -96,7 +96,7 @@ extension ThreadManager {
         }
 
         guard changed else { return }
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
 
         // Agent completed work — refresh dirty and delivered states for affected threads
         await refreshDirtyStates()
@@ -626,7 +626,7 @@ extension ThreadManager {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[index].hasUnreadAgentCompletion else { return }
         threads[index].unreadCompletionSessions.removeAll()
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
         updateDockBadge()
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
@@ -636,7 +636,7 @@ extension ThreadManager {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[index].unreadCompletionSessions.contains(sessionName) else { return }
         threads[index].unreadCompletionSessions.remove(sessionName)
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
         updateDockBadge()
         delegate?.threadManager(self, didUpdateThreads: threads)
     }

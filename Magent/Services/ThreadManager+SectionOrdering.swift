@@ -82,7 +82,7 @@ extension ThreadManager {
         threads[index].sectionId = sectionId
         placeThreadAtBottomOfSidebarGroup(threadId: thread.id, forcedSectionId: sectionId)
 
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
@@ -95,7 +95,7 @@ extension ThreadManager {
         }
         placeThreadAtBottomOfSidebarGroup(threadId: threadId)
 
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
@@ -108,7 +108,7 @@ extension ThreadManager {
         }
         placeThreadAtBottomOfSidebarGroup(threadId: threadId)
 
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
@@ -144,7 +144,7 @@ extension ThreadManager {
             }
         }
 
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
@@ -218,7 +218,7 @@ extension ThreadManager {
         }
 
         guard movedCount > 0 else { return 0 }
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
         return movedCount
     }
@@ -256,7 +256,7 @@ extension ThreadManager {
             changed = true
         }
         guard changed else { return }
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 }

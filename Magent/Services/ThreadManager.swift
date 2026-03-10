@@ -106,7 +106,7 @@ final class ThreadManager {
         // in ThreadDetailViewController will recreate them when the user opens the thread.
 
         if didMigrate {
-            try? persistence.saveThreads(threads)
+            try? persistence.saveActiveThreads(threads)
         }
 
         // Migrate session names from old magent- prefix to new ma- format
@@ -179,7 +179,7 @@ final class ThreadManager {
         }
 
         if changed {
-            try? persistence.saveThreads(threads)
+            try? persistence.saveActiveThreads(threads)
         }
     }
 }

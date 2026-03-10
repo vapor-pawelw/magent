@@ -367,7 +367,16 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             return
         }
 
-        for thread in recentThreads {
+        for (index, thread) in recentThreads.enumerated() {
+            if index > 0 {
+                let separator = NSBox()
+                separator.boxType = .separator
+                separator.translatesAutoresizingMaskIntoConstraints = false
+                recentArchivedThreadsStackView.addArrangedSubview(separator)
+                NSLayoutConstraint.activate([
+                    separator.widthAnchor.constraint(equalTo: recentArchivedThreadsStackView.widthAnchor),
+                ])
+            }
             let row = makeRecentArchivedThreadRow(
                 thread: thread,
                 projectName: projectsById[thread.projectId] ?? "Unknown Project"
@@ -386,9 +395,25 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private func makeRecentArchivedThreadRow(thread: MagentThread, projectName: String) -> NSView {
         let row = NSStackView()
         row.orientation = .horizontal
-        row.alignment = .top
-        row.spacing = 12
+        row.alignment = .centerY
+        row.spacing = 10
         row.translatesAutoresizingMaskIntoConstraints = false
+        row.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
+
+        let iconView = NSImageView()
+        iconView.image = NSImage(
+            systemSymbolName: thread.threadIcon.symbolName,
+            accessibilityDescription: thread.threadIcon.accessibilityDescription
+        )
+        iconView.contentTintColor = NSColor(resource: .textSecondary)
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.setContentHuggingPriority(.required, for: .horizontal)
+        iconView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 16),
+            iconView.heightAnchor.constraint(equalToConstant: 16),
+        ])
+        row.addArrangedSubview(iconView)
 
         let textStack = NSStackView()
         textStack.orientation = .vertical
