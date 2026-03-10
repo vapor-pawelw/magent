@@ -281,6 +281,9 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private static let settingsToolbarItemId = NSToolbarItem.Identifier("settings")
+    private static let recentlyArchivedToolbarItemId = NSToolbarItem.Identifier("recentlyArchived")
+
+    private var recentlyArchivedPopover: NSPopover?
 
     private func setupWindowToolbar() {
         guard let window = view.window, window.toolbar == nil else { return }
@@ -315,6 +318,21 @@ final class SplitViewController: NSSplitViewController {
                 detailVC.selectTab(at: tabIndex)
             }
         }
+    }
+
+    @objc private func recentlyArchivedTapped(_ sender: NSButton) {
+        if let existing = recentlyArchivedPopover, existing.isShown {
+            existing.close()
+            return
+        }
+
+        let popover = NSPopover()
+        popover.contentViewController = RecentlyArchivedPopoverViewController()
+        popover.behavior = .transient
+        popover.animates = true
+        recentlyArchivedPopover = popover
+
+        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
     }
 
     @objc private func settingsTapped() {
@@ -443,6 +461,20 @@ extension SplitViewController: ThreadListDelegate {
 
 extension SplitViewController: NSToolbarDelegate {
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        if itemIdentifier == Self.recentlyArchivedToolbarItemId {
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            let title = "Recently Archived"
+            item.label = title
+            item.toolTip = title
+            let button = NSButton()
+            button.image = NSImage(systemSymbolName: "archivebox", accessibilityDescription: title)
+            button.bezelStyle = .texturedRounded
+            button.target = self
+            button.action = #selector(recentlyArchivedTapped(_:))
+            button.isBordered = false
+            item.view = button
+            return item
+        }
         if itemIdentifier == Self.settingsToolbarItemId {
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             let settingsTitle = String(localized: .CommonStrings.commonSettings)
@@ -457,11 +489,11 @@ extension SplitViewController: NSToolbarDelegate {
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, Self.settingsToolbarItemId]
+        [.flexibleSpace, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, Self.settingsToolbarItemId]
+        [.flexibleSpace, Self.recentlyArchivedToolbarItemId, Self.settingsToolbarItemId]
     }
 }
 

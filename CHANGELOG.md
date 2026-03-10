@@ -7,6 +7,9 @@ All notable changes to this project will be documented in this file.
 ### Performance
 - Reduced CPU usage from periodic polling: session monitor now runs every 5 seconds (was 3s), pane output is cached for 5 seconds and shared across concurrent checks, and rate-limit scanning for background sessions is throttled to once every 15 seconds.
 
+### Sidebar
+- Added a dedicated "Recently Archived" toolbar button (archive box icon) next to the Settings gear, opening a compact popover with up to 10 recently archived threads and one-click Restore actions.
+
 ### Settings
 - Archived thread rows in `Settings > Threads` now lead with a "Thread archived" caption, show the task description (or thread name) in a larger prominent font, and display branch and worktree folder more prominently.
 
