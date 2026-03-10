@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 - Archived thread rows in `Settings > Threads` now lead with a "Thread archived" caption, show the task description (or thread name) in a larger prominent font, and display branch and worktree folder more prominently.
 
 ### Thread
+- Fixed Codex tabs being incorrectly shown as busy when the project or global default agent is set to Claude — agent type is now detected from the actual running process instead of the configured default.
 - "Use project default" in the add-tab menu now always resolves to the current project/global default agent from Settings instead of the agent the thread was originally created with.
 
 ### Settings

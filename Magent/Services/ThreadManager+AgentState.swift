@@ -166,11 +166,36 @@ extension ThreadManager {
 
     // MARK: - Busy Session Sync
 
-    /// Syncs `busySessions` with actual tmux pane state by checking `pane_current_command`.
-    /// If the foreground process is a non-shell command, the session is busy.
-    /// If it's the login shell for this app session, the agent has exited and the session is idle.
-    /// This intentionally avoids treating every shell binary as idle because custom agent wrappers
-    /// can run under `bash`/`sh` even while agent work is still in progress.
+    private enum DetectedRunningAgent {
+        case claude
+        case codex
+        case none
+    }
+
+    /// Detects the running agent from the foreground process name and child process args.
+    /// Returns `.none` when no known agent is detected (terminal or unknown).
+    private func detectRunningAgent(
+        paneCommand: String,
+        childProcesses: [(pid: pid_t, args: String)]
+    ) -> DetectedRunningAgent {
+        // Check the foreground process name first
+        let commandLower = paneCommand.lowercased()
+        if commandLower.contains("claude") { return .claude }
+        if commandLower.contains("codex") { return .codex }
+
+        // Check child process args (handles shell-wrapper launches like `zsh -c 'claude ...'`)
+        for child in childProcesses {
+            let argsLower = child.args.lowercased()
+            if argsLower.contains("claude") { return .claude }
+            if argsLower.contains("codex") { return .codex }
+        }
+
+        return .none
+    }
+
+    /// Syncs `busySessions` by detecting what agent is actually running in each pane,
+    /// then applying agent-specific idle/busy logic. If no known agent is detected
+    /// (terminal session), the session is treated as not busy.
     func syncBusySessionsFromProcessState() async {
         var changed = false
         var busyChangedThreadIds = Set<UUID>()
@@ -221,20 +246,12 @@ extension ThreadManager {
             return
         }
 
-        // Collect pane PIDs for all shell sessions (both title-busy and non-busy).
-        // Child-process checks detect agents inside shell wrappers AND verify
-        // that a stale spinner title isn't a false busy signal.
-        var shellPidsToCheck = Set<pid_t>()
-        for thread in threads where !thread.isArchived {
-            for session in thread.agentTmuxSessions {
-                guard let paneState = paneStates[session] else { continue }
-                let isShell = Self.idleShellCommands.contains(paneState.command)
-                if isShell && paneState.pid > 0 {
-                    shellPidsToCheck.insert(paneState.pid)
-                }
-            }
+        // Collect pane PIDs so we can fetch child processes for agent detection
+        var allPanePids = Set<pid_t>()
+        for (_, paneState) in paneStates where paneState.pid > 0 {
+            allPanePids.insert(paneState.pid)
         }
-        let childrenByPid = await tmux.childPids(forParents: shellPidsToCheck)
+        let childProcessesByPid = await tmux.childProcesses(forParents: allPanePids)
 
         // Snapshot thread IDs and their sessions before iterating. The `threads`
         // array can shrink during `await` suspension points (e.g. archive), which
@@ -242,19 +259,26 @@ extension ThreadManager {
         let threadSnapshot: [(id: UUID, sessions: [String])] = threads
             .filter { !$0.isArchived }
             .map { ($0.id, $0.agentTmuxSessions) }
+
         for (threadId, sessions) in threadSnapshot {
             for session in sessions {
                 guard let paneState = paneStates[session] else { continue }
                 guard let ti = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                let sessionAgent = agentType(for: threads[ti], sessionName: session)
-                    ?? effectiveAgentType(for: threads[ti].projectId)
 
-                // Codex busy semantics: only a live status token in the latest
-                // scope ("• esc to interrupt)") means busy.
-                if sessionAgent == .codex {
-                    let hasInterruptBusySignal = await paneShowsEscToInterrupt(sessionName: session)
+                if threads[ti].waitingForInputSessions.contains(session) { continue }
+
+                let children = childProcessesByPid[paneState.pid] ?? []
+                let detectedAgent = detectRunningAgent(
+                    paneCommand: paneState.command,
+                    childProcesses: children
+                )
+
+                switch detectedAgent {
+                case .codex:
+                    // Codex: busy only while "• esc to interrupt)" is visible in the latest scope
+                    let isBusy = await paneShowsEscToInterrupt(sessionName: session)
                     guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                    if hasInterruptBusySignal && !threads[i].waitingForInputSessions.contains(session) {
+                    if isBusy {
                         if !threads[i].busySessions.contains(session) {
                             threads[i].busySessions.insert(session)
                             changed = true
@@ -270,65 +294,42 @@ extension ThreadManager {
                         changed = true
                         busyChangedThreadIds.insert(threads[i].id)
                     }
-                    continue
-                }
 
-                let command = paneState.command
-                let isShell = Self.idleShellCommands.contains(command)
-                let titleIndicatesBusy = paneTitleIndicatesBusy(paneState.title)
-                if isShell {
-                    if titleIndicatesBusy && !threads[ti].waitingForInputSessions.contains(session) {
-                        // Both ✳ and braille spinner characters can persist in the pane
-                        // title after the agent finishes. Always verify via pane content
-                        // that the agent isn't just sitting at an empty prompt.
-                        let capturedContent = await tmux.cachedCapturePane(sessionName: session)
-                        if let content = capturedContent, isAtRateLimitPrompt(content) {
-                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                            if setPromptRateLimitMarker(threadId: threadId, session: session) {
-                                changed = true
-                                rateLimitChangedThreadIds.insert(threadId)
-                            }
-                            if threads[i].busySessions.contains(session) {
-                                threads[i].busySessions.remove(session)
-                                changed = true
-                                busyChangedThreadIds.insert(threads[i].id)
-                            }
-                            continue
-                        }
-                        if let content = capturedContent, isAgentIdleAtPrompt(content) {
-                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                            // Agent is idle — clear any stale busy state
-                            if threads[i].busySessions.contains(session) {
-                                threads[i].busySessions.remove(session)
-                                changed = true
-                                busyChangedThreadIds.insert(threads[i].id)
-                            }
-                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
-                                changed = true
-                                rateLimitChangedThreadIds.insert(threadId)
-                            }
-                            continue
-                        }
+                case .claude:
+                    // Claude: skip if a completion bell was received recently — the bell fires
+                    // just before process exit, so the process name can lag behind briefly.
+                    let recentlyCompleted: Bool = {
+                        guard let bellDate = recentBellBySession[session] else { return false }
+                        return Date().timeIntervalSince(bellDate) < 5.0
+                    }()
+                    if recentlyCompleted { continue }
+
+                    let content = await tmux.cachedCapturePane(sessionName: session)
+                    if let content, isAtRateLimitPrompt(content) {
                         guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                        // Pane content didn't show a ❯ prompt — but if the agent has
-                        // fully exited (shell has no child processes), the spinner title
-                        // is stale. This handles the case where the agent exits and we
-                        // land at a plain shell prompt (%, $) that isAgentIdleAtPrompt
-                        // doesn't recognize.
-                        let hasChildren = paneState.pid > 0
-                            && !(childrenByPid[paneState.pid]?.isEmpty ?? true)
-                        if !hasChildren {
-                            if threads[i].busySessions.contains(session) {
-                                threads[i].busySessions.remove(session)
-                                changed = true
-                                busyChangedThreadIds.insert(threads[i].id)
-                            }
-                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
-                                changed = true
-                                rateLimitChangedThreadIds.insert(threadId)
-                            }
-                            continue
+                        if setPromptRateLimitMarker(threadId: threadId, session: session) {
+                            changed = true
+                            rateLimitChangedThreadIds.insert(threadId)
                         }
+                        if threads[i].busySessions.contains(session) {
+                            threads[i].busySessions.remove(session)
+                            changed = true
+                            busyChangedThreadIds.insert(threads[i].id)
+                        }
+                    } else if let content, isAgentIdleAtPrompt(content) {
+                        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
+                        if threads[i].busySessions.contains(session) {
+                            threads[i].busySessions.remove(session)
+                            changed = true
+                            busyChangedThreadIds.insert(threads[i].id)
+                        }
+                        if clearPromptRateLimitMarker(threadId: threadId, session: session) {
+                            changed = true
+                            rateLimitChangedThreadIds.insert(threadId)
+                        }
+                    } else {
+                        // Claude is running but not idle at prompt — treat as busy
+                        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                         if !threads[i].busySessions.contains(session) {
                             threads[i].busySessions.insert(session)
                             changed = true
@@ -341,68 +342,18 @@ extension ThreadManager {
                         let recoveredIds = await clearRateLimitAfterRecovery(
                             threadId: threadId,
                             sessionName: session,
-                            paneContent: capturedContent
+                            paneContent: content
                         )
                         if !recoveredIds.isEmpty {
                             rateLimitChangedThreadIds.formUnion(recoveredIds)
                             changed = true
                         }
-                        continue
                     }
-                    // Title doesn't indicate busy — check if the shell has child processes
-                    // (agent running inside the shell wrapper, e.g. zsh -c 'claude ...')
-                    if paneState.pid > 0, !(childrenByPid[paneState.pid]?.isEmpty ?? true) {
-                        // Shell has children — but the agent could be idle at its prompt
-                        // (e.g. Claude Code waiting for user input while still running as
-                        // a child process of the wrapper shell).
-                        let capturedContent2 = await tmux.cachedCapturePane(sessionName: session)
-                        if let content = capturedContent2, isAtRateLimitPrompt(content) {
-                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                            if setPromptRateLimitMarker(threadId: threadId, session: session) {
-                                changed = true
-                                rateLimitChangedThreadIds.insert(threadId)
-                            }
-                            if threads[i].busySessions.contains(session) {
-                                threads[i].busySessions.remove(session)
-                                changed = true
-                                busyChangedThreadIds.insert(threads[i].id)
-                            }
-                        } else if let content = capturedContent2, isAgentIdleAtPrompt(content) {
-                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                            if threads[i].busySessions.contains(session) {
-                                threads[i].busySessions.remove(session)
-                                changed = true
-                                busyChangedThreadIds.insert(threads[i].id)
-                            }
-                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
-                                changed = true
-                                rateLimitChangedThreadIds.insert(threadId)
-                            }
-                        } else {
-                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                            if !threads[i].busySessions.contains(session) {
-                                threads[i].busySessions.insert(session)
-                                changed = true
-                                busyChangedThreadIds.insert(threads[i].id)
-                            }
-                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
-                                changed = true
-                                rateLimitChangedThreadIds.insert(threadId)
-                            }
-                            let recoveredIds = await clearRateLimitAfterRecovery(
-                                threadId: threadId,
-                                sessionName: session,
-                                paneContent: capturedContent2
-                            )
-                            if !recoveredIds.isEmpty {
-                                rateLimitChangedThreadIds.formUnion(recoveredIds)
-                                changed = true
-                            }
-                        }
-                        continue
-                    }
+
+                case .none:
+                    // No known agent detected — terminal session or agent has exited.
+                    // Clear any stale busy/waiting/rate-limit state.
                     guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                    // Agent not running — clear busy, waiting, and prompt-based rate limit if set
                     if threads[i].busySessions.contains(session) {
                         threads[i].busySessions.remove(session)
                         changed = true
@@ -418,65 +369,6 @@ extension ThreadManager {
                         changed = true
                         rateLimitChangedThreadIds.insert(threadId)
                     }
-                } else {
-                    // Non-shell process running (e.g. node, claude, or a version string
-                    // like "2.1.63" that Claude Code sets as its process title).
-                    // Skip if a completion bell was recently received for this session;
-                    // the bell fires just before the process exits, so pane_current_command
-                    // can still show the agent binary for a brief window after completion.
-                    let recentlyCompleted: Bool = {
-                        guard let bellDate = recentBellBySession[session] else { return false }
-                        return Date().timeIntervalSince(bellDate) < 5.0
-                    }()
-                    if !recentlyCompleted && !threads[ti].waitingForInputSessions.contains(session) {
-                        // The agent process can still be the foreground command even when
-                        // idle at its prompt (e.g. Claude Code showing ❯). Verify via
-                        // pane content that the agent is actually working.
-                        let capturedContent3 = await tmux.cachedCapturePane(sessionName: session)
-                        if let content = capturedContent3, isAtRateLimitPrompt(content) {
-                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                            if setPromptRateLimitMarker(threadId: threadId, session: session) {
-                                changed = true
-                                rateLimitChangedThreadIds.insert(threadId)
-                            }
-                            if threads[i].busySessions.contains(session) {
-                                threads[i].busySessions.remove(session)
-                                changed = true
-                                busyChangedThreadIds.insert(threads[i].id)
-                            }
-                        } else if let content = capturedContent3, isAgentIdleAtPrompt(content) {
-                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                            if threads[i].busySessions.contains(session) {
-                                threads[i].busySessions.remove(session)
-                                changed = true
-                                busyChangedThreadIds.insert(threads[i].id)
-                            }
-                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
-                                changed = true
-                                rateLimitChangedThreadIds.insert(threadId)
-                            }
-                        } else {
-                            guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
-                            if !threads[i].busySessions.contains(session) {
-                                threads[i].busySessions.insert(session)
-                                changed = true
-                                busyChangedThreadIds.insert(threads[i].id)
-                            }
-                            if clearPromptRateLimitMarker(threadId: threadId, session: session) {
-                                changed = true
-                                rateLimitChangedThreadIds.insert(threadId)
-                            }
-                            let recoveredIds = await clearRateLimitAfterRecovery(
-                                threadId: threadId,
-                                sessionName: session,
-                                paneContent: capturedContent3
-                            )
-                            if !recoveredIds.isEmpty {
-                                rateLimitChangedThreadIds.formUnion(recoveredIds)
-                                changed = true
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -484,20 +376,7 @@ extension ThreadManager {
         await publishBusySyncChangesIfNeeded()
     }
 
-    // MARK: - Busy Indicators
-
-    private func paneTitleIndicatesBusy(_ title: String) -> Bool {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let scalar = trimmed.unicodeScalars.first else { return false }
-        let v = scalar.value
-        // Braille spinner (⠋⠙⠹…) used by Claude Code / Codex while processing.
-        if (0x2800...0x28FF).contains(v) { return true }
-        // ✳ (U+2733 eight-spoked asterisk) — alternate busy prefix used by Claude Code.
-        if v == 0x2733 { return true }
-        return false
-    }
-
-    /// Checks whether the agent appears to be idle at its input prompt by looking
+/// Checks whether the agent appears to be idle at its input prompt by looking
     /// at the pane content. The definitive busy signal is the "esc to interrupt"
     /// status bar text that Claude Code shows while processing. If that text is
     /// present, the agent is busy. If a ❯ prompt is visible without
@@ -595,7 +474,7 @@ extension ThreadManager {
     private func paneShowsEscToInterrupt(sessionName: String) async -> Bool {
         // Capture enough history to include at least one scope separator so we can
         // ignore stale matches from older scopes.
-        guard let paneContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 200) else {
+        guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 200) else {
             return false
         }
 

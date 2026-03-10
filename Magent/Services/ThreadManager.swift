@@ -49,13 +49,7 @@ final class ThreadManager {
     var lastTmuxZombieHealthCheckAt: Date = .distantPast
     var didShowTmuxZombieWarning = false
     var isRestartingTmuxForRecovery = false
-    static let idleShellCommands: Set<String> = {
-        let shellPath = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-        let shellName = URL(fileURLWithPath: shellPath).lastPathComponent
-        guard !shellName.isEmpty else { return ["zsh", "-zsh"] }
-        return [shellName, "-\(shellName)"]
-    }()
-    var dirtyCheckTickCounter: Int = 0
+var dirtyCheckTickCounter: Int = 0
     var _jiraSyncTickCounter: Int = 0
     var _prSyncTickCounter: Int = 0
     /// Tracks when each tmux session was last scanned for rate-limit text.
