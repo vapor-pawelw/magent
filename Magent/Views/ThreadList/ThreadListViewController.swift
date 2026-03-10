@@ -66,6 +66,10 @@ final class ThreadListViewController: NSViewController {
     private var lastFittedOutlineWidth: CGFloat = 0
     private var currentScrollTopOffset: CGFloat = 0
 
+    private struct SidebarScrollSnapshot {
+        let origin: NSPoint
+    }
+
     // MARK: - Data Model (3-level hierarchy)
     // Level 0: SidebarProject (project name header)
     // Level 1: SidebarProjectMainSpacer, MagentThread (main/flat item), or SidebarSection (section header)
@@ -345,6 +349,8 @@ final class ThreadListViewController: NSViewController {
     // MARK: - Data
 
     func reloadData() {
+        let scrollSnapshot = captureSidebarScrollSnapshot()
+
         // Remember current selection
         let selectedThreadId: UUID? = {
             let row = outlineView.selectedRow
@@ -468,6 +474,8 @@ final class ThreadListViewController: NSViewController {
             }
         }
 
+        restoreSidebarScrollSnapshot(scrollSnapshot)
+
         // Refresh cached remote availability per project (async, non-blocking)
         let projectIds = sidebarProjects.map(\.projectId)
         let currentSettings = settings
@@ -483,6 +491,24 @@ final class ThreadListViewController: NSViewController {
                 self?.projectsWithValidRemotes = validIds
             }
         }
+    }
+
+    private func captureSidebarScrollSnapshot() -> SidebarScrollSnapshot {
+        SidebarScrollSnapshot(origin: scrollView.contentView.bounds.origin)
+    }
+
+    private func restoreSidebarScrollSnapshot(_ snapshot: SidebarScrollSnapshot) {
+        let clipView = scrollView.contentView
+        let documentRect = clipView.documentRect
+        let visibleHeight = clipView.bounds.height
+        let minY = documentRect.minY
+        let maxY = max(documentRect.minY, documentRect.maxY - visibleHeight)
+        let targetY = min(max(snapshot.origin.y, minY), maxY)
+        let targetOrigin = NSPoint(x: snapshot.origin.x, y: targetY)
+
+        guard clipView.bounds.origin != targetOrigin else { return }
+        clipView.scroll(to: targetOrigin)
+        scrollView.reflectScrolledClipView(clipView)
     }
 
     private func sortThreadsForDisplay(
