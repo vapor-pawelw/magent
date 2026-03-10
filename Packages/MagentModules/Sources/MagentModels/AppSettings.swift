@@ -12,6 +12,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var playSoundForAgentCompletion: Bool
     public var agentCompletionSoundName: String
     public var autoReorderThreadsOnAgentCompletion: Bool
+    public var showDockBadgeAndBounceForUnreadCompletions: Bool
     public var autoRenameBranches: Bool
     public var autoSetThreadDescription: Bool
     public var autoSetThreadIconFromWorkType: Bool
@@ -47,6 +48,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         playSoundForAgentCompletion: Bool = true,
         agentCompletionSoundName: String = "Ping",
         autoReorderThreadsOnAgentCompletion: Bool = true,
+        showDockBadgeAndBounceForUnreadCompletions: Bool = true,
         autoRenameBranches: Bool = true,
         autoSetThreadDescription: Bool = true,
         autoSetThreadIconFromWorkType: Bool = true,
@@ -81,6 +83,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.playSoundForAgentCompletion = playSoundForAgentCompletion
         self.agentCompletionSoundName = agentCompletionSoundName
         self.autoReorderThreadsOnAgentCompletion = autoReorderThreadsOnAgentCompletion
+        self.showDockBadgeAndBounceForUnreadCompletions = showDockBadgeAndBounceForUnreadCompletions
         self.autoRenameBranches = autoRenameBranches
         self.autoSetThreadDescription = autoSetThreadDescription
         self.autoSetThreadIconFromWorkType = autoSetThreadIconFromWorkType
@@ -120,6 +123,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         playSoundForAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .playSoundForAgentCompletion) ?? true
         agentCompletionSoundName = try container.decodeIfPresent(String.self, forKey: .agentCompletionSoundName) ?? "Ping"
         autoReorderThreadsOnAgentCompletion = try container.decodeIfPresent(Bool.self, forKey: .autoReorderThreadsOnAgentCompletion) ?? true
+        showDockBadgeAndBounceForUnreadCompletions = try container.decodeIfPresent(Bool.self, forKey: .showDockBadgeAndBounceForUnreadCompletions) ?? true
         let legacyAutoRename = try container.decodeIfPresent(Bool.self, forKey: .autoRenameWorktrees)
         autoRenameBranches = try container.decodeIfPresent(Bool.self, forKey: .autoRenameBranches) ?? legacyAutoRename ?? true
         autoSetThreadDescription = try container.decodeIfPresent(Bool.self, forKey: .autoSetThreadDescription) ?? legacyAutoRename ?? true
@@ -158,6 +162,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(playSoundForAgentCompletion, forKey: .playSoundForAgentCompletion)
         try container.encode(agentCompletionSoundName, forKey: .agentCompletionSoundName)
         try container.encode(autoReorderThreadsOnAgentCompletion, forKey: .autoReorderThreadsOnAgentCompletion)
+        try container.encode(showDockBadgeAndBounceForUnreadCompletions, forKey: .showDockBadgeAndBounceForUnreadCompletions)
         try container.encode(autoRenameBranches, forKey: .autoRenameBranches)
         try container.encode(autoSetThreadDescription, forKey: .autoSetThreadDescription)
         try container.encode(autoSetThreadIconFromWorkType, forKey: .autoSetThreadIconFromWorkType)
@@ -284,6 +289,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case playSoundForAgentCompletion
         case agentCompletionSoundName
         case autoReorderThreadsOnAgentCompletion
+        case showDockBadgeAndBounceForUnreadCompletions
         case autoRenameBranches
         case autoSetThreadDescription
         case autoSetThreadIconFromWorkType

@@ -58,6 +58,7 @@ extension ThreadManager {
 
         var changed = false
         var changedThreadIds = Set<UUID>()
+        var newlyUnreadThreadIds = Set<UUID>()
 
         for session in orderedUniqueSessions {
             if let previous = recentBellBySession[session], now.timeIntervalSince(previous) < 1.0 {
@@ -80,7 +81,11 @@ extension ThreadManager {
             let isActiveThread = threads[index].id == activeThreadId
             let isActiveTab = isActiveThread && threads[index].lastSelectedTmuxSessionName == session
             if !isActiveTab {
+                let hadUnreadCompletion = threads[index].hasUnreadAgentCompletion
                 threads[index].unreadCompletionSessions.insert(session)
+                if !hadUnreadCompletion {
+                    newlyUnreadThreadIds.insert(threads[index].id)
+                }
             }
             changed = true
             changedThreadIds.insert(threads[index].id)
@@ -101,6 +106,9 @@ extension ThreadManager {
 
         await MainActor.run {
             updateDockBadge()
+            if !newlyUnreadThreadIds.isEmpty {
+                requestDockBounceForUnreadCompletionIfNeeded()
+            }
             delegate?.threadManager(self, didUpdateThreads: threads)
             for threadId in changedThreadIds {
                 if let thread = threads.first(where: { $0.id == threadId }) {

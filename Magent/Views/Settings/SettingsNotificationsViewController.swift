@@ -11,6 +11,7 @@ final class SettingsNotificationsViewController: NSViewController {
     private var showBannersCheckbox: NSButton!
     private var completionSoundCheckbox: NSButton!
     private var autoReorderOnCompletionCheckbox: NSButton!
+    private var dockCompletionAttentionCheckbox: NSButton!
     private var soundPickerPopup: NSPopUpButton!
     private var soundPickerRow: NSStackView!
     private var rateLimitSystemNotificationCheckbox: NSButton!
@@ -133,6 +134,14 @@ final class SettingsNotificationsViewController: NSViewController {
         )
         autoReorderOnCompletionCheckbox.state = settings.autoReorderThreadsOnAgentCompletion ? .on : .off
         agentStack.addArrangedSubview(autoReorderOnCompletionCheckbox)
+
+        dockCompletionAttentionCheckbox = NSButton(
+            checkboxWithTitle: String(localized: .NotificationStrings.notificationsBounceAndBadgeDockIcon),
+            target: self,
+            action: #selector(dockCompletionAttentionToggled)
+        )
+        dockCompletionAttentionCheckbox.state = settings.showDockBadgeAndBounceForUnreadCompletions ? .on : .off
+        agentStack.addArrangedSubview(dockCompletionAttentionCheckbox)
 
         stackView.addArrangedSubview(agentCard)
 
@@ -304,7 +313,7 @@ final class SettingsNotificationsViewController: NSViewController {
     @objc private func soundPickerChanged() {
         guard let selectedName = soundPickerPopup.selectedItem?.title else { return }
         settings.agentCompletionSoundName = selectedName
-        try? persistence.saveSettings(settings)
+        persistSettings()
 
         soundPreviewPlayer?.stop()
         if let sound = NSSound(named: NSSound.Name(selectedName)) {
@@ -338,7 +347,7 @@ final class SettingsNotificationsViewController: NSViewController {
     @objc private func rateLimitSoundPickerChanged() {
         guard let selectedName = rateLimitSoundPickerPopup.selectedItem?.title else { return }
         settings.rateLimitLiftedSoundName = selectedName
-        try? persistence.saveSettings(settings)
+        persistSettings()
 
         soundPreviewPlayer?.stop()
         if let sound = NSSound(named: NSSound.Name(selectedName)) {
@@ -350,7 +359,7 @@ final class SettingsNotificationsViewController: NSViewController {
     @objc private func rateLimitDetectedSoundPickerChanged() {
         guard let selectedName = rateLimitDetectedSoundPickerPopup.selectedItem?.title else { return }
         settings.rateLimitDetectedSoundName = selectedName
-        try? persistence.saveSettings(settings)
+        persistSettings()
 
         soundPreviewPlayer?.stop()
         if let sound = NSSound(named: NSSound.Name(selectedName)) {
@@ -366,12 +375,12 @@ final class SettingsNotificationsViewController: NSViewController {
             soundPreviewPlayer?.stop()
             soundPreviewPlayer = nil
         }
-        try? persistence.saveSettings(settings)
+        persistSettings()
     }
 
     @objc private func rateLimitSystemNotificationToggled() {
         settings.showSystemNotificationOnRateLimitLifted = rateLimitSystemNotificationCheckbox.state == .on
-        try? persistence.saveSettings(settings)
+        persistSettings()
     }
 
     @objc private func rateLimitDetectedSoundToggled() {
@@ -381,7 +390,7 @@ final class SettingsNotificationsViewController: NSViewController {
             soundPreviewPlayer?.stop()
             soundPreviewPlayer = nil
         }
-        try? persistence.saveSettings(settings)
+        persistSettings()
     }
 
     @objc private func completionSoundToggled() {
@@ -391,17 +400,22 @@ final class SettingsNotificationsViewController: NSViewController {
             soundPreviewPlayer?.stop()
             soundPreviewPlayer = nil
         }
-        try? persistence.saveSettings(settings)
+        persistSettings()
     }
 
     @objc private func showBannersToggled() {
         settings.showSystemBanners = showBannersCheckbox.state == .on
-        try? persistence.saveSettings(settings)
+        persistSettings()
     }
 
     @objc private func autoReorderOnCompletionToggled() {
         settings.autoReorderThreadsOnAgentCompletion = autoReorderOnCompletionCheckbox.state == .on
-        try? persistence.saveSettings(settings)
+        persistSettings()
+    }
+
+    @objc private func dockCompletionAttentionToggled() {
+        settings.showDockBadgeAndBounceForUnreadCompletions = dockCompletionAttentionCheckbox.state == .on
+        persistSettings(refreshDockBadge: true)
     }
 
     @objc private func openSystemNotificationSettings() {
@@ -427,19 +441,30 @@ final class SettingsNotificationsViewController: NSViewController {
                     : .systemRed
 
                 let alpha: CGFloat = authorized ? 1.0 : 0.5
-                self.completionCard.alphaValue = alpha
+                self.completionCard.alphaValue = 1.0
                 self.rateLimitCard.alphaValue = alpha
 
                 self.showBannersCheckbox.isEnabled = authorized
                 self.completionSoundCheckbox.isEnabled = authorized
                 self.soundPickerPopup.isEnabled = authorized
-                self.autoReorderOnCompletionCheckbox.isEnabled = authorized
+                self.autoReorderOnCompletionCheckbox.isEnabled = true
+                self.dockCompletionAttentionCheckbox.isEnabled = true
                 self.rateLimitSystemNotificationCheckbox.isEnabled = authorized
                 self.rateLimitNotifyCheckbox.isEnabled = authorized
                 self.rateLimitSoundPickerPopup.isEnabled = authorized
                 self.rateLimitDetectedSoundCheckbox.isEnabled = authorized && self.settings.enableRateLimitDetection
                 self.rateLimitDetectedSoundPickerPopup.isEnabled = authorized && self.settings.enableRateLimitDetection
             }
+        }
+    }
+
+    private func persistSettings(refreshDockBadge: Bool = false) {
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+
+        guard refreshDockBadge else { return }
+        Task { @MainActor in
+            ThreadManager.shared.updateDockBadge()
         }
     }
 }

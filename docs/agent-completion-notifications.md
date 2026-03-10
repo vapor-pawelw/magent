@@ -1,0 +1,33 @@
+# Agent Completion Notifications
+
+This doc covers how Magent surfaces unread agent completions outside the main UI.
+
+## User-facing behavior
+
+- The sidebar and tab bar still use the existing green completion dot for unread finished work.
+- When the app is not foregrounded and a thread gets its first unread completion, the Dock icon requests informational attention (bounce).
+- The Dock badge shows the number of non-archived threads that currently have unread completions.
+- Waiting-for-input state does not contribute to the Dock badge.
+- Users can disable the Dock bounce and badge behavior in `Settings > Notifications` without disabling completion banners, sounds, or auto-reorder.
+
+## Implementation details
+
+- Completion detection still enters through `ThreadManager.checkForAgentCompletions()`.
+- A Dock bounce is requested only when a thread transitions from `hasUnreadAgentCompletion == false` to `true`, which avoids repeated bounces for additional unread tabs in the same thread.
+- Dock badge updates are centralized in `ThreadManager.updateDockBadge()`.
+- The Dock badge uses thread count, not unread session count, so it matches the sidebar's thread-level completion affordance.
+- The Dock completion setting is persisted as `AppSettings.showDockBadgeAndBounceForUnreadCompletions`.
+- Toggling the setting in Notifications refreshes the Dock badge immediately instead of waiting for the next completion event.
+
+## Gotchas
+
+- Do not re-expand the Dock badge count to include `waitingForInputSessions`; the Dock badge is intentionally scoped to finished unread work only.
+- Do not gate the Dock badge/bounce toggle on macOS notification permission. Dock behavior should remain available even when system notification banners are disabled or denied.
+- Keep Dock-side effects routed through the existing completion state. Adding a second unread-tracking path will drift from the sidebar and tab indicators.
+
+## What changed in this thread
+
+- Added a Notifications setting for Dock bounce and unread completion badge behavior.
+- Updated completion handling so background completions can bounce the Dock icon.
+- Changed the Dock badge to count only unread completed threads.
+- Updated release notes to mention the new behavior.

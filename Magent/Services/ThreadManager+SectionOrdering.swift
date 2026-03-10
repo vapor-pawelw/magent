@@ -8,8 +8,22 @@ extension ThreadManager {
 
     @MainActor
     func updateDockBadge() {
-        let unreadCount = threads.filter({ !$0.isArchived && ($0.hasUnreadAgentCompletion || $0.hasWaitingForInput) }).count
+        let settings = persistence.loadSettings()
+        guard settings.showDockBadgeAndBounceForUnreadCompletions else {
+            NSApp.dockTile.badgeLabel = nil
+            return
+        }
+
+        let unreadCount = threads.filter { !$0.isArchived && $0.hasUnreadAgentCompletion }.count
         NSApp.dockTile.badgeLabel = unreadCount > 0 ? "\(unreadCount)" : nil
+    }
+
+    @MainActor
+    func requestDockBounceForUnreadCompletionIfNeeded() {
+        let settings = persistence.loadSettings()
+        guard settings.showDockBadgeAndBounceForUnreadCompletions else { return }
+        guard !NSApp.isActive else { return }
+        NSApp.requestUserAttention(.informationalRequest)
     }
 
     // MARK: - Section Management

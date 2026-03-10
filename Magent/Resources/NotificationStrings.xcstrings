@@ -84,7 +84,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When an agent finishes a command, Magent can send a system notification, play a sound, and move the thread to the top of its section."
+            "value": "When an agent finishes a command, Magent can send a system notification, play a sound, bounce the Dock icon, badge unread completed threads, and move the thread to the top of its section."
           }
         }
       }
@@ -118,6 +118,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Agent Needs Input"
+          }
+        }
+      }
+    },
+    "notificationsBounceAndBadgeDockIcon": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bounce Dock icon and badge unread completed threads"
           }
         }
       }
