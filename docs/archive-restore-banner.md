@@ -7,6 +7,7 @@
 - The same banner appears whether archive was triggered from the UI or via `magent-cli archive-thread`.
 - The banner exposes a `Restore` action that recreates the archived worktree, returns the thread to the sidebar, and navigates back to it.
 - `Settings > Threads` also shows up to 10 recently archived threads with inline `Restore` buttons, so the same restore flow stays available after the archive banner expires.
+- A dedicated `archivebox` toolbar button in the top-right (next to the Settings gear) opens a compact popover listing up to 10 recently archived threads with one-click Restore actions — no need to open Settings for quick restores.
 
 ## Implementation notes
 
@@ -26,6 +27,8 @@
 - Added persisted archive timestamps so recent archived-thread ordering stays stable across relaunches and worktree-sync auto-archive paths.
 - Fixed archived threads being wiped from disk on every active-thread save: added `PersistenceService.saveActiveThreads(_:)` and migrated all `saveThreads(threads)` call sites to it across all `ThreadManager` extensions.
 - Polished the Settings recently-archived row UI: each row now shows the thread's SF Symbol icon, rows are separated by `NSBox` dividers, and rows have vertical padding with center-Y alignment.
+- Added `RecentlyArchivedPopoverViewController` — a compact popover (360pt wide, ≤480pt tall) that replicates the recently-archived list with symmetric 12pt horizontal padding (leading = trailing), auto-refreshes on `magentArchivedThreadsDidChange`, and is shown from a new `archivebox` toolbar button in `SplitViewController`.
+- Wired a second toolbar item (`recentlyArchivedToolbarItemId`) in `SplitViewController`'s `NSToolbarDelegate` between `.flexibleSpace` and the existing Settings item.
 
 ## Gotchas
 
