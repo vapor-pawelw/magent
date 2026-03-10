@@ -65,8 +65,12 @@ find_worktree_for_branch() {
   local target_ref="refs/heads/${branch_name}"
 
   git -C "$repo_path" worktree list --porcelain | awk -v target="$target_ref" '
+    BEGIN {
+      found = 0
+    }
     $1 == "worktree" {
       if (path != "" && branch == target) {
+        found = 1
         print path
         exit
       }
@@ -80,6 +84,7 @@ find_worktree_for_branch() {
     }
     /^$/ {
       if (path != "" && branch == target) {
+        found = 1
         print path
         exit
       }
@@ -88,7 +93,7 @@ find_worktree_for_branch() {
       next
     }
     END {
-      if (path != "" && branch == target) {
+      if (!found && path != "" && branch == target) {
         print path
       }
     }
