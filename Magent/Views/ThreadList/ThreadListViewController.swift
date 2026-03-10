@@ -10,6 +10,15 @@ protocol ThreadListDelegate: AnyObject {
     func threadListDidRequestSettings(_ controller: ThreadListViewController)
 }
 
+private final class SidebarOutlineView: NSOutlineView {
+    var suppressSelectionAutoScroll = false
+
+    override func scrollRowToVisible(_ row: Int) {
+        guard !suppressSelectionAutoScroll else { return }
+        super.scrollRowToVisible(row)
+    }
+}
+
 final class ThreadListViewController: NSViewController {
 
     static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
@@ -305,7 +314,7 @@ final class ThreadListViewController: NSViewController {
     // MARK: - Outline View
 
     private func setupOutlineView() {
-        outlineView = NSOutlineView()
+        outlineView = SidebarOutlineView()
         outlineView.style = .fullWidth
         outlineView.headerView = nil
         outlineView.floatsGroupRows = true
@@ -496,13 +505,18 @@ final class ThreadListViewController: NSViewController {
         if let selectedId = selectedThreadId {
             for row in 0..<outlineView.numberOfRows {
                 if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == selectedId {
-                    outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                    preserveSidebarSelectionViewport {
+                        outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                    }
                     break
                 }
             }
         }
 
         restoreSidebarScrollSnapshot(scrollSnapshot)
+        DispatchQueue.main.async { [weak self] in
+            self?.restoreSidebarScrollSnapshot(scrollSnapshot)
+        }
 
         // Refresh cached remote availability per project (async, non-blocking)
         let projectIds = sidebarProjects.map(\.projectId)
@@ -537,6 +551,15 @@ final class ThreadListViewController: NSViewController {
         guard clipView.bounds.origin != targetOrigin else { return }
         clipView.scroll(to: targetOrigin)
         scrollView.reflectScrolledClipView(clipView)
+    }
+
+    private func preserveSidebarSelectionViewport(_ updates: () -> Void) {
+        let sidebarOutlineView = outlineView as? SidebarOutlineView
+        sidebarOutlineView?.suppressSelectionAutoScroll = true
+        updates()
+        DispatchQueue.main.async { [weak sidebarOutlineView] in
+            sidebarOutlineView?.suppressSelectionAutoScroll = false
+        }
     }
 
     private func sortThreadsForDisplay(

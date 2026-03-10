@@ -8,6 +8,7 @@
 - All thread rows should occupy the same visual height as the two-line description layout, even when a thread only renders one line of text.
 - Pin, rate-limit, and completion markers should stay visually aligned, with pin always rightmost.
 - Periodic sidebar refreshes should not scroll the thread list back to the top while the user is reading older rows.
+- Periodic sidebar refreshes should not yank the current selection back into view if the user has intentionally scrolled elsewhere in the list.
 
 ## Implementation Notes
 
@@ -20,6 +21,7 @@
 - Refit sidebar outline width from the scroll view's visible clip width, not from `NSOutlineView`'s current frame width. On launch, the outline can hold a stale frame width even after the split view has restored the real sidebar size, which leaves trailing markers and project `+` buttons flush against the outer edge until a manual divider drag forces a resize.
 - Avoid per-layout `noteHeightOfRows(...)` invalidation, which caused visible resize lag/flicker during divider drags.
 - `ThreadListViewController.reloadData()` rebuilds the full outline tree during periodic thread/session refreshes, so it must capture and restore the `NSScrollView` clip-view origin around `outlineView.reloadData()` to preserve browsing position.
+- When `reloadData()` re-selects the already-selected thread, suppress AppKit's internal `scrollRowToVisible(_:)` for that specific restore path and reapply the saved clip-view origin on the next main-queue turn as well. Immediate restore alone can still lose to deferred selection/layout scrolling.
 
 ## Gotchas
 
@@ -27,5 +29,6 @@
 - Do not reintroduce separate "compact" and "description" thread row heights. Keeping a single measured height for all `MagentThread` rows prevents compact rows from jumping when text, selection, or marker state changes.
 - A split-view width fix alone is not sufficient. The sidebar can look like it is resizing when the real bug is row-height changes or trailing-marker width churn inside cells.
 - Reloading the outline without restoring scroll position will look like a spontaneous jump-to-top bug, especially because session-monitor updates fire every few seconds even when the user is not interacting with the sidebar.
+- Re-selecting the current row during a background reload can still trigger AppKit auto-scroll even after an immediate scroll restore. Keep any `scrollRowToVisible` suppression narrowly scoped to internal selection-preservation paths so normal user-driven selection still reveals the chosen row.
 - **Trailing icons can appear flush to the edge on first launch** — this is a transient initial-layout-pass timing issue (frames settle on first resize) and not a constraint logic bug. It does not recur after the first sidebar resize or window layout pass. Do not mistake it for a regression introduced by unrelated changes to views anchored below the outline view (e.g. `DiffPanelView`).
 - **Do not constrain `DiffPanelView`'s internal `stackView` to `scrollView.contentView` anchors** — the clip-view frame is managed internally by `NSScrollView` and mixing auto layout constraints into that chain causes the outline view's trailing markers to momentarily snap to the wrong position and fail to track sidebar resize drag. Constrain to the `scrollView` frame anchors instead (leading/trailing), and use `.defaultLow` horizontal compression resistance on any variable-width labels inside document-view rows to prevent them from pushing the scroll view wider.
