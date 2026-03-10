@@ -210,99 +210,108 @@ extension SettingsProjectsViewController {
 
         stack.addArrangedSubview(sectionsCard)
 
-        let (jiraCard, jiraStack) = createSectionCard(
-            title: "Jira Integration",
-            description: "Project-specific Jira settings for ticket sync and section mapping."
-        )
-        stack.addArrangedSubview(jiraCard)
+        var jiraCard: NSView?
+        var jiraStack: NSStackView?
+        var boardRow: NSStackView?
+        var syncDesc: NSTextField?
+        var autoSyncDesc: NSTextField?
 
-        // Project Key
-        let projectKeyLabel = NSTextField(labelWithString: "Project Key")
-        projectKeyLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        jiraStack.addArrangedSubview(projectKeyLabel)
+        if AppFeatures.jiraIntegrationEnabled {
+            let jiraSection = createSectionCard(
+                title: AppFeatures.annotatedTitle("Jira Integration", for: .jiraIntegration),
+                description: "Project-specific Jira settings for ticket sync and section mapping. Release builds hide this section."
+            )
+            jiraCard = jiraSection.container
+            jiraStack = jiraSection.content
+            stack.addArrangedSubview(jiraSection.container)
 
-        jiraProjectKeyField = NSTextField(string: project.jiraProjectKey ?? "")
-        jiraProjectKeyField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
-        jiraProjectKeyField.placeholderString = "e.g. IP, PROJ"
-        jiraProjectKeyField.translatesAutoresizingMaskIntoConstraints = false
-        jiraProjectKeyField.target = self
-        jiraProjectKeyField.action = #selector(jiraProjectKeyChanged)
-        jiraStack.addArrangedSubview(jiraProjectKeyField)
+            let projectKeyLabel = NSTextField(labelWithString: "Project Key")
+            projectKeyLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+            jiraSection.content.addArrangedSubview(projectKeyLabel)
 
-        // Board
-        let boardLabel = NSTextField(labelWithString: "Board")
-        boardLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        jiraStack.addArrangedSubview(boardLabel)
+            jiraProjectKeyField = NSTextField(string: project.jiraProjectKey ?? "")
+            jiraProjectKeyField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+            jiraProjectKeyField.placeholderString = "e.g. IP, PROJ"
+            jiraProjectKeyField.translatesAutoresizingMaskIntoConstraints = false
+            jiraProjectKeyField.target = self
+            jiraProjectKeyField.action = #selector(jiraProjectKeyChanged)
+            jiraSection.content.addArrangedSubview(jiraProjectKeyField)
 
-        let boardRow = NSStackView()
-        boardRow.orientation = .horizontal
-        boardRow.spacing = 8
+            let boardLabel = NSTextField(labelWithString: "Board")
+            boardLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+            jiraSection.content.addArrangedSubview(boardLabel)
 
-        jiraBoardPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        jiraBoardPopup.target = self
-        jiraBoardPopup.action = #selector(jiraBoardChanged)
-        if let boardName = project.jiraBoardName {
-            jiraBoardPopup.addItem(withTitle: boardName)
-        } else {
-            jiraBoardPopup.addItem(withTitle: "Select board")
+            let currentBoardRow = NSStackView()
+            currentBoardRow.orientation = .horizontal
+            currentBoardRow.spacing = 8
+            boardRow = currentBoardRow
+
+            jiraBoardPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+            jiraBoardPopup.target = self
+            jiraBoardPopup.action = #selector(jiraBoardChanged)
+            if let boardName = project.jiraBoardName {
+                jiraBoardPopup.addItem(withTitle: boardName)
+            } else {
+                jiraBoardPopup.addItem(withTitle: "Select board")
+            }
+            currentBoardRow.addArrangedSubview(jiraBoardPopup)
+
+            let refreshBoardsBtn = NSButton(title: "Refresh", target: self, action: #selector(refreshBoardsTapped))
+            refreshBoardsBtn.bezelStyle = .rounded
+            refreshBoardsBtn.controlSize = .small
+            currentBoardRow.addArrangedSubview(refreshBoardsBtn)
+            jiraSection.content.addArrangedSubview(currentBoardRow)
+
+            let assigneeLabel = NSTextField(labelWithString: "Assignee Account ID")
+            assigneeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+            jiraSection.content.addArrangedSubview(assigneeLabel)
+
+            let assigneeDesc = NSTextField(wrappingLabelWithString: "Your Jira account ID for filtering tickets.")
+            assigneeDesc.font = .systemFont(ofSize: 11)
+            assigneeDesc.textColor = NSColor(resource: .textSecondary)
+            jiraSection.content.addArrangedSubview(assigneeDesc)
+
+            jiraAssigneeField = NSTextField(string: project.jiraAssigneeAccountId ?? "")
+            jiraAssigneeField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+            jiraAssigneeField.placeholderString = "e.g. 5e0dd2629a4b780d990e8760"
+            jiraAssigneeField.translatesAutoresizingMaskIntoConstraints = false
+            jiraAssigneeField.target = self
+            jiraAssigneeField.action = #selector(jiraAssigneeChanged)
+            jiraSection.content.addArrangedSubview(jiraAssigneeField)
+
+            jiraSectionsSyncControlsStack = NSStackView()
+            jiraSectionsSyncControlsStack.orientation = .vertical
+            jiraSectionsSyncControlsStack.alignment = .leading
+            jiraSectionsSyncControlsStack.spacing = 4
+            jiraSectionsSyncControlsStack.translatesAutoresizingMaskIntoConstraints = false
+            jiraSection.content.addArrangedSubview(jiraSectionsSyncControlsStack)
+
+            jiraSyncButton = NSButton(title: "Sync Sections from Jira", target: self, action: #selector(syncSectionsFromJiraTapped))
+            jiraSyncButton.bezelStyle = .rounded
+            jiraSectionsSyncControlsStack.addArrangedSubview(jiraSyncButton)
+
+            let currentSyncDesc = NSTextField(wrappingLabelWithString: "Fetches statuses from project tickets and replaces this project's sections to match.")
+            currentSyncDesc.font = .systemFont(ofSize: 11)
+            currentSyncDesc.textColor = NSColor(resource: .textSecondary)
+            jiraSectionsSyncControlsStack.addArrangedSubview(currentSyncDesc)
+            syncDesc = currentSyncDesc
+
+            jiraAutoSyncCheckbox = NSButton(
+                checkboxWithTitle: "Enable auto-sync",
+                target: self,
+                action: #selector(jiraAutoSyncToggled)
+            )
+            jiraAutoSyncCheckbox.state = project.jiraSyncEnabled ? .on : .off
+            jiraSectionsSyncControlsStack.addArrangedSubview(jiraAutoSyncCheckbox)
+
+            let currentAutoSyncDesc = NSTextField(wrappingLabelWithString: "Polls Jira and moves threads to matching sections. Creates threads for new tickets.")
+            currentAutoSyncDesc.font = .systemFont(ofSize: 11)
+            currentAutoSyncDesc.textColor = NSColor(resource: .textSecondary)
+            jiraSectionsSyncControlsStack.addArrangedSubview(currentAutoSyncDesc)
+            autoSyncDesc = currentAutoSyncDesc
+
+            updateSectionsVisibilityControls(for: project)
         }
-        boardRow.addArrangedSubview(jiraBoardPopup)
-
-        let refreshBoardsBtn = NSButton(title: "Refresh", target: self, action: #selector(refreshBoardsTapped))
-        refreshBoardsBtn.bezelStyle = .rounded
-        refreshBoardsBtn.controlSize = .small
-        boardRow.addArrangedSubview(refreshBoardsBtn)
-        jiraStack.addArrangedSubview(boardRow)
-
-        // Assignee Account ID
-        let assigneeLabel = NSTextField(labelWithString: "Assignee Account ID")
-        assigneeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        jiraStack.addArrangedSubview(assigneeLabel)
-
-        let assigneeDesc = NSTextField(wrappingLabelWithString: "Your Jira account ID for filtering tickets.")
-        assigneeDesc.font = .systemFont(ofSize: 11)
-        assigneeDesc.textColor = NSColor(resource: .textSecondary)
-        jiraStack.addArrangedSubview(assigneeDesc)
-
-        jiraAssigneeField = NSTextField(string: project.jiraAssigneeAccountId ?? "")
-        jiraAssigneeField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
-        jiraAssigneeField.placeholderString = "e.g. 5e0dd2629a4b780d990e8760"
-        jiraAssigneeField.translatesAutoresizingMaskIntoConstraints = false
-        jiraAssigneeField.target = self
-        jiraAssigneeField.action = #selector(jiraAssigneeChanged)
-        jiraStack.addArrangedSubview(jiraAssigneeField)
-
-        jiraSectionsSyncControlsStack = NSStackView()
-        jiraSectionsSyncControlsStack.orientation = .vertical
-        jiraSectionsSyncControlsStack.alignment = .leading
-        jiraSectionsSyncControlsStack.spacing = 4
-        jiraSectionsSyncControlsStack.translatesAutoresizingMaskIntoConstraints = false
-        jiraStack.addArrangedSubview(jiraSectionsSyncControlsStack)
-
-        // Sync Sections button
-        jiraSyncButton = NSButton(title: "Sync Sections from Jira", target: self, action: #selector(syncSectionsFromJiraTapped))
-        jiraSyncButton.bezelStyle = .rounded
-        jiraSectionsSyncControlsStack.addArrangedSubview(jiraSyncButton)
-
-        let syncDesc = NSTextField(wrappingLabelWithString: "Fetches statuses from project tickets and replaces this project's sections to match.")
-        syncDesc.font = .systemFont(ofSize: 11)
-        syncDesc.textColor = NSColor(resource: .textSecondary)
-        jiraSectionsSyncControlsStack.addArrangedSubview(syncDesc)
-
-        // Auto-sync checkbox
-        jiraAutoSyncCheckbox = NSButton(
-            checkboxWithTitle: "Enable auto-sync",
-            target: self,
-            action: #selector(jiraAutoSyncToggled)
-        )
-        jiraAutoSyncCheckbox.state = project.jiraSyncEnabled ? .on : .off
-        jiraSectionsSyncControlsStack.addArrangedSubview(jiraAutoSyncCheckbox)
-
-        let autoSyncDesc = NSTextField(wrappingLabelWithString: "Polls Jira and moves threads to matching sections. Creates threads for new tickets.")
-        autoSyncDesc.font = .systemFont(ofSize: 11)
-        autoSyncDesc.textColor = NSColor(resource: .textSecondary)
-        jiraSectionsSyncControlsStack.addArrangedSubview(autoSyncDesc)
-        updateSectionsVisibilityControls(for: project)
 
         let (overridesCard, overridesStack) = createSectionCard(title: "Project Overrides")
         stack.addArrangedSubview(overridesCard)
@@ -452,7 +461,6 @@ extension SettingsProjectsViewController {
             sectionsScrollView.widthAnchor.constraint(equalTo: sectionsContentStack.widthAnchor),
             sectionsScrollView.heightAnchor.constraint(equalToConstant: 140),
             sectionsContentStack.widthAnchor.constraint(equalTo: sectionsOverridesStack.widthAnchor),
-            jiraCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
             overridesCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
             nameField.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
             repoRow.widthAnchor.constraint(equalTo: detailsStack.widthAnchor),
@@ -462,17 +470,23 @@ extension SettingsProjectsViewController {
             defaultSectionDesc.widthAnchor.constraint(equalTo: defaultSectionContainer.widthAnchor),
             defaultSectionPopup.widthAnchor.constraint(equalTo: defaultSectionContainer.widthAnchor),
             threadListLayoutPopup.widthAnchor.constraint(equalTo: sectionsStack.widthAnchor),
-            jiraProjectKeyField.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
-            boardRow.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
-            jiraAssigneeField.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
-            jiraSectionsSyncControlsStack.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
-            syncDesc.widthAnchor.constraint(equalTo: jiraSectionsSyncControlsStack.widthAnchor),
-            autoSyncDesc.widthAnchor.constraint(equalTo: jiraSectionsSyncControlsStack.widthAnchor),
             overrideDesc.widthAnchor.constraint(equalTo: overridesStack.widthAnchor),
             sectionsOverridesStack.widthAnchor.constraint(equalTo: sectionsStack.widthAnchor),
             slugPromptWrapper.widthAnchor.constraint(equalTo: overridesStack.widthAnchor),
             slugScrollView.widthAnchor.constraint(equalTo: slugPromptWrapper.widthAnchor),
         ])
+
+        if let jiraCard, let jiraStack, let boardRow, let syncDesc, let autoSyncDesc {
+            NSLayoutConstraint.activate([
+                jiraCard.widthAnchor.constraint(equalTo: stack.widthAnchor),
+                jiraProjectKeyField.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
+                boardRow.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
+                jiraAssigneeField.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
+                jiraSectionsSyncControlsStack.widthAnchor.constraint(equalTo: jiraStack.widthAnchor),
+                syncDesc.widthAnchor.constraint(equalTo: jiraSectionsSyncControlsStack.widthAnchor),
+                autoSyncDesc.widthAnchor.constraint(equalTo: jiraSectionsSyncControlsStack.widthAnchor),
+            ])
+        }
     }
 
     func createSectionCard(title: String, description: String? = nil) -> (container: NSView, content: NSStackView) {

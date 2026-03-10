@@ -96,6 +96,19 @@ final class ResizeHandleView: NSView {
 enum SettingsCategory: Int, CaseIterable {
     case general, threads, agents, notifications, projects, jira
 
+    static var visibleCategories: [SettingsCategory] {
+        allCases.filter(\.isVisible)
+    }
+
+    var isVisible: Bool {
+        switch self {
+        case .jira:
+            AppFeatures.jiraIntegrationEnabled
+        default:
+            true
+        }
+    }
+
     var title: String {
         switch self {
         case .general: return String(localized: .CommonStrings.settingsCategoryGeneral)
@@ -103,7 +116,11 @@ enum SettingsCategory: Int, CaseIterable {
         case .agents: return String(localized: .CommonStrings.settingsCategoryAgents)
         case .notifications: return String(localized: .CommonStrings.settingsCategoryNotifications)
         case .projects: return String(localized: .CommonStrings.settingsCategoryProjects)
-        case .jira: return String(localized: .CommonStrings.settingsCategoryJira)
+        case .jira:
+            return AppFeatures.annotatedTitle(
+                String(localized: .CommonStrings.settingsCategoryJira),
+                for: .jiraIntegration
+            )
         }
     }
 
@@ -130,7 +147,7 @@ final class SettingsSplitViewController: NSSplitViewController {
     private let agentsVC = SettingsAgentsViewController()
     private let notificationsVC = SettingsNotificationsViewController()
     private let projectsVC = SettingsProjectsViewController()
-    private let jiraVC = SettingsJiraViewController()
+    private lazy var jiraVC = SettingsJiraViewController()
     private var detailSplitItem: NSSplitViewItem!
     private var currentCategory: SettingsCategory = .general
 
@@ -169,7 +186,10 @@ final class SettingsSplitViewController: NSSplitViewController {
         detailContainerVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
         let container = detailContainerVC.view
 
-        let allVCs: [NSViewController] = [generalVC, threadsVC, agentsVC, notificationsVC, projectsVC, jiraVC]
+        var allVCs: [NSViewController] = [generalVC, threadsVC, agentsVC, notificationsVC, projectsVC]
+        if AppFeatures.jiraIntegrationEnabled {
+            allVCs.append(jiraVC)
+        }
         for vc in allVCs {
             detailContainerVC.addChild(vc)
             vc.view.translatesAutoresizingMaskIntoConstraints = false
@@ -189,7 +209,9 @@ final class SettingsSplitViewController: NSSplitViewController {
         agentsVC.view.isHidden = category != .agents
         notificationsVC.view.isHidden = category != .notifications
         projectsVC.view.isHidden = category != .projects
-        jiraVC.view.isHidden = category != .jira
+        if AppFeatures.jiraIntegrationEnabled {
+            jiraVC.view.isHidden = category != .jira
+        }
     }
 
     fileprivate func showCategory(_ category: SettingsCategory) {
@@ -285,13 +307,13 @@ final class SettingsSidebarViewController: NSViewController {
 
 extension SettingsSidebarViewController: NSTableViewDataSource {
     func numberOfRows(in tableView: NSTableView) -> Int {
-        SettingsCategory.allCases.count
+        SettingsCategory.visibleCategories.count
     }
 }
 
 extension SettingsSidebarViewController: NSTableViewDelegate {
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let category = SettingsCategory.allCases[row]
+        let category = SettingsCategory.visibleCategories[row]
         let identifier = NSUserInterfaceItemIdentifier("SidebarCell")
         let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView ?? {
             let c = NSTableCellView()
@@ -325,6 +347,6 @@ extension SettingsSidebarViewController: NSTableViewDelegate {
     func tableViewSelectionDidChange(_ notification: Notification) {
         let row = tableView.selectedRow
         guard row >= 0 else { return }
-        delegate?.settingsSidebar(self, didSelect: SettingsCategory.allCases[row])
+        delegate?.settingsSidebar(self, didSelect: SettingsCategory.visibleCategories[row])
     }
 }

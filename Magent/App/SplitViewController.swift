@@ -214,7 +214,7 @@ final class SplitViewController: NSSplitViewController {
             contentContainerVC.setContent(detailVC)
         }
 
-        if thread.jiraUnassigned {
+        if AppFeatures.jiraIntegrationEnabled, thread.jiraUnassigned {
             BannerManager.shared.show(
                 message: "This ticket is no longer assigned to you",
                 style: .info,

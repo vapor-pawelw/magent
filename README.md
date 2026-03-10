@@ -71,9 +71,11 @@ Deep git awareness without getting in the way.
 - **Diff stats** — per-file additions/deletions with staged/unstaged/untracked breakdown
 - **Worktree recovery** — missing worktrees are auto-recreated from the branch
 
-### 🎫 Jira Integration
+### 🎫 Jira Integration (Debug builds only for now)
 
 Link threads to Jira tickets for project tracking.
+
+Release builds currently hide Jira integration while the code remains available in local debug builds.
 
 - **Ticket association** — attach a Jira ticket key to any thread
 - **Assignment tracking** — visual indicator when a ticket becomes unassigned

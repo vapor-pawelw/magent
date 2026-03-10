@@ -633,8 +633,8 @@ final class IPCCommandHandler {
             isArchived: thread.isArchived,
             isBlockedByRateLimit: thread.isBlockedByRateLimit,
             hasBranchMismatch: thread.hasBranchMismatch,
-            jiraTicketKey: thread.jiraTicketKey,
-            jiraUnassigned: thread.jiraUnassigned,
+            jiraTicketKey: AppFeatures.jiraIntegrationEnabled ? thread.jiraTicketKey : nil,
+            jiraUnassigned: AppFeatures.jiraIntegrationEnabled ? thread.jiraUnassigned : false,
             branchName: thread.branchName,
             baseBranch: thread.baseBranch,
             rateLimitDescription: thread.isBlockedByRateLimit ? thread.rateLimitLiftDescription : nil

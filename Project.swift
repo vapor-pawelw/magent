@@ -62,6 +62,18 @@ let project = Project(
                     "ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS": "YES",
                     "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
                     "STRING_CATALOG_GENERATE_SYMBOLS": "YES",
+                ],
+                configurations: [
+                    .debug(
+                        name: "Debug",
+                        settings: [
+                            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "$(inherited) FEATURE_JIRA",
+                        ]
+                    ),
+                    .release(
+                        name: "Release",
+                        settings: [:]
+                    ),
                 ]
             )
         ),

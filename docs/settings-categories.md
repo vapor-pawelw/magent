@@ -7,6 +7,7 @@
 - `General` currently owns update controls, terminal overlay visibility toggles, and the environment-variable reference used by startup injection settings.
 - `Threads` owns thread naming defaults, thread sections, startup injection fields, and the review prompt.
 - Section color editing now reuses a single system color picker per settings screen, so switching to another section keeps the earlier section's custom dot color intact instead of resetting it.
+- Debug-only features may still appear in Settings during local development, but they should be clearly annotated with `Debug builds only` and fully hidden from release builds.
 
 ## What Changed In This Thread
 
@@ -29,3 +30,4 @@
 - If a setting affects terminal chrome globally across all threads, keep it in `General` even if it is only visible from thread UI.
 - Thread-sections editing logic moved with the `Threads` controller; avoid reintroducing section-table actions into `SettingsGeneralViewController`.
 - `NSColorPanel.shared` is process-wide. Programmatically setting its color can synchronously fire the current action, so if you do not clear/rebind the target around that assignment, the previously edited section can absorb the new color change.
+- When a feature is release-gated behind a `FEATURE_*` flag, hide its sidebar category/card entirely in release builds instead of showing disabled controls that cannot work.

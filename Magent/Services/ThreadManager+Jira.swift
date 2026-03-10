@@ -1,6 +1,7 @@
 import Foundation
 import MagentCore
 
+#if FEATURE_JIRA
 extension ThreadManager {
 
     // MARK: - Section Sync
@@ -277,3 +278,14 @@ extension ThreadManager {
         }
     }
 }
+#else
+extension ThreadManager {
+    func syncSectionsFromJira(project: Project) async throws -> [ThreadSection] {
+        []
+    }
+
+    func runJiraSyncTick() async {}
+
+    func excludeJiraTicket(key: String, projectId: UUID) {}
+}
+#endif

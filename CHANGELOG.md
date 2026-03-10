@@ -116,6 +116,7 @@ All notable changes to this project will be documented in this file.
 ### Settings
 - Update checks now detect new releases on launch only when enabled, show a persistent dismissible banner with `Update Now`, `Skip this version`, and expandable changelog notes, and mirror the same version/changelog state in Settings with an `Update to …` action.
 - Settings now split thread-focused preferences into a dedicated `Threads` category for naming, sections, startup injection, and review defaults, while `General` keeps app-wide updates, terminal overlay toggles, and environment-variable help.
+- Local release-gated features now use build flags, and debug-only Settings surfaces are labeled accordingly; Jira integration is currently available only in `Debug` builds and hidden from releases.
 - Section settings now let you delete any non-default section immediately, with a confirmation showing how many threads will be moved into the current default section.
 - Fixed section color pickers so switching to another section no longer resets the previously edited dot color, and only one picker stays active at a time.
 - Added Terminal Overlay visibility settings to permanently hide/show: `Scroll to bottom` indicator, terminal scroll controls, and Prompt TOC overlay.

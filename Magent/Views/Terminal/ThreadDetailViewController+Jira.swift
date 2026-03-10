@@ -1,6 +1,7 @@
 import Cocoa
 import MagentCore
 
+#if FEATURE_JIRA
 extension ThreadDetailViewController {
 
     // MARK: - Jira Button
@@ -72,3 +73,16 @@ extension ThreadDetailViewController {
         }
     }
 }
+#else
+extension ThreadDetailViewController {
+    func refreshJiraButton() {
+        openInJiraButton.isHidden = true
+    }
+
+    func jiraButtonImage() -> NSImage {
+        NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira") ?? NSImage()
+    }
+
+    @objc func openInJiraTapped() {}
+}
+#endif

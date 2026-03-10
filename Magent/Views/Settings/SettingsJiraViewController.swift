@@ -39,6 +39,18 @@ final class SettingsJiraViewController: NSViewController {
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
+        if let annotation = AppFeature.jiraIntegration.developerAnnotation {
+            let availabilityLabel = NSTextField(
+                wrappingLabelWithString: "Available in \(annotation.lowercased()). Release builds hide Jira settings and Jira-driven automation."
+            )
+            availabilityLabel.font = .systemFont(ofSize: 12, weight: .medium)
+            availabilityLabel.textColor = .systemOrange
+            stack.addArrangedSubview(availabilityLabel)
+            NSLayoutConstraint.activate([
+                availabilityLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            ])
+        }
+
         let (statusCard, statusStack) = createSectionCard(
             title: "Connection & Authentication",
             description: "Use acli for Jira auth and connectivity checks."

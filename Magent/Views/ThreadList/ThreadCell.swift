@@ -364,7 +364,8 @@ final class ThreadCell: NSTableCellView {
                 ? Self.descriptionFont()
                 : .preferredFont(forTextStyle: .body)
         }
-        textField?.textColor = thread.jiraUnassigned ? .tertiaryLabelColor : .labelColor
+        let showsJiraState = AppFeatures.jiraIntegrationEnabled
+        textField?.textColor = showsJiraState && thread.jiraUnassigned ? .tertiaryLabelColor : .labelColor
         textField?.lineBreakMode = .byTruncatingTail
 
         if hasDescription, let description = trimmedDescription {
@@ -372,7 +373,7 @@ final class ThreadCell: NSTableCellView {
             textField?.maximumNumberOfLines = 2
             textField?.lineBreakMode = .byWordWrapping
             subtitleLabel?.stringValue = fullSecondaryLine
-            subtitleLabel?.textColor = thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
+            subtitleLabel?.textColor = showsJiraState && thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
             subtitleLabel?.isHidden = false
             setDirtyDot(primaryDirtyDot, visible: false)
             setDirtyDot(secondaryDirtyDot, visible: thread.isDirty)
@@ -417,7 +418,7 @@ final class ThreadCell: NSTableCellView {
         prLabel?.toolTip = nil
         prLabel?.isHidden = true
 
-        if thread.jiraTicketKey != nil {
+        if AppFeatures.jiraIntegrationEnabled, thread.jiraTicketKey != nil {
             jiraImageView?.image = NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira ticket")
             jiraImageView?.contentTintColor = .tertiaryLabelColor
             jiraImageView?.toolTip = thread.jiraTicketKey

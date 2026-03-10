@@ -291,6 +291,7 @@ extension ThreadListViewController {
     // MARK: - Jira Context Menu
 
     private func buildJiraMenuItem(for thread: MagentThread, settings: AppSettings) -> NSMenuItem? {
+#if FEATURE_JIRA
         guard let project = settings.projects.first(where: { $0.id == thread.projectId }),
               let projectKey = project.jiraProjectKey, !projectKey.isEmpty else {
             return nil
@@ -313,9 +314,13 @@ extension ThreadListViewController {
         item.image = jiraMenuIcon()
         item.representedObject = thread
         return item
+#else
+        nil
+#endif
     }
 
     private func jiraMenuIcon() -> NSImage? {
+#if FEATURE_JIRA
         if let image = NSImage(named: NSImage.Name("JiraIcon")) {
             let sized = (image.copy() as? NSImage) ?? image
             sized.size = NSSize(width: 16, height: 16)
@@ -323,6 +328,9 @@ extension ThreadListViewController {
             return sized
         }
         return NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira")
+#else
+        nil
+#endif
     }
 
     private func pullRequestMenuIcon(for thread: MagentThread) -> NSImage {
@@ -331,6 +339,7 @@ extension ThreadListViewController {
     }
 
     @objc private func openThreadInJira(_ sender: NSMenuItem) {
+#if FEATURE_JIRA
         guard let thread = sender.representedObject as? MagentThread else { return }
 
         let settings = persistence.loadSettings()
@@ -353,6 +362,7 @@ extension ThreadListViewController {
         if let url {
             NSWorkspace.shared.open(url)
         }
+#endif
     }
 
     private func buildProjectContextMenu(for project: SidebarProject) -> NSMenu {
