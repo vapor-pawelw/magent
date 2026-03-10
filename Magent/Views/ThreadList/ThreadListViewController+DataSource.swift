@@ -288,6 +288,12 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         case other
     }
 
+    enum SectionHeaderHitArea {
+        case name
+        case disclosure
+        case other
+    }
+
     private func threadLeadingOffset(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
         if outlineView.parent(forItem: thread) is SidebarSection {
             return Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel
@@ -323,6 +329,36 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if let addButton = cell.subviews.first(where: { $0.identifier == Self.projectAddButtonIdentifier }),
            addButton.frame.insetBy(dx: -2, dy: -2).contains(pointInCell) {
             return .add
+        }
+        return .other
+    }
+
+    func sectionHeaderHitArea(_ section: SidebarSection) -> SectionHeaderHitArea {
+        guard let event = NSApp.currentEvent,
+              event.type == .leftMouseDown || event.type == .leftMouseUp else { return .other }
+
+        let pointInOutline = outlineView.convert(event.locationInWindow, from: nil)
+        let row = outlineView.row(at: pointInOutline)
+        guard row >= 0,
+              let rowSection = outlineView.item(atRow: row) as? SidebarSection,
+              rowSection.projectId == section.projectId,
+              rowSection.sectionId == section.sectionId,
+              let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView else {
+            return .other
+        }
+
+        let pointInCell = cell.convert(pointInOutline, from: outlineView)
+        if let disclosureButton = cell.subviews.first(where: { $0.identifier == Self.sectionDisclosureButtonIdentifier }),
+           disclosureButton.frame.insetBy(dx: -2, dy: -2).contains(pointInCell) {
+            return .disclosure
+        }
+        if let nameStack = cell.subviews.first(where: { $0.identifier == Self.sectionNameStackIdentifier }),
+           nameStack.frame.insetBy(dx: -2, dy: -2).contains(pointInCell) {
+            return .name
+        }
+        if let textField = cell.textField,
+           textField.frame.insetBy(dx: -2, dy: -2).contains(pointInCell) {
+            return .name
         }
         return .other
     }
@@ -382,8 +418,21 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             if suppressNextSectionRowToggle {
                 return false
             }
-            guard !section.threads.isEmpty else { return false }
-            toggleSection(section, animatedDisclosureButton: sectionDisclosureButton(for: section))
+
+            switch sectionHeaderHitArea(section) {
+            case .disclosure:
+                break
+            case .name:
+                guard !isRenamingSection(section) else { return false }
+                if NSApp.currentEvent?.clickCount == 2 {
+                    cancelPendingSectionNameToggle(for: section)
+                } else if !section.threads.isEmpty {
+                    scheduleSectionNameToggle(for: section)
+                }
+            case .other:
+                guard !section.threads.isEmpty else { return false }
+                toggleSection(section, animatedDisclosureButton: sectionDisclosureButton(for: section))
+            }
             return false
         }
         return item is MagentThread
@@ -552,6 +601,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     badgeContainer.addSubview(badgeLabel)
 
                     let nameStack = NSStackView(views: [tf, badgeContainer])
+                    nameStack.identifier = Self.sectionNameStackIdentifier
                     nameStack.translatesAutoresizingMaskIntoConstraints = false
                     nameStack.orientation = .horizontal
                     nameStack.alignment = .centerY
@@ -570,6 +620,15 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     disclosureButton.target = self
                     disclosureButton.action = #selector(toggleSectionExpanded(_:))
                     c.addSubview(disclosureButton)
+
+                    let editor = NSTextField(string: "")
+                    editor.identifier = Self.sectionInlineRenameFieldIdentifier
+                    editor.translatesAutoresizingMaskIntoConstraints = false
+                    editor.isHidden = true
+                    editor.focusRingType = .none
+                    editor.font = .systemFont(ofSize: 12, weight: .medium)
+                    editor.delegate = self
+                    c.addSubview(editor)
 
                     NSLayoutConstraint.activate([
                         iv.leadingAnchor.constraint(
@@ -594,6 +653,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                         disclosureButton.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         disclosureButton.widthAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
                         disclosureButton.heightAnchor.constraint(equalToConstant: Self.disclosureButtonSize),
+                        editor.leadingAnchor.constraint(equalTo: nameStack.leadingAnchor, constant: -2),
+                        editor.trailingAnchor.constraint(equalTo: disclosureButton.leadingAnchor, constant: -6),
+                        editor.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                     ])
                     return c
                 }()
@@ -622,6 +684,18 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 let hasThreads = !section.threads.isEmpty
                 disclosureButton.isHidden = !hasThreads
                 disclosureButton.isEnabled = hasThreads
+            }
+            if let nameStack = cell.subviews.first(where: { $0.identifier == Self.sectionNameStackIdentifier }) {
+                let isRenaming = isRenamingSection(section)
+                nameStack.isHidden = isRenaming
+                cell.imageView?.isHidden = isRenaming
+            }
+            if let editor = cell.subviews.first(where: { $0.identifier == Self.sectionInlineRenameFieldIdentifier }) as? NSTextField {
+                let isRenaming = isRenamingSection(section)
+                editor.isHidden = !isRenaming
+                editor.stringValue = isRenaming ? activeSectionRename?.originalName ?? section.name : section.name
+                editor.placeholderString = "Section name"
+                editor.toolTip = "Press Return or click anywhere to save."
             }
             return cell
         }

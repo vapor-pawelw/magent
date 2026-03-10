@@ -5,6 +5,8 @@ final class SettingsProjectsViewController: NSViewController {
     static let projectRowPasteboardType = NSPasteboard.PasteboardType("com.magent.settings.project-row")
     static let sectionRowPasteboardType = NSPasteboard.PasteboardType("com.magent.settings.section-row")
     static let sectionColorPanelIdentifier = NSUserInterfaceItemIdentifier("SettingsProjectsSectionColorPanel")
+    static let sectionNameLabelTag = 203
+    static let sectionInlineRenameFieldTag = 204
 
     let persistence = PersistenceService.shared
     var settings: AppSettings!
@@ -40,6 +42,7 @@ final class SettingsProjectsViewController: NSViewController {
     var sectionsTableView: NSTableView!
     var currentEditingSectionId: UUID?
     var isUpdatingSectionColorPanel = false
+    var activeInlineRenameSectionId: UUID?
 
     var projectSortedSections: [ThreadSection] {
         guard let index = selectedProjectIndex,

@@ -192,6 +192,8 @@ extension SettingsProjectsViewController {
         sectionsTableView.addTableColumn(sectionsCol)
         sectionsTableView.dataSource = self
         sectionsTableView.delegate = self
+        sectionsTableView.target = self
+        sectionsTableView.doubleAction = #selector(projectSectionTableDoubleClicked(_:))
 
         let sectionsScrollView = NSScrollView()
         sectionsScrollView.documentView = sectionsTableView

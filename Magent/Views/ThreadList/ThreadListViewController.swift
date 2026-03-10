@@ -28,8 +28,10 @@ final class ThreadListViewController: NSViewController {
     static let projectDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectDisclosureButton")
     static let projectAddButtonIdentifier = NSUserInterfaceItemIdentifier("ProjectAddButton")
     static let sectionDisclosureButtonIdentifier = NSUserInterfaceItemIdentifier("SectionDisclosureButton")
+    static let sectionNameStackIdentifier = NSUserInterfaceItemIdentifier("SectionNameStack")
     static let sectionCountBadgeContainerIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeContainer")
     static let sectionCountBadgeLabelIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeLabel")
+    static let sectionInlineRenameFieldIdentifier = NSUserInterfaceItemIdentifier("SectionInlineRenameField")
     static let sidebarHorizontalInset: CGFloat = 0
     static let sidebarTopInset: CGFloat = 8
     static let rateLimitStatusTopInset: CGFloat = 8
@@ -70,6 +72,9 @@ final class ThreadListViewController: NSViewController {
     var isCreatingThread = false
     var suppressNextSectionRowToggle = false
     var suppressNextProjectRowToggle = false
+    var activeSectionRename: (projectId: UUID, sectionId: UUID, originalName: String)?
+    var pendingSectionNameToggleWorkItem: DispatchWorkItem?
+    var pendingSectionNameToggleKey: String?
     /// Project IDs that have at least one recognized git hosting remote (GitHub/GitLab/Bitbucket).
     var projectsWithValidRemotes: Set<UUID> = []
     private var lastFittedOutlineWidth: CGFloat = 0
@@ -344,6 +349,8 @@ final class ThreadListViewController: NSViewController {
 
         outlineView.dataSource = self
         outlineView.delegate = self
+        outlineView.target = self
+        outlineView.doubleAction = #selector(outlineViewDoubleClicked(_:))
 
         // Enable drag and drop
         outlineView.registerForDraggedTypes([.string])

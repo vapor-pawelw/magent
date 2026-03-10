@@ -3,6 +3,108 @@ import MagentCore
 
 extension SettingsThreadsViewController {
 
+    @objc func sectionTableDoubleClicked(_ sender: NSTableView) {
+        let row = sender.clickedRow
+        guard row >= 0, row < sortedSections.count, sectionNameWasDoubleClicked(in: sender, row: row) else { return }
+        beginInlineRename(for: sortedSections[row].id)
+    }
+
+    private func sectionNameWasDoubleClicked(in tableView: NSTableView, row: Int) -> Bool {
+        guard let event = NSApp.currentEvent else { return false }
+        let pointInTable = tableView.convert(event.locationInWindow, from: nil)
+        guard let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView,
+              let label = cell.viewWithTag(Self.sectionNameLabelTag) else { return false }
+        let pointInCell = cell.convert(pointInTable, from: tableView)
+        return label.frame.insetBy(dx: -2, dy: -2).contains(pointInCell)
+    }
+
+    private func beginInlineRename(for sectionId: UUID) {
+        if let activeInlineRenameSectionId, activeInlineRenameSectionId != sectionId {
+            finishInlineRename(commit: true)
+        }
+        activeInlineRenameSectionId = sectionId
+        sectionsTableView.reloadData()
+        focusInlineRenameField(selectAll: true)
+    }
+
+    private func focusInlineRenameField(selectAll: Bool) {
+        guard let field = inlineRenameField() else { return }
+        view.window?.makeFirstResponder(field)
+        if selectAll {
+            field.selectText(nil)
+        }
+    }
+
+    private func inlineRenameField() -> NSTextField? {
+        guard let sectionId = activeInlineRenameSectionId,
+              let row = sortedSections.firstIndex(where: { $0.id == sectionId }),
+              let cell = sectionsTableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView else {
+            return nil
+        }
+        return cell.viewWithTag(Self.sectionInlineRenameFieldTag) as? NSTextField
+    }
+
+    private enum InlineRenameError: LocalizedError {
+        case emptyName
+        case duplicateName(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .emptyName:
+                return "Section names cannot be empty."
+            case .duplicateName(let name):
+                return "A section named \"\(name)\" already exists."
+            }
+        }
+    }
+
+    func finishInlineRename(commit: Bool) {
+        guard let sectionId = activeInlineRenameSectionId,
+              let currentSection = settings.threadSections.first(where: { $0.id == sectionId }) else {
+            activeInlineRenameSectionId = nil
+            return
+        }
+
+        let rawValue = inlineRenameField()?.stringValue ?? currentSection.name
+        let newName = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !commit {
+            activeInlineRenameSectionId = nil
+            sectionsTableView.reloadData()
+            return
+        }
+
+        do {
+            try persistInlineRename(sectionId: sectionId, newName: newName, originalName: currentSection.name)
+            activeInlineRenameSectionId = nil
+            sectionsTableView.reloadData()
+            refreshDefaultSectionPopup()
+            NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Rename Section Failed"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            sectionsTableView.reloadData()
+            focusInlineRenameField(selectAll: true)
+        }
+    }
+
+    private func persistInlineRename(sectionId: UUID, newName: String, originalName: String) throws {
+        guard !newName.isEmpty else { throw InlineRenameError.emptyName }
+        if newName == originalName { return }
+        if settings.threadSections.contains(where: {
+            $0.id != sectionId && $0.name.caseInsensitiveCompare(newName) == .orderedSame
+        }) {
+            throw InlineRenameError.duplicateName(newName)
+        }
+        guard let index = settings.threadSections.firstIndex(where: { $0.id == sectionId }) else { return }
+        settings.threadSections[index].name = newName
+        try persistence.saveSettings(settings)
+    }
+
     private func threadsInGlobalSection(_ section: ThreadSection) -> [MagentThread] {
         ThreadManager.shared.threadsAssigned(toSection: section.id, settings: settings)
     }
@@ -183,9 +285,17 @@ extension SettingsThreadsViewController {
             c.addSubview(colorBtn)
 
             let tf = NSTextField(labelWithString: "")
+            tf.tag = Self.sectionNameLabelTag
             tf.translatesAutoresizingMaskIntoConstraints = false
             c.addSubview(tf)
             c.textField = tf
+
+            let editor = NSTextField(string: "")
+            editor.tag = Self.sectionInlineRenameFieldTag
+            editor.translatesAutoresizingMaskIntoConstraints = false
+            editor.isHidden = true
+            editor.delegate = self
+            c.addSubview(editor)
 
             let visBtn = NSButton(image: NSImage(systemSymbolName: "eye", accessibilityDescription: nil)!, target: nil, action: nil)
             visBtn.bezelStyle = .inline
@@ -208,6 +318,9 @@ extension SettingsThreadsViewController {
                 colorBtn.heightAnchor.constraint(equalToConstant: 16),
                 tf.leadingAnchor.constraint(equalTo: colorBtn.trailingAnchor, constant: 8),
                 tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                editor.leadingAnchor.constraint(equalTo: tf.leadingAnchor),
+                editor.trailingAnchor.constraint(equalTo: visBtn.leadingAnchor, constant: -8),
+                editor.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                 delBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -4),
                 delBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                 visBtn.trailingAnchor.constraint(equalTo: delBtn.leadingAnchor, constant: -4),
@@ -217,6 +330,14 @@ extension SettingsThreadsViewController {
         }()
 
         cell.textField?.stringValue = section.name
+        cell.textField?.isHidden = activeInlineRenameSectionId == section.id
+
+        if let editor = cell.viewWithTag(Self.sectionInlineRenameFieldTag) as? NSTextField {
+            let isEditing = activeInlineRenameSectionId == section.id
+            editor.isHidden = !isEditing
+            editor.stringValue = isEditing ? section.name : ""
+            editor.placeholderString = "Section name"
+        }
 
         if let colorBtn = cell.viewWithTag(100) as? NSButton {
             colorBtn.image = colorDotImage(color: section.color, size: 12)
@@ -241,5 +362,31 @@ extension SettingsThreadsViewController {
         }
 
         return cell
+    }
+}
+
+extension SettingsThreadsViewController: NSTextFieldDelegate {
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard control.tag == Self.sectionInlineRenameFieldTag else { return false }
+
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            view.window?.makeFirstResponder(nil)
+            return true
+        }
+
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            finishInlineRename(commit: false)
+            return true
+        }
+
+        return false
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField,
+              field.tag == Self.sectionInlineRenameFieldTag else { return }
+
+        let movementValue = notification.userInfo?["NSTextMovement"] as? Int
+        finishInlineRename(commit: movementValue != NSTextMovement.cancel.rawValue)
     }
 }

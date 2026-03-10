@@ -86,6 +86,121 @@ extension SettingsProjectsViewController: NSTableViewDataSource {
 }
 
 extension SettingsProjectsViewController: NSTableViewDelegate {
+    @objc func projectSectionTableDoubleClicked(_ sender: NSTableView) {
+        let row = sender.clickedRow
+        guard row >= 0, row < projectSortedSections.count, projectSectionNameWasDoubleClicked(in: sender, row: row) else { return }
+        beginInlineProjectSectionRename(for: projectSortedSections[row].id)
+    }
+
+    private func projectSectionNameWasDoubleClicked(in tableView: NSTableView, row: Int) -> Bool {
+        guard let event = NSApp.currentEvent else { return false }
+        let pointInTable = tableView.convert(event.locationInWindow, from: nil)
+        guard let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView,
+              let label = cell.viewWithTag(Self.sectionNameLabelTag) else { return false }
+        let pointInCell = cell.convert(pointInTable, from: tableView)
+        return label.frame.insetBy(dx: -2, dy: -2).contains(pointInCell)
+    }
+
+    private func beginInlineProjectSectionRename(for sectionId: UUID) {
+        if let activeInlineRenameSectionId, activeInlineRenameSectionId != sectionId {
+            finishInlineProjectSectionRename(commit: true)
+        }
+        activeInlineRenameSectionId = sectionId
+        sectionsTableView.reloadData()
+        focusProjectInlineRenameField(selectAll: true)
+    }
+
+    private func focusProjectInlineRenameField(selectAll: Bool) {
+        guard let field = projectInlineRenameField() else { return }
+        view.window?.makeFirstResponder(field)
+        if selectAll {
+            field.selectText(nil)
+        }
+    }
+
+    private func projectInlineRenameField() -> NSTextField? {
+        guard let sectionId = activeInlineRenameSectionId,
+              let row = projectSortedSections.firstIndex(where: { $0.id == sectionId }),
+              let cell = sectionsTableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView else {
+            return nil
+        }
+        return cell.viewWithTag(Self.sectionInlineRenameFieldTag) as? NSTextField
+    }
+
+    private enum InlineProjectRenameError: LocalizedError {
+        case emptyName
+        case duplicateName(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .emptyName:
+                return "Section names cannot be empty."
+            case .duplicateName(let name):
+                return "A section named \"\(name)\" already exists."
+            }
+        }
+    }
+
+    func finishInlineProjectSectionRename(commit: Bool) {
+        guard let sectionId = activeInlineRenameSectionId,
+              let index = selectedProjectIndex,
+              let currentSection = settings.projects[index].threadSections?.first(where: { $0.id == sectionId }) else {
+            activeInlineRenameSectionId = nil
+            return
+        }
+
+        let rawValue = projectInlineRenameField()?.stringValue ?? currentSection.name
+        let newName = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !commit {
+            activeInlineRenameSectionId = nil
+            sectionsTableView.reloadData()
+            return
+        }
+
+        do {
+            try persistInlineProjectSectionRename(
+                projectIndex: index,
+                sectionId: sectionId,
+                newName: newName,
+                originalName: currentSection.name
+            )
+            activeInlineRenameSectionId = nil
+            sectionsTableView.reloadData()
+            refreshDefaultSectionPopup(for: settings.projects[index])
+            NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Rename Section Failed"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            sectionsTableView.reloadData()
+            focusProjectInlineRenameField(selectAll: true)
+        }
+    }
+
+    private func persistInlineProjectSectionRename(
+        projectIndex: Int,
+        sectionId: UUID,
+        newName: String,
+        originalName: String
+    ) throws {
+        guard !newName.isEmpty else { throw InlineProjectRenameError.emptyName }
+        if newName == originalName { return }
+        guard var sections = settings.projects[projectIndex].threadSections else { return }
+        if sections.contains(where: {
+            $0.id != sectionId && $0.name.caseInsensitiveCompare(newName) == .orderedSame
+        }) {
+            throw InlineProjectRenameError.duplicateName(newName)
+        }
+        guard let sectionIndex = sections.firstIndex(where: { $0.id == sectionId }) else { return }
+        sections[sectionIndex].name = newName
+        settings.projects[projectIndex].threadSections = sections
+        try persistence.saveSettings(settings)
+    }
+
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         if tableView === sectionsTableView {
             return sectionsCellView(for: row, in: tableView)
@@ -161,9 +276,17 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
             c.addSubview(colorBtn)
 
             let tf = NSTextField(labelWithString: "")
+            tf.tag = Self.sectionNameLabelTag
             tf.translatesAutoresizingMaskIntoConstraints = false
             c.addSubview(tf)
             c.textField = tf
+
+            let editor = NSTextField(string: "")
+            editor.tag = Self.sectionInlineRenameFieldTag
+            editor.translatesAutoresizingMaskIntoConstraints = false
+            editor.isHidden = true
+            editor.delegate = self
+            c.addSubview(editor)
 
             let visBtn = NSButton(image: NSImage(systemSymbolName: "eye", accessibilityDescription: nil)!, target: nil, action: nil)
             visBtn.bezelStyle = .inline
@@ -195,6 +318,9 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
                 tf.leadingAnchor.constraint(equalTo: colorBtn.trailingAnchor, constant: 8),
                 tf.trailingAnchor.constraint(lessThanOrEqualTo: delBtn.leadingAnchor, constant: -SettingsProjectsTableLayout.iconSpacing),
                 tf.centerYAnchor.constraint(equalTo: c.centerYAnchor),
+                editor.leadingAnchor.constraint(equalTo: tf.leadingAnchor),
+                editor.trailingAnchor.constraint(equalTo: delBtn.leadingAnchor, constant: -SettingsProjectsTableLayout.iconSpacing),
+                editor.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                 visBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -SettingsProjectsTableLayout.horizontalInset),
                 visBtn.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                 visBtn.widthAnchor.constraint(equalToConstant: SettingsProjectsTableLayout.iconButtonSize),
@@ -208,6 +334,14 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
         }()
 
         cell.textField?.stringValue = section.name
+        cell.textField?.isHidden = activeInlineRenameSectionId == section.id
+
+        if let editor = cell.viewWithTag(Self.sectionInlineRenameFieldTag) as? NSTextField {
+            let isEditing = activeInlineRenameSectionId == section.id
+            editor.isHidden = !isEditing
+            editor.stringValue = isEditing ? section.name : ""
+            editor.placeholderString = "Section name"
+        }
 
         if let colorBtn = cell.viewWithTag(200) as? NSButton {
             colorBtn.image = colorDotImage(color: section.color, size: 12)
@@ -268,5 +402,31 @@ extension SettingsProjectsViewController: NSTextViewDelegate {
         }
 
         try? persistence.saveSettings(settings)
+    }
+}
+
+extension SettingsProjectsViewController: NSTextFieldDelegate {
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard control.tag == Self.sectionInlineRenameFieldTag else { return false }
+
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            view.window?.makeFirstResponder(nil)
+            return true
+        }
+
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            finishInlineProjectSectionRename(commit: false)
+            return true
+        }
+
+        return false
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField,
+              field.tag == Self.sectionInlineRenameFieldTag else { return }
+
+        let movementValue = notification.userInfo?["NSTextMovement"] as? Int
+        finishInlineProjectSectionRename(commit: movementValue != NSTextMovement.cancel.rawValue)
     }
 }

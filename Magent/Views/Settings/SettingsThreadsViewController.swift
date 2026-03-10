@@ -4,6 +4,8 @@ import MagentCore
 final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate, NSTableViewDataSource, NSTableViewDelegate {
     static let sectionColorPanelIdentifier = NSUserInterfaceItemIdentifier("SettingsThreadsSectionColorPanel")
     private static let recentArchivedThreadLimit = 10
+    static let sectionNameLabelTag = 103
+    static let sectionInlineRenameFieldTag = 104
 
     let persistence = PersistenceService.shared
     var settings: AppSettings!
@@ -26,6 +28,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var useSectionsCheckbox: NSButton!
     var currentEditingSectionId: UUID?
     var isUpdatingSectionColorPanel = false
+    var activeInlineRenameSectionId: UUID?
 
     var sortedSections: [ThreadSection] {
         settings.threadSections.sorted { $0.sortOrder < $1.sortOrder }
@@ -144,6 +147,8 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         sectionsTableView.addTableColumn(sectionsColumn)
         sectionsTableView.dataSource = self
         sectionsTableView.delegate = self
+        sectionsTableView.target = self
+        sectionsTableView.doubleAction = #selector(sectionTableDoubleClicked(_:))
 
         let sectionsScrollView = NSScrollView()
         sectionsScrollView.documentView = sectionsTableView

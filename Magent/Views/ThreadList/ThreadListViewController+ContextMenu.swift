@@ -376,6 +376,22 @@ extension ThreadListViewController {
         return menu
     }
 
+    private func buildSectionContextMenu(for section: SidebarSection) -> NSMenu {
+        let menu = NSMenu()
+
+        let renameItem = NSMenuItem(title: "Rename Section", action: #selector(renameSectionFromMenu(_:)), keyEquivalent: "")
+        renameItem.target = self
+        renameItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
+        renameItem.representedObject = [
+            "projectId": section.projectId.uuidString,
+            "sectionId": section.sectionId.uuidString,
+            "sectionName": section.name,
+        ]
+        menu.addItem(renameItem)
+
+        return menu
+    }
+
     @objc private func toggleProjectPin(_ sender: NSMenuItem) {
         guard let projectId = sender.representedObject as? UUID else { return }
         var settings = persistence.loadSettings()
@@ -401,6 +417,15 @@ extension ThreadListViewController {
               let sectionId = info["sectionId"] as? UUID else { return }
         threadManager.moveThread(thread, toSection: sectionId)
         reloadData()
+    }
+
+    @objc private func renameSectionFromMenu(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: String],
+              let projectIdRaw = info["projectId"],
+              let sectionIdRaw = info["sectionId"],
+              let projectId = UUID(uuidString: projectIdRaw),
+              let sectionId = UUID(uuidString: sectionIdRaw) else { return }
+        beginRenamingSection(projectId: projectId, sectionId: sectionId, fallbackName: info["sectionName"])
     }
 
     @objc private func setThreadIcon(_ sender: NSMenuItem) {
@@ -760,6 +785,15 @@ extension ThreadListViewController: NSMenuDelegate {
             return
         }
 
+        if let section = clickedItem as? SidebarSection {
+            let contextMenu = buildSectionContextMenu(for: section)
+            for item in contextMenu.items {
+                contextMenu.removeItem(item)
+                menu.addItem(item)
+            }
+            return
+        }
+
         if let thread = clickedItem as? MagentThread {
             let contextMenu = buildContextMenu(for: thread)
             for item in contextMenu.items {
@@ -767,5 +801,222 @@ extension ThreadListViewController: NSMenuDelegate {
                 menu.addItem(item)
             }
         }
+    }
+}
+
+extension ThreadListViewController {
+
+    @objc func outlineViewDoubleClicked(_ sender: NSOutlineView) {
+        let row = sender.clickedRow
+        guard row >= 0,
+              let section = sender.item(atRow: row) as? SidebarSection,
+              sectionHeaderHitArea(section) == .name else { return }
+        cancelPendingSectionNameToggle(for: section)
+        beginRenamingSection(projectId: section.projectId, sectionId: section.sectionId, fallbackName: section.name)
+    }
+
+    func isRenamingSection(_ section: SidebarSection) -> Bool {
+        activeSectionRename?.projectId == section.projectId && activeSectionRename?.sectionId == section.sectionId
+    }
+
+    func scheduleSectionNameToggle(for section: SidebarSection) {
+        cancelPendingSectionNameToggle()
+        let toggleKey = sectionToggleKey(projectId: section.projectId, sectionId: section.sectionId)
+        pendingSectionNameToggleKey = toggleKey
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.pendingSectionNameToggleKey == toggleKey,
+                  let currentSection = self.sidebarProjects
+                    .first(where: { $0.projectId == section.projectId })?
+                    .children
+                    .compactMap({ $0 as? SidebarSection })
+                    .first(where: { $0.sectionId == section.sectionId }) else { return }
+            self.pendingSectionNameToggleKey = nil
+            self.pendingSectionNameToggleWorkItem = nil
+            guard !self.isRenamingSection(currentSection) else { return }
+            self.toggleSection(currentSection, animatedDisclosureButton: self.sectionDisclosureButton(for: currentSection))
+        }
+        pendingSectionNameToggleWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: workItem)
+    }
+
+    func cancelPendingSectionNameToggle(for section: SidebarSection? = nil) {
+        if let section,
+           pendingSectionNameToggleKey != sectionToggleKey(projectId: section.projectId, sectionId: section.sectionId) {
+            return
+        }
+        pendingSectionNameToggleWorkItem?.cancel()
+        pendingSectionNameToggleWorkItem = nil
+        pendingSectionNameToggleKey = nil
+    }
+
+    private func sectionToggleKey(projectId: UUID, sectionId: UUID) -> String {
+        "\(projectId.uuidString):\(sectionId.uuidString)"
+    }
+
+    private func beginRenamingSection(projectId: UUID, sectionId: UUID, fallbackName: String?) {
+        cancelPendingSectionNameToggle()
+
+        if let activeSectionRename,
+           activeSectionRename.projectId != projectId || activeSectionRename.sectionId != sectionId {
+            finishSectionRename(commit: true)
+        }
+
+        let currentName = currentSectionName(projectId: projectId, sectionId: sectionId) ?? fallbackName ?? ""
+        activeSectionRename = (projectId: projectId, sectionId: sectionId, originalName: currentName)
+        reloadData()
+        focusActiveSectionRenameField(selectAll: true)
+    }
+
+    private func focusActiveSectionRenameField(selectAll: Bool) {
+        guard let editor = activeSectionRenameField() else { return }
+        view.window?.makeFirstResponder(editor)
+        if selectAll {
+            editor.selectText(nil)
+        }
+    }
+
+    private func activeSectionRenameField() -> NSTextField? {
+        guard let activeSectionRename,
+              let row = rowForSection(projectId: activeSectionRename.projectId, sectionId: activeSectionRename.sectionId),
+              row >= 0,
+              let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView else {
+            return nil
+        }
+        return cell.subviews.first(where: { $0.identifier == Self.sectionInlineRenameFieldIdentifier }) as? NSTextField
+    }
+
+    private func rowForSection(projectId: UUID, sectionId: UUID) -> Int? {
+        for row in 0..<outlineView.numberOfRows {
+            guard let section = outlineView.item(atRow: row) as? SidebarSection,
+                  section.projectId == projectId,
+                  section.sectionId == sectionId else { continue }
+            return row
+        }
+        return nil
+    }
+
+    private func currentSectionName(projectId: UUID, sectionId: UUID) -> String? {
+        let settings = persistence.loadSettings()
+        if let project = settings.projects.first(where: { $0.id == projectId }),
+           let projectSections = project.threadSections,
+           let section = projectSections.first(where: { $0.id == sectionId }) {
+            return section.name
+        }
+        return settings.threadSections.first(where: { $0.id == sectionId })?.name
+    }
+
+    private enum SectionRenameError: LocalizedError {
+        case sectionNotFound
+        case duplicateName(String)
+        case emptyName
+
+        var errorDescription: String? {
+            switch self {
+            case .sectionNotFound:
+                return "The section no longer exists."
+            case .duplicateName(let name):
+                return "A section named \"\(name)\" already exists."
+            case .emptyName:
+                return "Section names cannot be empty."
+            }
+        }
+    }
+
+    func finishSectionRename(commit: Bool) {
+        guard let activeSectionRename else { return }
+
+        let editorValue = activeSectionRenameField()?.stringValue ?? activeSectionRename.originalName
+        let trimmedName = editorValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !commit {
+            self.activeSectionRename = nil
+            reloadData()
+            return
+        }
+
+        if trimmedName.isEmpty {
+            BannerManager.shared.show(message: SectionRenameError.emptyName.localizedDescription, style: .warning)
+            reloadData()
+            focusActiveSectionRenameField(selectAll: true)
+            return
+        }
+
+        if trimmedName == activeSectionRename.originalName {
+            self.activeSectionRename = nil
+            reloadData()
+            return
+        }
+
+        do {
+            try persistSectionRename(
+                projectId: activeSectionRename.projectId,
+                sectionId: activeSectionRename.sectionId,
+                newName: trimmedName
+            )
+            self.activeSectionRename = nil
+            NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+        } catch {
+            BannerManager.shared.show(message: error.localizedDescription, style: .warning)
+            reloadData()
+            focusActiveSectionRenameField(selectAll: true)
+        }
+    }
+
+    private func persistSectionRename(projectId: UUID, sectionId: UUID, newName: String) throws {
+        var settings = persistence.loadSettings()
+
+        if let projectIndex = settings.projects.firstIndex(where: { $0.id == projectId }),
+           settings.projects[projectIndex].threadSections != nil {
+            var sections = settings.projects[projectIndex].threadSections ?? []
+            guard let sectionIndex = sections.firstIndex(where: { $0.id == sectionId }) else {
+                throw SectionRenameError.sectionNotFound
+            }
+            if sections.contains(where: {
+                $0.id != sectionId && $0.name.caseInsensitiveCompare(newName) == .orderedSame
+            }) {
+                throw SectionRenameError.duplicateName(newName)
+            }
+            sections[sectionIndex].name = newName
+            settings.projects[projectIndex].threadSections = sections
+        } else {
+            guard let sectionIndex = settings.threadSections.firstIndex(where: { $0.id == sectionId }) else {
+                throw SectionRenameError.sectionNotFound
+            }
+            if settings.threadSections.contains(where: {
+                $0.id != sectionId && $0.name.caseInsensitiveCompare(newName) == .orderedSame
+            }) {
+                throw SectionRenameError.duplicateName(newName)
+            }
+            settings.threadSections[sectionIndex].name = newName
+        }
+
+        try persistence.saveSettings(settings)
+    }
+}
+
+extension ThreadListViewController: NSTextFieldDelegate {
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard control.identifier == Self.sectionInlineRenameFieldIdentifier else { return false }
+
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            view.window?.makeFirstResponder(nil)
+            return true
+        }
+
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            finishSectionRename(commit: false)
+            return true
+        }
+
+        return false
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField,
+              field.identifier == Self.sectionInlineRenameFieldIdentifier else { return }
+
+        let movementValue = notification.userInfo?["NSTextMovement"] as? Int
+        finishSectionRename(commit: movementValue != NSTextMovement.cancel.rawValue)
     }
 }
