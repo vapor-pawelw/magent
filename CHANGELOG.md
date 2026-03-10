@@ -72,6 +72,7 @@ All notable changes to this project will be documented in this file.
 - Fixed Prompt TOC shifting position when the diff viewer is opened or closed; position is now frozen while the diff panel is visible and restored correctly when it closes.
 
 ### Diff Viewer
+- The changes panel now shows a `COMMITS (n)` tab next to `CHANGES (n)` when the branch has more than one commit ahead of its base, listing each commit's short hash and subject.
 - Selecting text in the inline diff viewer now supports standard `Cmd+C` copy to the macOS clipboard.
 - Left-clicking an image diff now opens an enlarged animated overlay with background dimming; click anywhere (or press Escape) to dismiss it without disturbing the current diff scroll position.
 - Image diffs now stay fully visible while capping preview height to the diff pane, avoiding clipped previews and overly tall image blocks.
