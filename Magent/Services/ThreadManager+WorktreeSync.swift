@@ -206,7 +206,7 @@ extension ThreadManager {
         }
 
         if changed {
-            try? persistence.saveThreads(threads)
+            try? persistence.saveActiveThreads(threads)
         }
     }
 

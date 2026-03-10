@@ -151,7 +151,7 @@ extension ThreadManager {
         guard threads[threadIndex].sessionConversationIDs[sessionName] != conversationID else { return }
 
         threads[threadIndex].sessionConversationIDs[sessionName] = conversationID
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
     }
 
     private func latestClaudeConversationID(worktreePath: String) -> String? {
@@ -290,7 +290,7 @@ extension ThreadManager {
         } else {
             threads[index].submittedPromptsBySession[sessionName] = history
         }
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
     }
 
     private func normalizedSubmittedPrompt(_ prompt: String) -> String {

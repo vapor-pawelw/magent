@@ -121,7 +121,7 @@ extension ThreadManager {
             }
         }
 
-        try? persistence.saveThreads(threads)
+        try? persistence.saveActiveThreads(threads)
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
         }
@@ -162,7 +162,7 @@ extension ThreadManager {
             if let idx = threads.firstIndex(where: { $0.id == thread.id }) {
                 threads[idx] = thread
             }
-            try? persistence.saveThreads(threads)
+            try? persistence.saveActiveThreads(threads)
 
             // Inject ticket summary as prompt text without submitting
             if !ticket.summary.isEmpty,

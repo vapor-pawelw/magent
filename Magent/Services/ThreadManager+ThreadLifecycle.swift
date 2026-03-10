@@ -217,7 +217,7 @@ extension ThreadManager {
             placeThreadAtBottomOfSidebarGroup(threadId: threads[lastIndex].id)
         }
 
-        try persistence.saveThreads(threads)
+        try persistence.saveActiveThreads(threads)
         await MainActor.run {
             delegate?.threadManager(self, didCreateThread: thread)
         }
@@ -302,7 +302,7 @@ extension ThreadManager {
 
         // Insert main threads at front
         threads.insert(thread, at: 0)
-        try persistence.saveThreads(threads)
+        try persistence.saveActiveThreads(threads)
         await MainActor.run {
             delegate?.threadManager(self, didCreateThread: thread)
         }
@@ -622,7 +622,7 @@ extension ThreadManager {
             trustDirectoryIfNeeded(thread.worktreePath, agentType: thread.effectiveAgentType)
 
             // Persist updated threads
-            try persistence.saveThreads(threads)
+            try persistence.saveActiveThreads(threads)
 
             return .recovered
         } catch {

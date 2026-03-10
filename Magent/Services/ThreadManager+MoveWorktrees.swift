@@ -111,7 +111,7 @@ extension ThreadManager {
         }
 
         // Save updated thread records
-        try persistence.saveThreads(threads)
+        try persistence.saveActiveThreads(threads)
 
         // Try to remove old base directory if empty
         if let remaining = try? fm.contentsOfDirectory(atPath: oldBase), remaining.isEmpty {
