@@ -178,6 +178,16 @@ The main window's sidebar/detail `NSSplitView` structure should remain stable wh
 - Keep trailing marker layout width-stable by reserving a fixed status slot and keeping pin as the rightmost marker. Marker visibility changes must not change available description width.
 - Refit the sidebar outline from the scroll view's visible clip width when sidebar width changes; `NSOutlineView` can retain a stale frame width across startup restores, which leaves trailing controls misaligned until a manual resize. Still avoid forcing `noteHeightOfRows(...)` on every layout pass; that introduced visible lag/flicker during divider drags.
 
+### 4.7 Release-Gated Local Features
+
+Some features need to stay in the codebase before they are ready to ship. Those features are release-gated with dedicated `FEATURE_*` active compilation conditions in `Project.swift`.
+
+- Add the flag only to the configurations that should expose the feature.
+- Keep the availability check centralized in an app-level helper so AppKit/UI code can use one source of truth.
+- Release builds should hide the related UI and skip the related background automation instead of showing dead controls.
+- If a feature is visible in debug-only Settings surfaces, annotate it with `Debug builds only` so developers can see immediately that it is not part of release builds.
+- `FEATURE_JIRA` is the current example: Debug builds expose Jira settings/actions, while Release builds hide them and stub out Jira-specific UI/runtime hooks.
+
 ### 5. Persistence Model
 
 Thread state persisted as JSON in app's Application Support directory:
