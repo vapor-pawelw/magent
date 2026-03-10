@@ -133,6 +133,17 @@
         }
       }
     },
+    "commonHide": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide"
+          }
+        }
+      }
+    },
     "commonJoinAnd": {
       "extractionState": "manual",
       "localizations": {
@@ -250,6 +261,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unpin"
+          }
+        }
+      }
+    },
+    "commonUnhide": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unhide"
           }
         }
       }

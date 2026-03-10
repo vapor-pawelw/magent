@@ -37,6 +37,10 @@ final class IPCCommandHandler {
             return setDescription(request)
         case "set-thread-icon":
             return setThreadIcon(request)
+        case "hide-thread":
+            return setThreadHidden(request, hidden: true)
+        case "unhide-thread":
+            return setThreadHidden(request, hidden: false)
         case "current-thread":
             return currentThread(request)
         case "thread-info":
@@ -530,6 +534,35 @@ final class IPCCommandHandler {
         return IPCResponse(ok: true, id: request.id, thread: info)
     }
 
+    private func setThreadHidden(_ request: IPCRequest, hidden: Bool) -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        if thread.isMain {
+            return .failure("Main threads cannot be hidden", id: request.id)
+        }
+
+        guard thread.isSidebarHidden != hidden else {
+            let settings = persistence.loadSettings()
+            let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+            let info = IPCThreadInfo(thread: thread, projectName: projectName)
+            return IPCResponse(ok: true, id: request.id, thread: info)
+        }
+
+        threadManager.toggleThreadHidden(threadId: thread.id)
+
+        let settings = persistence.loadSettings()
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            return .success(id: request.id)
+        }
+        let info = IPCThreadInfo(thread: updated, projectName: projectName)
+        return IPCResponse(ok: true, id: request.id, thread: info)
+    }
+
     private func currentThread(_ request: IPCRequest) -> IPCResponse {
         guard let sessionName = request.sessionName, !sessionName.isEmpty else {
             return .failure("Missing required field: sessionName", id: request.id)
@@ -582,6 +615,7 @@ final class IPCCommandHandler {
             isFullyDelivered: thread.isFullyDelivered,
             showArchiveSuggestion: thread.showArchiveSuggestion,
             isPinned: thread.isPinned,
+            isSidebarHidden: thread.isSidebarHidden,
             isArchived: thread.isArchived,
             isBlockedByRateLimit: thread.isBlockedByRateLimit,
             hasBranchMismatch: thread.hasBranchMismatch,

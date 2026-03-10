@@ -179,6 +179,10 @@ final class ThreadCell: NSTableCellView {
         return dot
     }
 
+    private func setSidebarHiddenAppearance(_ isHiddenInSidebar: Bool) {
+        alphaValue = isHiddenInSidebar ? 0.5 : 1.0
+    }
+
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
         let completionIndicatorSize: CGFloat = Self.statusMarkerSlotWidth - 4
@@ -302,6 +306,7 @@ final class ThreadCell: NSTableCellView {
         ensureLeadingStack()
         ensureMainAccentBar()
         setLeadingOffset(leadingOffset)
+        setSidebarHiddenAppearance(thread.isSidebarHidden)
         mainAccentBar?.isHidden = true
 
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
@@ -488,6 +493,7 @@ final class ThreadCell: NSTableCellView {
         ensureLeadingStack()
         ensureMainAccentBar()
         setLeadingOffset(leadingOffset)
+        setSidebarHiddenAppearance(false)
         mainAccentBar?.isHidden = false
 
         textField?.stringValue = "Main worktree"
@@ -628,6 +634,10 @@ final class ThreadCell: NSTableCellView {
         var statuses: [String] = []
         if thread.isDirty {
             statuses.append("Dirty")
+        }
+
+        if thread.isSidebarHidden {
+            statuses.append("Hidden")
         }
 
         if thread.isRateLimitExpiredAndResumable {

@@ -20,6 +20,8 @@ public enum IPCAgentDocs {
     /tmp/magent-cli rename-branch --thread <name> --name <text>
     /tmp/magent-cli set-description --thread <name> [--description <text> | --clear]
     /tmp/magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>
+    /tmp/magent-cli hide-thread --thread <name>
+    /tmp/magent-cli unhide-thread --thread <name>
     /tmp/magent-cli thread-info --thread <name>
     /tmp/magent-cli list-sections [--project <name>]
     /tmp/magent-cli add-section --name <name> [--color <hex>] [--project <name>]
@@ -39,6 +41,7 @@ public enum IPCAgentDocs {
     Use rename-branch ONLY when the user gives a literal branch name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about, use auto-rename-thread instead.
     Use set-description to manually set or clear the thread description without renaming the branch.
     Use set-thread-icon to manually set the thread icon type.
+    Use hide-thread / unhide-thread to deprioritize a thread in the sidebar without archiving it.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
     """
 
@@ -64,7 +67,7 @@ public enum IPCAgentDocs {
 
     public static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     public static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    public static let codexIPCVersion = "<!-- magent-ipc-v10 -->"
+    public static let codexIPCVersion = "<!-- magent-ipc-v11 -->"
 
     /// Lightweight Codex `AGENTS.md` hint that points to on-demand docs.
     public static let codexAgentsMdBlock: String = """

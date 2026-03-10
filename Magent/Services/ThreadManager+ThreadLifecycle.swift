@@ -209,20 +209,9 @@ extension ThreadManager {
 
         threads.append(thread)
 
-        // Place at bottom of the default section's unpinned group
+        // Place at bottom of the default section's visible group
         if let lastIndex = threads.indices.last {
-            let sectionId = effectiveSectionId(for: threads[lastIndex])
-            let maxOrder = threads
-                .filter {
-                    $0.id != thread.id &&
-                    !$0.isMain && !$0.isArchived &&
-                    $0.projectId == project.id &&
-                    !$0.isPinned &&
-                    effectiveSectionId(for: $0) == sectionId
-                }
-                .map(\.displayOrder)
-                .max() ?? -1
-            threads[lastIndex].displayOrder = maxOrder + 1
+            placeThreadAtBottomOfSidebarGroup(threadId: threads[lastIndex].id)
         }
 
         try persistence.saveThreads(threads)

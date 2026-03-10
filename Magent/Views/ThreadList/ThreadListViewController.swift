@@ -498,9 +498,9 @@ final class ThreadListViewController: NSViewController {
                 let left = lhs.element
                 let right = rhs.element
 
-                // Pinned threads always come first
-                if left.isPinned != right.isPinned {
-                    return left.isPinned
+                // Sidebar groups are ordered pinned, normal, then hidden.
+                if left.sidebarListState != right.sidebarListState {
+                    return left.sidebarListState.rawValue < right.sidebarListState.rawValue
                 }
 
                 // Sort by displayOrder (lower first)

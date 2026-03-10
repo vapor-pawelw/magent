@@ -75,6 +75,7 @@ All notable changes to this project will be documented in this file.
 - Selecting files in `CHANGES` now reliably opens and scrolls the inline diff to the correct file section, including renamed files, quoted paths, and cases where AppKit layout had not settled yet.
 
 ### Sidebar
+- Threads can now be hidden to the bottom of their section/list and appear dimmed, with matching right-click and CLI hide/unhide actions so inactive work stays visible without competing with active threads.
 - Threads can now be reordered from the flat sidebar view even when section grouping is disabled; the drop keeps hidden section ordering aligned with the visible thread above.
 - Added a fixed 8 pt gap between each repository header and its `Main worktree` row for clearer visual separation.
 - Fixed a sidebar row-jump case where selecting threads could make non-description rows expand/collapse; compact rows now keep a stable one-line height.

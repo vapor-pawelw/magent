@@ -24,7 +24,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
     private func flatInsertionIndex(
         in project: SidebarProject,
         childIndex: Int,
-        pinState: Bool,
+        group: ThreadSidebarListState,
         excluding threadId: UUID
     ) -> Int {
         let priorChildren = project.children.prefix(max(0, childIndex))
@@ -32,7 +32,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             guard let thread = child as? MagentThread,
                   !thread.isMain,
                   thread.id != threadId,
-                  thread.isPinned == pinState else { return }
+                  thread.sidebarListState == group else { return }
             count += 1
         }
     }
@@ -51,6 +51,50 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         }
     }
 
+    private func threadGroupCounts(in section: SidebarSection) -> [ThreadSidebarListState: Int] {
+        Dictionary(
+            uniqueKeysWithValues: ThreadSidebarListState.allCases.map { group in
+                (group, section.threads.filter { $0.sidebarListState == group }.count)
+            }
+        )
+    }
+
+    private func validDropIndex(
+        _ index: Int,
+        for group: ThreadSidebarListState,
+        in counts: [ThreadSidebarListState: Int]
+    ) -> Bool {
+        let pinnedCount = counts[.pinned] ?? 0
+        let visibleCount = counts[.visible] ?? 0
+
+        switch group {
+        case .pinned:
+            return index <= pinnedCount
+        case .visible:
+            return index >= pinnedCount && index <= pinnedCount + visibleCount
+        case .hidden:
+            return index >= pinnedCount + visibleCount
+        }
+    }
+
+    private func groupRelativeDropIndex(
+        _ index: Int,
+        for group: ThreadSidebarListState,
+        in counts: [ThreadSidebarListState: Int]
+    ) -> Int {
+        let pinnedCount = counts[.pinned] ?? 0
+        let visibleCount = counts[.visible] ?? 0
+
+        switch group {
+        case .pinned:
+            return index
+        case .visible:
+            return index - pinnedCount
+        case .hidden:
+            return index - pinnedCount - visibleCount
+        }
+    }
+
     private func validateFlatProjectDrop(
         for thread: MagentThread,
         in project: SidebarProject,
@@ -62,21 +106,23 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         }
 
         let regularThreads = flatRegularThreads(in: project)
-        let pinnedCount = regularThreads
-            .filter { $0.isPinned && $0.id != thread.id }
-            .count
+        let counts = Dictionary(
+            uniqueKeysWithValues: ThreadSidebarListState.allCases.map { group in
+                (
+                    group,
+                    regularThreads.filter {
+                        $0.sidebarListState == group && $0.id != thread.id
+                    }.count
+                )
+            }
+        )
         let flatIndex = flatRegularInsertionIndex(
             in: project,
             childIndex: index,
             excluding: thread.id
         )
 
-        if thread.isPinned {
-            guard flatIndex <= pinnedCount else { return [] }
-        } else {
-            guard flatIndex >= pinnedCount else { return [] }
-        }
-
+        guard validDropIndex(flatIndex, for: thread.sidebarListState, in: counts) else { return [] }
         return .move
     }
 
@@ -90,12 +136,13 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             return false
         }
 
+        let group = thread.sidebarListState
         let visibleGroup = flatRegularThreads(in: project)
-            .filter { $0.isPinned == thread.isPinned && $0.id != thread.id }
+            .filter { $0.sidebarListState == group && $0.id != thread.id }
         let insertionIndex = flatInsertionIndex(
             in: project,
             childIndex: index,
-            pinState: thread.isPinned,
+            group: group,
             excluding: thread.id
         )
         let clampedInsertionIndex = max(0, min(insertionIndex, visibleGroup.count))
@@ -178,16 +225,10 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             return .move
         }
 
-        // Drop at specific index → reorder within section
-        // Enforce pinned/unpinned boundary
-        let pinnedCount = section.threads.filter(\.isPinned).count
-        if thread.isPinned {
-            // Pinned threads can only be placed within 0..<pinnedCount (or at pinnedCount to be last pinned)
-            guard index <= pinnedCount else { return [] }
-        } else {
-            // Unpinned threads can only be placed at pinnedCount...count
-            guard index >= pinnedCount else { return [] }
-        }
+        // Drop at specific index → reorder within section while preserving the
+        // pinned / visible / hidden group boundaries.
+        let counts = threadGroupCounts(in: section)
+        guard validDropIndex(index, for: thread.sidebarListState, in: counts) else { return [] }
 
         return .move
     }
@@ -224,9 +265,9 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             threadManager.moveThread(thread, toSection: section.sectionId)
         }
 
-        // Calculate group-relative index for the reorder
-        let pinnedCount = section.threads.filter(\.isPinned).count
-        let groupIndex = thread.isPinned ? index : index - pinnedCount
+        // Calculate group-relative index for the reorder.
+        let counts = threadGroupCounts(in: section)
+        let groupIndex = groupRelativeDropIndex(index, for: thread.sidebarListState, in: counts)
         threadManager.reorderThread(thread.id, toIndex: groupIndex, inSection: section.sectionId)
         reloadData()
         return true
