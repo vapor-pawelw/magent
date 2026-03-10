@@ -98,7 +98,7 @@ final class UpdateService {
     static let shared = UpdateService()
 
     private let persistence = PersistenceService.shared
-    private let latestReleaseURL = URL(string: "https://api.github.com/repos/vapor-pawelw/magent/releases/latest")!
+    private let latestReleaseURL = URL(string: "https://api.github.com/repos/vapor-pawelw/magent-releases/releases/latest")!
     private let updaterLogPath = "/tmp/magent-self-update.log"
 
     private var isChecking = false

@@ -63,6 +63,7 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 - **Concrete rate-limit fingerprints stay active until expiry/manual lift**: Once `ThreadManager+RateLimit` has anchored a non-ignored fingerprint to a future `resetAt`, later pane output must not auto-clear that limit just because the newest block no longer repeats the message. Only expiry or explicit user lift should remove it.
 - **Session rename/migration must re-key transient session state**: When tmux session names change (rename, migration, external reconciliation), always re-key/prune transient per-session sets (`busySessions`, `waitingForInputSessions`, notification dedupe state) so thread-level busy/waiting indicators cannot get stuck on stale session names.
 - **Release changelog contract**: Keep user-facing release notes in `CHANGELOG.md` under `## Unreleased` grouped by domain headings (for example: `Thread`, `Sidebar`, `Settings`, `Agents`), with empty domains omitted. Keep bullets short and, within each domain, ordered by user impact (broad/high-impact first) with user-facing improvements above bug/technical items. `scripts/release-interactive.sh` promotes that block into a versioned section, commits it, and creates an annotated tag from those notes.
+- **Release artifacts live in `vapor-pawelw/magent-releases`**: Keep that repo public and release-only. Do not add source code there. The source repo's release workflow publishes `Magent.dmg`/`Magent.zip` to that repo, and update checks/Homebrew must consume assets from there.
 - **GhosttyKit bootstrap contract**: `Libraries/GhosttyKit.xcframework/macos-arm64_x86_64/libghostty.a` is local-only and must not be committed (including LFS). Populate/update `Libraries/GhosttyKit.xcframework` via `./scripts/bootstrap-ghosttykit.sh` (default pinned ref), and keep release/CI flows using that script before Tuist/Xcode build steps.
 - **Local module split contract**: Shared non-UI code lives in `Packages/MagentModules`. `MagentCore` is the app-facing facade; keep lower-level code split into focused internal targets (`MagentModels`, `ShellInfra`, `GitCore`, `TmuxCore`, `JiraCore`, `IPCCore`, `PersistenceCore`, `UtilityCore`) when the dependency graph allows it. Keep resource-heavy AppKit UI, `ThreadManager`, banners, and update/IPC orchestration in the app target unless you first introduce package-safe resource/theme/localization wrappers. Prefer extracting pure models/services/utilities into package targets rather than moving AppKit controllers directly.
 - **Tuist**: Run `mise x -- tuist generate --no-open` after adding/removing Swift files.
@@ -90,11 +91,11 @@ When the user asks to "release", "publish", "cut a release", or "bump version":
    ```
 5. **Manual fallback only if needed**: create an **annotated** tag (`git tag -a v<new_version> -m "<notes>"`) and push it
 6. **Monitor the workflow**: `gh run list --limit 1` then `gh run watch <id> --exit-status`
-7. **Verify**: `gh release view v<new_version>` — confirm the release has `Magent.dmg` attached (plus compatibility `Magent.zip`)
+7. **Verify**: `gh release view v<new_version> --repo vapor-pawelw/magent-releases` — confirm the release has `Magent.dmg` attached (plus compatibility `Magent.zip`)
 
 The tag push triggers a GitHub Actions workflow (`.github/workflows/release.yml`) that:
 - Builds an unsigned `Magent.app` on `macos-26`
-- Creates a GitHub Release with changelog/tag-annotation notes, `Magent.dmg`, and a compatibility `Magent.zip`
+- Publishes a GitHub Release to `vapor-pawelw/magent-releases` with changelog/tag-annotation notes, `Magent.dmg`, and a compatibility `Magent.zip`
 - Auto-updates the Homebrew cask in `vapor-pawelw/homebrew-magent`
 
 **Do NOT** manually edit `Project.swift` version strings — the workflow injects them from the git tag automatically.

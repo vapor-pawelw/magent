@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+env:
+  RELEASE_REPO: vapor-pawelw/magent-releases
+
 permissions:
   contents: write
 
@@ -101,19 +104,25 @@ jobs:
         if: steps.release_notes.outputs.has_notes == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          repository: ${{ env.RELEASE_REPO }}
+          target_commitish: main
           files: |
             Magent.dmg
             Magent.zip
           body: ${{ steps.release_notes.outputs.body }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       - name: Create GitHub Release (generated fallback)
         if: steps.release_notes.outputs.has_notes != 'true'
         uses: softprops/action-gh-release@v2
         with:
+          repository: ${{ env.RELEASE_REPO }}
+          target_commitish: main
           files: |
             Magent.dmg
             Magent.zip
           generate_release_notes: true
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
   update-cask:
     needs: build
@@ -127,40 +136,15 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG#v}"
+          ASSET_URL="https://github.com/${{ env.RELEASE_REPO }}/releases/download/${TAG}/Magent.dmg"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "asset_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve Magent.dmg asset API URL
-        id: asset
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const tag = process.env.GITHUB_REF.replace("refs/tags/", "");
-            const { data: release } = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag,
-            });
-
-            const asset = release.assets.find((candidate) => candidate.name === "Magent.dmg");
-            if (!asset) {
-              core.setFailed(`Magent.dmg not found for ${tag}`);
-              return;
-            }
-
-            core.setOutput("api_url", asset.url);
-
-      - name: Download private release asset and compute SHA256
+      - name: Download public release asset and compute SHA256
         id: sha
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -sSL \
-            -H "Accept: application/octet-stream" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${{ steps.asset.outputs.api_url }}" \
-            -o Magent.dmg
+          curl -sSL "${{ steps.release.outputs.asset_url }}" -o Magent.dmg
 
           SHA=$(sha256sum Magent.dmg | awk '{print $1}')
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
@@ -177,10 +161,10 @@ jobs:
         run: |
           VERSION="${{ steps.release.outputs.version }}"
           SHA="${{ steps.sha.outputs.sha256 }}"
-          ASSET_API_URL="${{ steps.asset.outputs.api_url }}"
+          ASSET_URL="${{ steps.release.outputs.asset_url }}"
           sed -i "s/version \".*\"/version \"$VERSION\"/" homebrew-magent/Casks/magent.rb
           sed -i "s/sha256 \".*\"/sha256 \"$SHA\"/" homebrew-magent/Casks/magent.rb
-          sed -i "s|url \".*\".*|url \"$ASSET_API_URL\", using: GitHubPrivateRepositoryReleaseAssetDownloadStrategy|" homebrew-magent/Casks/magent.rb
+          sed -i "s|url \".*\".*|url \"$ASSET_URL\"|" homebrew-magent/Casks/magent.rb
           cat homebrew-magent/Casks/magent.rb
 
       - name: Commit and push cask update

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 RELEASE_WORKFLOW_NAME="Release"
+DEFAULT_RELEASE_REPO="vapor-pawelw/magent-releases"
 DEFAULT_HOMEBREW_TAP_REPO="vapor-pawelw/homebrew-magent"
 CHANGELOG_FILE="CHANGELOG.md"
 CHANGELOG_UNRELEASED_PLACEHOLDER="- _No notable changes yet._"
@@ -295,13 +296,16 @@ main() {
     exit 1
   fi
 
-  local owner_repo
-  owner_repo="$(infer_owner_repo || true)"
-  if [[ -z "$owner_repo" ]]; then
+  local source_repo
+  source_repo="$(infer_owner_repo || true)"
+  if [[ -z "$source_repo" ]]; then
     echo "Could not infer GitHub owner/repo from origin remote." >&2
     exit 1
   fi
-  owner_repo="$(normalize_owner_repo "$owner_repo")"
+  source_repo="$(normalize_owner_repo "$source_repo")"
+
+  local release_repo
+  release_repo="${MAGENT_RELEASE_REPO:-$DEFAULT_RELEASE_REPO}"
 
   local tap_repo
   tap_repo="${MAGENT_HOMEBREW_TAP_REPO:-$DEFAULT_HOMEBREW_TAP_REPO}"
@@ -319,7 +323,8 @@ main() {
   fi
   release_date="$(date +%Y-%m-%d)"
 
-  echo "Repository: $owner_repo"
+  echo "Source repository: $source_repo"
+  echo "Release repository: $release_repo"
   echo "Current branch: ${branch:-detached}"
   if [[ -n "$latest_tag" ]]; then
     echo "Latest tag: $latest_tag"
@@ -399,8 +404,8 @@ main() {
   echo "- Create and push changelog commit on branch '${branch}'"
   echo "- Create and push annotated tag: $tag"
   echo "- Current source commit: $commit"
-  echo "- Watch workflow: $RELEASE_WORKFLOW_NAME"
-  echo "- Verify GitHub release contains Magent.dmg and Magent.zip"
+  echo "- Watch workflow in ${source_repo}: $RELEASE_WORKFLOW_NAME"
+  echo "- Verify GitHub release in ${release_repo} contains Magent.dmg and Magent.zip"
   echo "- Verify Homebrew tap ${tap_repo} points to version ${version}"
   echo
 
@@ -438,24 +443,24 @@ main() {
     exit 1
   fi
 
-  if release_workflow_status "$owner_repo"; then
+  if release_workflow_status "$source_repo"; then
     :
   else
     local workflow_status
     workflow_status="$?"
     case "$workflow_status" in
       2)
-        echo "Tag pushed, but could not query GitHub Actions workflows for ${owner_repo}."
+        echo "Tag pushed, but could not query GitHub Actions workflows for ${source_repo}."
         echo "Skipping workflow/release/Homebrew verification."
         exit 0
         ;;
       3)
-        echo "Tag pushed. No GitHub Actions workflows are configured in ${owner_repo}."
+        echo "Tag pushed. No GitHub Actions workflows are configured in ${source_repo}."
         echo "Skipping workflow/release/Homebrew verification."
         exit 0
         ;;
       4)
-        echo "Tag pushed. Workflow '${RELEASE_WORKFLOW_NAME}' is not configured in ${owner_repo}."
+        echo "Tag pushed. Workflow '${RELEASE_WORKFLOW_NAME}' is not configured in ${source_repo}."
         echo "Skipping workflow/release/Homebrew verification."
         exit 0
         ;;
@@ -464,25 +469,21 @@ main() {
 
   echo "Changelog commit ${changelog_commit} pushed. Waiting for GitHub Actions run..."
   local run_id
-  run_id="$(wait_for_release_run_id "$owner_repo" "$tag" || true)"
+  run_id="$(wait_for_release_run_id "$source_repo" "$tag" || true)"
   if [[ -z "$run_id" ]]; then
     echo "Could not find the '${RELEASE_WORKFLOW_NAME}' run for tag ${tag}." >&2
-    echo "Check manually with: gh run list --workflow \"${RELEASE_WORKFLOW_NAME}\" --repo ${owner_repo}" >&2
+    echo "Check manually with: gh run list --workflow \"${RELEASE_WORKFLOW_NAME}\" --repo ${source_repo}" >&2
     exit 1
   fi
 
   echo "Watching workflow run $run_id..."
-  gh run watch "$run_id" --repo "$owner_repo" --exit-status
+  gh run watch "$run_id" --repo "$source_repo" --exit-status
 
-  echo "Verifying GitHub release assets..."
-  verify_release_asset "$owner_repo" "$tag"
+  echo "Verifying GitHub release assets in ${release_repo}..."
+  verify_release_asset "$release_repo" "$tag"
 
   local expected_cask_url
-  expected_cask_url="$(gh release view "$tag" --repo "$owner_repo" --json assets --jq '.assets[] | select(.name == "Magent.dmg") | .apiUrl' | head -n1 || true)"
-  if [[ -z "$expected_cask_url" ]]; then
-    echo "Could not determine expected Magent.dmg asset API URL for ${tag}." >&2
-    exit 1
-  fi
+  expected_cask_url="https://github.com/${release_repo}/releases/download/${tag}/Magent.dmg"
 
   echo "Verifying Homebrew tap update in ${tap_repo}..."
   local cask_sha
@@ -494,7 +495,7 @@ main() {
   fi
 
   local release_url
-  release_url="$(gh release view "$tag" --repo "$owner_repo" --json url --jq '.url')"
+  release_url="$(gh release view "$tag" --repo "$release_repo" --json url --jq '.url')"
 
   echo
   echo "Release complete."

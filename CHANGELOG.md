@@ -111,8 +111,9 @@ All notable changes to this project will be documented in this file.
 - First-prompt auto-rename now generates branch slug and thread description in one AI call, reducing duplicate background model usage.
 
 ### Distribution
+- Releases, in-app update checks, and Homebrew downloads now point at the public release-only repo `vapor-pawelw/magent-releases`, so updates no longer depend on source-repo access.
 - GitHub releases now include an installable `Magent.dmg`, and in-app updates/homebrew release automation now understand the DMG packaging while keeping a compatibility `.zip` asset.
-- Homebrew installs now work with private release assets by using authenticated GitHub API download URLs in the cask update pipeline.
+- Homebrew cask updates now use the public GitHub release download URL for `Magent.dmg`, removing the private-asset token requirement.
 - Auto-updates now detect Homebrew installs and upgrade via `brew` instead of using in-place app replacement.
 - GhosttyKit bootstrap now auto-recovers from stale iTerm2 themes dependency URLs: it retries once by patching to Ghostty's maintained mirror when the initial build fails with the known `ghostty-themes.tgz` `404`.
 - Fixed local build/relaunch failures after Ghostty API changes by updating runtime callback compatibility in the embedded terminal bridge.
