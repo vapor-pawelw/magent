@@ -1,8 +1,7 @@
 import Cocoa
 import MagentCore
 
-extension SettingsGeneralViewController {
-
+extension SettingsThreadsViewController {
 
     @objc private func visibilityToggled(_ sender: NSButton) {
         let point = sender.convert(NSPoint.zero, to: sectionsTableView)
@@ -105,27 +104,6 @@ extension SettingsGeneralViewController {
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()
     }
-
-
-    // MARK: - NSTextViewDelegate
-
-    func textDidChange(_ notification: Notification) {
-        guard let textView = notification.object as? NSTextView else { return }
-
-        if textView === terminalInjectionTextView {
-            settings.terminalInjectionCommand = textView.string
-        } else if textView === agentContextTextView {
-            settings.agentContextInjection = textView.string
-        } else if textView === slugPromptTextView {
-            settings.autoRenameSlugPrompt = textView.string
-        } else if textView === reviewPromptTextView {
-            settings.reviewPrompt = textView.string
-        }
-
-        try? persistence.saveSettings(settings)
-    }
-
-    // MARK: - Thread Sections Table
 
     func numberOfRows(in tableView: NSTableView) -> Int {
         sortedSections.count

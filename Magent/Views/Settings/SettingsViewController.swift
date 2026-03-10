@@ -94,11 +94,12 @@ final class ResizeHandleView: NSView {
 // MARK: - Settings Category
 
 enum SettingsCategory: Int, CaseIterable {
-    case general, agents, notifications, projects, jira
+    case general, threads, agents, notifications, projects, jira
 
     var title: String {
         switch self {
         case .general: return String(localized: .CommonStrings.settingsCategoryGeneral)
+        case .threads: return String(localized: .CommonStrings.settingsCategoryThreads)
         case .agents: return String(localized: .CommonStrings.settingsCategoryAgents)
         case .notifications: return String(localized: .CommonStrings.settingsCategoryNotifications)
         case .projects: return String(localized: .CommonStrings.settingsCategoryProjects)
@@ -109,6 +110,7 @@ enum SettingsCategory: Int, CaseIterable {
     var symbolName: String {
         switch self {
         case .general: return "gearshape"
+        case .threads: return "square.stack.3d.up"
         case .agents: return "cpu"
         case .notifications: return "bell"
         case .projects: return "folder"
@@ -124,6 +126,7 @@ final class SettingsSplitViewController: NSSplitViewController {
     private let sidebarVC = SettingsSidebarViewController()
     private let detailContainerVC = NSViewController()
     private let generalVC = SettingsGeneralViewController()
+    private let threadsVC = SettingsThreadsViewController()
     private let agentsVC = SettingsAgentsViewController()
     private let notificationsVC = SettingsNotificationsViewController()
     private let projectsVC = SettingsProjectsViewController()
@@ -166,7 +169,7 @@ final class SettingsSplitViewController: NSSplitViewController {
         detailContainerVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
         let container = detailContainerVC.view
 
-        let allVCs: [NSViewController] = [generalVC, agentsVC, notificationsVC, projectsVC, jiraVC]
+        let allVCs: [NSViewController] = [generalVC, threadsVC, agentsVC, notificationsVC, projectsVC, jiraVC]
         for vc in allVCs {
             detailContainerVC.addChild(vc)
             vc.view.translatesAutoresizingMaskIntoConstraints = false
@@ -182,6 +185,7 @@ final class SettingsSplitViewController: NSSplitViewController {
 
     private func showCategoryContent(_ category: SettingsCategory) {
         generalVC.view.isHidden = category != .general
+        threadsVC.view.isHidden = category != .threads
         agentsVC.view.isHidden = category != .agents
         notificationsVC.view.isHidden = category != .notifications
         projectsVC.view.isHidden = category != .projects

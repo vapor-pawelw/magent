@@ -103,6 +103,7 @@ All notable changes to this project will be documented in this file.
 - Fixed a remaining overlap case where the global Rate limits summary could still cover the first repo row by shifting the sidebar scroll container down with a dynamic top constraint.
 
 ### Settings
+- Settings now split thread-focused preferences into a dedicated `Threads` category for naming, sections, startup injection, and review defaults, while `General` keeps app-wide updates, terminal overlay toggles, and environment-variable help.
 - Added Terminal Overlay visibility settings to permanently hide/show: `Scroll to bottom` indicator, terminal scroll controls, and Prompt TOC overlay.
 - Project settings now include `Local Sync Paths` (line-separated repo-relative files/directories) copied into new thread worktrees and merged back on archive.
 - Project settings now include project reorder and visibility controls.
