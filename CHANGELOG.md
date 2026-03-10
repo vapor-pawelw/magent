@@ -40,6 +40,7 @@ All notable changes to this project will be documented in this file.
 
 ### Table of Contents
 - Prompt TOC header now uses a slightly darker top band so the draggable area is easier to spot at a glance.
+- Prompt TOC now opens/loads anchored to the newest prompts by default; during refresh it stays pinned to bottom when you are at/near bottom, but preserves your offset if you scrolled up.
 - Prompt TOC now stays pinned to the bottom when new prompts are appended while you were already scrolled to the bottom.
 - Fixed Prompt TOC not refreshing after an agent completes its first reply when auto-rename is enabled: the bell pipe was not replaced after the tmux session was renamed, so subsequent completion events were silently dropped.
 - Prompt TOC background is now semi-transparent when idle and fades to opaque on hover, reducing visual clutter while keeping the panel accessible; the fade now applies to the whole panel (including text) using the same mechanism as the scroll overlay.

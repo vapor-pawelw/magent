@@ -187,8 +187,7 @@ extension ThreadDetailViewController {
         }
         promptTOCView?.setEntries(
             entries,
-            agentType: agentType,
-            preserveBottomIfAppending: previousSessionName == sessionName && entries.count > previousEntryCount
+            agentType: agentType
         )
         if previousSessionName != sessionName {
             restorePromptTOCSize(for: sessionName)
@@ -1060,11 +1059,12 @@ final class PromptTableOfContentsView: NSView {
     private var rowViews: [PromptTOCEntryRowView] = []
     private var selectedEntryIndex: Int?
     private var isHovered = false
-    private var shouldRestoreScrollToBottomAfterReload = false
+    private var shouldRestoreScrollToBottomAfterReload = true
+    private var preservedScrollOffsetY: CGFloat = 0
 
     private static let normalAlpha: CGFloat = 0.55
     private static let hoverAlpha: CGFloat = 0.95
-    private static let bottomScrollTolerance: CGFloat = 2
+    private static let bottomAutoScrollTolerance: CGFloat = 24
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1077,7 +1077,8 @@ final class PromptTableOfContentsView: NSView {
     }
 
     func setLoading(agentType: AgentType?) {
-        shouldRestoreScrollToBottomAfterReload = isScrolledToBottom()
+        preservedScrollOffsetY = currentScrollOffsetY()
+        shouldRestoreScrollToBottomAfterReload = isScrolledToBottomOrNearBottom()
         subtitleLabel.stringValue = subtitle(forCount: nil, agentType: agentType)
         spinner.isHidden = false
         spinner.startAnimation(nil)
@@ -1087,11 +1088,10 @@ final class PromptTableOfContentsView: NSView {
 
     func setEntries(
         _ entries: [PromptTOCEntry],
-        agentType: AgentType?,
-        preserveBottomIfAppending: Bool = false
+        agentType: AgentType?
     ) {
         let previousSelection = selectedEntryIndex
-        let shouldScrollToBottom = preserveBottomIfAppending && shouldRestoreScrollToBottomAfterReload
+        let shouldScrollToBottom = shouldRestoreScrollToBottomAfterReload
         subtitleLabel.stringValue = subtitle(forCount: entries.count, agentType: agentType)
         spinner.stopAnimation(nil)
         spinner.isHidden = true
@@ -1137,6 +1137,8 @@ final class PromptTableOfContentsView: NSView {
         scrollView.layoutSubtreeIfNeeded()
         if shouldScrollToBottom {
             scrollToBottom()
+        } else {
+            restoreScrollOffset()
         }
         shouldRestoreScrollToBottomAfterReload = false
     }
@@ -1337,10 +1339,14 @@ final class PromptTableOfContentsView: NSView {
         }
     }
 
-    private func isScrolledToBottom() -> Bool {
+    private func currentScrollOffsetY() -> CGFloat {
+        scrollView.contentView.bounds.origin.y
+    }
+
+    private func isScrolledToBottomOrNearBottom() -> Bool {
         guard let documentView = scrollView.documentView else { return true }
         let visibleRect = scrollView.contentView.bounds
-        return visibleRect.maxY >= documentView.frame.maxY - Self.bottomScrollTolerance
+        return visibleRect.maxY >= documentView.frame.maxY - Self.bottomAutoScrollTolerance
     }
 
     private func scrollToBottom() {
@@ -1348,6 +1354,15 @@ final class PromptTableOfContentsView: NSView {
         let contentView = scrollView.contentView
         let maxOffsetY = max(0, documentView.frame.height - contentView.bounds.height)
         contentView.scroll(to: NSPoint(x: 0, y: maxOffsetY))
+        scrollView.reflectScrolledClipView(contentView)
+    }
+
+    private func restoreScrollOffset() {
+        guard let documentView = scrollView.documentView else { return }
+        let contentView = scrollView.contentView
+        let maxOffsetY = max(0, documentView.frame.height - contentView.bounds.height)
+        let targetOffsetY = min(max(0, preservedScrollOffsetY), maxOffsetY)
+        contentView.scroll(to: NSPoint(x: 0, y: targetOffsetY))
         scrollView.reflectScrolledClipView(contentView)
     }
 
