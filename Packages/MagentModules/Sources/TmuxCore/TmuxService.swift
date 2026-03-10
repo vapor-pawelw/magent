@@ -355,19 +355,23 @@ public final class TmuxService: Sendable {
         return result
     }
 
-    /// Returns child PIDs for each specified parent PID, in one `ps` call.
-    public func childPids(forParents parentPids: Set<pid_t>) async -> [pid_t: [pid_t]] {
+    /// Returns child processes (pid + full args) for each specified parent PID, in one `ps` call.
+    public func childProcesses(forParents parentPids: Set<pid_t>) async -> [pid_t: [(pid: pid_t, args: String)]] {
         guard !parentPids.isEmpty else { return [:] }
-        guard let output = try? await ShellExecutor.run("ps -o ppid=,pid= -ax"),
+        guard let output = try? await ShellExecutor.run("ps -o ppid=,pid=,args= -ax"),
               !output.isEmpty else { return [:] }
-        var result: [pid_t: [pid_t]] = [:]
+        var result: [pid_t: [(pid: pid_t, args: String)]] = [:]
         for line in output.split(whereSeparator: \.isNewline) {
-            let parts = line.split(whereSeparator: \.isWhitespace)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            // Split on whitespace for first two fields only; the rest is args (may contain spaces)
+            let parts = trimmed.split(maxSplits: 2, omittingEmptySubsequences: true, whereSeparator: \.isWhitespace)
             guard parts.count >= 2,
                   let ppid = pid_t(parts[0]),
                   let cpid = pid_t(parts[1]),
                   parentPids.contains(ppid) else { continue }
-            result[ppid, default: []].append(cpid)
+            let args = parts.count >= 3 ? String(parts[2]) : ""
+            result[ppid, default: []].append((pid: cpid, args: args))
         }
         return result
     }
