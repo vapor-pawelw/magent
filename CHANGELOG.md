@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Thread
+- "Use project default" in the add-tab menu now always resolves to the current project/global default agent from Settings instead of the agent the thread was originally created with.
+
+### Settings
 - `Settings > Threads` now shows up to 10 recently archived threads with one-click restore actions, so quick restores remain available after the archive banner disappears.
 - Archiving a thread now shows a 5-second in-app banner with thread details and a one-click `Restore` action, including when the archive was triggered through `magent-cli`.
 - Fixed `archive-current-thread.sh` failing when the base worktree match was the last entry in `git worktree list`, so the helper now resolves the main worktree correctly before merging and archiving.

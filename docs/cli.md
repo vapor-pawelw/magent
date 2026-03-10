@@ -205,7 +205,7 @@ Add a tab to an existing thread.
 magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
 ```
 
-Use `--agent terminal` for a plain shell tab. If `--agent` is omitted, defaults to the thread's agent type.
+Use `--agent terminal` for a plain shell tab. If `--agent` is omitted, defaults to the project/global default agent from Settings.
 
 ### list-tabs
 
