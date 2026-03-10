@@ -472,7 +472,7 @@ extension ThreadManager {
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
             BannerManager.shared.show(
-                message: restoredThreadBannerMessage(for: restoredThread, projectName: project.name),
+                attributedMessage: restoredThreadBannerAttributedMessage(for: restoredThread),
                 style: .info,
                 duration: Self.archivedThreadBannerDuration
             )
@@ -624,18 +624,59 @@ extension ThreadManager {
         thread.submittedPromptsBySession = [:]
     }
 
-    private func archivedThreadBannerMessage(
+    private func archivedThreadBannerAttributedMessage(
         for thread: MagentThread,
-        projectName: String,
         warning: String?
-    ) -> String {
-        var lines = ["Archived thread '\(thread.name)'."]
-        if let description = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !description.isEmpty {
-            lines.append("Task: \(description)")
+    ) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+
+        // Header line: "Thread archived"
+        let headerAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]
+        result.append(NSAttributedString(string: "Thread archived\n", attributes: headerAttrs))
+
+        // Description or thread name — prominent
+        let titleText: String
+        if let desc = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+            titleText = desc
+        } else {
+            titleText = thread.name
         }
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 14, weight: .semibold),
+            .foregroundColor: NSColor.labelColor,
+        ]
+        result.append(NSAttributedString(string: titleText, attributes: titleAttrs))
+
+        // Branch · worktree — secondary monospace line
+        let monoFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        let secondaryAttrs: [NSAttributedString.Key: Any] = [
+            .font: monoFont,
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]
+        let worktreeName = URL(fileURLWithPath: thread.worktreePath).lastPathComponent
+        result.append(NSAttributedString(string: "\n\(thread.branchName)  ·  \(worktreeName)", attributes: secondaryAttrs))
+
+        // Warning line if present
+        if let warning, !warning.isEmpty {
+            let warningAttrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                .foregroundColor: NSColor.systemYellow,
+            ]
+            result.append(NSAttributedString(string: "\n⚠ \(warning)", attributes: warningAttrs))
+        }
+
+        return result
+    }
+
+    private func archivedThreadBannerDetails(
+        for thread: MagentThread,
+        projectName: String
+    ) -> String {
+        var lines: [String] = []
         lines.append("Project: \(projectName)")
-        lines.append("Branch: \(thread.branchName)")
         if let baseBranch = thread.baseBranch?.trimmingCharacters(in: .whitespacesAndNewlines),
            !baseBranch.isEmpty {
             lines.append("Base: \(baseBranch)")
@@ -647,22 +688,39 @@ extension ThreadManager {
         }
         lines.append("Tabs: \(thread.tmuxSessionNames.count)")
         lines.append("Worktree: \(thread.worktreePath)")
-        if let warning, !warning.isEmpty {
-            lines.append("Warning: \(warning)")
-        }
         return lines.joined(separator: "\n")
     }
 
-    private func restoredThreadBannerMessage(for thread: MagentThread, projectName: String) -> String {
-        var lines = ["Restored thread '\(thread.name)'."]
-        if let description = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !description.isEmpty {
-            lines.append("Task: \(description)")
+    private func restoredThreadBannerAttributedMessage(for thread: MagentThread) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+
+        let headerAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]
+        result.append(NSAttributedString(string: "Thread restored\n", attributes: headerAttrs))
+
+        let titleText: String
+        if let desc = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+            titleText = desc
+        } else {
+            titleText = thread.name
         }
-        lines.append("Project: \(projectName)")
-        lines.append("Branch: \(thread.branchName)")
-        lines.append("Worktree: \(thread.worktreePath)")
-        return lines.joined(separator: "\n")
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 14, weight: .semibold),
+            .foregroundColor: NSColor.labelColor,
+        ]
+        result.append(NSAttributedString(string: titleText, attributes: titleAttrs))
+
+        let monoFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        let secondaryAttrs: [NSAttributedString.Key: Any] = [
+            .font: monoFont,
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]
+        let worktreeName = URL(fileURLWithPath: thread.worktreePath).lastPathComponent
+        result.append(NSAttributedString(string: "\n\(thread.branchName)  ·  \(worktreeName)", attributes: secondaryAttrs))
+
+        return result
     }
 
     func restoreArchivedThreadFromUserAction(id threadId: UUID, threadName: String) async -> Bool {
@@ -687,13 +745,12 @@ extension ThreadManager {
             .first(where: { $0.id == thread.projectId })?
             .name ?? "Unknown Project"
 
+        let attributed = archivedThreadBannerAttributedMessage(for: thread, warning: warning)
+        let details = archivedThreadBannerDetails(for: thread, projectName: projectName)
+
         Task { @MainActor [weak self] in
             BannerManager.shared.show(
-                message: self?.archivedThreadBannerMessage(
-                    for: thread,
-                    projectName: projectName,
-                    warning: warning
-                ) ?? "Archived thread '\(thread.name)'.",
+                attributedMessage: attributed,
                 style: warning == nil ? .info : .warning,
                 duration: Self.archivedThreadBannerDuration,
                 isDismissible: true,
@@ -703,7 +760,10 @@ extension ThreadManager {
                             _ = await self?.restoreArchivedThreadFromUserAction(id: thread.id, threadName: thread.name)
                         }
                     }
-                ]
+                ],
+                details: details,
+                detailsCollapsedTitle: "More Info",
+                detailsExpandedTitle: "Less Info"
             )
         }
     }

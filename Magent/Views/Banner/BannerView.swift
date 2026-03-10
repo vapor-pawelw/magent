@@ -38,6 +38,7 @@ struct BannerAction {
 
 struct BannerConfig {
     let message: String
+    let attributedMessage: NSAttributedString?
     let style: BannerStyle
     let duration: TimeInterval?
     let isDismissible: Bool
@@ -45,6 +46,28 @@ struct BannerConfig {
     let details: String?
     let detailsCollapsedTitle: String?
     let detailsExpandedTitle: String?
+
+    init(
+        message: String = "",
+        attributedMessage: NSAttributedString? = nil,
+        style: BannerStyle,
+        duration: TimeInterval?,
+        isDismissible: Bool,
+        actions: [BannerAction],
+        details: String? = nil,
+        detailsCollapsedTitle: String? = nil,
+        detailsExpandedTitle: String? = nil
+    ) {
+        self.message = message
+        self.attributedMessage = attributedMessage
+        self.style = style
+        self.duration = duration
+        self.isDismissible = isDismissible
+        self.actions = actions
+        self.details = details
+        self.detailsCollapsedTitle = detailsCollapsedTitle
+        self.detailsExpandedTitle = detailsExpandedTitle
+    }
 }
 
 // MARK: - BannerOverlayView
@@ -121,7 +144,11 @@ final class BannerView: NSView {
         iconView.translatesAutoresizingMaskIntoConstraints = false
         headerRow.addArrangedSubview(iconView)
 
-        messageLabel.stringValue = config.message
+        if let attributed = config.attributedMessage {
+            messageLabel.attributedStringValue = attributed
+        } else {
+            messageLabel.stringValue = config.message
+        }
         messageLabel.font = .systemFont(ofSize: 13, weight: .medium)
         messageLabel.textColor = NSColor(resource: .textPrimary)
         messageLabel.lineBreakMode = .byWordWrapping

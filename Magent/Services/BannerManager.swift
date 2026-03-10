@@ -36,6 +36,28 @@ final class BannerManager {
         ))
     }
 
+    func show(
+        attributedMessage: NSAttributedString,
+        style: BannerStyle = .info,
+        duration: TimeInterval? = 3.0,
+        isDismissible: Bool = true,
+        actions: [BannerAction] = [],
+        details: String? = nil,
+        detailsCollapsedTitle: String? = nil,
+        detailsExpandedTitle: String? = nil
+    ) {
+        showOnMain(config: BannerConfig(
+            attributedMessage: attributedMessage,
+            style: style,
+            duration: duration,
+            isDismissible: isDismissible,
+            actions: actions,
+            details: details,
+            detailsCollapsedTitle: detailsCollapsedTitle,
+            detailsExpandedTitle: detailsExpandedTitle
+        ))
+    }
+
     func dismissCurrent() {
         dismissAnimated()
     }
