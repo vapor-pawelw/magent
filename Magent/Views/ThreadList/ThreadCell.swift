@@ -3,11 +3,15 @@ import MagentCore
 
 final class ThreadCell: NSTableCellView {
 
+    private static let leadingIconSize: CGFloat = 16
+    private static let dirtyDotSize: CGFloat = 7
     private static let jiraMarkerWidth: CGFloat = 10
     private static let pinMarkerWidth: CGFloat = 12
     private static let archiveMarkerWidth: CGFloat = 12
     private static let statusMarkerSlotWidth: CGFloat = 14
     private static let trailingMarkerSpacing: CGFloat = 4
+    private static let primarySecondaryRowSpacing: CGFloat = 1
+    private static let contentVerticalInset: CGFloat = 9
 
     private var prLabel: NSTextField?
     private var subtitleLabel: NSTextField?
@@ -28,6 +32,31 @@ final class ThreadCell: NSTableCellView {
     private var isConfiguredAsMain = false
 
     var onArchive: (() -> Void)?
+
+    private static func descriptionFont() -> NSFont {
+        .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+    }
+
+    private static func metadataFont() -> NSFont {
+        .systemFont(ofSize: 10)
+    }
+
+    private static func lineHeight(for font: NSFont) -> CGFloat {
+        ceil(font.ascender - font.descender + font.leading)
+    }
+
+    static func uniformSidebarRowHeight() -> CGFloat {
+        let titleBlockHeight = (lineHeight(for: descriptionFont()) * 2)
+            + lineHeight(for: metadataFont())
+            + primarySecondaryRowSpacing
+        let contentHeight = max(
+            leadingIconSize,
+            dirtyDotSize,
+            statusMarkerSlotWidth,
+            titleBlockHeight
+        )
+        return ceil(contentHeight + (contentVerticalInset * 2))
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -70,7 +99,7 @@ final class ThreadCell: NSTableCellView {
 
         let subtitle = NSTextField(labelWithString: "")
         subtitle.translatesAutoresizingMaskIntoConstraints = false
-        subtitle.font = .systemFont(ofSize: 10)
+        subtitle.font = Self.metadataFont()
         subtitle.textColor = .secondaryLabelColor
         subtitle.lineBreakMode = .byTruncatingTail
         subtitle.maximumNumberOfLines = 1
@@ -83,8 +112,8 @@ final class ThreadCell: NSTableCellView {
         tf.removeFromSuperview()
 
         NSLayoutConstraint.activate([
-            iv.widthAnchor.constraint(equalToConstant: 16),
-            iv.heightAnchor.constraint(equalToConstant: 16),
+            iv.widthAnchor.constraint(equalToConstant: Self.leadingIconSize),
+            iv.heightAnchor.constraint(equalToConstant: Self.leadingIconSize),
         ])
 
         tf.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -106,7 +135,7 @@ final class ThreadCell: NSTableCellView {
         let verticalStack = NSStackView(views: [primaryRow, secondaryRow])
         verticalStack.orientation = .vertical
         verticalStack.alignment = .leading
-        verticalStack.spacing = 1
+        verticalStack.spacing = Self.primarySecondaryRowSpacing
         verticalStack.translatesAutoresizingMaskIntoConstraints = false
         verticalStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         verticalStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -173,8 +202,8 @@ final class ThreadCell: NSTableCellView {
         dot.setContentCompressionResistancePriority(.required, for: .horizontal)
         dot.isHidden = true
         NSLayoutConstraint.activate([
-            dot.widthAnchor.constraint(equalToConstant: 7),
-            dot.heightAnchor.constraint(equalToConstant: 7),
+            dot.widthAnchor.constraint(equalToConstant: Self.dirtyDotSize),
+            dot.heightAnchor.constraint(equalToConstant: Self.dirtyDotSize),
         ])
         return dot
     }
@@ -329,10 +358,10 @@ final class ThreadCell: NSTableCellView {
 
         if hasDescription {
             // Keep description wrapping stable across selection/unread state changes.
-            textField?.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+            textField?.font = Self.descriptionFont()
         } else {
             textField?.font = thread.hasUnreadAgentCompletion
-                ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+                ? Self.descriptionFont()
                 : .preferredFont(forTextStyle: .body)
         }
         textField?.textColor = thread.jiraUnassigned ? .tertiaryLabelColor : .labelColor

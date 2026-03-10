@@ -288,25 +288,6 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         case other
     }
 
-    private func stableDescriptionMeasurementFont() -> NSFont {
-        // Selection can clear unread completion, which changes the rendered font.
-        // Measure with the widest sidebar description font so row heights stay stable.
-        .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-    }
-
-    private func lineHeight(for font: NSFont) -> CGFloat {
-        ceil(font.ascender - font.descender + font.leading)
-    }
-
-    private func stableDescriptionRowHeight() -> CGFloat {
-        let primaryLineHeight = lineHeight(for: stableDescriptionMeasurementFont())
-        let secondaryLineHeight = lineHeight(for: .systemFont(ofSize: 10))
-        let primaryLineCount: CGFloat = 2
-        let rowSpacing: CGFloat = 1
-        let verticalPadding: CGFloat = 18
-        return ceil((primaryLineHeight * primaryLineCount) + secondaryLineHeight + rowSpacing + verticalPadding)
-    }
-
     private func threadLeadingOffset(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
         if outlineView.parent(forItem: thread) is SidebarSection {
             return Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel
@@ -359,18 +340,10 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarSection {
             return 28
         }
-        if let thread = item as? MagentThread {
-            if thread.isMain {
-                return 46
-            }
-            let trimmedDescription = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let hasDescription = !(trimmedDescription?.isEmpty ?? true)
-            if hasDescription {
-                // Keep description rows visually stable across selection and status
-                // marker changes by reserving the two-line description height.
-                return stableDescriptionRowHeight()
-            }
-            return 26
+        if item is MagentThread {
+            // Keep every thread row visually stable by reserving the two-line
+            // description layout height, even when a thread only renders one line.
+            return ThreadCell.uniformSidebarRowHeight()
         }
         return 26
     }
