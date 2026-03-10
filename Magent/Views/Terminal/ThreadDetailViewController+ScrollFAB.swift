@@ -17,10 +17,10 @@ extension ThreadDetailViewController {
     // MARK: - Scroll Overlay (bottom-right draggable pill)
 
     func bringScrollOverlaysToFront() {
-        if scrollOverlay.superview === terminalContainer {
+        if showTerminalScrollOverlay, scrollOverlay.superview === terminalContainer {
             terminalContainer.addSubview(scrollOverlay, positioned: .above, relativeTo: nil)
         }
-        if floatingScrollToBottomButton.superview === terminalContainer {
+        if showScrollToBottomIndicator, floatingScrollToBottomButton.superview === terminalContainer {
             terminalContainer.addSubview(floatingScrollToBottomButton, positioned: .above, relativeTo: nil)
         }
     }
@@ -94,6 +94,13 @@ extension ThreadDetailViewController {
     // MARK: - Show / Hide
 
     func setScrollFABVisible(_ visible: Bool) {
+        guard showScrollToBottomIndicator else {
+            isScrollFABVisible = false
+            floatingScrollToBottomButton.layer?.removeAllAnimations()
+            floatingScrollToBottomButton.alphaValue = 0
+            floatingScrollToBottomButton.isHidden = true
+            return
+        }
         guard visible != isScrollFABVisible else { return }
 
         isScrollFABVisible = visible
@@ -140,6 +147,11 @@ extension ThreadDetailViewController {
     func scheduleScrollFABVisibilityRefresh() {
         scrollFABRefreshTask?.cancel()
 
+        guard showScrollToBottomIndicator else {
+            setScrollFABVisible(false)
+            return
+        }
+
         guard let sessionName = currentSessionName() else {
             setScrollFABVisible(false)
             return
@@ -163,6 +175,10 @@ extension ThreadDetailViewController {
     // MARK: - Scrollbar Notification
 
     @objc func handleScrollbarUpdate(_ notification: Notification) {
+        guard showScrollToBottomIndicator else {
+            setScrollFABVisible(false)
+            return
+        }
         guard let userInfo = notification.userInfo,
               let surfaceAddr = userInfo["surfaceAddr"] as? Int,
               let total = userInfo["total"] as? UInt64,

@@ -32,3 +32,4 @@ class SidebarSection {
 }
 
 final class SidebarSpacer {}
+final class SidebarProjectMainSpacer {}

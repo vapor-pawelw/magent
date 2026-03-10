@@ -34,6 +34,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var notifyOnRateLimitLifted: Bool
     public var rateLimitLiftedSoundName: String
     public var autoCheckForUpdates: Bool
+    public var showScrollToBottomIndicator: Bool
+    public var showTerminalScrollOverlay: Bool
+    public var showPromptTOCOverlay: Bool
 
     public init(
         projects: [Project] = [],
@@ -65,7 +68,10 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showSystemNotificationOnRateLimitLifted: Bool = true,
         notifyOnRateLimitLifted: Bool = true,
         rateLimitLiftedSoundName: String = "Glass",
-        autoCheckForUpdates: Bool = true
+        autoCheckForUpdates: Bool = true,
+        showScrollToBottomIndicator: Bool = true,
+        showTerminalScrollOverlay: Bool = true,
+        showPromptTOCOverlay: Bool = true
     ) {
         self.projects = projects
         self.activeAgents = activeAgents
@@ -97,6 +103,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.notifyOnRateLimitLifted = notifyOnRateLimitLifted
         self.rateLimitLiftedSoundName = rateLimitLiftedSoundName
         self.autoCheckForUpdates = autoCheckForUpdates
+        self.showScrollToBottomIndicator = showScrollToBottomIndicator
+        self.showTerminalScrollOverlay = showTerminalScrollOverlay
+        self.showPromptTOCOverlay = showPromptTOCOverlay
     }
 
     public init(from decoder: Decoder) throws {
@@ -134,6 +143,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showSystemNotificationOnRateLimitLifted = try container.decodeIfPresent(Bool.self, forKey: .showSystemNotificationOnRateLimitLifted) ?? notifyOnRateLimitLifted
         rateLimitLiftedSoundName = try container.decodeIfPresent(String.self, forKey: .rateLimitLiftedSoundName) ?? "Glass"
         autoCheckForUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckForUpdates) ?? true
+        showScrollToBottomIndicator = try container.decodeIfPresent(Bool.self, forKey: .showScrollToBottomIndicator) ?? true
+        showTerminalScrollOverlay = try container.decodeIfPresent(Bool.self, forKey: .showTerminalScrollOverlay) ?? true
+        showPromptTOCOverlay = try container.decodeIfPresent(Bool.self, forKey: .showPromptTOCOverlay) ?? true
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -170,6 +182,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(showSystemNotificationOnRateLimitLifted, forKey: .showSystemNotificationOnRateLimitLifted)
         try container.encode(rateLimitLiftedSoundName, forKey: .rateLimitLiftedSoundName)
         try container.encode(autoCheckForUpdates, forKey: .autoCheckForUpdates)
+        try container.encode(showScrollToBottomIndicator, forKey: .showScrollToBottomIndicator)
+        try container.encode(showTerminalScrollOverlay, forKey: .showTerminalScrollOverlay)
+        try container.encode(showPromptTOCOverlay, forKey: .showPromptTOCOverlay)
     }
 
     public var visibleSections: [ThreadSection] {
@@ -292,6 +307,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case notifyOnRateLimitLifted
         case rateLimitLiftedSoundName
         case autoCheckForUpdates
+        case showScrollToBottomIndicator
+        case showTerminalScrollOverlay
+        case showPromptTOCOverlay
 
         // Legacy keys kept for migration.
         case agentCommand

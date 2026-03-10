@@ -33,6 +33,7 @@ final class ThreadListViewController: NSViewController {
         projectDisclosureTrailingInset - ((projectHeaderActionButtonSize - disclosureButtonSize) / 2)
     static let projectHeaderVerticalPadding: CGFloat = 4
     static let projectHeaderRowHeight: CGFloat = disclosureButtonSize + (projectHeaderVerticalPadding * 2) + 2
+    static let projectHeaderToMainRowGap: CGFloat = 16
     static let projectSpacerDividerVerticalSpacing: CGFloat = 4
     static let projectSpacerDividerHeight: CGFloat = 1
     static let projectSpacerDividerHorizontalInset: CGFloat = 8
@@ -67,7 +68,7 @@ final class ThreadListViewController: NSViewController {
 
     // MARK: - Data Model (3-level hierarchy)
     // Level 0: SidebarProject (project name header)
-    // Level 1: MagentThread (main/flat item) or SidebarSection (section header)
+    // Level 1: SidebarProjectMainSpacer, MagentThread (main/flat item), or SidebarSection (section header)
     // Level 2: MagentThread (regular threads under a section)
 
     var sidebarProjects: [SidebarProject] = []
@@ -386,7 +387,10 @@ final class ThreadListViewController: NSViewController {
 
             // Main thread(s) for this project first
             let projectMainThreads = mainThreads.filter { $0.projectId == project.id }
-            children.append(contentsOf: projectMainThreads)
+            if !projectMainThreads.isEmpty {
+                children.append(SidebarProjectMainSpacer())
+                children.append(contentsOf: projectMainThreads)
+            }
 
             if shouldUseSections {
                 // Section groups with regular threads (per-project or global fallback)

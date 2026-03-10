@@ -9,6 +9,9 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     private var autoSetDescriptionCheckbox: NSButton!
     private var autoSetIconFromWorkTypeCheckbox: NSButton!
     private var autoCheckForUpdatesCheckbox: NSButton!
+    private var showScrollToBottomIndicatorCheckbox: NSButton!
+    private var showScrollOverlayCheckbox: NSButton!
+    private var showPromptTOCCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
     var terminalInjectionTextView: NSTextView!
     var agentContextTextView: NSTextView!
@@ -170,6 +173,57 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         checkNowButton.controlSize = .small
         updatesSection.addArrangedSubview(checkNowButton)
 
+        let (terminalOverlaysCard, terminalOverlaysSection) = createSectionCard(
+            title: "Terminal Overlays",
+            description: "Control always-on terminal helpers."
+        )
+        stackView.addArrangedSubview(terminalOverlaysCard)
+
+        showScrollToBottomIndicatorCheckbox = NSButton(
+            checkboxWithTitle: "Show scroll-to-bottom indicator",
+            target: self,
+            action: #selector(showScrollToBottomIndicatorToggled)
+        )
+        showScrollToBottomIndicatorCheckbox.state = settings.showScrollToBottomIndicator ? .on : .off
+        terminalOverlaysSection.addArrangedSubview(showScrollToBottomIndicatorCheckbox)
+
+        let showScrollToBottomIndicatorDesc = NSTextField(
+            wrappingLabelWithString: "Shows the floating `Scroll to bottom` pill when you are away from live output."
+        )
+        showScrollToBottomIndicatorDesc.font = .systemFont(ofSize: 11)
+        showScrollToBottomIndicatorDesc.textColor = NSColor(resource: .textSecondary)
+        terminalOverlaysSection.addArrangedSubview(showScrollToBottomIndicatorDesc)
+
+        showScrollOverlayCheckbox = NSButton(
+            checkboxWithTitle: "Show terminal scroll overlay controls",
+            target: self,
+            action: #selector(showScrollOverlayToggled)
+        )
+        showScrollOverlayCheckbox.state = settings.showTerminalScrollOverlay ? .on : .off
+        terminalOverlaysSection.addArrangedSubview(showScrollOverlayCheckbox)
+
+        let showScrollOverlayDesc = NSTextField(
+            wrappingLabelWithString: "Shows the bottom-right page up/down/jump overlay."
+        )
+        showScrollOverlayDesc.font = .systemFont(ofSize: 11)
+        showScrollOverlayDesc.textColor = NSColor(resource: .textSecondary)
+        terminalOverlaysSection.addArrangedSubview(showScrollOverlayDesc)
+
+        showPromptTOCCheckbox = NSButton(
+            checkboxWithTitle: "Show prompt Table of Contents overlay",
+            target: self,
+            action: #selector(showPromptTOCToggled)
+        )
+        showPromptTOCCheckbox.state = settings.showPromptTOCOverlay ? .on : .off
+        terminalOverlaysSection.addArrangedSubview(showPromptTOCCheckbox)
+
+        let showPromptTOCDesc = NSTextField(
+            wrappingLabelWithString: "When disabled, TOC stays hidden and the top-right TOC toggle is removed."
+        )
+        showPromptTOCDesc.font = .systemFont(ofSize: 11)
+        showPromptTOCDesc.textColor = NSColor(resource: .textSecondary)
+        terminalOverlaysSection.addArrangedSubview(showPromptTOCDesc)
+
         let envVars: [(String, String)] = [
             ("$MAGENT_WORKTREE_PATH", "Absolute path to the thread's git worktree directory"),
             ("$MAGENT_PROJECT_PATH", "Absolute path to the original git repository"),
@@ -301,6 +355,7 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
             injectionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             reviewCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             updatesCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            terminalOverlaysCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             envCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             sectionsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
@@ -326,6 +381,11 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
         guard let clipView = contentScrollView?.contentView as NSClipView? else { return }
         clipView.scroll(to: NSPoint(x: 0, y: 0))
         contentScrollView.reflectScrolledClipView(clipView)
+    }
+
+    private func saveSettingsAndNotify() {
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
     }
 
     private func createSectionCard(title: String, description: String? = nil) -> (container: NSView, content: NSStackView) {
@@ -442,6 +502,21 @@ final class SettingsGeneralViewController: NSViewController, NSTextViewDelegate,
     @objc private func autoCheckForUpdatesToggled() {
         settings.autoCheckForUpdates = autoCheckForUpdatesCheckbox.state == .on
         try? persistence.saveSettings(settings)
+    }
+
+    @objc private func showScrollToBottomIndicatorToggled() {
+        settings.showScrollToBottomIndicator = showScrollToBottomIndicatorCheckbox.state == .on
+        saveSettingsAndNotify()
+    }
+
+    @objc private func showScrollOverlayToggled() {
+        settings.showTerminalScrollOverlay = showScrollOverlayCheckbox.state == .on
+        saveSettingsAndNotify()
+    }
+
+    @objc private func showPromptTOCToggled() {
+        settings.showPromptTOCOverlay = showPromptTOCCheckbox.state == .on
+        saveSettingsAndNotify()
     }
 
     @objc private func checkForUpdatesNowTapped() {

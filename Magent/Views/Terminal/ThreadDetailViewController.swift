@@ -62,6 +62,9 @@ final class ThreadDetailViewController: NSViewController {
     var promptTOCResizeStartTop: CGFloat = 0
     var promptTOCResizeStartTrailing: CGFloat = 0
     var promptTOCCanShowForCurrentTab = false
+    var showScrollToBottomIndicator = true
+    var showTerminalScrollOverlay = true
+    var showPromptTOCOverlay = true
 
     // MARK: - Inline Diff Viewer
     var diffVC: InlineDiffViewController?
@@ -163,6 +166,12 @@ final class ThreadDetailViewController: NSViewController {
             self,
             selector: #selector(handlePromptTOCVisibilityChanged),
             name: .magentPromptTOCVisibilityChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSettingsChanged(_:)),
+            name: .magentSettingsDidChange,
             object: nil
         )
 
@@ -314,6 +323,7 @@ final class ThreadDetailViewController: NSViewController {
 
         setupScrollFAB()
         setupScrollOverlay()
+        refreshOverlayVisibilitySettings()
     }
 
     // MARK: - Tab Setup
@@ -416,8 +426,22 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     func updateTerminalScrollControlsState() {
+        refreshOverlayVisibilitySettings()
         scrollOverlay.isScrollEnabled = currentSessionName() != nil
         scheduleScrollFABVisibilityRefresh()
+    }
+
+    func refreshOverlayVisibilitySettings() {
+        let settings = PersistenceService.shared.loadSettings()
+        showScrollToBottomIndicator = settings.showScrollToBottomIndicator
+        showTerminalScrollOverlay = settings.showTerminalScrollOverlay
+        showPromptTOCOverlay = settings.showPromptTOCOverlay
+
+        scrollOverlay.isHidden = !showTerminalScrollOverlay
+        if !showScrollToBottomIndicator {
+            setScrollFABVisible(false)
+        }
+        applyPromptTOCVisibility()
     }
 
     func makeTerminalView(for sessionName: String) -> TerminalSurfaceView {
@@ -587,6 +611,11 @@ final class ThreadDetailViewController: NSViewController {
 
     @objc private func handleHideDiffViewerNotification() {
         hideDiffViewer()
+    }
+
+    @objc private func handleSettingsChanged(_ notification: Notification) {
+        refreshOverlayVisibilitySettings()
+        updateTerminalScrollControlsState()
     }
 
 }

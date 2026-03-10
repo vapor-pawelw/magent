@@ -817,6 +817,18 @@ extension ThreadDetailViewController {
     }
 
     func updatePromptTOCToggleButtonState(canShow: Bool) {
+        guard showPromptTOCOverlay else {
+            togglePromptTOCButton.isHidden = true
+            togglePromptTOCButton.isEnabled = false
+            togglePromptTOCButton.image = NSImage(
+                systemSymbolName: "list.bullet.rectangle",
+                accessibilityDescription: "Toggle Table of Contents"
+            )
+            togglePromptTOCButton.toolTip = "Table of Contents is disabled in Settings"
+            return
+        }
+
+        togglePromptTOCButton.isHidden = false
         togglePromptTOCButton.isEnabled = canShow
         let isShown = canShow && !isPromptTOCManuallyHidden
         let symbolName = isShown ? "list.bullet.rectangle.fill" : "list.bullet.rectangle"
@@ -825,9 +837,10 @@ extension ThreadDetailViewController {
     }
 
     func applyPromptTOCVisibility(restoringPosition: Bool = false) {
-        updatePromptTOCToggleButtonState(canShow: promptTOCCanShowForCurrentTab)
+        let canShow = promptTOCCanShowForCurrentTab && showPromptTOCOverlay
+        updatePromptTOCToggleButtonState(canShow: canShow)
 
-        let shouldShow = promptTOCCanShowForCurrentTab && !isPromptTOCManuallyHidden
+        let shouldShow = canShow && !isPromptTOCManuallyHidden
         promptTOCView?.isHidden = !shouldShow
 
         guard shouldShow else { return }
@@ -840,7 +853,7 @@ extension ThreadDetailViewController {
     }
 
     func togglePromptTOCVisibility() {
-        guard promptTOCCanShowForCurrentTab else { return }
+        guard promptTOCCanShowForCurrentTab, showPromptTOCOverlay else { return }
         let nextHiddenState = !isPromptTOCManuallyHidden
         UserDefaults.standard.set(nextHiddenState, forKey: Self.promptTOCVisibilityDefaultsKey)
         NotificationCenter.default.post(name: .magentPromptTOCVisibilityChanged, object: nil)

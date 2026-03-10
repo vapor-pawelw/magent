@@ -114,6 +114,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarSpacer {
             return SidebarSpacerRowView()
         }
+        if item is SidebarProjectMainSpacer {
+            return SidebarSpacerRowView()
+        }
         if item is SidebarProject {
             let rowView = ProjectHeaderRowView()
             return rowView
@@ -274,6 +277,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarSpacer {
             return Self.projectHeaderInterProjectGap
         }
+        if item is SidebarProjectMainSpacer {
+            return Self.projectHeaderToMainRowGap
+        }
         if item is SidebarProject {
             return Self.projectHeaderRowHeight
         }
@@ -315,6 +321,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarSpacer {
             return false
         }
+        if item is SidebarProjectMainSpacer {
+            return false
+        }
         if let project = item as? SidebarProject {
             if suppressNextProjectRowToggle {
                 return false
@@ -347,6 +356,16 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? SidebarSpacerCellView
                 ?? {
                     let c = SidebarSpacerCellView()
+                    c.identifier = identifier
+                    return c
+                }()
+            return cell
+        }
+        if item is SidebarProjectMainSpacer {
+            let identifier = NSUserInterfaceItemIdentifier("ProjectMainSpacerCell")
+            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
+                ?? {
+                    let c = NSTableCellView()
                     c.identifier = identifier
                     return c
                 }()
