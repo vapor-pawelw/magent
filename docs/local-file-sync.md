@@ -2,6 +2,11 @@
 
 Per-project `Local Sync Paths` let users keep selected local-only files/directories synchronized between the main repo worktree and thread worktrees.
 
+Typical use cases:
+
+- gitignored local docs generated during agent work
+- large local build artifacts you want available across worktrees (for example `libghostty.a`)
+
 ## Configuration
 
 - Scope: project-level setting
@@ -25,18 +30,28 @@ The thread also stores a snapshot of that normalized path list at creation time.
 
 ## Archive Behavior
 
-Before removing a thread worktree, Magent merges each snapshotted path for that thread back into the project repo root.
+Before removing a thread worktree, Magent can merge configured paths for that thread back into the project repo root.
+
+- Merge-back is enabled by default.
+- It can be disabled globally in Settings -> General -> Archive (`Sync Local Sync Paths back to main worktree on archive`).
+- For CLI archive, `--skip-local-sync` disables merge-back for that specific archive command.
+- Only paths currently listed in project `Local Sync Paths` are eligible for merge-back.
 
 - Missing source path in thread worktree: skipped
 - Files unchanged in the thread since creation are skipped (no copy-back)
 - Merge-back is additive and non-destructive:
+  - directory entries are processed recursively
+  - intermediate directories are created only when at least one child file is being copied
+  - nested destination directories are merged per-file (never wholesale replaced)
   - never deletes destination files/directories that are absent in the thread worktree
-  - creates directories when needed
+  - creates directories only as needed for copied files
   - only touches files/directories covered by configured paths
+
+Repo root should become dirty only when a listed path actually syncs back (for example overwrite accepted in conflict prompt or destination missing and file copied).
 
 This preserves files created in the main repo while a thread was active.
 
-Because archive uses the thread's own snapshot, paths added to project settings after a thread was created are not applied retroactively to that existing thread.
+Thread snapshots still protect against retroactive additions: paths added after a thread was created are not applied to that existing thread during archive.
 
 ## Conflict Handling
 

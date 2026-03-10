@@ -122,10 +122,15 @@ extension ThreadManager {
     }
 
     func effectiveLocalSyncPaths(for thread: MagentThread, project: Project) -> [String] {
+        let currentPaths = project.normalizedLocalFileSyncPaths
         if let snapshot = thread.localFileSyncPathsSnapshot {
-            return Project.normalizeLocalFileSyncPaths(snapshot)
+            let snapshotPaths = Project.normalizeLocalFileSyncPaths(snapshot)
+            let currentSet = Set(currentPaths)
+            // Keep historical snapshot semantics for additions, but never sync paths
+            // that are no longer configured in the project.
+            return snapshotPaths.filter { currentSet.contains($0) }
         }
-        return project.normalizedLocalFileSyncPaths
+        return currentPaths
     }
 
     // MARK: - Merge Copy
@@ -145,14 +150,9 @@ extension ThreadManager {
 
             switch sourceKind {
             case .directory:
-                let ensured = try await ensureLocalSyncDirectoryExists(
-                    atPath: destinationPath,
-                    relativePath: relativePath,
-                    conflictMode: conflictMode,
-                    overwriteAll: &overwriteAll
-                )
-                guard ensured else { return }
-
+                // Recurse first and only materialize destination directories if a child
+                // file actually needs to be copied. This avoids dirtying repo root by
+                // creating empty directories when no file-level sync is needed.
                 let children = (try fm.contentsOfDirectory(atPath: sourcePath)).sorted()
                 for child in children {
                     let childSourcePath = (sourcePath as NSString).appendingPathComponent(child)
@@ -206,7 +206,10 @@ extension ThreadManager {
                         try fm.removeItem(atPath: destinationPath)
 
                     case .file:
-                        let filesMatch = fm.contentsEqual(atPath: sourcePath, andPath: destinationPath)
+                        let filesMatch = try localSyncFilesMatch(
+                            sourcePath: sourcePath,
+                            destinationPath: destinationPath
+                        )
                         guard !filesMatch else { return }
 
                         let shouldOverwrite = try await shouldOverwriteLocalSyncConflict(
@@ -299,6 +302,22 @@ extension ThreadManager {
             return .file
         }
         return type == .typeDirectory ? .directory : .file
+    }
+
+    private func localSyncFilesMatch(sourcePath: String, destinationPath: String) throws -> Bool {
+        let fm = FileManager.default
+        guard let sourceAttrs = try? fm.attributesOfItem(atPath: sourcePath),
+              let destinationAttrs = try? fm.attributesOfItem(atPath: destinationPath) else {
+            return false
+        }
+        let sourceSize = (sourceAttrs[.size] as? NSNumber)?.int64Value
+        let destinationSize = (destinationAttrs[.size] as? NSNumber)?.int64Value
+        if sourceSize != destinationSize {
+            return false
+        }
+        let sourceHash = try localSyncFileHash(atPath: sourcePath)
+        let destinationHash = try localSyncFileHash(atPath: destinationPath)
+        return sourceHash == destinationHash
     }
 
     // MARK: - Baseline Manifest

@@ -6,6 +6,7 @@ final class SettingsGeneralViewController: NSViewController {
     private let persistence = PersistenceService.shared
     private var settings: AppSettings!
     private var autoCheckForUpdatesCheckbox: NSButton!
+    private var syncLocalPathsOnArchiveCheckbox: NSButton!
     private var showScrollToBottomIndicatorCheckbox: NSButton!
     private var showScrollOverlayCheckbox: NSButton!
     private var showPromptTOCCheckbox: NSButton!
@@ -55,6 +56,27 @@ final class SettingsGeneralViewController: NSViewController {
         checkNowButton.bezelStyle = .rounded
         checkNowButton.controlSize = .small
         updatesSection.addArrangedSubview(checkNowButton)
+
+        let (archiveCard, archiveSection) = createSectionCard(
+            title: "Archive",
+            description: "Control whether archiving writes local synced files back into the main worktree."
+        )
+        stackView.addArrangedSubview(archiveCard)
+
+        syncLocalPathsOnArchiveCheckbox = NSButton(
+            checkboxWithTitle: "Sync Local Sync Paths back to main worktree on archive",
+            target: self,
+            action: #selector(syncLocalPathsOnArchiveToggled)
+        )
+        syncLocalPathsOnArchiveCheckbox.state = settings.syncLocalPathsOnArchive ? .on : .off
+        archiveSection.addArrangedSubview(syncLocalPathsOnArchiveCheckbox)
+
+        let syncLocalPathsOnArchiveDesc = NSTextField(
+            wrappingLabelWithString: "Disable this to keep main clean for parallel merges. You can still use `magent-cli archive-thread --skip-local-sync` per archive."
+        )
+        syncLocalPathsOnArchiveDesc.font = .systemFont(ofSize: 11)
+        syncLocalPathsOnArchiveDesc.textColor = NSColor(resource: .textSecondary)
+        archiveSection.addArrangedSubview(syncLocalPathsOnArchiveDesc)
 
         let (terminalOverlaysCard, terminalOverlaysSection) = createSectionCard(
             title: "Terminal Overlays",
@@ -165,9 +187,11 @@ final class SettingsGeneralViewController: NSViewController {
 
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
             updatesCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            archiveCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             terminalOverlaysCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             envCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             updatesDesc.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
+            syncLocalPathsOnArchiveDesc.widthAnchor.constraint(equalTo: archiveSection.widthAnchor),
         ])
     }
 
@@ -235,6 +259,11 @@ final class SettingsGeneralViewController: NSViewController {
 
     @objc private func autoCheckForUpdatesToggled() {
         settings.autoCheckForUpdates = autoCheckForUpdatesCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func syncLocalPathsOnArchiveToggled() {
+        settings.syncLocalPathsOnArchive = syncLocalPathsOnArchiveCheckbox.state == .on
         try? persistence.saveSettings(settings)
     }
 

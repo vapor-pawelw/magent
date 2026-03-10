@@ -58,12 +58,13 @@ Before the app is usable, the user must complete a configuration step:
 ### Archiving a Thread
 
 1. User triggers archive action on a thread
-2. If the project has local sync paths configured, the thread's snapshotted files/directories are merged back into the repo root before removal
+2. If the project has local sync paths configured and archive local-sync is enabled, only listed local-sync files/directories are candidates for merge-back into the repo root before removal
 3. Existing files in the repo that are not present in the worktree are preserved (no delete sync)
-4. If merge-back would overwrite an existing target, user can choose `Override`, `Override All`, `Ignore`, or `Cancel Archive`
-5. The git worktree is removed/pruned
-6. The thread disappears from the sidebar/list
-7. Thread metadata may be retained for history
+4. Directory paths are merged recursively on a per-file basis; intermediate directories are created only when needed for copied files
+5. If merge-back would overwrite an existing target, user can choose `Override`, `Override All`, `Ignore`, or `Cancel Archive`
+6. The git worktree is removed/pruned
+7. The thread disappears from the sidebar/list
+8. Thread metadata may be retained for history
 
 ### Persistence
 

@@ -325,7 +325,8 @@ extension ThreadManager {
     func archiveThread(
         _ thread: MagentThread,
         promptForLocalSyncConflicts: Bool = false,
-        force: Bool = false
+        force: Bool = false,
+        syncLocalPathsBackToRepo: Bool? = nil
     ) async throws -> String? {
         guard !thread.isMain else {
             throw ThreadManagerError.cannotDeleteMainThread
@@ -333,7 +334,8 @@ extension ThreadManager {
 
         var archiveWarning: String?
         let settings = persistence.loadSettings()
-        if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
+        let shouldSyncLocalPathsBackToRepo = syncLocalPathsBackToRepo ?? settings.syncLocalPathsOnArchive
+        if shouldSyncLocalPathsBackToRepo, let project = settings.projects.first(where: { $0.id == thread.projectId }) {
             do {
                 try await syncConfiguredLocalPathsFromWorktree(
                     project: project,

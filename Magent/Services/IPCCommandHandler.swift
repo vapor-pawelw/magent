@@ -301,7 +301,11 @@ final class IPCCommandHandler {
         }
 
         do {
-            let warning = try await threadManager.archiveThread(thread, force: request.force ?? false)
+            let warning = try await threadManager.archiveThread(
+                thread,
+                force: request.force ?? false,
+                syncLocalPathsBackToRepo: !(request.skipLocalSync ?? false)
+            )
             return .success(id: request.id, warning: warning)
         } catch {
             return .failure("Failed to archive thread: \(error.localizedDescription)", id: request.id)

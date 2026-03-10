@@ -171,10 +171,10 @@ magent-cli unhide-thread --thread <name>
 
 Archive a thread (removes worktree, keeps git branch).
 
-When project `Local Sync Paths` are configured, archive performs merge-back from the thread's snapshotted path list to the repo root before worktree removal. Files unchanged in the thread since creation are skipped. In non-interactive CLI mode, conflicting overwrite targets are skipped. Pass `--force` to continue archiving even if local sync fails for a non-conflict reason.
+When project `Local Sync Paths` are configured, archive performs merge-back from the thread's snapshotted path list to the repo root before worktree removal (unless `--skip-local-sync` is passed, or the app-wide archive local-sync setting is disabled). Files unchanged in the thread since creation are skipped. In non-interactive CLI mode, conflicting overwrite targets are skipped. Pass `--force` to continue archiving even if local sync fails for a non-conflict reason.
 
 ```bash
-magent-cli archive-thread --thread <name> [--force]
+magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]
 ```
 
 ### delete-thread

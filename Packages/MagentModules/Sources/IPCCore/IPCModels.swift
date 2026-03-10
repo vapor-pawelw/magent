@@ -22,6 +22,7 @@ public nonisolated struct IPCRequest: Codable, Sendable {
     public var sectionColor: String?
     public var position: Int?
     public var force: Bool?
+    public var skipLocalSync: Bool?
 }
 
 // MARK: - Response

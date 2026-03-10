@@ -573,16 +573,19 @@ actor IPCSocketServer {
         archive-thread)
             thread=""
             force=0
+            skip_local_sync=0
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --thread) thread="$2"; shift 2 ;;
                     --force) force=1; shift ;;
+                    --skip-local-sync) skip_local_sync=1; shift ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] || die "Usage: magent-cli archive-thread --thread <name> [--force]"
+            [ -n "$thread" ] || die "Usage: magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]"
             json="{$(json_kv command archive-thread),$(json_kv threadName "$thread")"
             [ "$force" = "1" ] && json="$json,\"force\":true"
+            [ "$skip_local_sync" = "1" ] && json="$json,\"skipLocalSync\":true"
             json="$json}"
             send_checked_request "$json" >/dev/null
             ;;
@@ -894,7 +897,7 @@ actor IPCSocketServer {
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
             echo "  send-prompt          --thread <name> --prompt <text>"
-            echo "  archive-thread       --thread <name> [--force]  (removes worktree, keeps branch)"
+            echo "  archive-thread       --thread <name> [--force] [--skip-local-sync]  (removes worktree, keeps branch)"
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
             echo "  list-tabs            (--thread <name> | --thread-id <id>)"
             echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]"

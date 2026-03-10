@@ -104,7 +104,7 @@ extension SettingsProjectsViewController {
         localFileSyncPathsTextView = createOverrideSection(
             in: detailsStack,
             title: "Local Sync Paths",
-            description: "Line-separated repo-relative files/directories copied into new thread worktrees, then merged back to the repo root on archive.",
+            description: "Line-separated repo-relative files/directories for local-only assets (for example gitignored docs or build artifacts). Directory entries sync recursively, per-file, without wholesale overwrite.",
             value: project.normalizedLocalFileSyncPaths.joined(separator: "\n"),
             font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )

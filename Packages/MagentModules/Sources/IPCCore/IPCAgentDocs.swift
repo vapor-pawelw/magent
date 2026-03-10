@@ -9,7 +9,7 @@ public enum IPCAgentDocs {
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
     /tmp/magent-cli send-prompt --thread <name> --prompt <text>
-    /tmp/magent-cli archive-thread --thread <name> [--force]
+    /tmp/magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]
     /tmp/magent-cli delete-thread --thread <name>
     /tmp/magent-cli list-tabs --thread <name>
     /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
@@ -42,6 +42,7 @@ public enum IPCAgentDocs {
     Use set-description to manually set or clear the thread description without renaming the branch.
     Use set-thread-icon to manually set the thread icon type.
     Use hide-thread / unhide-thread to deprioritize a thread in the sidebar without archiving it.
+    Use archive-thread --skip-local-sync to avoid writing local sync path changes into the main worktree during archive.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
     """
 
