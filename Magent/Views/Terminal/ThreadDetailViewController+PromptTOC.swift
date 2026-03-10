@@ -1137,6 +1137,7 @@ final class PromptTableOfContentsView: NSView {
     private let closeButton = NSButton()
     private var rowViews: [PromptTOCEntryRowView] = []
     private var selectedEntryIndex: Int?
+    private var tocEntries: [PromptTOCEntry] = []
     private var isHovered = false
     private var shouldRestoreScrollToBottomAfterReload = true
     private var preservedScrollOffsetY: CGFloat = 0
@@ -1171,6 +1172,7 @@ final class PromptTableOfContentsView: NSView {
     ) {
         let previousSelection = selectedEntryIndex
         let shouldScrollToBottom = shouldRestoreScrollToBottomAfterReload
+        tocEntries = entries
         subtitleLabel.stringValue = subtitle(forCount: entries.count, agentType: agentType)
         spinner.stopAnimation(nil)
         spinner.isHidden = true
@@ -1465,16 +1467,38 @@ final class PromptTableOfContentsView: NSView {
 
     private func showRenameContextMenu(for entryIndex: Int, event: NSEvent) {
         let menu = NSMenu()
-        let item = NSMenuItem(
+
+        let copyItem = NSMenuItem(
+            title: "Copy prompt",
+            action: #selector(handleCopyPromptFromContextMenu(_:)),
+            keyEquivalent: ""
+        )
+        copyItem.target = self
+        copyItem.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
+        copyItem.representedObject = NSNumber(value: entryIndex)
+        menu.addItem(copyItem)
+
+        menu.addItem(.separator())
+
+        let renameItem = NSMenuItem(
             title: "Rename thread from this prompt",
             action: #selector(handleRenameFromContextMenu(_:)),
             keyEquivalent: ""
         )
-        item.target = self
-        item.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
-        item.representedObject = NSNumber(value: entryIndex)
-        menu.addItem(item)
+        renameItem.target = self
+        renameItem.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
+        renameItem.representedObject = NSNumber(value: entryIndex)
+        menu.addItem(renameItem)
+
         NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func handleCopyPromptFromContextMenu(_ sender: NSMenuItem) {
+        guard let index = (sender.representedObject as? NSNumber)?.intValue,
+              index < tocEntries.count else { return }
+        let text = tocEntries[index].displayText
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     @objc private func handleRenameFromContextMenu(_ sender: NSMenuItem) {
