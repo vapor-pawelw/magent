@@ -146,29 +146,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             excluding: thread.id
         )
         let clampedInsertionIndex = max(0, min(insertionIndex, visibleGroup.count))
-
-        let previousThread = clampedInsertionIndex > 0 ? visibleGroup[clampedInsertionIndex - 1] : nil
-        let nextThread = clampedInsertionIndex < visibleGroup.count ? visibleGroup[clampedInsertionIndex] : nil
-        guard let anchorThread = previousThread ?? nextThread else {
-            reloadData()
-            return true
-        }
-
-        guard let targetSectionId = threadManager.effectiveSectionId(for: anchorThread) else {
-            reloadData()
-            return true
-        }
-
-        if threadManager.effectiveSectionId(for: thread) != targetSectionId {
-            threadManager.moveThread(thread, toSection: targetSectionId)
-        }
-
-        let targetSectionThreadsBeforeInsertion = visibleGroup
-            .prefix(clampedInsertionIndex)
-            .filter { threadManager.effectiveSectionId(for: $0) == targetSectionId }
-            .count
-        let targetIndex = previousThread == nil ? 0 : targetSectionThreadsBeforeInsertion
-        threadManager.reorderThread(thread.id, toIndex: targetIndex, inSection: targetSectionId)
+        threadManager.reorderThreadInVisibleProjectList(thread.id, toIndex: clampedInsertionIndex)
         reloadData()
         return true
     }

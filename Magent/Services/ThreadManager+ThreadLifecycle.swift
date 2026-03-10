@@ -209,7 +209,7 @@ extension ThreadManager {
 
         threads.append(thread)
 
-        // Place at bottom of the default section's visible group
+        // Place at the bottom of the default section's visible group.
         if let lastIndex = threads.indices.last {
             placeThreadAtBottomOfSidebarGroup(threadId: threads[lastIndex].id)
         }

@@ -408,14 +408,11 @@ final class ThreadListViewController: NSViewController {
                     ))
                 }
             } else {
-                // Flat list: main first, then regular threads in the same order they
-                // would appear across sections (section order + in-section order).
+                // Flat list: treat the project like one combined section while
+                // preserving each thread's stored section assignment.
                 let projectRegularThreads = regularThreads.filter { $0.projectId == project.id }
-                let sortedThreads = sortThreadsForFlatDisplay(
+                let sortedThreads = sortThreadsForDisplay(
                     projectRegularThreads,
-                    projectSections: projectSections,
-                    knownSectionIds: projectKnownSectionIds,
-                    defaultSectionId: projectDefaultSectionId,
                     preferRecentCompletions: settings.autoReorderThreadsOnAgentCompletion
                 )
                 children.append(contentsOf: sortedThreads)
@@ -526,48 +523,6 @@ final class ThreadListViewController: NSViewController {
                 return lhs.offset < rhs.offset
             }
             .map(\.element)
-    }
-
-    private func sortThreadsForFlatDisplay(
-        _ threads: [MagentThread],
-        projectSections: [ThreadSection],
-        knownSectionIds: Set<UUID>,
-        defaultSectionId: UUID?,
-        preferRecentCompletions: Bool
-    ) -> [MagentThread] {
-        guard !projectSections.isEmpty else {
-            return sortThreadsForDisplay(threads, preferRecentCompletions: preferRecentCompletions)
-        }
-
-        var pinnedThreads: [MagentThread] = []
-        var unpinnedThreads: [MagentThread] = []
-        var seenThreadIds: Set<UUID> = []
-
-        for section in projectSections {
-            let sectionThreads = threads.filter { thread in
-                thread.resolvedSectionId(knownSectionIds: knownSectionIds, fallback: defaultSectionId) == section.id
-            }
-            let sortedSectionThreads = sortThreadsForDisplay(
-                sectionThreads,
-                preferRecentCompletions: preferRecentCompletions
-            )
-            pinnedThreads.append(contentsOf: sortedSectionThreads.filter(\.isPinned))
-            unpinnedThreads.append(contentsOf: sortedSectionThreads.filter { !$0.isPinned })
-            seenThreadIds.formUnion(sortedSectionThreads.map(\.id))
-        }
-
-        // Keep unmatched threads visible and consistently ordered.
-        let unmatchedThreads = threads.filter { !seenThreadIds.contains($0.id) }
-        if !unmatchedThreads.isEmpty {
-            let sortedUnmatched = sortThreadsForDisplay(
-                unmatchedThreads,
-                preferRecentCompletions: preferRecentCompletions
-            )
-            pinnedThreads.append(contentsOf: sortedUnmatched.filter(\.isPinned))
-            unpinnedThreads.append(contentsOf: sortedUnmatched.filter { !$0.isPinned })
-        }
-
-        return pinnedThreads + unpinnedThreads
     }
 
     func autoSelectFirst() {

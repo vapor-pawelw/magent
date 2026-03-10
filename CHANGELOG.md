@@ -77,7 +77,7 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 - Threads can now be hidden to the bottom of their section/list and appear dimmed, with matching right-click and CLI hide/unhide actions so inactive work stays visible without competing with active threads.
-- Threads can now be reordered from the flat sidebar view even when section grouping is disabled; the drop keeps hidden section ordering aligned with the visible thread above.
+- When section grouping is disabled, the flat sidebar now behaves like one combined section: new threads land at the bottom, agent-completed threads jump to the top of their pin group, and manual reordering works without changing each thread's stored section.
 - Added a fixed 8 pt gap between each repository header and its `Main worktree` row for clearer visual separation.
 - Fixed a sidebar row-jump case where selecting threads could make non-description rows expand/collapse; compact rows now keep a stable one-line height.
 - Fixed another sidebar row-height jitter case caused by selection-dependent scrollbar width changes affecting description line wrapping.
