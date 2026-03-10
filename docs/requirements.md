@@ -123,7 +123,7 @@ Before the app is usable, the user must complete a configuration step:
 - Users must be able to page up, page down, and jump back to live output even when the embedded terminal forwards wheel input to the agent instead of tmux scrollback.
 - The page-up/page-down/jump controls may live in floating terminal chrome instead of the top bar, as long as they stay visible and usable above the embedded terminal surface.
 - The bottom-left floating `Scroll to bottom` pill should appear only after the user has scrolled meaningfully away from live output, not on tiny incidental near-bottom scrolls.
-- Floating terminal scroll overlays should share the same semi-transparent idle state, hover opacity treatment, and default 48 pt bottom clearance.
+- Floating terminal scroll overlays should keep the default 48 pt bottom clearance. The bottom-right multi-action overlay may use a semi-transparent idle state with hover opacity, while the bottom-left `Scroll to bottom` pill should stay fully opaque with no hover-specific fade.
 
 ## Thread Row Display Rules
 

@@ -54,6 +54,8 @@ final class ThreadDetailViewController: NSViewController {
     var scrollOverlayDragStartTrailing: CGFloat = 16
     var scrollOverlayDragStartBottom: CGFloat = 16
     var scrollFABRefreshTask: Task<Void, Never>?
+    var isScrollFABVisible = false
+    var scrollFABAnimationGeneration: UInt = 0
 
     var promptTOCDragStartOrigin: NSPoint = .zero
     var promptTOCResizeStartSize: NSSize = .zero

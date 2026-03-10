@@ -78,6 +78,7 @@ extension ThreadDetailViewController {
         btn.translatesAutoresizingMaskIntoConstraints = false
         btn.isHidden = true
         btn.alphaValue = 0
+        btn.wantsLayer = true
         btn.onTap = { [weak self] in self?.floatingScrollToBottomTapped() }
 
         terminalContainer.addSubview(btn)
@@ -93,55 +94,43 @@ extension ThreadDetailViewController {
     // MARK: - Show / Hide
 
     func setScrollFABVisible(_ visible: Bool) {
-        if visible && floatingScrollToBottomButton.isHidden {
-            floatingScrollToBottomButton.alphaValue = 0
-            floatingScrollToBottomButton.isHidden = false
+        guard visible != isScrollFABVisible else { return }
+
+        isScrollFABVisible = visible
+        scrollFABAnimationGeneration &+= 1
+        let animationGeneration = scrollFABAnimationGeneration
+        let button = floatingScrollToBottomButton
+
+        button.layer?.removeAllAnimations()
+
+        if visible {
+            button.alphaValue = 0
+            button.isHidden = false
             setScrollFABTranslationY(-Self.scrollFABVerticalTravel)
-            animateScrollFABTranslationY(
-                from: -Self.scrollFABVerticalTravel,
-                to: 0,
-                duration: Self.scrollFABFadeInDuration,
-                timingFunctionName: .easeOut
-            )
+
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = Self.scrollFABFadeInDuration
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                self.floatingScrollToBottomButton.animator().alphaValue = TerminalScrollToBottomPillButton.restingAlpha
+                ctx.allowsImplicitAnimation = true
+                button.animator().alphaValue = TerminalScrollToBottomPillButton.restingAlpha
+                button.layer?.transform = CATransform3DIdentity
             }
-        } else if !visible && !floatingScrollToBottomButton.isHidden {
-            animateScrollFABTranslationY(
-                from: 0,
-                to: -Self.scrollFABVerticalTravel,
-                duration: Self.scrollFABFadeOutDuration,
-                timingFunctionName: .easeInEaseOut
-            )
+        } else {
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = Self.scrollFABFadeOutDuration
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                self.floatingScrollToBottomButton.animator().alphaValue = 0
-            }, completionHandler: {
+                ctx.allowsImplicitAnimation = true
+                button.animator().alphaValue = 0
+                button.layer?.transform = CATransform3DMakeTranslation(0, -Self.scrollFABVerticalTravel, 0)
+            }, completionHandler: { [weak self] in
                 Task { @MainActor [weak self] in
-                    self?.setScrollFABTranslationY(0)
-                    self?.floatingScrollToBottomButton.isHidden = true
+                    guard let self else { return }
+                    guard self.scrollFABAnimationGeneration == animationGeneration, !self.isScrollFABVisible else { return }
+                    self.setScrollFABTranslationY(0)
+                    button.isHidden = true
                 }
             })
         }
-    }
-
-    private func animateScrollFABTranslationY(
-        from fromTranslationY: CGFloat,
-        to translationY: CGFloat,
-        duration: TimeInterval,
-        timingFunctionName: CAMediaTimingFunctionName
-    ) {
-        guard let layer = floatingScrollToBottomButton.layer else { return }
-        layer.transform = CATransform3DMakeTranslation(0, fromTranslationY, 0)
-
-        CATransaction.begin()
-        CATransaction.setAnimationDuration(duration)
-        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: timingFunctionName))
-        layer.transform = CATransform3DMakeTranslation(0, translationY, 0)
-        CATransaction.commit()
     }
 
     private func setScrollFABTranslationY(_ translationY: CGFloat) {
