@@ -73,19 +73,11 @@ extension SettingsProjectsViewController {
 
     func threadsInProjectSection(_ section: ThreadSection, projectIndex: Int) -> [MagentThread] {
         let project = settings.projects[projectIndex]
-        let sections = project.threadSections ?? []
-        let knownIds = Set(sections.map(\.id))
-        let defaultId = settings.defaultSection(for: project.id)?.id
-        return ThreadManager.shared.threads.filter { thread in
-            guard !thread.isMain, thread.projectId == project.id else { return false }
-            let effectiveId: UUID?
-            if let sid = thread.sectionId, knownIds.contains(sid) {
-                effectiveId = sid
-            } else {
-                effectiveId = defaultId
-            }
-            return effectiveId == section.id
-        }
+        return ThreadManager.shared.threadsAssigned(
+            toSection: section.id,
+            projectId: project.id,
+            settings: settings
+        )
     }
 
     @objc func deleteProjectSectionTapped(_ sender: NSButton) {
@@ -96,6 +88,7 @@ extension SettingsProjectsViewController {
 
         let section = projectSortedSections[row]
         guard var sections = settings.projects[index].threadSections else { return }
+        guard let defaultSection = settings.defaultSection(for: settings.projects[index].id) else { return }
 
         guard sections.count > 1 else {
             let alert = NSAlert()
@@ -107,20 +100,26 @@ extension SettingsProjectsViewController {
             return
         }
 
-        let threadsInSection = threadsInProjectSection(section, projectIndex: index)
-        if !threadsInSection.isEmpty {
-            let alert = NSAlert()
-            alert.messageText = "Cannot Delete Section"
-            alert.informativeText = "Move all threads out of \"\(section.name)\" before deleting it."
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
-            return
-        }
+        guard defaultSection.id != section.id else { return }
 
-        if settings.projects[index].defaultSectionId == section.id {
-            settings.projects[index].defaultSectionId = nil
-        }
+        let threadCount = threadsInProjectSection(section, projectIndex: index).count
+        let alert = NSAlert()
+        alert.messageText = "Delete Section?"
+        alert.informativeText = threadCount == 1
+            ? "Delete \"\(section.name)\"? 1 thread will be moved to \"\(defaultSection.name)\"."
+            : "Delete \"\(section.name)\"? \(threadCount) threads will be moved to \"\(defaultSection.name)\"."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        ThreadManager.shared.reassignThreadsAssigned(
+            toSection: section.id,
+            toSection: defaultSection.id,
+            projectId: settings.projects[index].id,
+            settings: settings
+        )
+
         sections.removeAll { $0.id == section.id }
         settings.projects[index].threadSections = sections
         try? persistence.saveSettings(settings)

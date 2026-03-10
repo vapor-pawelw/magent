@@ -193,6 +193,62 @@ extension ThreadManager {
     }
 
     @MainActor
+    func threadsAssigned(
+        toSection sectionId: UUID,
+        projectId: UUID? = nil,
+        settings: AppSettings
+    ) -> [MagentThread] {
+        threads.filter {
+            threadUsesSection($0, sectionId: sectionId, projectId: projectId, settings: settings)
+        }
+    }
+
+    @MainActor
+    @discardableResult
+    func reassignThreadsAssigned(
+        toSection oldSectionId: UUID,
+        toSection newSectionId: UUID,
+        projectId: UUID? = nil,
+        settings: AppSettings
+    ) -> Int {
+        var movedCount = 0
+        for index in threads.indices where threadUsesSection(threads[index], sectionId: oldSectionId, projectId: projectId, settings: settings) {
+            threads[index].sectionId = newSectionId
+            movedCount += 1
+        }
+
+        guard movedCount > 0 else { return 0 }
+        try? persistence.saveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+        return movedCount
+    }
+
+    private func threadUsesSection(
+        _ thread: MagentThread,
+        sectionId: UUID,
+        projectId: UUID?,
+        settings: AppSettings
+    ) -> Bool {
+        guard !thread.isArchived else { return false }
+
+        if let projectId {
+            guard thread.projectId == projectId else { return false }
+            let knownSectionIds = Set(settings.sections(for: projectId).map(\.id))
+            let fallbackId = settings.defaultSection(for: projectId)?.id
+            return thread.resolvedSectionId(knownSectionIds: knownSectionIds, fallback: fallbackId) == sectionId
+        }
+
+        if let project = settings.projects.first(where: { $0.id == thread.projectId }),
+           project.threadSections != nil {
+            return false
+        }
+
+        let knownSectionIds = Set(settings.threadSections.map(\.id))
+        let fallbackId = settings.defaultSection?.id
+        return thread.resolvedSectionId(knownSectionIds: knownSectionIds, fallback: fallbackId) == sectionId
+    }
+
+    @MainActor
     func reassignThreads(fromSection oldSectionId: UUID, toSection newSectionId: UUID) {
         var changed = false
         for i in threads.indices where threads[i].sectionId == oldSectionId {

@@ -108,6 +108,7 @@ All notable changes to this project will be documented in this file.
 
 ### Settings
 - Settings now split thread-focused preferences into a dedicated `Threads` category for naming, sections, startup injection, and review defaults, while `General` keeps app-wide updates, terminal overlay toggles, and environment-variable help.
+- Section settings now let you delete any non-default section immediately, with a confirmation showing how many threads will be moved into the current default section.
 - Added Terminal Overlay visibility settings to permanently hide/show: `Scroll to bottom` indicator, terminal scroll controls, and Prompt TOC overlay.
 - Project settings now include `Local Sync Paths` (line-separated repo-relative files/directories) copied into new thread worktrees and merged back on archive.
 - Project settings now include project reorder and visibility controls.
