@@ -651,7 +651,10 @@ final class DiffPanelView: NSView {
         let subjectLabel = NSTextField(labelWithString: commit.subject)
         subjectLabel.font = .systemFont(ofSize: 11)
         subjectLabel.textColor = .labelColor
-        subjectLabel.lineBreakMode = .byTruncatingTail
+        subjectLabel.maximumNumberOfLines = 3
+        subjectLabel.cell?.wraps = true
+        subjectLabel.cell?.truncatesLastVisibleLine = true
+        subjectLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         subjectLabel.translatesAutoresizingMaskIntoConstraints = false
         subjectLabel.toolTip = "\(commit.shortHash) \(commit.subject)\n\(commit.authorName) · \(commit.date)"
 
@@ -660,13 +663,14 @@ final class DiffPanelView: NSView {
 
         NSLayoutConstraint.activate([
             hashLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            hashLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            hashLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 3),
 
             subjectLabel.leadingAnchor.constraint(equalTo: hashLabel.trailingAnchor, constant: 6),
             subjectLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            subjectLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            subjectLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 1),
+            subjectLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -2),
 
-            container.heightAnchor.constraint(equalToConstant: 18),
+            container.heightAnchor.constraint(greaterThanOrEqualToConstant: 20),
         ])
 
         return container
