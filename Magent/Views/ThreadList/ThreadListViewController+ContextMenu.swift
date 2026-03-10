@@ -21,6 +21,18 @@ extension ThreadListViewController {
         pinItem.representedObject = thread.id
         menu.addItem(pinItem)
 
+        let hideTitle = thread.isSidebarHidden
+            ? String(localized: .CommonStrings.commonUnhide)
+            : String(localized: .CommonStrings.commonHide)
+        let hideItem = NSMenuItem(title: hideTitle, action: #selector(toggleThreadHidden(_:)), keyEquivalent: "")
+        hideItem.target = self
+        hideItem.image = NSImage(
+            systemSymbolName: thread.isSidebarHidden ? "eye" : "eye.slash",
+            accessibilityDescription: nil
+        )
+        hideItem.representedObject = thread.id
+        menu.addItem(hideItem)
+
         let promptRenameItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameWithAgent), action: #selector(renameThreadFromPrompt(_:)), keyEquivalent: "")
         promptRenameItem.target = self
         promptRenameItem.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
@@ -361,6 +373,11 @@ extension ThreadListViewController {
     @objc private func toggleThreadPin(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
         threadManager.toggleThreadPin(threadId: threadId)
+    }
+
+    @objc private func toggleThreadHidden(_ sender: NSMenuItem) {
+        guard let threadId = sender.representedObject as? UUID else { return }
+        threadManager.toggleThreadHidden(threadId: threadId)
     }
 
     @objc private func moveThreadToSection(_ sender: NSMenuItem) {

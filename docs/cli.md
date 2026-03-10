@@ -83,6 +83,7 @@ The response includes a `status` object with all UI-visible indicators:
 | `isFullyDelivered` | bool | All commits merged to base branch |
 | `showArchiveSuggestion` | bool | Thread is fully delivered and idle |
 | `isPinned` | bool | Thread is pinned to top |
+| `isSidebarHidden` | bool | Thread is hidden to the bottom of the list and shown dimmed |
 | `isArchived` | bool | Thread has been archived |
 | `isBlockedByRateLimit` | bool | All agent tabs are rate-limited (red hourglass) |
 | `hasBranchMismatch` | bool | Worktree HEAD doesn't match expected branch |
@@ -148,6 +149,22 @@ Set a thread icon manually.
 
 ```bash
 magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>
+```
+
+### hide-thread
+
+Hide a thread to the bottom of its section/list without archiving it.
+
+```bash
+magent-cli hide-thread --thread <name>
+```
+
+### unhide-thread
+
+Restore a hidden thread to the normal sidebar group.
+
+```bash
+magent-cli unhide-thread --thread <name>
 ```
 
 ### archive-thread

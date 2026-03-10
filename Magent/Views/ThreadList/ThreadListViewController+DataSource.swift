@@ -5,6 +5,50 @@ import MagentCore
 
 extension ThreadListViewController: NSOutlineViewDataSource {
 
+    private func threadGroupCounts(in section: SidebarSection) -> [ThreadSidebarListState: Int] {
+        Dictionary(
+            uniqueKeysWithValues: ThreadSidebarListState.allCases.map { group in
+                (group, section.threads.filter { $0.sidebarListState == group }.count)
+            }
+        )
+    }
+
+    private func validDropIndex(
+        _ index: Int,
+        for group: ThreadSidebarListState,
+        in counts: [ThreadSidebarListState: Int]
+    ) -> Bool {
+        let pinnedCount = counts[.pinned] ?? 0
+        let visibleCount = counts[.visible] ?? 0
+
+        switch group {
+        case .pinned:
+            return index <= pinnedCount
+        case .visible:
+            return index >= pinnedCount && index <= pinnedCount + visibleCount
+        case .hidden:
+            return index >= pinnedCount + visibleCount
+        }
+    }
+
+    private func groupRelativeDropIndex(
+        _ index: Int,
+        for group: ThreadSidebarListState,
+        in counts: [ThreadSidebarListState: Int]
+    ) -> Int {
+        let pinnedCount = counts[.pinned] ?? 0
+        let visibleCount = counts[.visible] ?? 0
+
+        switch group {
+        case .pinned:
+            return index
+        case .visible:
+            return index - pinnedCount
+        case .hidden:
+            return index - pinnedCount - visibleCount
+        }
+    }
+
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
         if item == nil { return sidebarRootItems.count }
         if let project = item as? SidebarProject { return project.children.count }
@@ -42,7 +86,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
     ) -> NSDragOperation {
         guard let section = item as? SidebarSection else { return [] }
 
-        // Read the dragged thread's pin status
+        // Read the dragged thread's sidebar group
         guard let pasteboardItem = info.draggingPasteboard.pasteboardItems?.first,
               let uuidString = pasteboardItem.string(forType: .string),
               let threadId = UUID(uuidString: uuidString),
@@ -55,16 +99,10 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             return .move
         }
 
-        // Drop at specific index → reorder within section
-        // Enforce pinned/unpinned boundary
-        let pinnedCount = section.threads.filter(\.isPinned).count
-        if thread.isPinned {
-            // Pinned threads can only be placed within 0..<pinnedCount (or at pinnedCount to be last pinned)
-            guard index <= pinnedCount else { return [] }
-        } else {
-            // Unpinned threads can only be placed at pinnedCount...count
-            guard index >= pinnedCount else { return [] }
-        }
+        // Drop at specific index → reorder within section while preserving the
+        // pinned / visible / hidden group boundaries.
+        let counts = threadGroupCounts(in: section)
+        guard validDropIndex(index, for: thread.sidebarListState, in: counts) else { return [] }
 
         return .move
     }
@@ -97,9 +135,9 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             threadManager.moveThread(thread, toSection: section.sectionId)
         }
 
-        // Calculate group-relative index for the reorder
-        let pinnedCount = section.threads.filter(\.isPinned).count
-        let groupIndex = thread.isPinned ? index : index - pinnedCount
+        // Calculate group-relative index for the reorder.
+        let counts = threadGroupCounts(in: section)
+        let groupIndex = groupRelativeDropIndex(index, for: thread.sidebarListState, in: counts)
         threadManager.reorderThread(threadId, toIndex: groupIndex, inSection: section.sectionId)
         reloadData()
         return true

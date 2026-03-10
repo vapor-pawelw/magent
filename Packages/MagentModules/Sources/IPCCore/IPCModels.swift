@@ -87,6 +87,7 @@ public nonisolated struct IPCThreadStatus: Encodable, Sendable {
     public let isFullyDelivered: Bool
     public let showArchiveSuggestion: Bool
     public let isPinned: Bool
+    public let isSidebarHidden: Bool
     public let isArchived: Bool
     public let isBlockedByRateLimit: Bool
     public let hasBranchMismatch: Bool
@@ -104,6 +105,7 @@ public nonisolated struct IPCThreadStatus: Encodable, Sendable {
         isFullyDelivered: Bool,
         showArchiveSuggestion: Bool,
         isPinned: Bool,
+        isSidebarHidden: Bool,
         isArchived: Bool,
         isBlockedByRateLimit: Bool,
         hasBranchMismatch: Bool,
@@ -120,6 +122,7 @@ public nonisolated struct IPCThreadStatus: Encodable, Sendable {
         self.isFullyDelivered = isFullyDelivered
         self.showArchiveSuggestion = showArchiveSuggestion
         self.isPinned = isPinned
+        self.isSidebarHidden = isSidebarHidden
         self.isArchived = isArchived
         self.isBlockedByRateLimit = isBlockedByRateLimit
         self.hasBranchMismatch = hasBranchMismatch

@@ -88,6 +88,12 @@ public nonisolated struct PullRequestInfo: Sendable, Equatable {
     }
 }
 
+public nonisolated enum ThreadSidebarListState: Int, CaseIterable, Sendable {
+    case pinned = 0
+    case visible = 1
+    case hidden = 2
+}
+
 public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public let id: UUID
     public let projectId: UUID
@@ -106,6 +112,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var lastSelectedTmuxSessionName: String?
     public var agentHasRun: Bool
     public var isPinned: Bool
+    public var isSidebarHidden: Bool
     public var lastAgentCompletionAt: Date?
     public var unreadCompletionSessions: Set<String>
     public var didAutoRenameFromFirstPrompt: Bool
@@ -161,6 +168,16 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     public var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
+    }
+
+    public var sidebarListState: ThreadSidebarListState {
+        if isPinned {
+            return .pinned
+        }
+        if isSidebarHidden {
+            return .hidden
+        }
+        return .visible
     }
 
     public var hasAgentBusy: Bool {
@@ -221,7 +238,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case tmuxSessionNames, agentTmuxSessions, sessionAgentTypes, sessionConversationIDs, pinnedTmuxSessions
         case createdAt, isArchived, sectionId, isMain
         case lastSelectedTmuxSessionName
-        case agentHasRun, isPinned, lastAgentCompletionAt
+        case agentHasRun, isPinned, isSidebarHidden, lastAgentCompletionAt
         case unreadCompletionSessions
         case hasUnreadAgentCompletion // migration only
         case didAutoRenameFromFirstPrompt
@@ -254,6 +271,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         lastSelectedTmuxSessionName: String? = nil,
         agentHasRun: Bool = false,
         isPinned: Bool = false,
+        isSidebarHidden: Bool = false,
         lastAgentCompletionAt: Date? = nil,
         unreadCompletionSessions: Set<String> = [],
         didAutoRenameFromFirstPrompt: Bool = false,
@@ -284,6 +302,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.lastSelectedTmuxSessionName = lastSelectedTmuxSessionName
         self.agentHasRun = agentHasRun
         self.isPinned = isPinned
+        self.isSidebarHidden = isSidebarHidden
         self.lastAgentCompletionAt = lastAgentCompletionAt
         self.unreadCompletionSessions = unreadCompletionSessions
         self.didAutoRenameFromFirstPrompt = didAutoRenameFromFirstPrompt
@@ -317,6 +336,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         lastSelectedTmuxSessionName = try container.decodeIfPresent(String.self, forKey: .lastSelectedTmuxSessionName)
         agentHasRun = try container.decodeIfPresent(Bool.self, forKey: .agentHasRun) ?? false
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        isSidebarHidden = try container.decodeIfPresent(Bool.self, forKey: .isSidebarHidden) ?? false
         lastAgentCompletionAt = try container.decodeIfPresent(Date.self, forKey: .lastAgentCompletionAt)
         didAutoRenameFromFirstPrompt = try container.decodeIfPresent(Bool.self, forKey: .didAutoRenameFromFirstPrompt) ?? false
         customTabNames = try container.decodeIfPresent([String: String].self, forKey: .customTabNames) ?? [:]
@@ -362,6 +382,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encodeIfPresent(lastSelectedTmuxSessionName, forKey: .lastSelectedTmuxSessionName)
         try container.encode(agentHasRun, forKey: .agentHasRun)
         try container.encode(isPinned, forKey: .isPinned)
+        try container.encode(isSidebarHidden, forKey: .isSidebarHidden)
         try container.encodeIfPresent(lastAgentCompletionAt, forKey: .lastAgentCompletionAt)
         try container.encode(unreadCompletionSessions, forKey: .unreadCompletionSessions)
         try container.encode(didAutoRenameFromFirstPrompt, forKey: .didAutoRenameFromFirstPrompt)

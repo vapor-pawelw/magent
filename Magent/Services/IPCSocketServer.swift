@@ -713,6 +713,28 @@ actor IPCSocketServer {
             [ -n "$thread" ] && [ -n "$icon" ] || die "Usage: magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>"
             send_request "{$(json_kv command set-thread-icon),$(json_kv threadName "$thread"),$(json_kv icon "$icon")}"
             ;;
+        hide-thread)
+            thread=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli hide-thread --thread <name>"
+            send_request "{$(json_kv command hide-thread),$(json_kv threadName "$thread")}"
+            ;;
+        unhide-thread)
+            thread=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli unhide-thread --thread <name>"
+            send_request "{$(json_kv command unhide-thread),$(json_kv threadName "$thread")}"
+            ;;
         thread-info)
             thread=""; thread_id=""
             while [ $# -gt 0 ]; do
@@ -884,6 +906,8 @@ actor IPCSocketServer {
             echo "  rename-thread-exact  --thread <name> --name <text>         (alias for rename-branch)"
             echo "  set-description      --thread <name> [--description <text> | --clear]"
             echo "  set-thread-icon      --thread <name> --icon <type>         (set thread icon: feature|fix|improvement|refactor|test|other)"
+            echo "  hide-thread         --thread <name>                        (move thread to dimmed bottom group)"
+            echo "  unhide-thread       --thread <name>                        (restore thread to normal group)"
             echo "  thread-info          (--thread <name> | --thread-id <id>)  (full thread details)"
             echo "  move-thread          --thread <name> --section <name>      (move thread to section)"
             echo ""
