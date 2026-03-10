@@ -4,6 +4,7 @@ import MagentCore
 private enum TerminalOverlayStyle {
     static let normalAlpha: CGFloat = 0.55
     static let hoverAlpha: CGFloat = 0.90
+    static let opaqueAlpha: CGFloat = 1.0
     static let backgroundColor = NSColor(white: 0.08, alpha: 1.0).cgColor
     static let contentTintColor = NSColor(white: 1, alpha: 0.85)
 }
@@ -122,20 +123,22 @@ final class TerminalScrollOverlayView: NSView {
 
 /// A standalone overlay-styled pill action for jumping the terminal back to live output.
 final class TerminalScrollToBottomPillButton: NSView {
-    static let restingAlpha = TerminalOverlayStyle.normalAlpha
+    static let restingAlpha = TerminalOverlayStyle.opaqueAlpha
 
     var onTap: (() -> Void)?
 
-    private let button = NSButton()
-    private var trackingArea: NSTrackingArea?
+    private let iconView = NSImageView()
+    private let titleLabel = NSTextField(labelWithString: "Scroll to bottom")
+    private let contentStack = NSStackView()
 
     private static let contentInsets = NSEdgeInsets(top: 8, left: 16, bottom: 8, right: 16)
+    private static let contentSpacing: CGFloat = 8
 
     override var intrinsicContentSize: NSSize {
-        let buttonSize = button.intrinsicContentSize
+        let contentSize = contentStack.fittingSize
         return NSSize(
-            width: buttonSize.width + Self.contentInsets.left + Self.contentInsets.right,
-            height: buttonSize.height + Self.contentInsets.top + Self.contentInsets.bottom
+            width: contentSize.width + Self.contentInsets.left + Self.contentInsets.right,
+            height: contentSize.height + Self.contentInsets.top + Self.contentInsets.bottom
         )
     }
 
@@ -154,27 +157,6 @@ final class TerminalScrollToBottomPillButton: NSView {
         layer?.cornerRadius = bounds.height / 2
     }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let existing = trackingArea { removeTrackingArea(existing) }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        trackingArea = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        updateHoverState(isHovered: true)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        updateHoverState(isHovered: false)
-    }
-
     private func setup() {
         wantsLayer = true
         layer?.backgroundColor = TerminalOverlayStyle.backgroundColor
@@ -183,39 +165,47 @@ final class TerminalScrollToBottomPillButton: NSView {
         setAccessibilityRole(.button)
 
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
-        button.image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Scroll to bottom")?
+        iconView.image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Scroll to bottom")?
             .withSymbolConfiguration(symbolConfig)
-        button.title = "Scroll to bottom"
-        button.imagePosition = .imageLeading
-        button.imageHugsTitle = true
-        button.imageScaling = .scaleProportionallyDown
-        button.font = .systemFont(ofSize: 12, weight: .semibold)
-        button.contentTintColor = TerminalOverlayStyle.contentTintColor
-        button.isBordered = false
-        button.focusRingType = .none
-        button.bezelStyle = .inline
-        button.target = self
-        button.action = #selector(handleTap)
-        button.toolTip = "Scroll to live output"
-        button.translatesAutoresizingMaskIntoConstraints = false
+        iconView.contentTintColor = TerminalOverlayStyle.contentTintColor
+        iconView.imageScaling = .scaleProportionallyDown
+        iconView.translatesAutoresizingMaskIntoConstraints = false
 
-        addSubview(button)
+        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        titleLabel.textColor = TerminalOverlayStyle.contentTintColor
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        contentStack.orientation = .horizontal
+        contentStack.alignment = .centerY
+        contentStack.spacing = Self.contentSpacing
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.addArrangedSubview(iconView)
+        contentStack.addArrangedSubview(titleLabel)
+
+        toolTip = "Scroll to live output"
+
+        addSubview(contentStack)
         NSLayoutConstraint.activate([
-            button.topAnchor.constraint(equalTo: topAnchor, constant: Self.contentInsets.top),
-            button.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.contentInsets.left),
-            button.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.contentInsets.right),
-            button.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.contentInsets.bottom),
+            contentStack.topAnchor.constraint(equalTo: topAnchor, constant: Self.contentInsets.top),
+            contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.contentInsets.left),
+            contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.contentInsets.right),
+            contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.contentInsets.bottom),
         ])
     }
 
-    private func updateHoverState(isHovered: Bool) {
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = isHovered ? 0.15 : 0.22
-            self.animator().alphaValue = isHovered ? TerminalOverlayStyle.hoverAlpha : Self.restingAlpha
-        }
+    override func mouseUp(with event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(location) else { return }
+        handleTap()
     }
 
     @objc private func handleTap() {
         onTap?()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        handleTap()
+        return true
     }
 }
