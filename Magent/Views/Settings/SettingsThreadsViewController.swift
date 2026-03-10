@@ -388,24 +388,39 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         let textStack = NSStackView()
         textStack.orientation = .vertical
         textStack.alignment = .leading
-        textStack.spacing = 2
+        textStack.spacing = 3
         textStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let titleLabel = NSTextField(labelWithString: thread.name)
-        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        textStack.addArrangedSubview(titleLabel)
+        // "Thread archived" caption
+        let captionLabel = NSTextField(labelWithString: "Thread archived")
+        captionLabel.font = .systemFont(ofSize: 10)
+        captionLabel.textColor = NSColor(resource: .textSecondary)
+        textStack.addArrangedSubview(captionLabel)
 
+        // Description (prominent) or thread name as fallback
+        let titleText: String
         if let description = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
            !description.isEmpty {
-            let descriptionLabel = NSTextField(wrappingLabelWithString: description)
-            descriptionLabel.font = .systemFont(ofSize: 11)
-            descriptionLabel.textColor = NSColor(resource: .textSecondary)
-            textStack.addArrangedSubview(descriptionLabel)
-            NSLayoutConstraint.activate([
-                descriptionLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
-            ])
+            titleText = description
+        } else {
+            titleText = thread.name
         }
+        let titleLabel = NSTextField(wrappingLabelWithString: titleText)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        titleLabel.textColor = NSColor(resource: .textPrimary)
+        textStack.addArrangedSubview(titleLabel)
+        NSLayoutConstraint.activate([
+            titleLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
+        ])
 
+        // Branch + worktree folder (prominent)
+        let worktreeFolder = URL(fileURLWithPath: thread.worktreePath).lastPathComponent
+        let branchWorktreeLabel = NSTextField(labelWithString: "\(thread.branchName)  ·  \(worktreeFolder)")
+        branchWorktreeLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        branchWorktreeLabel.textColor = NSColor(resource: .textPrimary)
+        textStack.addArrangedSubview(branchWorktreeLabel)
+
+        // Metadata: project · archived date
         let metadataLabel = NSTextField(
             wrappingLabelWithString: recentArchivedThreadMetadata(
                 thread: thread,
@@ -437,7 +452,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     }
 
     private func recentArchivedThreadMetadata(thread: MagentThread, projectName: String) -> String {
-        var segments = [projectName, thread.branchName]
+        var segments = [projectName]
         if let archivedAt = thread.archivedAt {
             segments.append("Archived \(archivedAt.formatted(date: .abbreviated, time: .shortened))")
         }
