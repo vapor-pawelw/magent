@@ -489,7 +489,12 @@ extension ThreadManager {
         })
 
         let latestScopeStart = scopeSeparatorIndex.map { lines.index(after: $0) } ?? lines.startIndex
-        let latestScopeLines = lines[latestScopeStart...]
+        // Only check the bottom portion of the latest scope. "• esc to interrupt)"
+        // is Codex's active working-status line; it lives at the bottom while the
+        // model is processing. Once a task completes, the idle prompt appears below
+        // it and the working-status line scrolls up — checking all lines in the
+        // scope would yield false positives from completed-task scrollback.
+        let latestScopeLines = Array(lines[latestScopeStart...]).suffix(20)
 
         // In Codex output, "• esc to interrupt)" appears inside the active
         // "Working (...)" status line while the model is processing.
