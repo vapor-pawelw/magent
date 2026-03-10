@@ -437,11 +437,12 @@ final class DiffPanelView: NSView {
             (.secondaryLabelColor,                                      "Committed — part of branch diff"),
         ]
 
+        let contentInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 16)
+
         let outerStack = NSStackView()
         outerStack.orientation = .vertical
         outerStack.alignment = .leading
         outerStack.spacing = 6
-        outerStack.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 16)
         outerStack.translatesAutoresizingMaskIntoConstraints = false
 
         for (color, label) in items {
@@ -456,6 +457,7 @@ final class DiffPanelView: NSView {
             let text = NSTextField(labelWithString: label)
             text.font = .systemFont(ofSize: 11)
             text.textColor = .labelColor
+            text.maximumNumberOfLines = 1
 
             let row = NSStackView(views: [dot, text])
             row.orientation = .horizontal
@@ -466,12 +468,14 @@ final class DiffPanelView: NSView {
 
         let vc = NSViewController()
         let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(outerStack)
         NSLayoutConstraint.activate([
-            outerStack.topAnchor.constraint(equalTo: container.topAnchor),
-            outerStack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            outerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            outerStack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            outerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: contentInsets.top),
+            outerStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: contentInsets.left),
+            outerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -contentInsets.right),
+            outerStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -contentInsets.bottom),
+            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 230),
         ])
         vc.view = container
         return vc

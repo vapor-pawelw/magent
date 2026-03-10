@@ -3,6 +3,7 @@
 ## User Behavior
 
 - In the sidebar `CHANGES` panel, single-clicking a file still selects it and opens the inline diff viewer for that path.
+- The `CHANGES` panel `ⓘ` legend popover keeps consistent padding around every row instead of letting the first rows sit flush against the popover edge.
 - Selecting inline diff text now supports the standard `Cmd+C` shortcut and copies the selected text to the macOS clipboard.
 - Left-clicking an image preview inside the inline diff opens a larger overlay above the full thread view with a darkened background; clicking anywhere or pressing Escape dismisses it.
 - Double-clicking a file opens the file with the system default macOS app.
@@ -17,6 +18,7 @@
 - Revealing files in Finder uses `NSWorkspace.shared.activateFileViewerSelecting([url])`.
 - Missing files (for example deleted paths still listed in diff stats) show a warning banner instead of failing silently.
 - Image zoom is implemented as a separate overlay in `ThreadDetailViewController+DiffViewer.swift`, not by resizing the inline diff section. `InlineDiffViewController` only forwards click events from image views upward.
+- The legend popover in `DiffPanelView.makeLegendViewController()` should use explicit container-to-stack inset constraints for padding. Relying on `NSStackView.edgeInsets` alone can render inconsistently in AppKit popovers.
 
 ## Gotcha
 
