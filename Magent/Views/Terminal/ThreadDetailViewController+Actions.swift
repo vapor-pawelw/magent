@@ -111,15 +111,10 @@ extension ThreadDetailViewController {
                 // which has been unsafe while a sheet is presented on the same window.
                 Task {
                     do {
-                        let warning = try await self.threadManager.archiveThread(
+                        _ = try await self.threadManager.archiveThread(
                             threadToArchive,
                             promptForLocalSyncConflicts: true
                         )
-                        if let warning {
-                            await MainActor.run {
-                                BannerManager.shared.show(message: warning, style: .warning, duration: nil)
-                            }
-                        }
                     } catch ThreadManagerError.archiveCancelled {
                         return
                     } catch ThreadManagerError.localFileSyncFailed(let message) {
@@ -136,14 +131,11 @@ extension ThreadDetailViewController {
 
                             Task {
                                 do {
-                                    let warning = try await self.threadManager.archiveThread(
+                                    _ = try await self.threadManager.archiveThread(
                                         threadToArchive,
                                         promptForLocalSyncConflicts: false,
                                         force: true
-                                    ) ?? String(localized: .ThreadStrings.threadArchiveCompletedWithoutLocalSync)
-                                    await MainActor.run {
-                                        BannerManager.shared.show(message: warning, style: .warning, duration: nil)
-                                    }
+                                    )
                                 } catch ThreadManagerError.archiveCancelled {
                                     return
                                 } catch {

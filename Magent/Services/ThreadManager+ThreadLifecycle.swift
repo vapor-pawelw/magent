@@ -1,7 +1,10 @@
+import Cocoa
 import Foundation
 import MagentCore
 
 extension ThreadManager {
+
+    private static let archivedThreadBannerDuration: TimeInterval = 5.0
 
     // MARK: - Thread Creation
 
@@ -364,9 +367,7 @@ extension ThreadManager {
         var allThreads = persistence.loadThreads()
         if let i = allThreads.firstIndex(where: { $0.id == thread.id }) {
             allThreads[i].isArchived = true
-            allThreads[i].tmuxSessionNames = []
-            allThreads[i].sessionConversationIDs = [:]
-            allThreads[i].submittedPromptsBySession = [:]
+            clearPersistedSessionState(for: &allThreads[i])
         }
         try persistence.saveThreads(allThreads)
 
@@ -386,8 +387,109 @@ extension ThreadManager {
 
         cleanupAllBrokenSymlinks()
         await cleanupStaleMagentSessions()
+        showArchivedThreadBanner(for: thread, warning: archiveWarning)
 
         return archiveWarning
+    }
+
+    func restoreArchivedThread(id threadId: UUID) async throws -> MagentThread {
+        if let existing = threads.first(where: { $0.id == threadId }) {
+            return existing
+        }
+
+        let settings = persistence.loadSettings()
+        var allThreads = persistence.loadThreads()
+        guard let archivedIndex = allThreads.firstIndex(where: { $0.id == threadId }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+
+        var restoredThread = allThreads[archivedIndex]
+        guard restoredThread.isArchived else {
+            throw ThreadManagerError.duplicateName
+        }
+
+        guard let project = settings.projects.first(where: { $0.id == restoredThread.projectId }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+
+        if threads.contains(where: { $0.projectId == restoredThread.projectId && $0.name == restoredThread.name }) {
+            throw ThreadManagerError.duplicateName
+        }
+
+        await git.pruneWorktrees(repoPath: project.repoPath)
+
+        let branchExists = await git.branchExists(repoPath: project.repoPath, branchName: restoredThread.branchName)
+        if branchExists {
+            _ = try await git.addWorktreeForExistingBranch(
+                repoPath: project.repoPath,
+                branchName: restoredThread.branchName,
+                worktreePath: restoredThread.worktreePath
+            )
+        } else {
+            let persistedBaseBranch = restoredThread.baseBranch?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let baseBranch: String?
+            if let persistedBaseBranch, !persistedBaseBranch.isEmpty {
+                baseBranch = persistedBaseBranch
+            } else if let projectDefault = project.defaultBranch?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                      !projectDefault.isEmpty {
+                baseBranch = projectDefault
+            } else {
+                baseBranch = nil
+            }
+            _ = try await git.createWorktree(
+                repoPath: project.repoPath,
+                branchName: restoredThread.branchName,
+                worktreePath: restoredThread.worktreePath,
+                baseBranch: baseBranch
+            )
+        }
+
+        restoredThread.isArchived = false
+        clearPersistedSessionState(for: &restoredThread)
+        restoredThread.unreadCompletionSessions.removeAll()
+        restoredThread.lastAgentCompletionAt = nil
+        restoredThread.isDirty = false
+        restoredThread.isFullyDelivered = false
+        restoredThread.jiraUnassigned = false
+        restoredThread.actualBranch = nil
+        restoredThread.expectedBranch = nil
+        restoredThread.hasBranchMismatch = false
+        restoredThread.rateLimitedSessions = [:]
+        restoredThread.pullRequestInfo = nil
+        restoredThread.busySessions.removeAll()
+        restoredThread.waitingForInputSessions.removeAll()
+
+        allThreads[archivedIndex] = restoredThread
+        try persistence.saveThreads(allThreads)
+
+        threads.append(restoredThread)
+        bumpThreadToTopOfSection(restoredThread.id)
+        if let restoredActiveIndex = threads.firstIndex(where: { $0.id == restoredThread.id }) {
+            restoredThread = threads[restoredActiveIndex]
+            allThreads[archivedIndex] = restoredThread
+        }
+        try persistence.saveThreads(allThreads)
+
+        trustDirectoryIfNeeded(restoredThread.worktreePath, agentType: restoredThread.effectiveAgentType)
+        pruneWorktreeCache(for: project)
+
+        await MainActor.run {
+            delegate?.threadManager(self, didUpdateThreads: threads)
+            BannerManager.shared.show(
+                message: restoredThreadBannerMessage(for: restoredThread, projectName: project.name),
+                style: .info,
+                duration: Self.archivedThreadBannerDuration
+            )
+            NotificationCenter.default.post(
+                name: .magentNavigateToThread,
+                object: nil,
+                userInfo: ["threadId": restoredThread.id]
+            )
+        }
+
+        return restoredThread
     }
 
     // MARK: - Delete Thread
@@ -515,6 +617,93 @@ extension ThreadManager {
             return .recovered
         } catch {
             return .failed(error)
+        }
+    }
+
+    private func clearPersistedSessionState(for thread: inout MagentThread) {
+        thread.tmuxSessionNames = []
+        thread.agentTmuxSessions = []
+        thread.sessionAgentTypes = [:]
+        thread.sessionConversationIDs = [:]
+        thread.pinnedTmuxSessions = []
+        thread.lastSelectedTmuxSessionName = nil
+        thread.customTabNames = [:]
+        thread.submittedPromptsBySession = [:]
+    }
+
+    private func archivedThreadBannerMessage(
+        for thread: MagentThread,
+        projectName: String,
+        warning: String?
+    ) -> String {
+        var lines = ["Archived thread '\(thread.name)'."]
+        if let description = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !description.isEmpty {
+            lines.append("Task: \(description)")
+        }
+        lines.append("Project: \(projectName)")
+        lines.append("Branch: \(thread.branchName)")
+        if let baseBranch = thread.baseBranch?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !baseBranch.isEmpty {
+            lines.append("Base: \(baseBranch)")
+        }
+        if let ticketKey = thread.jiraTicketKey?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !ticketKey.isEmpty {
+            lines.append("Jira: \(ticketKey)")
+        }
+        lines.append("Tabs: \(thread.tmuxSessionNames.count)")
+        lines.append("Worktree: \(thread.worktreePath)")
+        if let warning, !warning.isEmpty {
+            lines.append("Warning: \(warning)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func restoredThreadBannerMessage(for thread: MagentThread, projectName: String) -> String {
+        var lines = ["Restored thread '\(thread.name)'."]
+        if let description = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !description.isEmpty {
+            lines.append("Task: \(description)")
+        }
+        lines.append("Project: \(projectName)")
+        lines.append("Branch: \(thread.branchName)")
+        lines.append("Worktree: \(thread.worktreePath)")
+        return lines.joined(separator: "\n")
+    }
+
+    private func showArchivedThreadBanner(for thread: MagentThread, warning: String?) {
+        let projectName = persistence.loadSettings()
+            .projects
+            .first(where: { $0.id == thread.projectId })?
+            .name ?? "Unknown Project"
+
+        Task { @MainActor [weak self] in
+            BannerManager.shared.show(
+                message: self?.archivedThreadBannerMessage(
+                    for: thread,
+                    projectName: projectName,
+                    warning: warning
+                ) ?? "Archived thread '\(thread.name)'.",
+                style: warning == nil ? .info : .warning,
+                duration: Self.archivedThreadBannerDuration,
+                actions: [
+                    BannerAction(title: "Restore") {
+                        Task { [weak self] in
+                            do {
+                                _ = try await self?.restoreArchivedThread(id: thread.id)
+                            } catch {
+                                await MainActor.run {
+                                    BannerManager.shared.show(
+                                        message: "Failed to restore thread '\(thread.name)': \(error.localizedDescription)",
+                                        style: .error,
+                                        duration: Self.archivedThreadBannerDuration
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ]
+            )
         }
     }
 }

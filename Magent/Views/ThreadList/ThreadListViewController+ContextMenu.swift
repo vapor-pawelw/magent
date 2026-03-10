@@ -650,15 +650,10 @@ extension ThreadListViewController {
                 // crashes if a sheet is being presented on the same window.
                 Task {
                     do {
-                        let warning = try await threadManager.archiveThread(
+                        _ = try await threadManager.archiveThread(
                             thread,
                             promptForLocalSyncConflicts: true
                         )
-                        if let warning {
-                            await MainActor.run {
-                                BannerManager.shared.show(message: warning, style: .warning, duration: nil)
-                            }
-                        }
                     } catch ThreadManagerError.archiveCancelled {
                         return
                     } catch ThreadManagerError.localFileSyncFailed(let message) {
@@ -675,14 +670,11 @@ extension ThreadListViewController {
 
                             Task {
                                 do {
-                                    let warning = try await threadManager.archiveThread(
+                                    _ = try await threadManager.archiveThread(
                                         thread,
                                         promptForLocalSyncConflicts: false,
                                         force: true
-                                    ) ?? String(localized: .ThreadStrings.threadArchiveCompletedWithoutLocalSync)
-                                    await MainActor.run {
-                                        BannerManager.shared.show(message: warning, style: .warning, duration: nil)
-                                    }
+                                    )
                                 } catch ThreadManagerError.archiveCancelled {
                                     return
                                 } catch {

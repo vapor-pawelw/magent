@@ -220,6 +220,7 @@ extension ThreadManager {
             threads[index].sessionAgentTypes[sessionName] = agentType
             threads[index].agentHasRun = true
         }
+        threads[index].customTabNames[sessionName] = TmuxSessionNaming.defaultTabDisplayName(for: agentType)
         threads[index].lastSelectedTmuxSessionName = sessionName
         try? persistence.saveThreads(threads)
     }
