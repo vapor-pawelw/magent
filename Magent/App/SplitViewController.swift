@@ -54,6 +54,8 @@ final class SplitViewController: NSSplitViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        preferredSidebarWidth = resolvedSavedSidebarWidth()
+
         threadListVC.delegate = self
 
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: threadListVC)
@@ -71,6 +73,11 @@ final class SplitViewController: NSSplitViewController {
     }
 
     // MARK: - Keyboard Shortcuts
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        applyInitialSidebarWidthIfNeeded()
+    }
 
     override func viewDidAppear() {
         super.viewDidAppear()
@@ -125,14 +132,14 @@ final class SplitViewController: NSSplitViewController {
             sidebarItem.animator().isCollapsed = false
         }
 
-        let savedWidth = UserDefaults.standard.object(forKey: Self.sidebarWidthDefaultsKey) as? Double
-        let targetWidth = CGFloat(savedWidth ?? Double(Self.defaultSidebarWidth))
-        let clampedWidth = min(max(targetWidth, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+        let clampedWidth = resolvedSavedSidebarWidth()
         preferredSidebarWidth = clampedWidth
         splitView.setPosition(clampedWidth, ofDividerAt: 0)
+        threadListVC.refreshSidebarLayout(forceColumnRefit: true)
     }
 
     override func splitViewDidResizeSubviews(_ notification: Notification) {
+        threadListVC.refreshSidebarLayout(forceColumnRefit: true)
         guard !isRestoringSidebarWidth else { return }
         guard let sidebarItem else { return }
         let width = sidebarItem.viewController.view.frame.width
@@ -362,6 +369,13 @@ final class SplitViewController: NSSplitViewController {
         return min(max(width, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
     }
 
+    private func resolvedSavedSidebarWidth() -> CGFloat {
+        guard let sidebarItem else { return Self.defaultSidebarWidth }
+        let savedWidth = UserDefaults.standard.object(forKey: Self.sidebarWidthDefaultsKey) as? Double
+        let targetWidth = CGFloat(savedWidth ?? Double(Self.defaultSidebarWidth))
+        return min(max(targetWidth, sidebarItem.minimumThickness), sidebarItem.maximumThickness)
+    }
+
     private func restoreSidebarWidth(_ width: CGFloat?) {
         guard let width else { return }
         guard let sidebarItem else { return }
@@ -377,6 +391,7 @@ final class SplitViewController: NSSplitViewController {
         defer { isRestoringSidebarWidth = false }
         splitView.layoutSubtreeIfNeeded()
         splitView.setPosition(clampedWidth, ofDividerAt: 0)
+        threadListVC.refreshSidebarLayout(forceColumnRefit: true)
     }
 
     override func splitView(

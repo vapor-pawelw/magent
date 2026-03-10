@@ -170,11 +170,12 @@ The main window's sidebar/detail `NSSplitView` structure should remain stable wh
 - Create the sidebar split item and the detail/content split item once at startup.
 - When the selected thread changes, swap the child view controller inside a persistent content container instead of removing/re-adding split view items.
 - Recreating split view items during selection can make AppKit renegotiate divider positions, which causes visible sidebar width jumps and sidebar row reflow (for example task descriptions toggling between one and two lines).
+- Restore the saved sidebar width before launch-time thread selection/detail installation begins. If startup content swaps run first, they can preserve the default width and force the sidebar to reflow a second time when the persisted width is finally applied.
 - Even with a stable container, AppKit can still push the divider when a newly-installed child view's constraints resolve. Wrap each `setContent(...)` call with `preserveSidebarWidthDuringContentChange`: capture the current divider position, swap content, then call `splitView.setPosition(_:ofDividerAt:)` synchronously and once more on the next run-loop tick via `DispatchQueue.main.async`.
 - While `preserveSidebarWidthDuringContentChange` is enforcing a width, do not treat `splitViewDidResizeSubviews` callbacks as user-driven resizes. AppKit can emit transient divider moves during selection/content swaps, and persisting those values will ratchet the saved sidebar width smaller over time.
 - All thread rows should reserve the same description-style height, measured from the sidebar cell's typography/layout rather than hardcoded compact-vs-multiline constants, and description rows should keep a stable semibold font so selection-side effects (like unread state clearing) cannot rewrap rows between one and two lines.
 - Keep trailing marker layout width-stable by reserving a fixed status slot and keeping pin as the rightmost marker. Marker visibility changes must not change available description width.
-- Refit the outline column width when sidebar width changes, but avoid forcing `noteHeightOfRows(...)` on every layout pass; that introduced visible lag/flicker during divider drags.
+- Refit the sidebar outline from the scroll view's visible clip width when sidebar width changes; `NSOutlineView` can retain a stale frame width across startup restores, which leaves trailing controls misaligned until a manual resize. Still avoid forcing `noteHeightOfRows(...)` on every layout pass; that introduced visible lag/flicker during divider drags.
 
 ### 5. Persistence Model
 

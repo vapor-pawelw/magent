@@ -119,11 +119,39 @@ final class ThreadListViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        let currentWidth = outlineView.bounds.width
-        guard currentWidth > 0 else { return }
-        guard abs(currentWidth - lastFittedOutlineWidth) > 0.5 else { return }
-        lastFittedOutlineWidth = currentWidth
-        outlineView.sizeLastColumnToFit()
+        refitOutlineColumnIfNeeded()
+    }
+
+    func refreshSidebarLayout(forceColumnRefit: Bool = false) {
+        guard isViewLoaded else { return }
+        view.layoutSubtreeIfNeeded()
+        scrollView?.layoutSubtreeIfNeeded()
+        outlineView?.layoutSubtreeIfNeeded()
+        refitOutlineColumnIfNeeded(force: forceColumnRefit)
+    }
+
+    private func refitOutlineColumnIfNeeded(force: Bool = false) {
+        guard let outlineView, let scrollView else { return }
+        let targetWidth = scrollView.contentView.bounds.width
+        guard targetWidth > 0 else { return }
+
+        let needsOutlineWidthSync = abs(outlineView.frame.width - targetWidth) > 0.5
+        let currentColumnWidth = outlineView.tableColumns.first?.width ?? 0
+        let needsColumnWidthSync = abs(currentColumnWidth - targetWidth) > 0.5
+        guard force || needsOutlineWidthSync || needsColumnWidthSync || abs(targetWidth - lastFittedOutlineWidth) > 0.5 else { return }
+
+        if needsOutlineWidthSync {
+            var frame = outlineView.frame
+            frame.size.width = targetWidth
+            outlineView.frame = frame
+        }
+        if let column = outlineView.tableColumns.first {
+            column.width = targetWidth
+        }
+
+        lastFittedOutlineWidth = targetWidth
+        outlineView.noteNumberOfRowsChanged()
+        outlineView.layoutSubtreeIfNeeded()
     }
 
     @objc private func sectionsDidChange() {

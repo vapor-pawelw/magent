@@ -13,10 +13,12 @@
 
 - Keep the main split view structure stable: swap detail content inside a persistent container instead of removing and re-adding split-view items.
 - Preserve the sidebar width during detail-content swaps with `SplitViewController.preserveSidebarWidthDuringContentChange(...)`.
+- Load the saved sidebar width into `preferredSidebarWidth` before startup selection/detail work begins, and apply the initial divider position no later than `viewWillAppear`. If launch-time content swaps run first, AppKit will build sidebar rows against the default width and then reflow them again when the saved width is restored.
 - Route thread-row height through `ThreadCell.uniformSidebarRowHeight()` so every thread row derives the reserved two-line layout height from the cell's actual fonts, line counts, marker sizes, and vertical insets.
 - Keep description text style stable for description rows (semibold) so wrapping does not change with unread-selection state transitions.
 - Reserve a fixed status-marker slot in trailing row layout (14 pt) and keep pin as the rightmost marker. This prevents marker visibility toggles from changing available text width.
-- Refit outline column width on sidebar-width changes (`sizeLastColumnToFit`) but avoid per-layout `noteHeightOfRows(...)` invalidation, which caused visible resize lag/flicker.
+- Refit sidebar outline width from the scroll view's visible clip width, not from `NSOutlineView`'s current frame width. On launch, the outline can hold a stale frame width even after the split view has restored the real sidebar size, which leaves trailing markers and project `+` buttons flush against the outer edge until a manual divider drag forces a resize.
+- Avoid per-layout `noteHeightOfRows(...)` invalidation, which caused visible resize lag/flicker during divider drags.
 - `ThreadListViewController.reloadData()` rebuilds the full outline tree during periodic thread/session refreshes, so it must capture and restore the `NSScrollView` clip-view origin around `outlineView.reloadData()` to preserve browsing position.
 
 ## Gotchas
