@@ -102,10 +102,7 @@ extension ThreadDetailViewController {
     }
 
     func openPRButtonImage(for provider: GitHostingProvider) -> NSImage {
-        if let image = hostIcon(for: provider) {
-            return image
-        }
-        return NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: "Open Pull Request") ?? NSImage()
+        OpenActionIcons.pullRequestIcon(for: provider, size: 16)
     }
 
     private func openPRTooltip(for provider: GitHostingProvider) -> String {
@@ -122,44 +119,7 @@ extension ThreadDetailViewController {
     }
 
     private func hostIcon(for provider: GitHostingProvider) -> NSImage? {
-        let imageName: String?
-        switch provider {
-        case .github:
-            imageName = "RepoHostGitHub"
-        case .gitlab:
-            imageName = "RepoHostGitLab"
-        case .bitbucket:
-            imageName = "RepoHostBitbucket"
-        case .unknown:
-            imageName = nil
-        }
-
-        guard let imageName, let baseImage = NSImage(named: NSImage.Name(imageName)) else { return nil }
-        let sourceImage = (baseImage.copy() as? NSImage) ?? baseImage
-        sourceImage.size = NSSize(width: 16, height: 16)
-
-        if provider == .github {
-            // GitHub favicon is dark; keep it readable in dark mode with a subtle light badge.
-            let size = NSSize(width: 16, height: 16)
-            let composed = NSImage(size: size, flipped: false) { _ in
-                let rect = NSRect(origin: .zero, size: size)
-                let bgPath = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
-                NSColor.white.setFill()
-                bgPath.fill()
-                NSColor.black.withAlphaComponent(0.16).setStroke()
-                bgPath.lineWidth = 1
-                bgPath.stroke()
-
-                let iconRect = rect.insetBy(dx: 2, dy: 2)
-                sourceImage.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1.0)
-                return true
-            }
-            composed.isTemplate = false
-            return composed
-        }
-
-        sourceImage.isTemplate = false
-        return sourceImage
+        OpenActionIcons.hostingProviderIcon(for: provider, size: 16)
     }
 
     private func showRemoteMenu(remotes: [GitRemote], branch: String, defaultBranch: String?, relativeTo button: NSButton) {
@@ -242,9 +202,7 @@ extension ThreadDetailViewController {
     }
 
     func finderButtonImage() -> NSImage {
-        let image = NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app")
-        image.size = NSSize(width: 14, height: 14)
-        return image
+        OpenActionIcons.finderIcon(size: 14)
     }
 
     private func finderTargetPath() -> String {

@@ -85,7 +85,7 @@ extension ThreadListViewController {
         // Open in Finder
         let finderItem = NSMenuItem(title: String(localized: .ThreadStrings.threadOpenInFinder), action: #selector(openThreadInFinder(_:)), keyEquivalent: "")
         finderItem.target = self
-        finderItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        finderItem.image = OpenActionIcons.finderIcon(size: 16)
         finderItem.representedObject = thread
         menu.addItem(finderItem)
 
@@ -94,7 +94,7 @@ extension ThreadListViewController {
             let prTitle = thread.pullRequestInfo.map { String(localized: .ThreadStrings.threadOpenPullRequestLabel($0.displayLabel)) } ?? String(localized: .ThreadStrings.threadShowPullRequest)
             let prItem = NSMenuItem(title: prTitle, action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
             prItem.target = self
-            prItem.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: nil)
+            prItem.image = pullRequestMenuIcon(for: thread)
             prItem.representedObject = thread
             menu.addItem(prItem)
         }
@@ -154,7 +154,7 @@ extension ThreadListViewController {
         // Open in Finder
         let finderItem = NSMenuItem(title: String(localized: .ThreadStrings.threadOpenInFinder), action: #selector(openThreadInFinder(_:)), keyEquivalent: "")
         finderItem.target = self
-        finderItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        finderItem.image = OpenActionIcons.finderIcon(size: 16)
         finderItem.representedObject = thread
         menu.addItem(finderItem)
 
@@ -174,7 +174,7 @@ extension ThreadListViewController {
             let mainPrTitle = thread.pullRequestInfo.map { String(localized: .ThreadStrings.threadOpenPullRequestLabel($0.displayLabel)) } ?? String(localized: .ThreadStrings.threadShowOpenPullRequests)
             let prItem = NSMenuItem(title: mainPrTitle, action: #selector(openThreadPullRequest(_:)), keyEquivalent: "")
             prItem.target = self
-            prItem.image = NSImage(systemSymbolName: "arrow.up.right.square", accessibilityDescription: nil)
+            prItem.image = pullRequestMenuIcon(for: thread)
             prItem.representedObject = thread
             menu.addItem(prItem)
         }
@@ -311,6 +311,11 @@ extension ThreadListViewController {
             return sized
         }
         return NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira")
+    }
+
+    private func pullRequestMenuIcon(for thread: MagentThread) -> NSImage {
+        let provider = threadManager._cachedRemoteByProjectId[thread.projectId]?.provider ?? .unknown
+        return OpenActionIcons.pullRequestIcon(for: provider, size: 16)
     }
 
     @objc private func openThreadInJira(_ sender: NSMenuItem) {

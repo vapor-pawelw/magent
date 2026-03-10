@@ -58,6 +58,7 @@ private final class DiffFileRowView: NSView {
         let menu = NSMenu()
         let finderItem = NSMenuItem(title: "Show in Finder", action: #selector(showInFinderFromMenu(_:)), keyEquivalent: "")
         finderItem.target = self
+        finderItem.image = OpenActionIcons.finderIcon(size: 16)
         menu.addItem(finderItem)
         return menu
     }

@@ -36,6 +36,7 @@ let project = Project(
                 "Magent/Services/UpdateService.swift",
                 "Magent/Utilities/AgentMenuBuilder.swift",
                 "Magent/Utilities/ColorDot.swift",
+                "Magent/Utilities/OpenActionIcons.swift",
                 "Magent/Utilities/SpinnerSheet.swift",
                 "Magent/Views/**",
             ],
