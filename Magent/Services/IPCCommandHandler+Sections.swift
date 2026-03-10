@@ -30,24 +30,41 @@ extension IPCCommandHandler {
     }
 
     /// Returns threads currently assigned to a section (across all projects for global, or filtered for project-specific).
-    func threadsInSection(_ sectionId: UUID, projectId: UUID?) -> [MagentThread] {
-        let allThreads = threadManager.threads.filter { !$0.isArchived }
-        let settings = persistence.loadSettings()
-        let scopedSections = if let projectId {
-            settings.sections(for: projectId)
-        } else {
-            settings.threadSections
-        }
-        let knownSectionIds = Set(scopedSections.map(\.id))
-        let fallbackId = if let projectId {
-            settings.defaultSection(for: projectId)?.id
-        } else {
-            settings.defaultSection?.id
+    func threadsInSection(_ sectionId: UUID, projectId: UUID?, settings: AppSettings) -> [MagentThread] {
+        if Thread.isMainThread {
+            return threadManager.threadsAssigned(toSection: sectionId, projectId: projectId, settings: settings)
         }
 
-        return allThreads.filter { thread in
-            if let projectId, thread.projectId != projectId { return false }
-            return thread.resolvedSectionId(knownSectionIds: knownSectionIds, fallback: fallbackId) == sectionId
+        var result: [MagentThread] = []
+        DispatchQueue.main.sync {
+            result = threadManager.threadsAssigned(toSection: sectionId, projectId: projectId, settings: settings)
+        }
+        return result
+    }
+
+    func reassignThreadsInSection(
+        from oldSectionId: UUID,
+        to newSectionId: UUID,
+        projectId: UUID?,
+        settings: AppSettings
+    ) {
+        if Thread.isMainThread {
+            threadManager.reassignThreadsAssigned(
+                toSection: oldSectionId,
+                toSection: newSectionId,
+                projectId: projectId,
+                settings: settings
+            )
+            return
+        }
+
+        _ = DispatchQueue.main.sync {
+            threadManager.reassignThreadsAssigned(
+                toSection: oldSectionId,
+                toSection: newSectionId,
+                projectId: projectId,
+                settings: settings
+            )
         }
     }
 
@@ -150,16 +167,16 @@ extension IPCCommandHandler {
                 return .failure("Section not found: \(sectionName)", id: request.id)
             }
             let section = sections[sectionIndex]
-            let threads = threadsInSection(section.id, projectId: project.id)
-            if !threads.isEmpty {
-                return .failure("Cannot remove section '\(sectionName)': \(threads.count) thread(s) still in it. Move them first.", id: request.id)
-            }
             guard sections.count > 1 else {
                 return .failure("Cannot remove section '\(sectionName)': at least one section is required.", id: request.id)
             }
-            if settings.projects[projectIndex].defaultSectionId == section.id {
-                settings.projects[projectIndex].defaultSectionId = nil
+            guard let defaultSection = settings.defaultSection(for: project.id) else {
+                return .failure("Cannot remove section '\(sectionName)': no default section is available.", id: request.id)
             }
+            if defaultSection.id == section.id {
+                return .failure("Cannot remove section '\(sectionName)': change the default section first.", id: request.id)
+            }
+            reassignThreadsInSection(from: section.id, to: defaultSection.id, projectId: project.id, settings: settings)
             sections.remove(at: sectionIndex)
             settings.projects[projectIndex].threadSections = sections
             try? persistence.saveSettings(settings)
@@ -171,16 +188,16 @@ extension IPCCommandHandler {
                 return .failure("Section not found: \(sectionName)", id: request.id)
             }
             let section = settings.threadSections[sectionIndex]
-            let threads = threadsInSection(section.id, projectId: nil)
-            if !threads.isEmpty {
-                return .failure("Cannot remove global section '\(sectionName)': \(threads.count) thread(s) across projects still in it. Move them first.", id: request.id)
-            }
             guard settings.threadSections.count > 1 else {
                 return .failure("Cannot remove global section '\(sectionName)': at least one section is required.", id: request.id)
             }
-            if settings.defaultSectionId == section.id {
-                settings.defaultSectionId = nil
+            guard let defaultSection = settings.defaultSection else {
+                return .failure("Cannot remove global section '\(sectionName)': no default section is available.", id: request.id)
             }
+            if defaultSection.id == section.id {
+                return .failure("Cannot remove global section '\(sectionName)': change the default section first.", id: request.id)
+            }
+            reassignThreadsInSection(from: section.id, to: defaultSection.id, projectId: nil, settings: settings)
             settings.threadSections.remove(at: sectionIndex)
             try? persistence.saveSettings(settings)
             notifySectionsDidChange()
@@ -289,7 +306,7 @@ extension IPCCommandHandler {
                 return .failure("Section not found: \(sectionName)", id: request.id)
             }
             let section = sections[sectionIndex]
-            let threads = threadsInSection(section.id, projectId: project.id)
+            let threads = threadsInSection(section.id, projectId: project.id, settings: settings)
             if !threads.isEmpty {
                 return .failure("Cannot hide section '\(sectionName)': \(threads.count) thread(s) still in it. Move them first.", id: request.id)
             }
@@ -301,7 +318,7 @@ extension IPCCommandHandler {
                 return .failure("Section not found: \(sectionName)", id: request.id)
             }
             let section = settings.threadSections[sectionIndex]
-            let threads = threadsInSection(section.id, projectId: nil)
+            let threads = threadsInSection(section.id, projectId: nil, settings: settings)
             if !threads.isEmpty {
                 return .failure("Cannot hide global section '\(sectionName)': \(threads.count) thread(s) across projects still in it. Move them first.", id: request.id)
             }

@@ -183,6 +183,7 @@ extension SettingsProjectsViewController {
             }
         }
         try? persistence.saveSettings(settings)
+        sectionsTableView?.reloadData()
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 

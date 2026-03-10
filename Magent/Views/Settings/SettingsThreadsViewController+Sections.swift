@@ -3,6 +3,10 @@ import MagentCore
 
 extension SettingsThreadsViewController {
 
+    private func threadsInGlobalSection(_ section: ThreadSection) -> [MagentThread] {
+        ThreadManager.shared.threadsAssigned(toSection: section.id, settings: settings)
+    }
+
     @objc private func visibilityToggled(_ sender: NSButton) {
         let point = sender.convert(NSPoint.zero, to: sectionsTableView)
         let row = sectionsTableView.row(at: point)
@@ -12,12 +16,7 @@ extension SettingsThreadsViewController {
         guard let index = settings.threadSections.firstIndex(where: { $0.id == section.id }) else { return }
 
         if section.isVisible {
-            let knownSectionIds = Set(settings.threadSections.map(\.id))
-            let defaultSectionId = settings.defaultSection?.id
-            let threadsInSection = ThreadManager.shared.threads.filter { thread in
-                guard !thread.isMain else { return false }
-                return thread.resolvedSectionId(knownSectionIds: knownSectionIds, fallback: defaultSectionId) == section.id
-            }
+            let threadsInSection = threadsInGlobalSection(section)
             if !threadsInSection.isEmpty {
                 let alert = NSAlert()
                 alert.messageText = "Cannot Hide Section"
@@ -42,6 +41,7 @@ extension SettingsThreadsViewController {
         guard row >= 0 else { return }
 
         let section = sortedSections[row]
+        guard let defaultSection = settings.defaultSection else { return }
 
         guard settings.threadSections.count > 1 else {
             let alert = NSAlert()
@@ -53,25 +53,25 @@ extension SettingsThreadsViewController {
             return
         }
 
-        let knownSectionIds = Set(settings.threadSections.map(\.id))
-        let defaultSectionId = settings.defaultSection?.id
-        let threadsInSection = ThreadManager.shared.threads.filter { thread in
-            guard !thread.isMain else { return false }
-            return thread.resolvedSectionId(knownSectionIds: knownSectionIds, fallback: defaultSectionId) == section.id
-        }
-        if !threadsInSection.isEmpty {
-            let alert = NSAlert()
-            alert.messageText = "Cannot Delete Section"
-            alert.informativeText = "Move all threads out of \"\(section.name)\" before deleting it."
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
-            return
-        }
+        guard defaultSection.id != section.id else { return }
 
-        if settings.defaultSectionId == section.id {
-            settings.defaultSectionId = nil
-        }
+        let threadCount = threadsInGlobalSection(section).count
+        let alert = NSAlert()
+        alert.messageText = "Delete Section?"
+        alert.informativeText = threadCount == 1
+            ? "Delete \"\(section.name)\"? 1 thread will be moved to \"\(defaultSection.name)\"."
+            : "Delete \"\(section.name)\"? \(threadCount) threads will be moved to \"\(defaultSection.name)\"."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        ThreadManager.shared.reassignThreadsAssigned(
+            toSection: section.id,
+            toSection: defaultSection.id,
+            settings: settings
+        )
+
         settings.threadSections.removeAll { $0.id == section.id }
         try? persistence.saveSettings(settings)
         sectionsTableView.reloadData()
@@ -150,6 +150,7 @@ extension SettingsThreadsViewController {
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let section = sortedSections[row]
+        let currentDefaultSectionId = settings.defaultSection?.id
         let identifier = NSUserInterfaceItemIdentifier("AppearanceSectionCell")
         let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView ?? {
             let c = NSTableCellView()
@@ -213,6 +214,9 @@ extension SettingsThreadsViewController {
         }
 
         if let delBtn = cell.viewWithTag(102) as? NSButton {
+            let isDefaultSection = section.id == currentDefaultSectionId
+            delBtn.isHidden = isDefaultSection
+            delBtn.isEnabled = !isDefaultSection
             delBtn.target = self
             delBtn.action = #selector(deleteSectionTapped(_:))
         }

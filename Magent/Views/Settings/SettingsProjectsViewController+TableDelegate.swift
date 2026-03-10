@@ -145,6 +145,7 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
 
     func sectionsCellView(for row: Int, in tableView: NSTableView) -> NSView? {
         let section = projectSortedSections[row]
+        let currentDefaultSectionId = selectedProject.flatMap { settings.defaultSection(for: $0.id)?.id }
         let identifier = NSUserInterfaceItemIdentifier("ProjectSectionCell")
         let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView ?? {
             let c = NSTableCellView()
@@ -223,6 +224,9 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
         }
 
         if let delBtn = cell.viewWithTag(202) as? NSButton {
+            let isDefaultSection = section.id == currentDefaultSectionId
+            delBtn.isHidden = isDefaultSection
+            delBtn.isEnabled = !isDefaultSection
             delBtn.target = self
             delBtn.action = #selector(deleteProjectSectionTapped(_:))
         }

@@ -426,6 +426,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         guard selected >= 0, selected < visible.count else { return }
         settings.defaultSectionId = visible[selected].id
         try? persistence.saveSettings(settings)
+        sectionsTableView.reloadData()
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
