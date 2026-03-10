@@ -14,7 +14,7 @@ extension ThreadManager {
             return
         }
         guard sessionMonitorTimer == nil else { return }
-        sessionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+        sessionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.runSessionMonitorTick()
             }

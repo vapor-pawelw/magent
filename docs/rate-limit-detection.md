@@ -4,7 +4,14 @@ Magent monitors agent terminal sessions for rate-limit messages and surfaces the
 
 ## How It Works
 
-Every few seconds, Magent reads the last portion of each agent terminal pane and looks for rate-limit phrases (e.g., "rate limited", "too many requests", "try again in 35m", "resets 4pm"). When found, it parses the reset time and displays a countdown in the sidebar and on affected tabs.
+Every 5 seconds, Magent reads the last portion of each agent terminal pane and looks for rate-limit phrases (e.g., "rate limited", "too many requests", "try again in 35m", "resets 4pm"). When found, it parses the reset time and displays a countdown in the sidebar and on affected tabs.
+
+### Scan Frequency
+
+- **Active session** (currently visible tab): scanned every monitor tick (~5s).
+- **Background sessions**: scanned at most once every 15 seconds to reduce CPU usage.
+
+Pane content is also cached for up to 5 seconds and shared across all periodic checks (busy detection, waiting-for-input detection, rate-limit scanning), so multiple checks in the same tick reuse a single `tmux capture-pane` subprocess result.
 
 ### Agent-Specific Parsing
 

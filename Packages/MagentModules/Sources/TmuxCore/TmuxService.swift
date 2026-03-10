@@ -6,6 +6,7 @@ public final class TmuxService: Sendable {
 
     public static let shared = TmuxService()
     private let agentCompletionEventsPath = "/tmp/magent-agent-completion-events.log"
+    private let paneCache = PaneCaptureCache()
     public struct ZombieParentSummary {
         public let parentPid: Int
         public let zombieCount: Int
@@ -446,6 +447,13 @@ public final class TmuxService: Sendable {
             return nil
         }
         return output
+    }
+
+    /// Like `capturePane`, but results are cached for up to 5 seconds per session.
+    /// Concurrent calls for the same session coalesce into a single subprocess.
+    /// Use this from periodic polling paths; use `capturePane` when you need fresh output.
+    public func cachedCapturePane(sessionName: String, lastLines: Int = 15) async -> String? {
+        await paneCache.get(sessionName: sessionName, lastLines: lastLines)
     }
 
     /// Returns tmux parent processes that currently hold zombie children.

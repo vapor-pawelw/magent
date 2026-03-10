@@ -117,6 +117,11 @@ extension ThreadManager {
         // Lazy-load persisted rate-limit caches on first use.
         ensureRateLimitCachesLoaded()
 
+        // Determine the currently visible session so we can scan it on every tick.
+        // All other sessions are throttled to one scan per 15 seconds.
+        let activeSession: String? = threads.first(where: { $0.id == activeThreadId })?.lastSelectedTmuxSessionName
+        let rateLimitThrottle: TimeInterval = 15
+
         let rateLimitSnapshot = threads.filter { !$0.isArchived }
         for thread in rateLimitSnapshot {
             let threadId = thread.id
@@ -139,7 +144,16 @@ extension ThreadManager {
                     continue
                 }
 
-                guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
+                // Non-active sessions: skip pane fetch if scanned recently.
+                // Existing markers survive via `pruneExpiredGlobalRateLimits`; no state is lost.
+                let isActiveSession = sessionName == activeSession
+                let lastScan = lastRateLimitScanBySession[sessionName] ?? .distantPast
+                if !isActiveSession && now.timeIntervalSince(lastScan) < rateLimitThrottle {
+                    continue
+                }
+                lastRateLimitScanBySession[sessionName] = now
+
+                guard let paneContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 120),
                       let detection = rateLimitDetection(from: paneContent, now: now, agent: sessionAgent) else {
                     if detectionEnabled {
                         let existing = updatedRateLimits[sessionName]
@@ -479,7 +493,7 @@ extension ThreadManager {
         if let paneContent {
             latestPaneContent = paneContent
         } else {
-            latestPaneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120)
+            latestPaneContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 120)
         }
         guard let latestPaneContent else { return [] }
         if paneHasActiveNonIgnoredRateLimit(for: agent, paneContent: latestPaneContent, now: now) {

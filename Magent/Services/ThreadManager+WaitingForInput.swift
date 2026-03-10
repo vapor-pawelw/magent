@@ -26,7 +26,7 @@ extension ThreadManager {
                 // Only check busy sessions (or already-waiting sessions to detect resolution)
                 guard isBusy || wasWaiting else { continue }
 
-                guard let paneContent = await tmux.capturePane(sessionName: session) else { continue }
+                guard let paneContent = await tmux.cachedCapturePane(sessionName: session) else { continue }
                 guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                 let isWaiting = matchesWaitingForInputPattern(paneContent)
 

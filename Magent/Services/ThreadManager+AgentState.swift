@@ -281,7 +281,7 @@ extension ThreadManager {
                         // Both ✳ and braille spinner characters can persist in the pane
                         // title after the agent finishes. Always verify via pane content
                         // that the agent isn't just sitting at an empty prompt.
-                        let capturedContent = await tmux.capturePane(sessionName: session)
+                        let capturedContent = await tmux.cachedCapturePane(sessionName: session)
                         if let content = capturedContent, isAtRateLimitPrompt(content) {
                             guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                             if setPromptRateLimitMarker(threadId: threadId, session: session) {
@@ -355,7 +355,7 @@ extension ThreadManager {
                         // Shell has children — but the agent could be idle at its prompt
                         // (e.g. Claude Code waiting for user input while still running as
                         // a child process of the wrapper shell).
-                        let capturedContent2 = await tmux.capturePane(sessionName: session)
+                        let capturedContent2 = await tmux.cachedCapturePane(sessionName: session)
                         if let content = capturedContent2, isAtRateLimitPrompt(content) {
                             guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                             if setPromptRateLimitMarker(threadId: threadId, session: session) {
@@ -432,7 +432,7 @@ extension ThreadManager {
                         // The agent process can still be the foreground command even when
                         // idle at its prompt (e.g. Claude Code showing ❯). Verify via
                         // pane content that the agent is actually working.
-                        let capturedContent3 = await tmux.capturePane(sessionName: session)
+                        let capturedContent3 = await tmux.cachedCapturePane(sessionName: session)
                         if let content = capturedContent3, isAtRateLimitPrompt(content) {
                             guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                             if setPromptRateLimitMarker(threadId: threadId, session: session) {
@@ -595,7 +595,7 @@ extension ThreadManager {
     private func paneShowsEscToInterrupt(sessionName: String) async -> Bool {
         // Capture enough history to include at least one scope separator so we can
         // ignore stale matches from older scopes.
-        guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 200) else {
+        guard let paneContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 200) else {
             return false
         }
 

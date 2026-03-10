@@ -58,6 +58,9 @@ final class ThreadManager {
     var dirtyCheckTickCounter: Int = 0
     var _jiraSyncTickCounter: Int = 0
     var _prSyncTickCounter: Int = 0
+    /// Tracks when each tmux session was last scanned for rate-limit text.
+    /// Used to throttle non-active-session scans to once every 15 seconds.
+    var lastRateLimitScanBySession: [String: Date] = [:]
     var _cachedRemoteByProjectId: [UUID: GitRemote] = [:]
     var _mismatchBannerShownProjectIds: Set<UUID> = []
 
