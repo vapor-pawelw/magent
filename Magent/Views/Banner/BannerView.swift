@@ -27,7 +27,8 @@ enum BannerStyle {
     }
 
     var backgroundColor: NSColor {
-        tintColor.withAlphaComponent(0.15)
+        let tintedSurface = NSColor(resource: .surface).blended(withFraction: 0.18, of: tintColor) ?? tintColor
+        return tintedSurface.withAlphaComponent(0.96)
     }
 }
 
