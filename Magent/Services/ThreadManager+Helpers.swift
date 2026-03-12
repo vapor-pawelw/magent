@@ -793,7 +793,9 @@ extension ThreadManager {
         let shell = ShellExecutor.shellQuote(Self.startupShell)
         let zdotdir = ShellExecutor.shellQuote(ensureManagedZdotdir())
         let startCwd = ShellExecutor.shellQuote(workingDirectory)
-        return "\(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -l"
+        // Unset CLAUDECODE so agent CLIs can be launched manually from a terminal tab
+        // without triggering the "nested session" error inherited from Magent's parent process.
+        return "unset CLAUDECODE && \(envExports) && exec env MAGENT_START_CWD=\(startCwd) ZDOTDIR=\(zdotdir) \(shell) -l"
     }
 
     func agentStartCommand(
