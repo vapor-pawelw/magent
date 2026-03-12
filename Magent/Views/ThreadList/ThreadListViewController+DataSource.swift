@@ -846,17 +846,18 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         let row = outlineView.selectedRow
         guard row >= 0,
               let thread = outlineView.item(atRow: row) as? MagentThread else {
-            // Don't clear while reloadData() is running — it transiently loses selection
-            // before restoring it, which would cause the panel to blink.
-            if !isReloadingData {
-                diffPanelView?.clear()
-            }
+            // NSOutlineView can transiently report no selected row while reloading.
+            // Keep the controller-owned selection until the selected thread is truly gone.
+            guard selectedThreadFromState() == nil else { return }
+            clearSelectedThreadState()
             return
         }
-        UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
-        UserDefaults.standard.set(thread.projectId.uuidString, forKey: Self.lastOpenedProjectDefaultsKey)
-        delegate?.threadList(self, didSelectThread: thread)
-        refreshDiffPanel(for: thread)
+        let selectionChanged = selectedThreadID != thread.id
+        let resolved = recordSelectedThread(thread)
+        if selectionChanged {
+            delegate?.threadList(self, didSelectThread: resolved)
+        }
+        refreshDiffPanel(for: resolved)
     }
 }
 
@@ -900,10 +901,11 @@ extension ThreadListViewController: ThreadManagerDelegate {
         }
 
         // Refresh branch mismatch view for currently selected thread
-        let row = outlineView.selectedRow
-        if row >= 0, let selected = outlineView.item(atRow: row) as? MagentThread {
+        if let selected = selectedThreadFromState() {
             refreshBranchMismatchView(for: selected)
             refreshDiffPanelContext(for: selected)
+        } else if outlineView.selectedRow < 0 {
+            clearSelectedThreadState()
         }
     }
 

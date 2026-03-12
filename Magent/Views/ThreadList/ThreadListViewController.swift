@@ -117,6 +117,7 @@ final class ThreadListViewController: NSViewController {
     var allowsProgrammaticOutlineDisclosureChanges = false
     var diffPanelCommitLimitByThreadId: [UUID: Int] = [:]
     let diffPanelCommitPageSize = 10
+    private(set) var selectedThreadID: UUID?
 
     private struct SidebarScrollSnapshot {
         let origin: NSPoint
@@ -219,9 +220,7 @@ final class ThreadListViewController: NSViewController {
     @objc private func agentCompletionDetected(_ notification: Notification) {
         guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
         // If the completed thread is currently selected, refresh the diff panel
-        let row = outlineView.selectedRow
-        guard row >= 0,
-              let selected = outlineView.item(atRow: row) as? MagentThread,
+        guard let selected = selectedThreadFromState(),
               selected.id == threadId else { return }
         refreshDiffPanel(for: selected)
     }
@@ -451,7 +450,7 @@ final class ThreadListViewController: NSViewController {
         let scrollSnapshot = captureSidebarScrollSnapshot()
 
         // Remember current selection
-        let selectedThreadId: UUID? = {
+        let selectedThreadId = selectedThreadID ?? {
             let row = outlineView.selectedRow
             guard row >= 0, let thread = outlineView.item(atRow: row) as? MagentThread else { return nil }
             return thread.id
@@ -567,15 +566,20 @@ final class ThreadListViewController: NSViewController {
         refreshVisibleSectionDisclosureButtons()
 
         // Restore selection
+        var restoredSelection = false
         if let selectedId = selectedThreadId {
             for row in 0..<outlineView.numberOfRows {
                 if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == selectedId {
                     preserveSidebarSelectionViewport {
                         outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                     }
+                    restoredSelection = true
                     break
                 }
             }
+        }
+        if let selectedThreadId, !restoredSelection, self.selectedThreadID == selectedThreadId {
+            self.selectedThreadID = nil
         }
 
         restoreSidebarScrollSnapshot(scrollSnapshot)
@@ -681,7 +685,8 @@ final class ThreadListViewController: NSViewController {
         if let threadId = lastOpenedThreadId {
             for row in 0..<outlineView.numberOfRows {
                 if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
-                    delegate?.threadList(self, didSelectThread: thread)
+                    let resolved = recordSelectedThread(thread)
+                    delegate?.threadList(self, didSelectThread: resolved)
                     outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                     return
                 }
@@ -695,7 +700,8 @@ final class ThreadListViewController: NSViewController {
                 for row in 0..<outlineView.numberOfRows {
                     if let thread = outlineView.item(atRow: row) as? MagentThread,
                        thread.projectId == fallbackProjectId {
-                        delegate?.threadList(self, didSelectThread: thread)
+                        let resolved = recordSelectedThread(thread)
+                        delegate?.threadList(self, didSelectThread: resolved)
                         outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                         return
                     }
@@ -705,7 +711,8 @@ final class ThreadListViewController: NSViewController {
             for row in 0..<outlineView.numberOfRows {
                 if let thread = outlineView.item(atRow: row) as? MagentThread,
                    thread.projectId == lastOpenedProjectId {
-                    delegate?.threadList(self, didSelectThread: thread)
+                    let resolved = recordSelectedThread(thread)
+                    delegate?.threadList(self, didSelectThread: resolved)
                     outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                     return
                 }
@@ -715,21 +722,45 @@ final class ThreadListViewController: NSViewController {
         // Find the first selectable thread item
         for row in 0..<outlineView.numberOfRows {
             if let thread = outlineView.item(atRow: row) as? MagentThread {
-                delegate?.threadList(self, didSelectThread: thread)
+                let resolved = recordSelectedThread(thread)
+                delegate?.threadList(self, didSelectThread: resolved)
+                outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                return
+            }
+        }
+
+        clearSelectedThreadState()
+    }
+
+    func selectThread(byId threadId: UUID) {
+        for row in 0..<outlineView.numberOfRows {
+            if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
+                let resolved = recordSelectedThread(thread)
+                delegate?.threadList(self, didSelectThread: resolved)
                 outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
                 return
             }
         }
     }
 
-    func selectThread(byId threadId: UUID) {
-        for row in 0..<outlineView.numberOfRows {
-            if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
-                delegate?.threadList(self, didSelectThread: thread)
-                outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-                return
-            }
-        }
+    func selectedThreadFromState() -> MagentThread? {
+        guard let selectedThreadID else { return nil }
+        return threadManager.threads.first(where: { $0.id == selectedThreadID })
+    }
+
+    @discardableResult
+    func recordSelectedThread(_ thread: MagentThread) -> MagentThread {
+        let resolved = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        selectedThreadID = resolved.id
+        UserDefaults.standard.set(resolved.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
+        UserDefaults.standard.set(resolved.projectId.uuidString, forKey: Self.lastOpenedProjectDefaultsKey)
+        return resolved
+    }
+
+    func clearSelectedThreadState() {
+        selectedThreadID = nil
+        diffPanelView?.clear()
+        branchMismatchView?.clear()
     }
 
 }

@@ -189,12 +189,13 @@ extension ThreadListViewController {
     private func preferredProjectForQuickCreate(from projects: [Project]) -> Project? {
         guard !projects.isEmpty else { return nil }
 
+        if let selectedThread = selectedThreadFromState(),
+           let matched = projects.first(where: { $0.id == selectedThread.projectId }) {
+            return matched
+        }
+
         let selectedRow = outlineView.selectedRow
         if selectedRow >= 0 {
-            if let selectedThread = outlineView.item(atRow: selectedRow) as? MagentThread,
-               let matched = projects.first(where: { $0.id == selectedThread.projectId }) {
-                return matched
-            }
             if let selectedProject = outlineView.item(atRow: selectedRow) as? SidebarProject,
                let matched = projects.first(where: { $0.id == selectedProject.projectId }) {
                 return matched
@@ -295,7 +296,8 @@ extension ThreadListViewController {
                 await MainActor.run {
                     self.isCreatingThread = false
                     self.reloadData()
-                    self.delegate?.threadList(self, didSelectThread: thread)
+                    let resolved = self.recordSelectedThread(thread)
+                    self.delegate?.threadList(self, didSelectThread: resolved)
                 }
             } catch {
                 await MainActor.run {
@@ -313,20 +315,15 @@ extension ThreadListViewController {
     // MARK: - Diff Panel
 
     func refreshDiffPanelForSelectedThread() {
-        let row = outlineView.selectedRow
-        guard row >= 0,
-              let thread = outlineView.item(atRow: row) as? MagentThread else {
-            diffPanelView.clear()
-            branchMismatchView.clear()
+        guard let thread = selectedThreadFromState() else {
+            clearSelectedThreadState()
             return
         }
         refreshDiffPanel(for: thread)
     }
 
     func refreshDiffPanelContextForSelectedThread() {
-        let row = outlineView.selectedRow
-        guard row >= 0,
-              let thread = outlineView.item(atRow: row) as? MagentThread else {
+        guard let thread = selectedThreadFromState() else {
             diffPanelView.updateBranchInfo(branchName: nil, baseBranch: nil)
             return
         }
@@ -334,9 +331,7 @@ extension ThreadListViewController {
     }
 
     func loadMoreCommitsForSelectedThread() {
-        let row = outlineView.selectedRow
-        guard row >= 0,
-              let thread = outlineView.item(atRow: row) as? MagentThread else { return }
+        guard let thread = selectedThreadFromState() else { return }
         let nextLimit = diffPanelCommitLimitByThreadId[thread.id, default: diffPanelCommitPageSize] + diffPanelCommitPageSize
         diffPanelCommitLimitByThreadId[thread.id] = nextLimit
         refreshDiffPanel(for: thread, resetPagination: false)
@@ -389,10 +384,7 @@ extension ThreadListViewController {
             }
 
             await MainActor.run {
-                let selectedRow = self.outlineView.selectedRow
-                guard selectedRow >= 0,
-                      let selectedThread = self.outlineView.item(atRow: selectedRow) as? MagentThread,
-                      selectedThread.id == current.id else { return }
+                guard self.selectedThreadID == current.id else { return }
                 self.diffPanelView.update(
                     with: entries,
                     commits: commits,
