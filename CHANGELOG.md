@@ -16,7 +16,9 @@ All notable changes to this project will be documented in this file.
 - Fixed terminal overlays and other terminal chrome staying dark after switching to Light mode; open Ghostty surfaces now receive the new color scheme directly during appearance refresh.
 - Fixed newly opened terminal panes always starting in dark mode when Light mode is active; the full current config and color scheme are now applied at surface creation time, matching what the settings-change path does for already-open panes.
 - Terminals now react to macOS system appearance changes directly, without requiring a manual settings re-toggle; each surface responds to its own effective-appearance change event.
-- Tab bar items now have a visible border, a refined close glyph, and fully appearance-reactive colors for selected and deselected states.
+- Tab bar items now have a visible border and fully appearance-reactive colors for selected and deselected states; the close button uses the circular `xmark.circle.fill` icon.
+- Fixed tab background and border colors not resolving to correct light-mode values; CGColors on CALayers are now resolved inside `effectiveAppearance.performAsCurrentDrawingAppearance`.
+- Fixed Ghostty terminals remaining dark after switching the app to Light mode; `applyEmbeddedPreferences` now runs before window appearances are refreshed so any `viewDidChangeEffectiveAppearance` callbacks already see the updated color scheme.
 
 ### Sidebar
 - Fixed the main worktree row title being invisible in Light mode (white text on a light background); the text color now adapts to the selection state and the current appearance.

@@ -161,6 +161,15 @@ Skipping `update_config` here causes new panes to start dark even when Light mod
 
 **`effectiveAppearance` parameter**: `registerSurface` accepts an optional `NSAppearance?` which is the calling view's `effectiveAppearance`. This ensures new surfaces get the correct scheme even in scenarios where the view's effective appearance differs from `NSApp.effectiveAppearance` (e.g., per-window appearance overrides). Always pass `effectiveAppearance` from `TerminalSurfaceView` at surface-creation time.
 
+## Appearance Update Ordering in AppDelegate
+
+`AppDelegate.applyAppAppearanceAndTerminalPreferences` does three things in order:
+1. Sets `NSApp.appearance` to the new value.
+2. Calls `GhosttyAppManager.shared.applyEmbeddedPreferences(...)` to update the embedded terminal color scheme.
+3. Calls `refreshWindowAppearances(using:)` which sets each window's `appearance` and forces layout/display.
+
+**Rule**: `applyEmbeddedPreferences` **must** be called **before** `refreshWindowAppearances`. Setting window appearances (step 3) can synchronously trigger `viewDidChangeEffectiveAppearance` on `TerminalSurfaceView` instances (via `layoutSubtreeIfNeeded` / `displayIfNeeded`), which calls `refreshAppearance(using:)`. If `embeddedPreferences` has not yet been updated at that point, `resolvedColorScheme` uses the stale appearance mode and may set the wrong color scheme on all surfaces. `applyEmbeddedPreferences` then runs after the refresh and corrects it — but the intermediate wrong state can cause terminals to remain dark or miss the update entirely.
+
 ## System Appearance Change Contract
 
 Beyond the manual settings toggle, terminals must also react when macOS switches the system appearance (e.g., the user flips Dark/Light in System Settings, or per-window appearance changes).
