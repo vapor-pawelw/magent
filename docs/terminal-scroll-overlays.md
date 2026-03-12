@@ -17,7 +17,20 @@
 - The show/hide motion for the standalone pill is animation-only: keep its Auto Layout constraints pinned to the final resting position and animate only the layer's Y translation. The current travel distance is 24 pt below the resting position.
 - Visibility changes for the standalone pill should be state-gated in the controller so repeated show/hide requests do not restart the animation while the current transition is still in flight.
 
+## Scroll-to-bottom mechanics
+
+Both the overlay jump-to-bottom button and the FAB pill go through `scrollCurrentTerminal(.bottom)` in `ThreadDetailViewController+Actions.swift`:
+
+1. `TmuxService.scrollToBottom()` — sends `tmux send-keys -X cancel` to exit copy-mode.
+2. 80 ms sleep — allows tmux to redraw the live pane and extend Ghostty's scrollback.
+3. `bindingAction("scroll_to_bottom")` on the target surface — scrolls Ghostty's own viewport to the new bottom, ensuring the live output is visible.
+
+The Ghostty scroll **must happen after** the tmux redraw, not before. Calling it first (while still in copy-mode) causes Ghostty to land at the old "bottom" before tmux appends the fresh live-pane frame; the content then appears near the top of the viewport.
+
+The surface is resolved by `sessionName` at execution time (via `thread.tmuxSessionNames.firstIndex(of:)`), not by the index captured before the async work, since tabs may be closed or reordered during the 80 ms delay.
+
 ## Gotchas
 
 - Keep terminal overlays attached to `terminalContainer` and re-added above terminal surfaces after lazy tab creation; otherwise Ghostty's metal-backed surface can render over them. See `docs/libghostty-integration.md`.
 - Avoid using constraint changes for the standalone pill's entrance/exit animation. Constraint-driven movement would couple layout state to transient animation state and can leave the pill in the wrong resting position if visibility toggles rapidly.
+- Do not call `bindingAction("scroll_to_bottom")` before `TmuxService.scrollToBottom()` resolves. Ghostty's scrollback grows when tmux redraws after exiting copy-mode, so a premature Ghostty scroll anchors to a stale bottom and the fresh live-pane content ends up off-screen.

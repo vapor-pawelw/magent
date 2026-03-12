@@ -37,6 +37,18 @@ extension ThreadDetailViewController {
                     try await TmuxService.shared.scrollPageDown(sessionName: sessionName)
                 case .bottom:
                     try await TmuxService.shared.scrollToBottom(sessionName: sessionName)
+                    // Give tmux time to redraw the live pane after exiting copy-mode,
+                    // then scroll ghostty's own viewport to the new bottom so that
+                    // the most recent output is visible at the bottom of the viewport.
+                    // Resolve the view by sessionName at execution time — the tab
+                    // array may have changed (close/reorder) during the delay.
+                    try? await Task.sleep(nanoseconds: 80_000_000)
+                    await MainActor.run {
+                        if let i = self.thread.tmuxSessionNames.firstIndex(of: sessionName),
+                           i < self.terminalViews.count {
+                            self.terminalViews[i].bindingAction("scroll_to_bottom")
+                        }
+                    }
                 }
                 await MainActor.run {
                     self.scheduleScrollFABVisibilityRefresh()

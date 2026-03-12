@@ -201,12 +201,7 @@ extension ThreadDetailViewController {
         setScrollFABVisible(false)
         scrollFABRefreshTask?.cancel()
 
-        // Scroll ghostty's own scrollback to the bottom.
-        if currentTabIndex < terminalViews.count {
-            terminalViews[currentTabIndex].bindingAction("scroll_to_bottom")
-        }
-
-        // Also cancel tmux copy-mode in case scroll overlay page-up was used.
+        // Cancel tmux copy-mode and scroll ghostty's viewport to bottom after redraw.
         scrollTerminalToBottomTapped()
         scheduleScrollFABVisibilityRefresh()
     }
