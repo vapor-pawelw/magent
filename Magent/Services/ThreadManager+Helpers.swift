@@ -114,6 +114,18 @@ extension ThreadManager {
         return nil
     }
 
+    /// Returns the agent type currently running in the given tmux session, or nil if
+    /// no known agent process is detected (e.g. the pane is at a plain shell prompt).
+    func detectedAgentTypeInSession(_ sessionName: String) async -> AgentType? {
+        guard let paneState = await tmux.activePaneStates(forSessions: [sessionName])[sessionName] else {
+            return nil
+        }
+        let children = paneState.pid > 0
+            ? await tmux.childProcesses(forParents: [paneState.pid])[paneState.pid] ?? []
+            : []
+        return detectedRunningAgentType(paneCommand: paneState.command, childProcesses: children)
+    }
+
     func agentType(for thread: MagentThread, sessionName: String) -> AgentType? {
         guard thread.agentTmuxSessions.contains(sessionName) else { return nil }
         if let stored = thread.sessionAgentTypes[sessionName] {

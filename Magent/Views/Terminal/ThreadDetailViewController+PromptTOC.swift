@@ -164,6 +164,10 @@ extension ThreadDetailViewController {
             let prompt = firstNewEntry.displayText
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                // Only rename when an agent process is actually running in the session.
+                // This prevents terminal commands typed at a ❯-themed shell prompt from
+                // triggering auto-rename when the agent is not active.
+                guard await self.threadManager.detectedAgentTypeInSession(sessionName) != nil else { return }
                 let previousThread = self.thread
                 _ = await self.threadManager.autoRenameThreadAfterFirstPromptIfNeeded(
                     threadId: threadId,
