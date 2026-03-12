@@ -49,7 +49,7 @@ Run Claude Code, Codex, or any custom command as your coding agent.
 - **Custom agents** — any CLI tool works
 - **Per-project defaults** — different agents for different repos
 - **Auto-trust** — trust settings auto-configured for new worktrees
-- **Context transfer** — hand off context between agent tabs via `.magent-context.md`
+- **Context transfer** — hand off context between agent tabs via transient markdown files stored alongside worktrees, outside the repo
 
 ### 🖥️ Terminal
 
