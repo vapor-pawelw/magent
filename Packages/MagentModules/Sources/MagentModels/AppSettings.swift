@@ -324,12 +324,15 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case .claude:
             return agentSkipPermissions ? "claude --dangerously-skip-permissions" : "claude"
         case .codex:
+            // Use `command codex` to bypass any shell function wrappers (e.g. ones that
+            // inject --dangerously-bypass-approvals-and-sandbox) which would conflict with
+            // our explicit flags like --yolo (an alias for the same flag in newer codex).
             if agentSkipPermissions {
-                return "codex --yolo"
+                return "command codex --yolo"
             } else if agentSandboxEnabled {
-                return "codex --full-auto"
+                return "command codex --full-auto"
             } else {
-                return "codex"
+                return "command codex"
             }
         case .custom:
             let trimmed = customAgentCommand.trimmingCharacters(in: .whitespacesAndNewlines)

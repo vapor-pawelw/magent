@@ -868,13 +868,14 @@ extension ThreadManager {
             }
             return command
         case .codex:
+            // Use `command codex` to bypass shell function wrappers (same reason as in AppSettings.command(for:)).
             if settings.agentSkipPermissions {
-                return "codex resume \(quotedID) --dangerously-bypass-approvals-and-sandbox"
+                return "command codex resume \(quotedID) --yolo"
             }
             if settings.agentSandboxEnabled {
-                return "codex resume \(quotedID) --full-auto"
+                return "command codex resume \(quotedID) --full-auto"
             }
-            return "codex resume \(quotedID)"
+            return "command codex resume \(quotedID)"
         case .custom:
             return nil
         }
