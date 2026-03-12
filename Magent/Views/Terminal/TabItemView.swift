@@ -281,7 +281,7 @@ final class TabItemView: NSView, NSMenuDelegate {
             titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         } else {
             backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.62)
-            borderColor = NSColor.separatorColor.withAlphaComponent(0.72)
+            borderColor = NSColor.separatorColor.withAlphaComponent(0.32)
             titleColor = NSColor(resource: .textSecondary).withAlphaComponent(0.96)
             secondaryColor = NSColor(resource: .textSecondary).withAlphaComponent(0.82)
             titleLabel.font = .systemFont(ofSize: 12, weight: .regular)
