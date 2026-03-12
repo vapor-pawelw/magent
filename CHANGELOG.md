@@ -29,6 +29,7 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 - Dragging a thread over sidebar project or section headers no longer expands/collapses them; disclosure now reacts only to clicks.
+- Fixed a sidebar resize regression where showing the bottom-left `COMMITS` tab could force the sidebar wider than the normal minimum.
 
 
 ## 1.2.0 - 2026-03-11

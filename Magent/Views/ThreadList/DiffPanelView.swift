@@ -133,6 +133,9 @@ final class DiffPanelView: NSView {
         changesBtn.contentTintColor = NSColor(resource: .textSecondary)
         changesBtn.isBordered = false
         changesBtn.alignment = .left
+        changesBtn.lineBreakMode = .byTruncatingTail
+        changesBtn.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        changesBtn.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         changesBtn.target = self
         changesBtn.action = #selector(changesTabTapped)
         changesBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -143,6 +146,9 @@ final class DiffPanelView: NSView {
         commitsBtn.contentTintColor = NSColor(resource: .textSecondary)
         commitsBtn.isBordered = false
         commitsBtn.alignment = .left
+        commitsBtn.lineBreakMode = .byTruncatingTail
+        commitsBtn.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        commitsBtn.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         commitsBtn.target = self
         commitsBtn.action = #selector(commitsTabTapped)
         commitsBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -151,6 +157,8 @@ final class DiffPanelView: NSView {
         tabBarStack.orientation = .horizontal
         tabBarStack.spacing = 12
         tabBarStack.alignment = .centerY
+        tabBarStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        tabBarStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         tabBarStack.addArrangedSubview(changesBtn)
         tabBarStack.addArrangedSubview(commitsBtn)
         tabBarStack.translatesAutoresizingMaskIntoConstraints = false
@@ -165,6 +173,8 @@ final class DiffPanelView: NSView {
         infoButton.action = #selector(infoButtonTapped)
         infoButton.translatesAutoresizingMaskIntoConstraints = false
         infoButton.toolTip = "Color legend"
+        infoButton.setContentHuggingPriority(.required, for: .horizontal)
+        infoButton.setContentCompressionResistancePriority(.required, for: .horizontal)
         addSubview(infoButton)
 
         // Stack view for file/commit entries
@@ -189,6 +199,7 @@ final class DiffPanelView: NSView {
         branchInfoLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         branchInfoLabel.textColor = NSColor(resource: .textSecondary).withAlphaComponent(0.7)
         branchInfoLabel.lineBreakMode = .byTruncatingMiddle
+        branchInfoLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         branchInfoLabel.translatesAutoresizingMaskIntoConstraints = false
         branchInfoLabel.isHidden = true
         addSubview(branchInfoLabel)

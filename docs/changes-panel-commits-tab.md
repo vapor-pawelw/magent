@@ -25,3 +25,4 @@
 - `BranchCommit` and `commitLog` must be `public` because `GitCore` and `MagentModels` are separate Swift package targets — the app target accesses them via `MagentCore`.
 - The `COMMITS` tab is hidden (not just disabled) when commit count ≤ 1. If the active tab was `COMMITS` when an update reduces commit count to ≤ 1, the tab is auto-reset to `CHANGES` before hiding.
 - Keyboard navigation (`↑`/`↓` arrow keys) is guarded to only operate in the `CHANGES` tab; `keyDown` passes through to super when on the `COMMITS` tab.
+- Keep the tab-bar buttons (`changesTabButton`, `commitsTabButton`) on low horizontal hugging/compression resistance and truncate their titles. If those controls keep the default resistance, making `COMMITS (n)` visible can raise the sidebar's effective minimum width and block normal divider dragging.
