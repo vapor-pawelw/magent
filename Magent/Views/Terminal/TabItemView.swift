@@ -268,20 +268,14 @@ final class TabItemView: NSView, NSMenuDelegate {
     }
 
     private func updateAppearance() {
-        let backgroundColor: NSColor
-        let borderColor: NSColor
         let titleColor: NSColor
         let secondaryColor: NSColor
 
         if isSelected {
-            backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.18)
-            borderColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.38)
             titleColor = NSColor(resource: .textPrimary)
             secondaryColor = NSColor(resource: .textPrimary).withAlphaComponent(0.78)
             titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         } else {
-            backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.62)
-            borderColor = NSColor.separatorColor.withAlphaComponent(0.32)
             titleColor = NSColor(resource: .textSecondary).withAlphaComponent(0.96)
             secondaryColor = NSColor(resource: .textSecondary).withAlphaComponent(0.82)
             titleLabel.font = .systemFont(ofSize: 12, weight: .regular)
@@ -290,9 +284,17 @@ final class TabItemView: NSView, NSMenuDelegate {
         // Resolve NSColors into CGColors within the correct appearance context so
         // adaptive colors (Surface, PrimaryBrand, etc.) pick up light-mode values
         // when the window is in light mode.
+        // IMPORTANT: withAlphaComponent on a dynamic catalog color may snapshot the
+        // current drawing context — so the color creation must happen INSIDE the block,
+        // not before it, to avoid capturing the wrong (e.g. dark) variant.
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            self.layer?.backgroundColor = backgroundColor.cgColor
-            self.layer?.borderColor = borderColor.cgColor
+            if self.isSelected {
+                self.layer?.backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.18).cgColor
+                self.layer?.borderColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.38).cgColor
+            } else {
+                self.layer?.backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.62).cgColor
+                self.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.32).cgColor
+            }
         }
         titleLabel.textColor = titleColor
         pinIcon.contentTintColor = secondaryColor
