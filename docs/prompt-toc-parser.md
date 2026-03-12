@@ -29,6 +29,14 @@ This document covers the Prompt TOC parsing and jump behavior that was adjusted 
 - Bottom-cluster exclusion now includes blank prompt rows and footer divider rows.
 - TOC jump behavior now uses tmux `goto-line` plus `scroll-top` with top-relative to bottom-relative line conversion instead of `history-top` plus a long cursor walk.
 
+## Auto-rename gate: agent process detection
+
+Auto-rename-on-first-prompt fires only when an agent (Claude or Codex) process is actually detected running in the session at the moment new prompt entries are confirmed. This prevents terminal commands typed at a `❯`-themed shell prompt (e.g. oh-my-zsh Pure/Starship themes) from being mistaken for agent prompts and triggering a rename.
+
+- Detection uses `ThreadManager.detectedAgentTypeInSession(_:)`, which calls `tmux list-panes` for the pane command + PID, then `ps` for child processes, and delegates to `detectedRunningAgentType(paneCommand:childProcesses:)`.
+- If the pane is at a plain shell (agent not yet started, exited via Ctrl+C, etc.) the check returns `nil` and the rename is skipped silently.
+- This check is separate from the prompt TOC itself — TOC entries are still parsed and displayed regardless; only the auto-rename trigger is gated.
+
 ## Future debugging checklist
 
 - If Claude prompts disappear again, capture the pane with attributes (`tmux capture-pane -e -p -S - -E -`) and inspect both foreground and background styling before changing placeholder heuristics.
