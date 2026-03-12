@@ -185,6 +185,17 @@ Skipping `update_config` here causes new panes to start dark even when Light mod
 
 **`effectiveAppearance` parameter**: `registerSurface` accepts an optional `NSAppearance?` which is the calling view's `effectiveAppearance`. This ensures new surfaces get the correct scheme even in scenarios where the view's effective appearance differs from `NSApp.effectiveAppearance` (e.g., per-window appearance overrides). Always pass `effectiveAppearance` from `TerminalSurfaceView` at surface-creation time.
 
+## `reload_config` Callback Contract
+
+Ghostty's embedded runtime sends `GHOSTTY_ACTION_RELOAD_CONFIG` to the host when a terminal or the app needs its config reapplied (for example after current-terminal settings changes or conditional-state refreshes). Ignoring this callback means app-wide settings changes can still work through Magent's own settings path, but Ghostty-initiated surface reloads become no-ops.
+
+**Rule**:
+- For app targets, rebuild Magent's layered config (`ghostty_config_load_default_files` plus Magent overrides) and reapply it through `ghostty_app_update_config`, followed by the usual color-scheme refresh.
+- For surface targets, rebuild that same layered config and call `ghostty_surface_update_config` for the specific surface, then reapply the resolved color scheme and force a draw.
+- Resolve the surface target's `effectiveAppearance` from the `TerminalSurfaceView` stored in `ghostty_surface_userdata(...)`, so surface-local reloads keep the right light/dark scheme.
+
+Treat `GHOSTTY_ACTION_CONFIG_CHANGE` as handled as well, even if Magent does not currently need to react to the notification, so Ghostty's surface-level config workflow is not dropped on the floor by the embedder.
+
 ## Appearance Update Ordering in AppDelegate
 
 `AppDelegate.applyAppAppearanceAndTerminalPreferences` does three things in order:
@@ -193,6 +204,16 @@ Skipping `update_config` here causes new panes to start dark even when Light mod
 3. Calls `refreshWindowAppearances(using:)` which sets each window's `appearance` and forces layout/display.
 
 **Rule**: `applyEmbeddedPreferences` **must** be called **before** `refreshWindowAppearances`. Setting window appearances (step 3) can synchronously trigger `viewDidChangeEffectiveAppearance` on `TerminalSurfaceView` instances (via `layoutSubtreeIfNeeded` / `displayIfNeeded`), which calls `refreshAppearance(using:)`. If `embeddedPreferences` has not yet been updated at that point, `resolvedColorScheme` uses the stale appearance mode and may set the wrong color scheme on all surfaces. `applyEmbeddedPreferences` then runs after the refresh and corrects it — but the intermediate wrong state can cause terminals to remain dark or miss the update entirely.
+
+## Settings Notification Ordering Contract
+
+`magentSettingsDidChange` is observed both by `AppDelegate` and by open `ThreadDetailViewController` instances. The wheel-behavior setting is effectively a surface-time Ghostty config because Magent recreates `TerminalSurfaceView` instances for already-open tabs when that value changes.
+
+**Rule**:
+- The app-level settings observer must apply Ghostty prefs synchronously on the notification, not bounce through a later `Task`, so other same-turn observers do not race ahead and recreate surfaces with stale `embeddedPreferences`.
+- `ThreadDetailViewController.handleSettingsChanged(_:)` must call `GhosttyAppManager.shared.applyEmbeddedPreferences(...)` with the newly loaded settings before `reloadTerminalViewsForUpdatedTerminalPreferences()`.
+
+If surface recreation runs first and the shared Ghostty prefs update lands afterward, the brand-new surfaces are created from the old wheel config and the settings toggle appears to do nothing for already-open tabs until some later refresh.
 
 ## System Appearance Change Contract
 

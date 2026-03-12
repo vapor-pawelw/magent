@@ -9,7 +9,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     private var coordinator: AppCoordinator?
     private var ipcServer: IPCSocketServer?
-    private var settingsObserver: NSObjectProtocol?
     private var systemAppearanceObserver: NSObjectProtocol?
 
     private func isLiveNonZombieProcess(_ pid: pid_t) -> Bool {
@@ -79,15 +78,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         setupMainMenu()
         GhosttyAppManager.shared.initialize()
         applyAppAppearanceAndTerminalPreferences()
-        settingsObserver = NotificationCenter.default.addObserver(
-            forName: .magentSettingsDidChange,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.applyAppAppearanceAndTerminalPreferences()
-            }
-        }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSettingsChanged(_:)),
+            name: .magentSettingsDidChange,
+            object: nil
+        )
         systemAppearanceObserver = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
             object: nil,
@@ -115,10 +111,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if let settingsObserver {
-            NotificationCenter.default.removeObserver(settingsObserver)
-            self.settingsObserver = nil
-        }
+        NotificationCenter.default.removeObserver(self, name: .magentSettingsDidChange, object: nil)
         if let systemAppearanceObserver {
             DistributedNotificationCenter.default().removeObserver(systemAppearanceObserver)
             self.systemAppearanceObserver = nil
@@ -157,6 +150,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         coordinator?.showMainWindow()
         return true
+    }
+
+    @objc private func handleSettingsChanged(_ notification: Notification) {
+        applyAppAppearanceAndTerminalPreferences()
     }
 
     private func setupMainMenu() {

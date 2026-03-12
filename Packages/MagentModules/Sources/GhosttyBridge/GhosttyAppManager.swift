@@ -150,12 +150,9 @@ public final class GhosttyAppManager {
         registeredSurfaces[Int(bitPattern: surface)] = surface
         // Apply the current preferences immediately so the surface doesn't default to dark.
         // Mirrors what applyEmbeddedPreferences does for already-registered surfaces.
-        let colorScheme = resolvedColorScheme(for: effectiveAppearance)
         if let config = retainedConfigs.last {
-            ghostty_surface_update_config(surface, config)
+            applyConfig(config, to: surface, effectiveAppearance: effectiveAppearance)
         }
-        ghostty_surface_set_color_scheme(surface, colorScheme)
-        ghostty_surface_draw(surface)
     }
 
     public func unregisterSurface(_ surface: ghostty_surface_t?) {
@@ -177,10 +174,27 @@ public final class GhosttyAppManager {
         let colorScheme = resolvedColorScheme(for: effectiveAppearance)
         ghostty_app_set_color_scheme(app, colorScheme)
         for surface in registeredSurfaces.values {
-            ghostty_surface_update_config(surface, config)
-            ghostty_surface_set_color_scheme(surface, colorScheme)
-            ghostty_surface_draw(surface)
+            applyConfig(config, to: surface, effectiveAppearance: effectiveAppearance)
         }
+    }
+
+    func reloadEmbeddedConfig(soft: Bool, for surface: ghostty_surface_t? = nil) {
+        let logContext = soft ? "reload-config-soft" : "reload-config"
+        if let surface {
+            let effectiveAppearance = effectiveAppearance(for: surface)
+            guard let config = buildConfig(
+                for: embeddedPreferences,
+                logContext: "\(logContext)-surface",
+                effectiveAppearance: effectiveAppearance
+            ) else {
+                return
+            }
+            retainedConfigs.append(config)
+            applyConfig(config, to: surface, effectiveAppearance: effectiveAppearance)
+            return
+        }
+
+        applyEmbeddedPreferences(embeddedPreferences, effectiveAppearance: NSApp.effectiveAppearance)
     }
 
     public func refreshAppearanceIfNeeded() {
@@ -318,6 +332,23 @@ public final class GhosttyAppManager {
         }
     }
 
+    private func applyConfig(
+        _ config: ghostty_config_t,
+        to surface: ghostty_surface_t,
+        effectiveAppearance: NSAppearance?
+    ) {
+        let colorScheme = resolvedColorScheme(for: effectiveAppearance)
+        ghostty_surface_update_config(surface, config)
+        ghostty_surface_set_color_scheme(surface, colorScheme)
+        ghostty_surface_draw(surface)
+    }
+
+    private func effectiveAppearance(for surface: ghostty_surface_t) -> NSAppearance? {
+        guard let userData = ghostty_surface_userdata(surface) else { return nil }
+        let surfaceView = Unmanaged<TerminalSurfaceView>.fromOpaque(userData).takeUnretainedValue()
+        return surfaceView.effectiveAppearance
+    }
+
     private func resolvedColorScheme(for effectiveAppearance: NSAppearance? = nil) -> ghostty_color_scheme_e {
         switch embeddedPreferences.appearanceMode {
         case .system:
@@ -382,6 +413,25 @@ private func ghosttyActionCallback(
                 ]
             )
         }
+        return true
+    case GHOSTTY_ACTION_RELOAD_CONFIG:
+        let soft = action.action.reload_config.soft
+        switch target.tag {
+        case GHOSTTY_TARGET_APP:
+            Task { @MainActor in
+                GhosttyAppManager.shared.reloadEmbeddedConfig(soft: soft)
+            }
+            return true
+        case GHOSTTY_TARGET_SURFACE:
+            guard let surface = target.target.surface else { return false }
+            Task { @MainActor in
+                GhosttyAppManager.shared.reloadEmbeddedConfig(soft: soft, for: surface)
+            }
+            return true
+        default:
+            return false
+        }
+    case GHOSTTY_ACTION_CONFIG_CHANGE:
         return true
     default:
         return false
