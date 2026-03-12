@@ -18,18 +18,19 @@ extension ThreadDetailViewController {
 
             let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
             guard !remotes.isEmpty else {
-                BannerManager.shared.show(message: "No git remotes found", style: .warning)
+                await MainActor.run {
+                    BannerManager.shared.show(message: "No git remotes found", style: .warning)
+                }
                 return
             }
 
-            let branch = thread.branchName
+            let branch = thread.actualBranch ?? thread.branchName
             let defaultBranch: String?
             if let projectDefaultBranch = project.defaultBranch {
                 defaultBranch = projectDefaultBranch
             } else {
                 defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: project.repoPath)
             }
-
             if remotes.count == 1 {
                 await MainActor.run {
                     openRemoteURL(remotes[0], branch: branch, defaultBranch: defaultBranch)
@@ -43,8 +44,9 @@ extension ThreadDetailViewController {
                         openRemoteURL(origin, branch: branch, defaultBranch: defaultBranch)
                     }
                 } else {
+                    let menuTargets = await resolveRemoteMenuTargets(remotes: remotes, branch: branch, defaultBranch: defaultBranch)
                     await MainActor.run {
-                        showRemoteMenu(remotes: remotes, branch: branch, defaultBranch: defaultBranch, relativeTo: sender)
+                        showRemoteMenu(targets: menuTargets, relativeTo: sender)
                     }
                 }
             }
@@ -122,15 +124,38 @@ extension ThreadDetailViewController {
         OpenActionIcons.hostingProviderIcon(for: provider, size: 16)
     }
 
-    private func showRemoteMenu(remotes: [GitRemote], branch: String, defaultBranch: String?, relativeTo button: NSButton) {
-        let menu = NSMenu(title: "Select Remote")
+    private func resolveRemoteMenuTargets(
+        remotes: [GitRemote],
+        branch: String,
+        defaultBranch: String?
+    ) async -> [(remote: GitRemote, url: URL)] {
+        var targets: [(remote: GitRemote, url: URL)] = []
         for remote in remotes {
-            let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.openPullRequestsURL ?? remote.repoWebURL
-            guard let url else { continue }
+            let directURL: URL?
+            if branch != defaultBranch {
+                directURL = await GitService.shared.fetchPullRequest(remote: remote, branch: branch)?.url
+            } else {
+                directURL = nil
+            }
+
+            if let url = directURL
+                ?? remote.pullRequestURL(for: branch, defaultBranch: defaultBranch)
+                ?? remote.openPullRequestsURL
+                ?? remote.repoWebURL {
+                targets.append((remote: remote, url: url))
+            }
+        }
+        return targets
+    }
+
+    private func showRemoteMenu(targets: [(remote: GitRemote, url: URL)], relativeTo button: NSButton) {
+        let menu = NSMenu(title: "Select Remote")
+        for target in targets {
+            let remote = target.remote
             let title = "\(remote.name) (\(remote.host)/\(remote.repoPath))"
             let item = NSMenuItem(title: title, action: #selector(remoteMenuItemTapped(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = url
+            item.representedObject = target.url
             item.image = hostIcon(for: remote.provider)
             menu.addItem(item)
         }
@@ -143,11 +168,20 @@ extension ThreadDetailViewController {
     }
 
     private func openRemoteURL(_ remote: GitRemote, branch: String, defaultBranch: String?) {
-        guard let url = remote.pullRequestURL(for: branch, defaultBranch: defaultBranch) ?? remote.openPullRequestsURL ?? remote.repoWebURL else {
-            BannerManager.shared.show(message: "Could not construct URL for remote \(remote.name)", style: .warning)
-            return
+        Task {
+            let url = await GitService.shared.fetchPullRequest(remote: remote, branch: branch)?.url
+                ?? remote.pullRequestURL(for: branch, defaultBranch: defaultBranch)
+                ?? remote.openPullRequestsURL
+                ?? remote.repoWebURL
+
+            await MainActor.run {
+                guard let url else {
+                    BannerManager.shared.show(message: "Could not construct URL for remote \(remote.name)", style: .warning)
+                    return
+                }
+                NSWorkspace.shared.open(url)
+            }
         }
-        NSWorkspace.shared.open(url)
     }
 
     func xcodeButtonImage(forAppURL url: URL) -> NSImage {

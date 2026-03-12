@@ -59,9 +59,9 @@ extension ThreadManager {
                 await runJiraSyncTick()
             }
 
-            // PR sync every 20th tick (~60 seconds)
+            // PR sync roughly every 30 seconds after the initial startup sync.
             _prSyncTickCounter += 1
-            if _prSyncTickCounter >= 20 {
+            if _prSyncTickCounter >= 6 {
                 _prSyncTickCounter = 0
                 await runPRSyncTick()
             }

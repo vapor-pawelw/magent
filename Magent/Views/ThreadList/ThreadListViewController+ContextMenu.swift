@@ -595,6 +595,13 @@ extension ThreadListViewController {
         guard let project = settings.projects.first(where: { $0.id == thread.projectId }) else { return }
 
         Task {
+            if let url = await threadManager.resolvePullRequestURL(for: thread) {
+                await MainActor.run {
+                    _ = NSWorkspace.shared.open(url)
+                }
+                return
+            }
+
             let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
             guard !remotes.isEmpty else {
                 await MainActor.run {
@@ -603,7 +610,7 @@ extension ThreadListViewController {
                 return
             }
 
-            let branch = thread.branchName
+            let branch = thread.actualBranch ?? thread.branchName
             let defaultBranch: String?
             if let projectDefaultBranch = project.defaultBranch {
                 defaultBranch = projectDefaultBranch
