@@ -100,6 +100,10 @@ final class ThreadListViewController: NSViewController {
     var diffPanelView: DiffPanelView!
     var branchMismatchView: BranchMismatchView!
     var isCreatingThread = false
+    /// True while reloadData() is executing. Suppresses diffPanelView?.clear() in
+    /// outlineViewSelectionDidChange so the panel doesn't blink when the outline view
+    /// transiently loses selection mid-reload before restoring it.
+    var isReloadingData = false
     var suppressNextSectionRowToggle = false
     var suppressNextProjectRowToggle = false
     var activeSectionRename: (projectId: UUID, sectionId: UUID, originalName: String)?
@@ -441,6 +445,9 @@ final class ThreadListViewController: NSViewController {
     // MARK: - Data
 
     func reloadData() {
+        isReloadingData = true
+        defer { isReloadingData = false }
+
         let scrollSnapshot = captureSidebarScrollSnapshot()
 
         // Remember current selection

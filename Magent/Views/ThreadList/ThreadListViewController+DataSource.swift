@@ -846,7 +846,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         let row = outlineView.selectedRow
         guard row >= 0,
               let thread = outlineView.item(atRow: row) as? MagentThread else {
-            diffPanelView?.clear()
+            // Don't clear while reloadData() is running — it transiently loses selection
+            // before restoring it, which would cause the panel to blink.
+            if !isReloadingData {
+                diffPanelView?.clear()
+            }
             return
         }
         UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)

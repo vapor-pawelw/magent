@@ -25,6 +25,7 @@ All notable changes to this project will be documented in this file.
 - Fixed Ghostty terminals remaining dark after switching the app to Light mode; `applyEmbeddedPreferences` now runs before window appearances are refreshed so any `viewDidChangeEffectiveAppearance` callbacks already see the updated color scheme.
 
 ### Sidebar
+- Fixed the Changes panel blinking/disappearing briefly during sidebar reloads; the panel no longer clears when the outline view transiently loses selection mid-reload before restoring it.
 - Fixed a periodic scroll-position glitch in the sidebar (visible every ~5 seconds): thread status updates (busy, rate-limit, dirty flag, etc.) now refresh cell views in-place instead of triggering a full outline-view reload that briefly disrupted scroll position.
 - Fixed the main worktree row title being invisible in Light mode (white text on a light background); the text color now adapts to the selection state and the current appearance.
 
