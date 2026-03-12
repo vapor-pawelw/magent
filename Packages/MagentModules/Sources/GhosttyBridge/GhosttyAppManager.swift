@@ -155,17 +155,19 @@ public final class GhosttyAppManager {
     public func applyEmbeddedPreferences(_ preferences: GhosttyEmbeddedPreferences) {
         embeddedPreferences = preferences
         guard let app else { return }
+        // Apply color scheme first so surfaces pick it up when their config is refreshed.
+        applyAppearanceMode()
         guard let config = buildConfig(for: preferences, logContext: "update") else { return }
         retainedConfigs.append(config)
         ghostty_app_update_config(app, config)
         for surface in registeredSurfaces.values {
             ghostty_surface_update_config(surface, config)
         }
-        applyAppearanceMode()
     }
 
     public func refreshAppearanceIfNeeded() {
-        applyAppearanceMode()
+        // Re-apply full preferences so existing surfaces pick up the updated color scheme.
+        applyEmbeddedPreferences(embeddedPreferences)
     }
 
     private func startDisplayLinkIfNeeded() {

@@ -21,8 +21,10 @@ final class SettingsSectionCardView: NSView {
     }
 
     private func updateColors() {
-        let blended = NSColor(resource: .surface).blended(withFraction: 0.2, of: NSColor(resource: .appBackground))
-        layer?.backgroundColor = (blended ?? NSColor(resource: .surface)).cgColor
-        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let blended = NSColor(resource: .surface).blended(withFraction: 0.2, of: NSColor(resource: .appBackground))
+            layer?.backgroundColor = (blended ?? NSColor(resource: .surface)).cgColor
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+        }
     }
 }

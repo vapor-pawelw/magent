@@ -2,6 +2,19 @@ import Cocoa
 import GhosttyBridge
 import MagentCore
 
+// MARK: - AppBackgroundView
+
+/// NSView that keeps its layer background synced with the .appBackground color asset
+/// across both light and dark appearance changes.
+private final class AppBackgroundView: NSView {
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
+        }
+    }
+}
+
 // MARK: - ThreadDetailViewController
 
 final class ThreadDetailViewController: NSViewController {
@@ -17,7 +30,7 @@ final class ThreadDetailViewController: NSViewController {
     var thread: MagentThread
     let threadManager = ThreadManager.shared
     let tabBarStack = NSStackView()
-    let terminalContainer = NSView()
+    let terminalContainer: NSView = AppBackgroundView()
     let openPRButton = NSButton()
     let openInJiraButton = NSButton()
     let openInXcodeButton = NSButton()
@@ -104,7 +117,7 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     override func loadView() {
-        view = NSView()
+        view = AppBackgroundView()
     }
 
     override func viewDidLoad() {
@@ -209,6 +222,7 @@ final class ThreadDetailViewController: NSViewController {
         super.viewDidLayout()
         clampPromptTOCPositionIfNeeded()
     }
+
 
     deinit {
         promptTOCRefreshTask?.cancel()

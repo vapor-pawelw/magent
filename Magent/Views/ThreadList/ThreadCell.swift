@@ -657,7 +657,12 @@ final class ThreadCell: NSTableCellView {
 
     private func updateMainTextColorForSelection() {
         guard isConfiguredAsMain else { return }
-        textField?.textColor = .white
+        textField?.textColor = backgroundStyle == .emphasized ? .white : .labelColor
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateMainTextColorForSelection()
     }
 
     private func statusDescriptions(for thread: MagentThread) -> [String] {
