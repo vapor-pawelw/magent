@@ -28,6 +28,7 @@ All notable changes to this project will be documented in this file.
 - Terminal tabs now set their startup directory only when a tmux session is created, instead of re-sending `cd <worktree>` every time the app reattaches to an existing session.
 
 ### Sidebar
+- The main worktree now shows the same dirty marker as feature worktrees, and its bottom-left panel always stays available with working-tree changes plus recent commits. That panel now pages commit history in batches of 10, hides entirely for clean feature branches with nothing to show, and marks added directories with folder icons plus full-path hover tooltips.
 - Dragging a thread over sidebar project or section headers no longer expands/collapses them; disclosure now reacts only to clicks.
 - Fixed a sidebar resize regression where showing the bottom-left `COMMITS` tab could force the sidebar wider than the normal minimum.
 

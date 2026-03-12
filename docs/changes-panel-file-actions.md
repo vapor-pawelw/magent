@@ -3,11 +3,12 @@
 ## User Behavior
 
 - In the sidebar `CHANGES` panel, single-clicking a file still selects it and opens the inline diff viewer for that path.
+- Added directories in the `CHANGES` panel now render with a folder icon, a trailing slash in the label, and a full-path tooltip on hover so they are easier to distinguish from files.
 - The `CHANGES` panel `ⓘ` legend popover keeps consistent padding around every row instead of letting the first rows sit flush against the popover edge.
 - Selecting inline diff text now supports the standard `Cmd+C` shortcut and copies the selected text to the macOS clipboard.
 - Left-clicking an image preview inside the inline diff opens a larger overlay above the full thread view with a darkened background; clicking anywhere or pressing Escape dismisses it.
 - Double-clicking a file opens the file with the system default macOS app.
-- Right-clicking a file opens a context menu with `Show in Finder`.
+- Right-clicking a file opens a context menu with `Show in Finder`. Directory rows keep that Finder action but do not try to open the inline diff viewer.
 
 ## Implementation Notes
 
@@ -17,12 +18,14 @@
 - Opening files uses `NSWorkspace.shared.open(url)`.
 - Revealing files in Finder uses `NSWorkspace.shared.activateFileViewerSelecting([url])`.
 - Missing files (for example deleted paths still listed in diff stats) show a warning banner instead of failing silently.
+- Directory detection is UI-side in `DiffPanelView`: treat a path as a directory when it ends in `/` or resolves to a directory under the selected worktree path. Untracked directory rows can otherwise look identical to files because Git status reports them as plain paths.
 - Image zoom is implemented as a separate overlay in `ThreadDetailViewController+DiffViewer.swift`, not by resizing the inline diff section. `InlineDiffViewController` only forwards click events from image views upward.
 - The legend popover in `DiffPanelView.makeLegendViewController()` should use explicit container-to-stack inset constraints for padding. Relying on `NSStackView.edgeInsets` alone can render inconsistently in AppKit popovers.
 
 ## Gotcha
 
 - Right-click selection must not call the same path as left-click selection. Left-click posts `magentShowDiffViewer`, while right-click should only update row highlight and show the menu. This avoids unexpectedly opening/changing the inline diff while using context actions.
+- Directory rows must not post `magentShowDiffViewer`. Main-thread working-tree status can surface newly added directories that have no meaningful unified diff target, so the row should stay Finder-oriented instead of pretending it is a file diff anchor.
 - Rename paths from `git diff --numstat` can use brace syntax (for example `src/{old => new}.swift`) that does not match patch headers (`src/new.swift`). Normalize to the new/current path before wiring `FileDiffEntry.relativePath` into viewer scroll/expand lookups.
 - Inline diff section identity must come from normalized patch metadata (`rename to`, `+++`, `---`, or parsed `diff --git` tokens). Do not derive it by splitting raw headers on the literal string `" b/"`, because quoted paths, binary diffs, and filenames containing that substring can make the viewer expand the wrong file.
 - When scrolling to a section after `expandFile`, always call `view.layoutSubtreeIfNeeded()` before reading section frame coordinates. AppKit's layout cycle runs asynchronously, so frames inside a `DispatchQueue.main.async` block can still be zero or stale (fresh creation) or reflect pre-toggle constraint state (existing viewer). Without the forced layout pass, `section.convert(bounds, to: sectionsStackView)` returns wrong coordinates and the scroll always lands at the wrong file. Use `view` (not just `sectionsStackView`) so that `viewDidLayout` fires and `updateContentWidth` sets correct text heights before the scroll target is computed.

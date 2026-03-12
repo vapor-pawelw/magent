@@ -333,6 +333,15 @@ extension ThreadListViewController {
         refreshDiffPanelContext(for: thread)
     }
 
+    func loadMoreCommitsForSelectedThread() {
+        let row = outlineView.selectedRow
+        guard row >= 0,
+              let thread = outlineView.item(atRow: row) as? MagentThread else { return }
+        let nextLimit = diffPanelCommitLimitByThreadId[thread.id, default: diffPanelCommitPageSize] + diffPanelCommitPageSize
+        diffPanelCommitLimitByThreadId[thread.id] = nextLimit
+        refreshDiffPanel(for: thread, resetPagination: false)
+    }
+
     func refreshDiffPanelContext(for thread: MagentThread) {
         let current = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
         let branchName = current.isMain ? nil : (current.actualBranch ?? current.branchName)
@@ -340,28 +349,57 @@ extension ThreadListViewController {
         diffPanelView.updateBranchInfo(branchName: branchName, baseBranch: baseBranch)
     }
 
-    func refreshDiffPanel(for thread: MagentThread) {
-        guard !thread.isMain else {
-            diffPanelView.clear()
-            refreshBranchMismatchView(for: thread)
-            return
+    func refreshDiffPanel(for thread: MagentThread, resetPagination: Bool = true) {
+        if resetPagination || diffPanelCommitLimitByThreadId[thread.id] == nil {
+            diffPanelCommitLimitByThreadId[thread.id] = diffPanelCommitPageSize
         }
+        let commitLimit = diffPanelCommitLimitByThreadId[thread.id] ?? diffPanelCommitPageSize
+
         Task {
             let current = self.threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
-            let baseBranch = self.threadManager.resolveBaseBranch(for: current)
-            async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
-            async let commitsTask = GitService.shared.commitLog(
-                worktreePath: current.worktreePath,
-                baseBranch: baseBranch
-            )
-            let entries = await entriesTask
-            let commits = await commitsTask
+            let entries: [FileDiffEntry]
+            let commits: [BranchCommit]
+            let hasMoreCommits: Bool
+            let baseBranch: String?
+
+            if current.isMain {
+                baseBranch = nil
+                async let entriesTask = GitService.shared.workingTreeDiffStats(worktreePath: current.worktreePath)
+                async let commitsTask = GitService.shared.recentCommitLog(
+                    worktreePath: current.worktreePath,
+                    limit: commitLimit + 1
+                )
+                entries = await entriesTask
+                let commitPage = await commitsTask
+                hasMoreCommits = commitPage.count > commitLimit
+                commits = Array(commitPage.prefix(commitLimit))
+            } else {
+                let resolvedBaseBranch = self.threadManager.resolveBaseBranch(for: current)
+                baseBranch = resolvedBaseBranch
+                async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
+                async let commitsTask = GitService.shared.commitLog(
+                    worktreePath: current.worktreePath,
+                    baseBranch: resolvedBaseBranch,
+                    limit: commitLimit + 1
+                )
+                entries = await entriesTask
+                let commitPage = await commitsTask
+                hasMoreCommits = commitPage.count > commitLimit
+                commits = Array(commitPage.prefix(commitLimit))
+            }
+
             await MainActor.run {
+                let selectedRow = self.outlineView.selectedRow
+                guard selectedRow >= 0,
+                      let selectedThread = self.outlineView.item(atRow: selectedRow) as? MagentThread,
+                      selectedThread.id == current.id else { return }
                 self.diffPanelView.update(
                     with: entries,
                     commits: commits,
+                    hasMoreCommits: hasMoreCommits,
+                    forceVisible: current.isMain,
                     worktreePath: current.worktreePath,
-                    branchName: current.actualBranch ?? current.branchName,
+                    branchName: current.isMain ? nil : (current.actualBranch ?? current.branchName),
                     baseBranch: baseBranch
                 )
             }

@@ -18,7 +18,7 @@ extension ThreadManager {
     }
 
     func refreshDirtyStates() async {
-        let snapshot = threads.filter { !$0.isArchived && !$0.isMain }
+        let snapshot = threads.filter { !$0.isArchived }
         var changed = false
         for thread in snapshot {
             let dirty = await git.isDirty(worktreePath: thread.worktreePath)

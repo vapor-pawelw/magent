@@ -90,6 +90,8 @@ final class DiffPanelView: NSView {
     private var activeTab: DiffPanelTab = .changes
     private var selectedFilePath: String?
     private var worktreePath: String?
+    private var hasMoreCommits = false
+    private var forceVisible = false
 
     private var heightConstraint: NSLayoutConstraint!
     private var expandedHeight: CGFloat = DiffPanelView.defaultHeight
@@ -101,6 +103,8 @@ final class DiffPanelView: NSView {
     private var isDragging = false
     private var dragStartY: CGFloat = 0
     private var dragStartHeight: CGFloat = 0
+
+    var onLoadMoreCommits: (() -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -407,6 +411,8 @@ final class DiffPanelView: NSView {
     func update(
         with newEntries: [FileDiffEntry],
         commits newCommits: [BranchCommit] = [],
+        hasMoreCommits: Bool = false,
+        forceVisible: Bool = false,
         worktreePath: String? = nil,
         branchName: String? = nil,
         baseBranch: String? = nil
@@ -415,17 +421,20 @@ final class DiffPanelView: NSView {
         commits = newCommits
         selectedFilePath = nil
         self.worktreePath = worktreePath
+        self.hasMoreCommits = hasMoreCommits
+        self.forceVisible = forceVisible
 
-        // Show Commits tab only when there are 2+ commits
-        let showCommitsTab = commits.count > 1
+        let showCommitsTab = !commits.isEmpty
         commitsTabButton.isHidden = !showCommitsTab
         if !showCommitsTab && activeTab == .commits {
             activeTab = .changes
+        } else if entries.isEmpty && showCommitsTab {
+            activeTab = .commits
         }
 
         updateTabTitles()
 
-        if entries.isEmpty && commits.isEmpty {
+        if entries.isEmpty && commits.isEmpty && !forceVisible {
             branchInfoLabel.isHidden = true
             setPanelVisible(false)
             return
@@ -458,6 +467,8 @@ final class DiffPanelView: NSView {
         activeTab = .changes
         selectedFilePath = nil
         worktreePath = nil
+        hasMoreCommits = false
+        forceVisible = false
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         commitsTabButton.isHidden = true
         updateTabTitles()
@@ -467,7 +478,11 @@ final class DiffPanelView: NSView {
 
     private func updateTabTitles() {
         changesTabButton.title = entries.isEmpty ? "CHANGES" : "CHANGES (\(entries.count))"
-        commitsTabButton.title = commits.isEmpty ? "COMMITS" : "COMMITS (\(commits.count))"
+        if commits.isEmpty {
+            commitsTabButton.title = "COMMITS"
+        } else {
+            commitsTabButton.title = hasMoreCommits ? "COMMITS (\(commits.count)+)" : "COMMITS (\(commits.count))"
+        }
 
         let activeColor = NSColor.labelColor
         let inactiveColor = NSColor(resource: .textSecondary)
@@ -480,18 +495,38 @@ final class DiffPanelView: NSView {
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         switch activeTab {
         case .changes:
-            for entry in entries {
-                let row = makeEntryRow(entry)
+            if entries.isEmpty {
+                let row = makeEmptyStateRow(message: "No changes to show")
                 stackView.addArrangedSubview(row)
                 row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
                 row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+            } else {
+                for entry in entries {
+                    let row = makeEntryRow(entry)
+                    stackView.addArrangedSubview(row)
+                    row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
+                    row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+                }
             }
         case .commits:
-            for commit in commits {
-                let row = makeCommitRow(commit)
+            if commits.isEmpty {
+                let row = makeEmptyStateRow(message: "No commits to show")
                 stackView.addArrangedSubview(row)
                 row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
                 row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+            } else {
+                for commit in commits {
+                    let row = makeCommitRow(commit)
+                    stackView.addArrangedSubview(row)
+                    row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
+                    row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+                }
+                if hasMoreCommits {
+                    let row = makeLoadMoreRow()
+                    stackView.addArrangedSubview(row)
+                    row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
+                    row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+                }
             }
         }
     }
@@ -577,27 +612,62 @@ final class DiffPanelView: NSView {
     private func makeEntryRow(_ entry: FileDiffEntry) -> NSView {
         let container = DiffFileRowView(filePath: entry.relativePath)
         container.translatesAutoresizingMaskIntoConstraints = false
-        container.onClick = { [weak self] path in
-            self?.selectFile(path)
-        }
-        container.onSecondaryClick = { [weak self] path in
-            self?.selectFileForContextMenu(path)
-        }
-        container.onDoubleClick = { [weak self] path in
-            self?.openFileInDefaultApp(path)
+        let isDirectory = isDirectoryPath(entry.relativePath)
+        if isDirectory {
+            container.onClick = { [weak self] _ in
+                self?.deselectFile()
+            }
+            container.onSecondaryClick = { [weak self] _ in
+                self?.deselectFile()
+            }
+            container.onDoubleClick = { [weak self] path in
+                self?.showFileInFinder(path)
+            }
+        } else {
+            container.onClick = { [weak self] path in
+                self?.selectFile(path)
+            }
+            container.onSecondaryClick = { [weak self] path in
+                self?.selectFileForContextMenu(path)
+            }
+            container.onDoubleClick = { [weak self] path in
+                self?.openFileInDefaultApp(path)
+            }
         }
         container.onShowInFinder = { [weak self] path in
             self?.showFileInFinder(path)
         }
 
-        // Filename — show just the last path component for brevity
-        let filename = (entry.relativePath as NSString).lastPathComponent
+        let displayPath = entry.relativePath.hasSuffix("/") ? String(entry.relativePath.dropLast()) : entry.relativePath
+        let basename = (displayPath as NSString).lastPathComponent
+        let filename = isDirectory ? "\(basename)/" : basename
         let nameLabel = NSTextField(labelWithString: filename)
         nameLabel.font = .systemFont(ofSize: 11)
         nameLabel.textColor = colorForStatus(entry.workingStatus)
         nameLabel.lineBreakMode = .byTruncatingHead
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
-        nameLabel.toolTip = entry.relativePath
+        let pathTooltip = fullPathTooltip(for: entry.relativePath)
+        nameLabel.toolTip = pathTooltip
+        container.toolTip = pathTooltip
+
+        var nameLeadingAnchor = container.leadingAnchor
+        var nameLeadingConstant: CGFloat = 12
+        if let icon = directoryIcon(for: entry, isDirectory: isDirectory) {
+            let iconView = NSImageView()
+            iconView.translatesAutoresizingMaskIntoConstraints = false
+            iconView.image = icon
+            iconView.contentTintColor = colorForStatus(entry.workingStatus)
+            iconView.toolTip = pathTooltip
+            container.addSubview(iconView)
+            NSLayoutConstraint.activate([
+                iconView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+                iconView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                iconView.widthAnchor.constraint(equalToConstant: 12),
+                iconView.heightAnchor.constraint(equalToConstant: 12),
+            ])
+            nameLeadingAnchor = iconView.trailingAnchor
+            nameLeadingConstant = 5
+        }
         container.addSubview(nameLabel)
 
         // Stats labels
@@ -635,7 +705,7 @@ final class DiffPanelView: NSView {
         container.addSubview(statsStack)
 
         NSLayoutConstraint.activate([
-            nameLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            nameLabel.leadingAnchor.constraint(equalTo: nameLeadingAnchor, constant: nameLeadingConstant),
             nameLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
             nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: statsStack.leadingAnchor, constant: -6),
 
@@ -643,6 +713,26 @@ final class DiffPanelView: NSView {
             statsStack.centerYAnchor.constraint(equalTo: container.centerYAnchor),
 
             container.heightAnchor.constraint(equalToConstant: 18),
+        ])
+
+        return container
+    }
+
+    private func makeEmptyStateRow(message: String) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = NSTextField(labelWithString: message)
+        label.font = .systemFont(ofSize: 11)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            label.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
+            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -4),
+            container.heightAnchor.constraint(greaterThanOrEqualToConstant: 22),
         ])
 
         return container
@@ -685,6 +775,61 @@ final class DiffPanelView: NSView {
         ])
 
         return container
+    }
+
+    private func makeLoadMoreRow() -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let button = NSButton(title: "Load More Commits", target: self, action: #selector(loadMoreCommitsTapped))
+        button.isBordered = false
+        button.font = .systemFont(ofSize: 11, weight: .medium)
+        button.contentTintColor = NSColor.controlAccentColor
+        button.alignment = .left
+        button.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(button)
+
+        NSLayoutConstraint.activate([
+            button.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+            button.topAnchor.constraint(equalTo: container.topAnchor, constant: 2),
+            button.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -2),
+            container.heightAnchor.constraint(greaterThanOrEqualToConstant: 24),
+        ])
+
+        return container
+    }
+
+    @objc private func loadMoreCommitsTapped() {
+        onLoadMoreCommits?()
+    }
+
+    private func isDirectoryPath(_ relativePath: String) -> Bool {
+        if relativePath.hasSuffix("/") {
+            return true
+        }
+        guard let url = fileURL(for: relativePath) else { return false }
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+        return exists && isDirectory.boolValue
+    }
+
+    private func directoryIcon(for entry: FileDiffEntry, isDirectory: Bool) -> NSImage? {
+        guard isDirectory else { return nil }
+        let symbolName: String
+        switch entry.workingStatus {
+        case .untracked:
+            symbolName = "folder.badge.plus"
+        case .committed, .staged, .unstaged:
+            symbolName = "folder"
+        }
+        let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
+        return NSImage(systemSymbolName: symbolName, accessibilityDescription: "Directory")?
+            .withSymbolConfiguration(config)
+    }
+
+    private func fullPathTooltip(for relativePath: String) -> String {
+        guard let url = fileURL(for: relativePath) else { return relativePath }
+        return url.path
     }
 
     private func colorForStatus(_ status: FileWorkingStatus) -> NSColor {

@@ -111,6 +111,8 @@ final class ThreadListViewController: NSViewController {
     private var currentScrollTopOffset: CGFloat = 0
     var currentSettings = AppSettings()
     var allowsProgrammaticOutlineDisclosureChanges = false
+    var diffPanelCommitLimitByThreadId: [UUID: Int] = [:]
+    let diffPanelCommitPageSize = 10
 
     private struct SidebarScrollSnapshot {
         let origin: NSPoint
@@ -409,6 +411,9 @@ final class ThreadListViewController: NSViewController {
 
         // Diff panel at the bottom of sidebar
         diffPanelView = DiffPanelView()
+        diffPanelView.onLoadMoreCommits = { [weak self] in
+            self?.loadMoreCommitsForSelectedThread()
+        }
         view.addSubview(diffPanelView)
 
         // Branch mismatch warning below diff panel
