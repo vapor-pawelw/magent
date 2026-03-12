@@ -201,6 +201,15 @@ Shell startup uses a managed `ZDOTDIR` wrapper so Magent can source the user's s
 - A one-time `cd` in user `.zshrc` is expected and should be overridden by `MAGENT_START_CWD` during session creation.
 - Reattaching to an existing tmux session must not inject `cd` again. Existing terminal state is authoritative once the session is live; only fresh session creation should enforce the starting directory.
 
+### 4.9 Context Transfer File Contract
+
+`Continue in...` captures pane output into a transient markdown file and then passes that absolute path to the receiving agent in its initial prompt.
+
+- Do not write that file into the repo/worktree root, because even short-lived untracked files dirty the thread and can be accidentally staged.
+- Store handoff files under the project's worktrees base path in a hidden Magent-owned directory so they stay outside the repo but near the trusted worktree boundary.
+- Use a unique filename per transfer (for example a UUID-based suffix) so multiple transfers can be created concurrently without clobbering each other.
+- Treat these files as ephemeral cache entries: remove them after a bounded TTL and prune leftovers on app launch/shutdown.
+
 ### 5. Persistence Model
 
 Thread state persisted as JSON in app's Application Support directory:

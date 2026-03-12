@@ -399,6 +399,7 @@ extension ThreadDetailViewController {
         let settings = PersistenceService.shared.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let projectName = project?.name ?? "project"
+        let contextBasePath = project?.resolvedWorktreesBasePath()
 
         Task {
             guard let rawContent = await TmuxService.shared.captureFullPane(sessionName: sessionName) else {
@@ -415,9 +416,16 @@ extension ThreadDetailViewController {
                 projectName: projectName
             )
 
+            guard let contextBasePath else {
+                await MainActor.run {
+                    BannerManager.shared.show(message: String(localized: .NotificationStrings.contextWriteFileFailed), style: .error)
+                }
+                return
+            }
+
             guard let contextPath = ContextExporter.writeContextFile(
                 markdown: markdown,
-                in: thread.worktreePath
+                inWorktreesBasePath: contextBasePath
             ) else {
                 await MainActor.run {
                     BannerManager.shared.show(message: String(localized: .NotificationStrings.contextWriteFileFailed), style: .error)

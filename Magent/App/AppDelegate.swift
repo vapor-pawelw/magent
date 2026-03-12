@@ -11,6 +11,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private var ipcServer: IPCSocketServer?
     private var systemAppearanceObserver: NSObjectProtocol?
 
+    private var knownWorktreePaths: [String] {
+        ThreadManager.shared.threads.map(\.worktreePath)
+    }
+
+    private var knownWorktreesBasePaths: [String] {
+        PersistenceService.shared.loadSettings().projects.map { $0.resolvedWorktreesBasePath() }
+    }
+
     private func isLiveNonZombieProcess(_ pid: pid_t) -> Bool {
         guard pid > 0 else { return false }
 
@@ -77,6 +85,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         CrashReportingService.initialize()
         setupMainMenu()
         GhosttyAppManager.shared.initialize()
+        ContextExporter.cleanupExpiredContextFiles(
+            worktreePaths: knownWorktreePaths,
+            worktreesBasePaths: knownWorktreesBasePaths
+        )
         applyAppAppearanceAndTerminalPreferences()
         NotificationCenter.default.addObserver(
             self,
@@ -120,8 +132,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         Task { await server?.stop() }
 
         // Clean up any leftover ephemeral context transfer files
-        let worktreePaths = ThreadManager.shared.threads.map(\.worktreePath)
-        ContextExporter.cleanupAllContextFiles(worktreePaths: worktreePaths)
+        ContextExporter.cleanupAllContextFiles(
+            worktreePaths: knownWorktreePaths,
+            worktreesBasePaths: knownWorktreesBasePaths
+        )
         ThreadManager.shared.cleanupManagedZdotdir()
     }
 

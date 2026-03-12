@@ -3,6 +3,10 @@ import ShellInfra
 import MagentModels
 
 public enum ContextExporter {
+    private static let legacyContextFileName = ".magent-context.md"
+    private static let transferDirectoryName = ".magent-context"
+    private static let transferFilePrefix = "transfer-"
+    public static let transferFileTTL: TimeInterval = 60 * 60
 
     // MARK: - ANSI Stripping
 
@@ -85,12 +89,20 @@ public enum ContextExporter {
 
     // MARK: - File Writing
 
-    /// Writes markdown to `.magent-context.md` in the given directory. Returns absolute path on success.
-    public static func writeContextFile(markdown: String, in directory: String) -> String? {
-        let path = (directory as NSString).appendingPathComponent(".magent-context.md")
+    /// Writes markdown to a unique transient markdown file under the project's worktrees base path.
+    public static func writeContextFile(markdown: String, inWorktreesBasePath basePath: String) -> String? {
+        let fileManager = FileManager.default
+        let transferDirectory = contextTransferDirectoryPath(in: basePath)
+        let path = (transferDirectory as NSString).appendingPathComponent(uniqueTransferFileName())
         do {
+            cleanupExpiredContextFiles(worktreesBasePaths: [basePath])
+            try fileManager.createDirectory(
+                atPath: transferDirectory,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
             try markdown.write(toFile: path, atomically: true, encoding: .utf8)
-            scheduleCleanup(path: path, delay: 60)
+            scheduleCleanup(path: path, delay: transferFileTTL)
             return path
         } catch {
             return nil
@@ -104,12 +116,70 @@ public enum ContextExporter {
         }
     }
 
-    /// Removes any leftover `.magent-context.md` files from all known worktree directories.
-    public static func cleanupAllContextFiles(worktreePaths: [String]) {
+    /// Removes expired transfer files from all known worktrees-base directories and legacy files from worktrees.
+    public static func cleanupExpiredContextFiles(
+        worktreePaths: [String] = [],
+        worktreesBasePaths: [String],
+        maxAge: TimeInterval = transferFileTTL
+    ) {
+        cleanupLegacyContextFiles(worktreePaths: worktreePaths)
+        let now = Date()
+        let fileManager = FileManager.default
+        for basePath in Set(worktreesBasePaths) {
+            let directoryPath = contextTransferDirectoryPath(in: basePath)
+            guard let entries = try? fileManager.contentsOfDirectory(
+                at: URL(fileURLWithPath: directoryPath, isDirectory: true),
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                continue
+            }
+
+            for entry in entries where shouldDeleteTransferFile(at: entry, now: now, maxAge: maxAge) {
+                try? fileManager.removeItem(at: entry)
+            }
+
+            removeTransferDirectoryIfEmpty(directoryPath: directoryPath)
+        }
+    }
+
+    /// Removes any leftover transfer files from all known worktrees-base directories and legacy files from worktrees.
+    public static func cleanupAllContextFiles(worktreePaths: [String], worktreesBasePaths: [String]) {
+        cleanupLegacyContextFiles(worktreePaths: worktreePaths)
+        for basePath in Set(worktreesBasePaths) {
+            let directoryPath = contextTransferDirectoryPath(in: basePath)
+            try? FileManager.default.removeItem(atPath: directoryPath)
+        }
+    }
+
+    private static func cleanupLegacyContextFiles(worktreePaths: [String]) {
         for dir in worktreePaths {
-            let path = (dir as NSString).appendingPathComponent(".magent-context.md")
+            let path = (dir as NSString).appendingPathComponent(legacyContextFileName)
             try? FileManager.default.removeItem(atPath: path)
         }
+    }
+
+    private static func contextTransferDirectoryPath(in basePath: String) -> String {
+        (basePath as NSString).appendingPathComponent(transferDirectoryName)
+    }
+
+    private static func uniqueTransferFileName() -> String {
+        "\(transferFilePrefix)\(UUID().uuidString.lowercased()).md"
+    }
+
+    private static func shouldDeleteTransferFile(at fileURL: URL, now: Date, maxAge: TimeInterval) -> Bool {
+        guard fileURL.lastPathComponent.hasPrefix(transferFilePrefix) else { return false }
+        let values = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey])
+        guard let modifiedAt = values?.contentModificationDate else { return true }
+        return now.timeIntervalSince(modifiedAt) >= maxAge
+    }
+
+    private static func removeTransferDirectoryIfEmpty(directoryPath: String) {
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: directoryPath),
+              contents.isEmpty else {
+            return
+        }
+        try? FileManager.default.removeItem(atPath: directoryPath)
     }
 
     // MARK: - Transfer Prompt
