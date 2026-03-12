@@ -297,12 +297,13 @@ public final class GhosttyAppManager {
         }
 
         switch preferences.mouseWheelBehavior {
-        case .magentDefaultScroll:
-            lines.append("mouse-reporting = false")
+        case .magentDefaultScroll, .allowAppsToCapture:
+            // Both modes send scroll events to tmux (mouse-reporting = true); the distinction
+            // between "history only" and "allow app capture" is enforced at the tmux layer via
+            // WheelUpPane/WheelDownPane bindings set by applyMouseWheelScrollSettings.
+            lines.append("mouse-reporting = true")
         case .inheritGhosttyGlobal:
             break
-        case .allowAppsToCapture:
-            lines.append("mouse-reporting = true")
         }
 
         guard !lines.isEmpty else { return nil }

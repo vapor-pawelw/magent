@@ -241,6 +241,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             effectiveAppearance: appAppearance ?? NSApp.effectiveAppearance
         )
 
+        // Apply tmux mouse settings for the active wheel-scroll behavior.
+        // This is idempotent — safe to call at startup and on every settings change.
+        let behavior = settings.terminalMouseWheelBehavior
+        Task { await TmuxService.shared.applyMouseWheelScrollSettings(behavior: behavior) }
+
         refreshWindowAppearances(using: appAppearance)
     }
 

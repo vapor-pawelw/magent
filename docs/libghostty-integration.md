@@ -198,22 +198,24 @@ Treat `GHOSTTY_ACTION_CONFIG_CHANGE` as handled as well, even if Magent does not
 
 ## Appearance Update Ordering in AppDelegate
 
-`AppDelegate.applyAppAppearanceAndTerminalPreferences` does three things in order:
+`AppDelegate.applyAppAppearanceAndTerminalPreferences` does four things in order:
 1. Sets `NSApp.appearance` to the new value.
-2. Calls `GhosttyAppManager.shared.applyEmbeddedPreferences(...)` to update the embedded terminal color scheme.
-3. Calls `refreshWindowAppearances(using:)` which sets each window's `appearance` and forces layout/display.
+2. Calls `GhosttyAppManager.shared.applyEmbeddedPreferences(...)` to update the embedded terminal color scheme and ghostty mouse-reporting config.
+3. Dispatches `TmuxService.shared.applyMouseWheelScrollSettings(behavior:)` in a `Task` to configure tmux mouse support for the selected wheel behavior.
+4. Calls `refreshWindowAppearances(using:)` which sets each window's `appearance` and forces layout/display.
 
 **Rule**: `applyEmbeddedPreferences` **must** be called **before** `refreshWindowAppearances`. Setting window appearances (step 3) can synchronously trigger `viewDidChangeEffectiveAppearance` on `TerminalSurfaceView` instances (via `layoutSubtreeIfNeeded` / `displayIfNeeded`), which calls `refreshAppearance(using:)`. If `embeddedPreferences` has not yet been updated at that point, `resolvedColorScheme` uses the stale appearance mode and may set the wrong color scheme on all surfaces. `applyEmbeddedPreferences` then runs after the refresh and corrects it — but the intermediate wrong state can cause terminals to remain dark or miss the update entirely.
 
 ## Settings Notification Ordering Contract
 
-`magentSettingsDidChange` is observed both by `AppDelegate` and by open `ThreadDetailViewController` instances. The wheel-behavior setting is effectively a surface-time Ghostty config because Magent recreates `TerminalSurfaceView` instances for already-open tabs when that value changes.
+`magentSettingsDidChange` is observed both by `AppDelegate` and by open `ThreadDetailViewController` instances.
 
-**Rule**:
-- The app-level settings observer must apply Ghostty prefs synchronously on the notification, not bounce through a later `Task`, so other same-turn observers do not race ahead and recreate surfaces with stale `embeddedPreferences`.
-- `ThreadDetailViewController.handleSettingsChanged(_:)` must call `GhosttyAppManager.shared.applyEmbeddedPreferences(...)` with the newly loaded settings before `reloadTerminalViewsForUpdatedTerminalPreferences()`.
+**How wheel-scroll behavior is applied (two-layer approach)**:
+- **Ghostty layer** (`mouse-reporting`): Both `magentDefaultScroll` and `allowAppsToCapture` set `mouse-reporting = true` so scroll events reach tmux. `inheritGhosttyGlobal` leaves ghostty's mouse-reporting unchanged.
+- **tmux layer** (`applyMouseWheelScrollSettings`): `magentDefaultScroll` binds `WheelUpPane`/`WheelDownPane` to always enter copy-mode (history-only, never passed to apps). `allowAppsToCapture` removes those bindings so tmux's default behavior applies (apps that request mouse get the events). Both non-inherit options enable `set -g mouse on`. Changes are applied from `AppDelegate` via an async `Task`.
+- **Surface recreation**: `ThreadDetailViewController.handleSettingsChanged(_:)` recreates `TerminalSurfaceView` instances when the behavior changes so surfaces pick up the new ghostty config. It must call `GhosttyAppManager.shared.applyEmbeddedPreferences(...)` first so `retainedConfigs.last` is current when `registerSurface` runs on the new surfaces.
 
-If surface recreation runs first and the shared Ghostty prefs update lands afterward, the brand-new surfaces are created from the old wheel config and the settings toggle appears to do nothing for already-open tabs until some later refresh.
+**Rule**: The app-level settings observer must apply Ghostty prefs synchronously on the notification, not bounce through a later `Task`, so other same-turn observers do not race ahead and recreate surfaces with stale `embeddedPreferences`.
 
 ## System Appearance Change Contract
 

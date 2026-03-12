@@ -44,6 +44,39 @@ public final class TmuxService: Sendable {
         await configureBellMonitoring(resetEventLog: true)
     }
 
+    /// Applies tmux mouse settings for the given wheel-scroll behavior.
+    /// Must be called at startup (after applyGlobalSettings) and whenever the setting changes.
+    /// - For .magentDefaultScroll: enables tmux mouse and forces wheel to always enter
+    ///   copy-mode (history scrolling), never passing events to apps that request mouse.
+    /// - For .allowAppsToCapture: enables tmux mouse with default behavior so apps that
+    ///   request mouse reporting receive wheel events normally.
+    /// - For .inheritGhosttyGlobal: no-op; the user's own tmux config governs behavior.
+    public func applyMouseWheelScrollSettings(behavior: TerminalMouseWheelBehavior) async {
+        switch behavior {
+        case .magentDefaultScroll:
+            _ = try? await ShellExecutor.run("tmux set-option -g mouse on")
+            // Force wheel to always scroll terminal history (copy-mode), regardless of
+            // whether the pane's running app has requested mouse reporting.
+            _ = try? await ShellExecutor.run(
+                "tmux bind-key -T root WheelUpPane if-shell -F '#{pane_in_mode}' 'send-keys -X scroll-up' 'copy-mode -e ; send-keys -X scroll-up'"
+            )
+            // When in copy-mode: scroll down if there is history above, otherwise exit
+            // copy-mode (so the user returns to live output automatically).
+            _ = try? await ShellExecutor.run(
+                "tmux bind-key -T root WheelDownPane if-shell -F '#{pane_in_mode}' \"if-shell -F '#{scroll_position}' 'send-keys -X scroll-down' 'send-keys -X cancel'\" ''"
+            )
+        case .allowAppsToCapture:
+            _ = try? await ShellExecutor.run("tmux set-option -g mouse on")
+            // Restore tmux's default wheel behavior: apps that request mouse reporting
+            // receive wheel events; plain shell / no-mouse apps go to copy-mode.
+            _ = try? await ShellExecutor.run("tmux unbind-key -T root WheelUpPane 2>/dev/null; true")
+            _ = try? await ShellExecutor.run("tmux unbind-key -T root WheelDownPane 2>/dev/null; true")
+        case .inheritGhosttyGlobal:
+            // Don't touch tmux mouse settings — governed by the user's own tmux config.
+            break
+        }
+    }
+
     private func configureBellMonitoring(resetEventLog: Bool) async {
         if resetEventLog {
             _ = try? await ShellExecutor.run(": > \(shellQuote(agentCompletionEventsPath))")
