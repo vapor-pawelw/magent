@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - Fixed the main worktree row title being invisible in Light mode (white text on a light background); the text color now adapts to the selection state and the current appearance.
 
 ### Settings
+- Fixed Restore buttons in the Recently Archived Threads section now lining up at the trailing edge of the list, regardless of thread name or description length.
 - Added a dedicated `Appearance` settings category. Terminal keeps wheel behavior and terminal overlay visibility, while app light/dark mode moved out of Terminal.
 - Fixed settings section cards remaining dark after switching to Light mode; dynamic asset colors are now resolved in the correct appearance context when the mode changes.
 

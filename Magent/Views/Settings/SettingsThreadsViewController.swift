@@ -394,6 +394,9 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     }
 
     private func makeRecentArchivedThreadRow(thread: MagentThread, projectName: String) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
         let row = NSStackView()
         row.orientation = .horizontal
         row.alignment = .centerY
@@ -462,24 +465,31 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         metadataLabel.textColor = NSColor(resource: .textSecondary)
         textStack.addArrangedSubview(metadataLabel)
 
-        let restoreButton = NSButton(title: "Restore", target: self, action: #selector(restoreArchivedThreadTapped(_:)))
-        restoreButton.bezelStyle = .rounded
-        restoreButton.controlSize = .small
-        restoreButton.identifier = NSUserInterfaceItemIdentifier(thread.id.uuidString)
-        restoreButton.setContentHuggingPriority(.required, for: .horizontal)
-        restoreButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-
-        textStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        textStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
         row.addArrangedSubview(textStack)
-        row.addArrangedSubview(restoreButton)
 
         NSLayoutConstraint.activate([
             metadataLabel.widthAnchor.constraint(equalTo: textStack.widthAnchor),
         ])
 
-        return row
+        let restoreButton = NSButton(title: "Restore", target: self, action: #selector(restoreArchivedThreadTapped(_:)))
+        restoreButton.bezelStyle = .rounded
+        restoreButton.controlSize = .small
+        restoreButton.identifier = NSUserInterfaceItemIdentifier(thread.id.uuidString)
+        restoreButton.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addSubview(row)
+        container.addSubview(restoreButton)
+
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            row.topAnchor.constraint(equalTo: container.topAnchor),
+            row.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            row.trailingAnchor.constraint(lessThanOrEqualTo: restoreButton.leadingAnchor, constant: -8),
+            restoreButton.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            restoreButton.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+        ])
+
+        return container
     }
 
     private func recentArchivedThreadMetadata(thread: MagentThread, projectName: String) -> String {
