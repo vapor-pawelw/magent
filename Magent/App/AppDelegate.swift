@@ -210,7 +210,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             appAppearance = NSAppearance(named: .darkAqua)
         }
         NSApp.appearance = appAppearance
-        refreshWindowAppearances(using: appAppearance)
 
         let terminalAppearance: GhosttyEmbeddedAppearanceMode
         switch settings.appAppearanceMode {
@@ -232,12 +231,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             mouseWheelBehavior = .allowAppsToCapture
         }
 
+        // Apply terminal preferences BEFORE refreshing window appearances so that
+        // any viewDidChangeEffectiveAppearance calls triggered by the window refresh
+        // see the already-updated embeddedPreferences and resolve the correct color scheme.
         GhosttyAppManager.shared.applyEmbeddedPreferences(
             GhosttyEmbeddedPreferences(
                 appearanceMode: terminalAppearance,
                 mouseWheelBehavior: mouseWheelBehavior
             )
         )
+
+        refreshWindowAppearances(using: appAppearance)
     }
 
     private func refreshWindowAppearances(using appearance: NSAppearance?) {

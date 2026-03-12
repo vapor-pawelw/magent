@@ -156,13 +156,9 @@ final class TabItemView: NSView, NSMenuDelegate {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        // Use a lighter close glyph so the control reads like tab chrome, not an alert affordance.
-        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Tab")
-        closeButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
+        closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close Tab")
         closeButton.bezelStyle = .inline
         closeButton.isBordered = false
-        closeButton.wantsLayer = true
-        closeButton.layer?.cornerRadius = 5
         closeButton.target = self
         closeButton.action = #selector(closeTapped)
         closeButton.translatesAutoresizingMaskIntoConstraints = false
@@ -193,8 +189,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             busySpinner.heightAnchor.constraint(equalToConstant: 10),
             rateLimitIcon.widthAnchor.constraint(equalToConstant: 10),
             rateLimitIcon.heightAnchor.constraint(equalToConstant: 10),
-            closeButton.widthAnchor.constraint(equalToConstant: 18),
-            closeButton.heightAnchor.constraint(equalToConstant: 18),
+            closeButton.widthAnchor.constraint(equalToConstant: 16),
+            closeButton.heightAnchor.constraint(equalToConstant: 16),
         ])
 
         // Right-click menu
@@ -276,30 +272,31 @@ final class TabItemView: NSView, NSMenuDelegate {
         let borderColor: NSColor
         let titleColor: NSColor
         let secondaryColor: NSColor
-        let closeBackgroundColor: NSColor
 
         if isSelected {
             backgroundColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.18)
             borderColor = NSColor(resource: .primaryBrand).withAlphaComponent(0.38)
             titleColor = NSColor(resource: .textPrimary)
             secondaryColor = NSColor(resource: .textPrimary).withAlphaComponent(0.78)
-            closeBackgroundColor = NSColor(resource: .textPrimary).withAlphaComponent(0.12)
             titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         } else {
             backgroundColor = NSColor(resource: .surface).withAlphaComponent(0.62)
             borderColor = NSColor.separatorColor.withAlphaComponent(0.55)
             titleColor = NSColor(resource: .textSecondary).withAlphaComponent(0.96)
             secondaryColor = NSColor(resource: .textSecondary).withAlphaComponent(0.82)
-            closeBackgroundColor = NSColor(resource: .textSecondary).withAlphaComponent(0.10)
             titleLabel.font = .systemFont(ofSize: 12, weight: .regular)
         }
 
-        layer?.backgroundColor = backgroundColor.cgColor
-        layer?.borderColor = borderColor.cgColor
+        // Resolve NSColors into CGColors within the correct appearance context so
+        // adaptive colors (Surface, PrimaryBrand, etc.) pick up light-mode values
+        // when the window is in light mode.
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.layer?.backgroundColor = backgroundColor.cgColor
+            self.layer?.borderColor = borderColor.cgColor
+        }
         titleLabel.textColor = titleColor
         pinIcon.contentTintColor = secondaryColor
         closeButton.contentTintColor = secondaryColor
-        closeButton.layer?.backgroundColor = closeBackgroundColor.cgColor
         closeButton.alphaValue = isSelected ? 1.0 : 0.9
     }
 
