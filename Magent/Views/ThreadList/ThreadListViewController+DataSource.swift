@@ -880,8 +880,15 @@ extension ThreadListViewController: ThreadManagerDelegate {
     }
 
     func threadManager(_ manager: ThreadManager, didUpdateThreads threads: [MagentThread]) {
-        // reloadData() preserves the current selection by thread ID
-        reloadData()
+        // Only do a full reloadData() when the sidebar structure actually changed (threads
+        // added/removed/reordered/re-sectioned). For metadata-only updates (busy state,
+        // rate limits, dirty flag, PR info, etc.), update cells in-place — this avoids
+        // the scroll-position flash that reloadData() + expand/collapse causes.
+        if sidebarNeedsStructuralReload(for: threads) {
+            reloadData()
+        } else {
+            updateSidebarInPlace(with: threads)
+        }
 
         // If nothing is selected after reload (e.g. first launch), pick the first thread
         if outlineView.selectedRow < 0 {
@@ -893,6 +900,77 @@ extension ThreadListViewController: ThreadManagerDelegate {
         if row >= 0, let selected = outlineView.item(atRow: row) as? MagentThread {
             refreshBranchMismatchView(for: selected)
             refreshDiffPanelContext(for: selected)
+        }
+    }
+
+    // MARK: - Structural change detection
+
+    /// Thread properties that determine position/visibility in the sidebar.
+    /// A change in any of these requires a full reloadData(); anything else can be
+    /// updated in-place via updateSidebarInPlace(with:).
+    private struct SidebarThreadStructuralKey: Equatable {
+        let id: UUID
+        let sectionId: UUID?
+        let displayOrder: Int
+        let isPinned: Bool
+        let isSidebarHidden: Bool
+        let isArchived: Bool
+        let lastAgentCompletionAt: Date?
+
+        init(_ thread: MagentThread) {
+            id = thread.id
+            sectionId = thread.sectionId
+            displayOrder = thread.displayOrder
+            isPinned = thread.isPinned
+            isSidebarHidden = thread.isSidebarHidden
+            isArchived = thread.isArchived
+            lastAgentCompletionAt = thread.lastAgentCompletionAt
+        }
+    }
+
+    private func sidebarNeedsStructuralReload(for newThreads: [MagentThread]) -> Bool {
+        guard !sidebarProjects.isEmpty else { return true }
+
+        var currentThreads: [MagentThread] = []
+        for project in sidebarProjects {
+            for child in project.children {
+                if let t = child as? MagentThread {
+                    currentThreads.append(t)
+                } else if let s = child as? SidebarSection {
+                    currentThreads.append(contentsOf: s.threads)
+                }
+            }
+        }
+
+        let sortById: (SidebarThreadStructuralKey, SidebarThreadStructuralKey) -> Bool = {
+            $0.id.uuidString < $1.id.uuidString
+        }
+        let currentKeys = currentThreads.map { SidebarThreadStructuralKey($0) }.sorted(by: sortById)
+        let newKeys = newThreads.map { SidebarThreadStructuralKey($0) }.sorted(by: sortById)
+        return currentKeys != newKeys
+    }
+
+    /// Updates thread cell content in-place without a full reloadData().
+    /// Since SidebarProject and SidebarSection are class objects, we can mutate their
+    /// thread arrays in-place, then call reloadItem(_:reloadChildren:) to refresh cell
+    /// views — which never alters scroll position or expansion state.
+    private func updateSidebarInPlace(with updatedThreads: [MagentThread]) {
+        let threadById = Dictionary(uniqueKeysWithValues: updatedThreads.map { ($0.id, $0) })
+
+        for project in sidebarProjects {
+            for i in project.children.indices {
+                if let thread = project.children[i] as? MagentThread,
+                   let updated = threadById[thread.id] {
+                    project.children[i] = updated
+                } else if let section = project.children[i] as? SidebarSection {
+                    for j in section.threads.indices {
+                        if let updated = threadById[section.threads[j].id] {
+                            section.threads[j] = updated
+                        }
+                    }
+                }
+            }
+            outlineView.reloadItem(project, reloadChildren: true)
         }
     }
 }
