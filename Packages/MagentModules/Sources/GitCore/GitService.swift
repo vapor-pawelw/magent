@@ -416,19 +416,11 @@ public final class GitService: Sendable {
         return hash
     }
 
-    /// Returns commits on HEAD that are not reachable from `baseBranch`, ordered newest-first.
-    public func commitLog(worktreePath: String, baseBranch: String) async -> [BranchCommit] {
-        let sep = "\u{1F}"  // unit separator unlikely to appear in commit messages
-        let fmt = "%h\(sep)%s\(sep)%an\(sep)%ad"
-        let result = await ShellExecutor.execute(
-            "git log \(shellQuote(baseBranch))..HEAD --format=\(shellQuote(fmt)) --date=short",
-            workingDirectory: worktreePath
-        )
-        guard result.exitCode == 0 else { return [] }
-        return result.stdout
+    private func parseCommitLog(_ output: String, separator: String) -> [BranchCommit] {
+        output
             .components(separatedBy: "\n")
             .compactMap { line -> BranchCommit? in
-                let parts = line.components(separatedBy: sep)
+                let parts = line.components(separatedBy: separator)
                 guard parts.count == 4 else { return nil }
                 return BranchCommit(
                     shortHash: parts[0],
@@ -437,6 +429,50 @@ public final class GitService: Sendable {
                     date: parts[3]
                 )
             }
+    }
+
+    /// Returns commits on HEAD that are not reachable from `baseBranch`, ordered newest-first.
+    public func commitLog(
+        worktreePath: String,
+        baseBranch: String,
+        limit: Int? = nil,
+        skip: Int = 0
+    ) async -> [BranchCommit] {
+        let sep = "\u{1F}"  // unit separator unlikely to appear in commit messages
+        let fmt = "%h\(sep)%s\(sep)%an\(sep)%ad"
+        var command = "git log \(shellQuote(baseBranch))..HEAD --format=\(shellQuote(fmt)) --date=short"
+        if skip > 0 {
+            command += " --skip=\(skip)"
+        }
+        if let limit {
+            command += " -n \(max(0, limit))"
+        }
+        let result = await ShellExecutor.execute(
+            command,
+            workingDirectory: worktreePath
+        )
+        guard result.exitCode == 0 else { return [] }
+        return parseCommitLog(result.stdout, separator: sep)
+    }
+
+    /// Returns the most recent commits on `HEAD`, ordered newest-first.
+    public func recentCommitLog(
+        worktreePath: String,
+        limit: Int,
+        skip: Int = 0
+    ) async -> [BranchCommit] {
+        let sep = "\u{1F}"
+        let fmt = "%h\(sep)%s\(sep)%an\(sep)%ad"
+        var command = "git log HEAD --format=\(shellQuote(fmt)) --date=short -n \(max(0, limit))"
+        if skip > 0 {
+            command += " --skip=\(skip)"
+        }
+        let result = await ShellExecutor.execute(
+            command,
+            workingDirectory: worktreePath
+        )
+        guard result.exitCode == 0 else { return [] }
+        return parseCommitLog(result.stdout, separator: sep)
     }
 
     /// Returns the raw file contents at a given git ref (commit, branch, tag).
@@ -461,62 +497,48 @@ public final class GitService: Sendable {
             && !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Returns per-file diff stats comparing the worktree to its base branch.
-    public func diffStats(worktreePath: String, baseBranch: String) async -> [FileDiffEntry] {
-        guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return [] }
-
-        // Get numstat for all changes from merge-base to working tree (includes uncommitted)
-        let numstatResult = await ShellExecutor.execute(
-            "git -c core.quotePath=false diff --numstat \(shellQuote(mergeBase))",
-            workingDirectory: worktreePath
-        )
-
+    private func parseStatusMap(_ output: String) -> [String: FileWorkingStatus] {
         // Get working tree status for coloring
-        let statusResult = await ShellExecutor.execute(
-            "git -c core.quotePath=false status --porcelain",
-            workingDirectory: worktreePath
-        )
-
-        // Parse status into a map: relativePath → FileWorkingStatus
         var statusMap: [String: FileWorkingStatus] = [:]
-        if statusResult.exitCode == 0 {
-            for line in statusResult.stdout.components(separatedBy: "\n") where line.count >= 3 {
-                let indexChar = line[line.startIndex]
-                let workChar = line[line.index(after: line.startIndex)]
-                let path = normalizedStatusPath(String(line.dropFirst(3)))
-                guard !path.isEmpty else { continue }
+        for line in output.components(separatedBy: "\n") where line.count >= 3 {
+            let indexChar = line[line.startIndex]
+            let workChar = line[line.index(after: line.startIndex)]
+            let path = normalizedStatusPath(String(line.dropFirst(3)))
+            guard !path.isEmpty else { continue }
 
-                if indexChar == "?" {
-                    statusMap[path] = .untracked
-                } else if workChar != " " && workChar != "?" {
-                    statusMap[path] = .unstaged
-                } else if indexChar != " " && indexChar != "?" {
-                    statusMap[path] = .staged
-                }
+            if indexChar == "?" {
+                statusMap[path] = .untracked
+            } else if workChar != " " && workChar != "?" {
+                statusMap[path] = .unstaged
+            } else if indexChar != " " && indexChar != "?" {
+                statusMap[path] = .staged
             }
         }
+        return statusMap
+    }
 
-        // Parse numstat
+    private func parseDiffEntries(
+        numstatOutput: String,
+        statusMap: [String: FileWorkingStatus]
+    ) -> [FileDiffEntry] {
         var entries: [FileDiffEntry] = []
         var seenPaths = Set<String>()
-        if numstatResult.exitCode == 0 {
-            for line in numstatResult.stdout.components(separatedBy: "\n") where !line.isEmpty {
-                let parts = line.split(separator: "\t", maxSplits: 2)
-                guard parts.count >= 3 else { continue }
-                let additions = Int(parts[0]) ?? 0
-                let deletions = Int(parts[1]) ?? 0
-                let filePath = normalizedNumstatPath(String(parts[2]))
-                guard !filePath.isEmpty else { continue }
+        for line in numstatOutput.components(separatedBy: "\n") where !line.isEmpty {
+            let parts = line.split(separator: "\t", maxSplits: 2)
+            guard parts.count >= 3 else { continue }
+            let additions = Int(parts[0]) ?? 0
+            let deletions = Int(parts[1]) ?? 0
+            let filePath = normalizedNumstatPath(String(parts[2]))
+            guard !filePath.isEmpty else { continue }
 
-                seenPaths.insert(filePath)
-                let status = statusMap[filePath] ?? .committed
-                entries.append(FileDiffEntry(
-                    relativePath: filePath,
-                    additions: additions,
-                    deletions: deletions,
-                    workingStatus: status
-                ))
-            }
+            seenPaths.insert(filePath)
+            let status = statusMap[filePath] ?? .committed
+            entries.append(FileDiffEntry(
+                relativePath: filePath,
+                additions: additions,
+                deletions: deletions,
+                workingStatus: status
+            ))
         }
 
         // Add untracked files not already in numstat
@@ -532,6 +554,45 @@ public final class GitService: Sendable {
         return entries
     }
 
+    /// Returns per-file diff stats comparing the worktree to its base branch.
+    public func diffStats(worktreePath: String, baseBranch: String) async -> [FileDiffEntry] {
+        guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return [] }
+
+        // Get numstat for all changes from merge-base to working tree (includes uncommitted)
+        let numstatResult = await ShellExecutor.execute(
+            "git -c core.quotePath=false diff --numstat \(shellQuote(mergeBase))",
+            workingDirectory: worktreePath
+        )
+
+        let statusResult = await ShellExecutor.execute(
+            "git -c core.quotePath=false status --porcelain",
+            workingDirectory: worktreePath
+        )
+
+        guard numstatResult.exitCode == 0 || statusResult.exitCode == 0 else { return [] }
+        let statusMap = statusResult.exitCode == 0 ? parseStatusMap(statusResult.stdout) : [:]
+        let numstatOutput = numstatResult.exitCode == 0 ? numstatResult.stdout : ""
+        return parseDiffEntries(numstatOutput: numstatOutput, statusMap: statusMap)
+    }
+
+    /// Returns per-file diff stats for working tree changes only, relative to `HEAD`.
+    public func workingTreeDiffStats(worktreePath: String) async -> [FileDiffEntry] {
+        let numstatResult = await ShellExecutor.execute(
+            "git -c core.quotePath=false diff --numstat HEAD",
+            workingDirectory: worktreePath
+        )
+
+        let statusResult = await ShellExecutor.execute(
+            "git -c core.quotePath=false status --porcelain",
+            workingDirectory: worktreePath
+        )
+
+        guard numstatResult.exitCode == 0 || statusResult.exitCode == 0 else { return [] }
+        let statusMap = statusResult.exitCode == 0 ? parseStatusMap(statusResult.stdout) : [:]
+        let numstatOutput = numstatResult.exitCode == 0 ? numstatResult.stdout : ""
+        return parseDiffEntries(numstatOutput: numstatOutput, statusMap: statusMap)
+    }
+
     /// Returns the full unified diff output comparing the worktree to its base branch.
     public func diffContent(worktreePath: String, baseBranch: String) async -> String? {
         guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return nil }
@@ -543,6 +604,41 @@ public final class GitService: Sendable {
         guard diffResult.exitCode == 0 else { return nil }
 
         // Also get content of untracked files as pseudo-diffs
+        let statusResult = await ShellExecutor.execute(
+            "git -c core.quotePath=false status --porcelain",
+            workingDirectory: worktreePath
+        )
+        var untrackedDiff = ""
+        if statusResult.exitCode == 0 {
+            for line in statusResult.stdout.components(separatedBy: "\n") where line.hasPrefix("?? ") {
+                let path = String(line.dropFirst(3))
+                guard !path.isEmpty, !path.hasSuffix("/") else { continue }
+                let catResult = await ShellExecutor.execute(
+                    "cat \(shellQuote(path))",
+                    workingDirectory: worktreePath
+                )
+                if catResult.exitCode == 0 {
+                    let lines = catResult.stdout.components(separatedBy: "\n")
+                    untrackedDiff += "\ndiff --git a/\(path) b/\(path)\nnew file mode 100644\n--- /dev/null\n+++ b/\(path)\n@@ -0,0 +1,\(lines.count) @@\n"
+                    for l in lines {
+                        untrackedDiff += "+\(l)\n"
+                    }
+                }
+            }
+        }
+
+        let combined = diffResult.stdout + untrackedDiff
+        return combined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : combined
+    }
+
+    /// Returns the full unified diff output for working tree changes only, relative to `HEAD`.
+    public func workingTreeDiffContent(worktreePath: String) async -> String? {
+        let diffResult = await ShellExecutor.execute(
+            "git -c core.quotePath=false diff --no-color HEAD",
+            workingDirectory: worktreePath
+        )
+        guard diffResult.exitCode == 0 else { return nil }
+
         let statusResult = await ShellExecutor.execute(
             "git -c core.quotePath=false status --porcelain",
             workingDirectory: worktreePath

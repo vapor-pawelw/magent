@@ -175,28 +175,43 @@ extension ThreadDetailViewController {
         guard !isLoadingDiffViewer else { return }
         isLoadingDiffViewer = true
 
-        let baseBranch = threadManager.resolveBaseBranch(for: thread)
         let worktreePath = thread.worktreePath
-        NSLog("[DiffViewer] starting async load, baseBranch=%@, worktreePath=%@", baseBranch, worktreePath)
+        let baseBranch = thread.isMain ? nil : threadManager.resolveBaseBranch(for: thread)
+        NSLog("[DiffViewer] starting async load, baseBranch=%@, worktreePath=%@",
+              baseBranch ?? "HEAD", worktreePath)
         Task {
-            async let diffContentTask = GitService.shared.diffContent(
-                worktreePath: worktreePath,
-                baseBranch: baseBranch
-            )
-            async let mergeBaseTask = GitService.shared.mergeBase(
-                worktreePath: worktreePath,
-                baseBranch: baseBranch
-            )
+            let diffContent: String?
+            let mergeBase: String?
+            let entries: [FileDiffEntry]
 
-            guard let diffContent = await diffContentTask else {
+            if let baseBranch {
+                async let diffContentTask = GitService.shared.diffContent(
+                    worktreePath: worktreePath,
+                    baseBranch: baseBranch
+                )
+                async let mergeBaseTask = GitService.shared.mergeBase(
+                    worktreePath: worktreePath,
+                    baseBranch: baseBranch
+                )
+                async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
+                diffContent = await diffContentTask
+                mergeBase = await mergeBaseTask
+                entries = await entriesTask
+            } else {
+                async let diffContentTask = GitService.shared.workingTreeDiffContent(worktreePath: worktreePath)
+                async let entriesTask = GitService.shared.workingTreeDiffStats(worktreePath: worktreePath)
+                diffContent = await diffContentTask
+                mergeBase = "HEAD"
+                entries = await entriesTask
+            }
+
+            guard let diffContent else {
                 NSLog("[DiffViewer] diffContent is nil, aborting")
                 isLoadingDiffViewer = false
                 return
             }
-            let mergeBase = await mergeBaseTask
             NSLog("[DiffViewer] got diffContent (%d chars), mergeBase=%@", diffContent.count, mergeBase ?? "nil")
 
-            let entries = await threadManager.refreshDiffStats(for: thread.id)
             let fileCount = entries.count
             NSLog("[DiffViewer] got %d entries, entering MainActor", fileCount)
 
@@ -296,21 +311,33 @@ extension ThreadDetailViewController {
 
     func refreshDiffViewerIfVisible() {
         guard diffVC != nil else { return }
-        let baseBranch = threadManager.resolveBaseBranch(for: thread)
         let worktreePath = thread.worktreePath
+        let baseBranch = thread.isMain ? nil : threadManager.resolveBaseBranch(for: thread)
         Task {
-            async let diffContentTask = GitService.shared.diffContent(
-                worktreePath: worktreePath,
-                baseBranch: baseBranch
-            )
-            async let mergeBaseTask = GitService.shared.mergeBase(
-                worktreePath: worktreePath,
-                baseBranch: baseBranch
-            )
+            let diffContent: String?
+            let mergeBase: String?
+            let entries: [FileDiffEntry]
 
-            let diffContent = await diffContentTask
-            let mergeBase = await mergeBaseTask
-            let entries = await threadManager.refreshDiffStats(for: thread.id)
+            if let baseBranch {
+                async let diffContentTask = GitService.shared.diffContent(
+                    worktreePath: worktreePath,
+                    baseBranch: baseBranch
+                )
+                async let mergeBaseTask = GitService.shared.mergeBase(
+                    worktreePath: worktreePath,
+                    baseBranch: baseBranch
+                )
+                async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
+                diffContent = await diffContentTask
+                mergeBase = await mergeBaseTask
+                entries = await entriesTask
+            } else {
+                async let diffContentTask = GitService.shared.workingTreeDiffContent(worktreePath: worktreePath)
+                async let entriesTask = GitService.shared.workingTreeDiffStats(worktreePath: worktreePath)
+                diffContent = await diffContentTask
+                mergeBase = "HEAD"
+                entries = await entriesTask
+            }
 
             await MainActor.run {
                 if let content = diffContent {
