@@ -243,9 +243,9 @@ User Action (+ button)
 
 ## Session Reopen / Recovery
 
-- `ThreadDetailViewController` always calls `ThreadManager.recreateSessionIfNeeded(...)` before attaching a tab so reopened views can reuse a live tmux session or recover a missing/mismatched one.
+- `ThreadDetailViewController` prepares the selected tab first during thread switch, then continues recreating remaining tabs in the background. Tabs that have not been prepared yet still call `ThreadManager.recreateSessionIfNeeded(...)` on first selection so they can reuse a live tmux session or recover a missing/mismatched one without blocking the whole thread switch.
 - Keep the fast path cheap: if the tmux session already exists and matches the expected thread/worktree context, return before doing slower resume bookkeeping such as agent conversation-ID refresh.
-- The loading overlay's secondary detail line is reserved for non-routine recovery actions reported by session recreation. Normal agent startup should continue to show only `Starting agent...`.
+- The loading overlay must follow the actual selected session, not the first tab in the thread. Its secondary detail line is reserved for non-routine recovery actions reported by session recreation; normal agent startup should continue to show only `Starting agent...`.
 
 ## tmux Session Ownership
 
