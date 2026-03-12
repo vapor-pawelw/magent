@@ -94,7 +94,7 @@ final class ResizeHandleView: NSView {
 // MARK: - Settings Category
 
 enum SettingsCategory: Int, CaseIterable {
-    case general, threads, agents, notifications, projects, jira
+    case general, terminal, threads, agents, notifications, projects, jira
 
     static var visibleCategories: [SettingsCategory] {
         allCases.filter(\.isVisible)
@@ -112,6 +112,7 @@ enum SettingsCategory: Int, CaseIterable {
     var title: String {
         switch self {
         case .general: return String(localized: .CommonStrings.settingsCategoryGeneral)
+        case .terminal: return "Terminal"
         case .threads: return String(localized: .CommonStrings.settingsCategoryThreads)
         case .agents: return String(localized: .CommonStrings.settingsCategoryAgents)
         case .notifications: return String(localized: .CommonStrings.settingsCategoryNotifications)
@@ -127,6 +128,7 @@ enum SettingsCategory: Int, CaseIterable {
     var symbolName: String {
         switch self {
         case .general: return "gearshape"
+        case .terminal: return "terminal"
         case .threads: return "square.stack.3d.up"
         case .agents: return "cpu"
         case .notifications: return "bell"
@@ -143,6 +145,7 @@ final class SettingsSplitViewController: NSSplitViewController {
     private let sidebarVC = SettingsSidebarViewController()
     private let detailContainerVC = NSViewController()
     private let generalVC = SettingsGeneralViewController()
+    private let terminalVC = SettingsTerminalViewController()
     private let threadsVC = SettingsThreadsViewController()
     private let agentsVC = SettingsAgentsViewController()
     private let notificationsVC = SettingsNotificationsViewController()
@@ -186,7 +189,7 @@ final class SettingsSplitViewController: NSSplitViewController {
         detailContainerVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
         let container = detailContainerVC.view
 
-        var allVCs: [NSViewController] = [generalVC, threadsVC, agentsVC, notificationsVC, projectsVC]
+        var allVCs: [NSViewController] = [generalVC, terminalVC, threadsVC, agentsVC, notificationsVC, projectsVC]
         if AppFeatures.jiraIntegrationEnabled {
             allVCs.append(jiraVC)
         }
@@ -205,6 +208,7 @@ final class SettingsSplitViewController: NSSplitViewController {
 
     private func showCategoryContent(_ category: SettingsCategory) {
         generalVC.view.isHidden = category != .general
+        terminalVC.view.isHidden = category != .terminal
         threadsVC.view.isHidden = category != .threads
         agentsVC.view.isHidden = category != .agents
         notificationsVC.view.isHidden = category != .notifications
@@ -262,7 +266,6 @@ final class SettingsSidebarViewController: NSViewController {
         tableView.headerView = nil
         tableView.style = .sourceList
         tableView.rowSizeStyle = .default
-        tableView.selectionHighlightStyle = .sourceList
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("SidebarColumn"))
         tableView.addTableColumn(column)

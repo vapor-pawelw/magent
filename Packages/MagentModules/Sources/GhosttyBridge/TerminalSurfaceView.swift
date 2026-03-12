@@ -93,6 +93,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         GhosttyAppManager.log("surface created: \(surface != nil), bounds: \(bounds)")
 
         if surface != nil {
+            GhosttyAppManager.shared.registerSurface(surface)
             updateSurfaceSize()
             ghostty_surface_set_focus(surface, true)
             GhosttyAppManager.shared.focusedSurface = surface
@@ -130,6 +131,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     private func destroySurface() {
         if let surface {
+            GhosttyAppManager.shared.unregisterSurface(surface)
             ghostty_surface_free(surface)
             self.surface = nil
         }

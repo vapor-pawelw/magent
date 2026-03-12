@@ -1,5 +1,33 @@
 import Foundation
 
+public enum AppAppearanceMode: String, Codable, Sendable, CaseIterable {
+    case system
+    case light
+    case dark
+
+    public var displayName: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+}
+
+public enum TerminalMouseWheelBehavior: String, Codable, Sendable, CaseIterable {
+    case magentDefaultScroll
+    case inheritGhosttyGlobal
+    case allowAppsToCapture
+
+    public var displayName: String {
+        switch self {
+        case .magentDefaultScroll: "Scroll terminal history"
+        case .inheritGhosttyGlobal: "Use Ghostty global setting"
+        case .allowAppsToCapture: "Send wheel input to apps/prompts"
+        }
+    }
+}
+
 public nonisolated struct AppSettings: Codable, Sendable {
     public static let defaultSlugPrompt = "Generate a short kebab-case slug (2-4 words) for a git branch name. Extract the core concept or feature — ignore filler words like 'I want', 'how do I', 'can you', etc. Bug reports, observations about broken behavior, and feature requests are all actionable — generate a slug for them."
     public static let defaultReviewPrompt = "Review the changes on this branch compared to {baseBranch}. Run `git diff $(git merge-base {baseBranch} HEAD)` to see all changes (committed and uncommitted) since this branch diverged. Also run `git log HEAD..{baseBranch} --oneline` to check if {baseBranch} has moved ahead, and flag any likely merge conflicts. Provide a thorough code review covering correctness, potential bugs, code style, and any suggestions for improvement."
@@ -38,6 +66,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var autoCheckForUpdates: Bool
     public var skippedUpdateVersion: String?
     public var syncLocalPathsOnArchive: Bool
+    public var appAppearanceMode: AppAppearanceMode
+    public var terminalMouseWheelBehavior: TerminalMouseWheelBehavior
     public var showScrollToBottomIndicator: Bool
     public var showTerminalScrollOverlay: Bool
     public var showPromptTOCOverlay: Bool
@@ -77,6 +107,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoCheckForUpdates: Bool = true,
         skippedUpdateVersion: String? = nil,
         syncLocalPathsOnArchive: Bool = true,
+        appAppearanceMode: AppAppearanceMode = .system,
+        terminalMouseWheelBehavior: TerminalMouseWheelBehavior = .magentDefaultScroll,
         showScrollToBottomIndicator: Bool = true,
         showTerminalScrollOverlay: Bool = true,
         showPromptTOCOverlay: Bool = true
@@ -115,6 +147,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.autoCheckForUpdates = autoCheckForUpdates
         self.skippedUpdateVersion = skippedUpdateVersion
         self.syncLocalPathsOnArchive = syncLocalPathsOnArchive
+        self.appAppearanceMode = appAppearanceMode
+        self.terminalMouseWheelBehavior = terminalMouseWheelBehavior
         self.showScrollToBottomIndicator = showScrollToBottomIndicator
         self.showTerminalScrollOverlay = showTerminalScrollOverlay
         self.showPromptTOCOverlay = showPromptTOCOverlay
@@ -159,6 +193,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoCheckForUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckForUpdates) ?? true
         skippedUpdateVersion = try container.decodeIfPresent(String.self, forKey: .skippedUpdateVersion)
         syncLocalPathsOnArchive = try container.decodeIfPresent(Bool.self, forKey: .syncLocalPathsOnArchive) ?? true
+        appAppearanceMode = try container.decodeIfPresent(AppAppearanceMode.self, forKey: .appAppearanceMode) ?? .system
+        terminalMouseWheelBehavior = try container.decodeIfPresent(TerminalMouseWheelBehavior.self, forKey: .terminalMouseWheelBehavior) ?? .magentDefaultScroll
         showScrollToBottomIndicator = try container.decodeIfPresent(Bool.self, forKey: .showScrollToBottomIndicator) ?? true
         showTerminalScrollOverlay = try container.decodeIfPresent(Bool.self, forKey: .showTerminalScrollOverlay) ?? true
         showPromptTOCOverlay = try container.decodeIfPresent(Bool.self, forKey: .showPromptTOCOverlay) ?? true
@@ -202,6 +238,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoCheckForUpdates, forKey: .autoCheckForUpdates)
         try container.encodeIfPresent(skippedUpdateVersion, forKey: .skippedUpdateVersion)
         try container.encode(syncLocalPathsOnArchive, forKey: .syncLocalPathsOnArchive)
+        try container.encode(appAppearanceMode, forKey: .appAppearanceMode)
+        try container.encode(terminalMouseWheelBehavior, forKey: .terminalMouseWheelBehavior)
         try container.encode(showScrollToBottomIndicator, forKey: .showScrollToBottomIndicator)
         try container.encode(showTerminalScrollOverlay, forKey: .showTerminalScrollOverlay)
         try container.encode(showPromptTOCOverlay, forKey: .showPromptTOCOverlay)
@@ -335,6 +373,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case autoCheckForUpdates
         case skippedUpdateVersion
         case syncLocalPathsOnArchive
+        case appAppearanceMode
+        case terminalMouseWheelBehavior
         case showScrollToBottomIndicator
         case showTerminalScrollOverlay
         case showPromptTOCOverlay

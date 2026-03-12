@@ -1,6 +1,31 @@
 import Cocoa
 import GhosttyKit
 
+public enum GhosttyEmbeddedAppearanceMode: Sendable {
+    case system
+    case light
+    case dark
+}
+
+public enum GhosttyEmbeddedMouseWheelBehavior: Sendable {
+    case magentDefaultScroll
+    case inheritGhosttyGlobal
+    case allowAppsToCapture
+}
+
+public struct GhosttyEmbeddedPreferences: Sendable {
+    public var appearanceMode: GhosttyEmbeddedAppearanceMode
+    public var mouseWheelBehavior: GhosttyEmbeddedMouseWheelBehavior
+
+    public init(
+        appearanceMode: GhosttyEmbeddedAppearanceMode = .system,
+        mouseWheelBehavior: GhosttyEmbeddedMouseWheelBehavior = .magentDefaultScroll
+    ) {
+        self.appearanceMode = appearanceMode
+        self.mouseWheelBehavior = mouseWheelBehavior
+    }
+}
+
 /// Singleton managing the ghostty_app_t instance and runtime callbacks.
 @MainActor
 public final class GhosttyAppManager {
@@ -13,6 +38,9 @@ public final class GhosttyAppManager {
     private var displayLink: CVDisplayLink?
     private var surfaceCount = 0
     private var pendingSyntheticPasteText: String?
+    private var retainedConfigs: [ghostty_config_t] = []
+    private var registeredSurfaces: [Int: ghostty_surface_t] = [:]
+    private var embeddedPreferences = GhosttyEmbeddedPreferences()
 
     // MARK: - Initialization
 
@@ -33,22 +61,10 @@ public final class GhosttyAppManager {
         let initResult = ghostty_init(0, nil)
         Self.log("init result: \(initResult), HOME=\(ProcessInfo.processInfo.environment["HOME"] ?? "nil")")
 
-        // Create and finalize config
-        guard let config = ghostty_config_new() else {
-            Self.log("config_new returned nil")
+        guard let config = buildConfig(for: embeddedPreferences, logContext: "initial") else {
             return
         }
-        Self.log("config created")
-        ghostty_config_load_default_files(config)
-        ghostty_config_finalize(config)
-        let diagCount = ghostty_config_diagnostics_count(config)
-        Self.log("config finalized, diagnostics: \(diagCount)")
-        for i in 0..<diagCount {
-            let diag = ghostty_config_get_diagnostic(config, i)
-            if let msg = diag.message {
-                Self.log("  diag[\(i)]: \(String(cString: msg))")
-            }
-        }
+        retainedConfigs.append(config)
 
         // Create runtime config with callbacks (top-level functions,
         // naturally nonisolated since this module has no default actor isolation)
@@ -64,6 +80,7 @@ public final class GhosttyAppManager {
 
         app = ghostty_app_new(&runtimeConfig, config)
         Self.log("app created: \(app != nil)")
+        applyAppearanceMode()
     }
 
     public static func log(_ msg: String) {
@@ -125,6 +142,32 @@ public final class GhosttyAppManager {
         return text
     }
 
+    public func registerSurface(_ surface: ghostty_surface_t?) {
+        guard let surface else { return }
+        registeredSurfaces[Int(bitPattern: surface)] = surface
+    }
+
+    public func unregisterSurface(_ surface: ghostty_surface_t?) {
+        guard let surface else { return }
+        registeredSurfaces.removeValue(forKey: Int(bitPattern: surface))
+    }
+
+    public func applyEmbeddedPreferences(_ preferences: GhosttyEmbeddedPreferences) {
+        embeddedPreferences = preferences
+        guard let app else { return }
+        guard let config = buildConfig(for: preferences, logContext: "update") else { return }
+        retainedConfigs.append(config)
+        ghostty_app_update_config(app, config)
+        for surface in registeredSurfaces.values {
+            ghostty_surface_update_config(surface, config)
+        }
+        applyAppearanceMode()
+    }
+
+    public func refreshAppearanceIfNeeded() {
+        applyAppearanceMode()
+    }
+
     private func startDisplayLinkIfNeeded() {
         guard displayLink == nil else { return }
         CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
@@ -143,6 +186,80 @@ public final class GhosttyAppManager {
 
     public static let ghosttySurfaceClosed = Notification.Name("ghosttySurfaceClosed")
     public static let ghosttyScrollbarUpdated = Notification.Name("ghosttyScrollbarUpdated")
+
+    private func buildConfig(
+        for preferences: GhosttyEmbeddedPreferences,
+        logContext: String
+    ) -> ghostty_config_t? {
+        guard let config = ghostty_config_new() else {
+            Self.log("\(logContext): config_new returned nil")
+            return nil
+        }
+
+        Self.log("\(logContext): config created")
+        ghostty_config_load_default_files(config)
+        if let overridePath = writeOverrideConfig(for: preferences) {
+            overridePath.withCString { path in
+                ghostty_config_load_file(config, path)
+            }
+        }
+        ghostty_config_finalize(config)
+
+        let diagCount = ghostty_config_diagnostics_count(config)
+        Self.log("\(logContext): config finalized, diagnostics: \(diagCount)")
+        for i in 0..<diagCount {
+            let diag = ghostty_config_get_diagnostic(config, i)
+            if let msg = diag.message {
+                Self.log("  diag[\(i)]: \(String(cString: msg))")
+            }
+        }
+
+        return config
+    }
+
+    private func writeOverrideConfig(for preferences: GhosttyEmbeddedPreferences) -> String? {
+        var lines: [String] = []
+
+        switch preferences.mouseWheelBehavior {
+        case .magentDefaultScroll:
+            lines.append("mouse-reporting = false")
+        case .inheritGhosttyGlobal:
+            break
+        case .allowAppsToCapture:
+            lines.append("mouse-reporting = true")
+        }
+
+        guard !lines.isEmpty else { return nil }
+
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("magent-ghostty-overrides.config")
+        let contents = lines.joined(separator: "\n") + "\n"
+        do {
+            try contents.write(to: url, atomically: true, encoding: .utf8)
+            return url.path
+        } catch {
+            Self.log("failed to write override config: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func applyAppearanceMode() {
+        guard let app else { return }
+        let colorScheme: ghostty_color_scheme_e
+        switch embeddedPreferences.appearanceMode {
+        case .system:
+            colorScheme = currentSystemColorScheme()
+        case .light:
+            colorScheme = GHOSTTY_COLOR_SCHEME_LIGHT
+        case .dark:
+            colorScheme = GHOSTTY_COLOR_SCHEME_DARK
+        }
+        ghostty_app_set_color_scheme(app, colorScheme)
+    }
+
+    private func currentSystemColorScheme() -> ghostty_color_scheme_e {
+        let appearance = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
+        return appearance == .darkAqua ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT
+    }
 }
 
 // MARK: - C callbacks

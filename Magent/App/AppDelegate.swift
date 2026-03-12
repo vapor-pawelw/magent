@@ -9,6 +9,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     private var coordinator: AppCoordinator?
     private var ipcServer: IPCSocketServer?
+    private var settingsObserver: NSObjectProtocol?
+    private var systemAppearanceObserver: NSObjectProtocol?
 
     private func isLiveNonZombieProcess(_ pid: pid_t) -> Bool {
         guard pid > 0 else { return false }
@@ -76,6 +78,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         CrashReportingService.initialize()
         setupMainMenu()
         GhosttyAppManager.shared.initialize()
+        applyAppAppearanceAndTerminalPreferences()
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .magentSettingsDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.applyAppAppearanceAndTerminalPreferences()
+            }
+        }
+        systemAppearanceObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleSystemAppearanceChanged()
+            }
+        }
         let notificationCenter = UNUserNotificationCenter.current()
         notificationCenter.delegate = self
         notificationCenter.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
@@ -94,6 +115,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let settingsObserver {
+            NotificationCenter.default.removeObserver(settingsObserver)
+            self.settingsObserver = nil
+        }
+        if let systemAppearanceObserver {
+            DistributedNotificationCenter.default().removeObserver(systemAppearanceObserver)
+            self.systemAppearanceObserver = nil
+        }
         let server = ipcServer
         Task { await server?.stop() }
 
@@ -104,6 +133,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        applyAppAppearanceAndTerminalPreferences()
         ThreadManager.shared.startSessionMonitor()
         coordinator?.showMainWindow()
     }
@@ -165,6 +195,51 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         mainMenu.addItem(editMenuItem)
 
         NSApp.mainMenu = mainMenu
+    }
+
+    private func applyAppAppearanceAndTerminalPreferences() {
+        let settings = PersistenceService.shared.loadSettings()
+
+        switch settings.appAppearanceMode {
+        case .system:
+            NSApp.appearance = nil
+        case .light:
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+
+        let terminalAppearance: GhosttyEmbeddedAppearanceMode
+        switch settings.appAppearanceMode {
+        case .system:
+            terminalAppearance = .system
+        case .light:
+            terminalAppearance = .light
+        case .dark:
+            terminalAppearance = .dark
+        }
+
+        let mouseWheelBehavior: GhosttyEmbeddedMouseWheelBehavior
+        switch settings.terminalMouseWheelBehavior {
+        case .magentDefaultScroll:
+            mouseWheelBehavior = .magentDefaultScroll
+        case .inheritGhosttyGlobal:
+            mouseWheelBehavior = .inheritGhosttyGlobal
+        case .allowAppsToCapture:
+            mouseWheelBehavior = .allowAppsToCapture
+        }
+
+        GhosttyAppManager.shared.applyEmbeddedPreferences(
+            GhosttyEmbeddedPreferences(
+                appearanceMode: terminalAppearance,
+                mouseWheelBehavior: mouseWheelBehavior
+            )
+        )
+    }
+
+    private func handleSystemAppearanceChanged() {
+        guard PersistenceService.shared.loadSettings().appAppearanceMode == .system else { return }
+        GhosttyAppManager.shared.refreshAppearanceIfNeeded()
     }
 
     @objc private func openSettings(_ sender: Any?) {

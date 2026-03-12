@@ -115,6 +115,14 @@ libghostty manages Metal rendering internally. The host app only:
 mAgent is macOS-only, so use the native macOS path:
 - Use `GHOSTTY_PLATFORM_MACOS` with `NSView`.
 
+## Embedded Config Layering
+
+Magent's embedded terminal should keep Ghostty's global user config, then layer Magent-owned overrides for the specific terminal behaviors exposed in Settings.
+
+- Load Ghostty defaults/user config first with `ghostty_config_load_default_files(...)`.
+- Apply Magent's explicit overrides afterwards from a generated config file so user Ghostty settings still work for everything else.
+- Keep overrides narrow and intentional. Current embedded overrides are settings-driven behaviors such as wheel capture policy; do not blanket-disable user Ghostty config again unless Magent stops exposing those options itself.
+
 ## Reference Implementation
 
 The Ghostty macOS app source is the definitive reference:
