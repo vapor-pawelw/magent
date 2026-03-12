@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 ### Thread
 - Auto-rename no longer triggers when terminal commands are typed in an agent session — it now checks that an agent process (Claude or Codex) is actually running before treating pane output as a submitted prompt.
 ### Terminal
+- Fixed "Scroll to bottom" on both the scroll overlay and the FAB pill landing with the last output at the top of the viewport; Ghostty's viewport is now scrolled after tmux redraws the live pane, not before.
 - Added a terminal mouse-wheel setting so Magent can default wheel input to terminal scrolling, inherit the user's Ghostty config, or let prompts/apps capture wheel input.
 - App appearance can now follow macOS or be forced to Light/Dark, and the embedded terminal stays aligned with that choice.
 - Fixed terminal surfaces remaining dark after switching to Light mode; the color scheme is now applied before surface configs are refreshed so all open terminals update immediately.
