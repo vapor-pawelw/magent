@@ -160,8 +160,11 @@ public final class GhosttyAppManager {
         guard let config = buildConfig(for: preferences, logContext: "update") else { return }
         retainedConfigs.append(config)
         ghostty_app_update_config(app, config)
+        let colorScheme = resolvedColorScheme()
         for surface in registeredSurfaces.values {
             ghostty_surface_update_config(surface, config)
+            ghostty_surface_set_color_scheme(surface, colorScheme)
+            ghostty_surface_refresh(surface)
         }
     }
 
@@ -246,16 +249,23 @@ public final class GhosttyAppManager {
 
     private func applyAppearanceMode() {
         guard let app else { return }
-        let colorScheme: ghostty_color_scheme_e
+        let colorScheme = resolvedColorScheme()
+        ghostty_app_set_color_scheme(app, colorScheme)
+        for surface in registeredSurfaces.values {
+            ghostty_surface_set_color_scheme(surface, colorScheme)
+            ghostty_surface_refresh(surface)
+        }
+    }
+
+    private func resolvedColorScheme() -> ghostty_color_scheme_e {
         switch embeddedPreferences.appearanceMode {
         case .system:
-            colorScheme = currentSystemColorScheme()
+            return currentSystemColorScheme()
         case .light:
-            colorScheme = GHOSTTY_COLOR_SCHEME_LIGHT
+            return GHOSTTY_COLOR_SCHEME_LIGHT
         case .dark:
-            colorScheme = GHOSTTY_COLOR_SCHEME_DARK
+            return GHOSTTY_COLOR_SCHEME_DARK
         }
-        ghostty_app_set_color_scheme(app, colorScheme)
     }
 
     private func currentSystemColorScheme() -> ghostty_color_scheme_e {

@@ -94,7 +94,7 @@ final class ResizeHandleView: NSView {
 // MARK: - Settings Category
 
 enum SettingsCategory: Int, CaseIterable {
-    case general, terminal, threads, agents, notifications, projects, jira
+    case general, terminal, threads, agents, notifications, projects, appearance, jira
 
     static var visibleCategories: [SettingsCategory] {
         allCases.filter(\.isVisible)
@@ -117,6 +117,7 @@ enum SettingsCategory: Int, CaseIterable {
         case .agents: return String(localized: .CommonStrings.settingsCategoryAgents)
         case .notifications: return String(localized: .CommonStrings.settingsCategoryNotifications)
         case .projects: return String(localized: .CommonStrings.settingsCategoryProjects)
+        case .appearance: return "Appearance"
         case .jira:
             return AppFeatures.annotatedTitle(
                 String(localized: .CommonStrings.settingsCategoryJira),
@@ -133,6 +134,7 @@ enum SettingsCategory: Int, CaseIterable {
         case .agents: return "cpu"
         case .notifications: return "bell"
         case .projects: return "folder"
+        case .appearance: return "circle.lefthalf.filled"
         case .jira: return "ticket"
         }
     }
@@ -150,6 +152,7 @@ final class SettingsSplitViewController: NSSplitViewController {
     private let agentsVC = SettingsAgentsViewController()
     private let notificationsVC = SettingsNotificationsViewController()
     private let projectsVC = SettingsProjectsViewController()
+    private let appearanceVC = SettingsAppearanceViewController()
     private lazy var jiraVC = SettingsJiraViewController()
     private var detailSplitItem: NSSplitViewItem!
     private var currentCategory: SettingsCategory = .general
@@ -189,7 +192,7 @@ final class SettingsSplitViewController: NSSplitViewController {
         detailContainerVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
         let container = detailContainerVC.view
 
-        var allVCs: [NSViewController] = [generalVC, terminalVC, threadsVC, agentsVC, notificationsVC, projectsVC]
+        var allVCs: [NSViewController] = [generalVC, terminalVC, threadsVC, agentsVC, notificationsVC, projectsVC, appearanceVC]
         if AppFeatures.jiraIntegrationEnabled {
             allVCs.append(jiraVC)
         }
@@ -213,6 +216,7 @@ final class SettingsSplitViewController: NSSplitViewController {
         agentsVC.view.isHidden = category != .agents
         notificationsVC.view.isHidden = category != .notifications
         projectsVC.view.isHidden = category != .projects
+        appearanceVC.view.isHidden = category != .appearance
         if AppFeatures.jiraIntegrationEnabled {
             jiraVC.view.isHidden = category != .jira
         }

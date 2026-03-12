@@ -27,8 +27,22 @@ enum BannerStyle {
     }
 
     var backgroundColor: NSColor {
-        let tintedSurface = NSColor(resource: .surface).blended(withFraction: 0.18, of: tintColor) ?? tintColor
-        return tintedSurface.withAlphaComponent(0.96)
+        switch self {
+        case .info:
+            return NSColor(srgbRed: 0.12, green: 0.39, blue: 0.89, alpha: 0.96)
+        case .warning:
+            return NSColor(srgbRed: 0.71, green: 0.46, blue: 0.09, alpha: 0.96)
+        case .error:
+            return NSColor(srgbRed: 0.75, green: 0.21, blue: 0.24, alpha: 0.96)
+        }
+    }
+
+    var foregroundColor: NSColor {
+        NSColor.white.withAlphaComponent(0.98)
+    }
+
+    var secondaryForegroundColor: NSColor {
+        NSColor.white.withAlphaComponent(0.82)
     }
 }
 
@@ -141,7 +155,7 @@ final class BannerView: NSView {
         rootStack.addArrangedSubview(headerRow)
 
         iconView.image = config.style.icon
-        iconView.contentTintColor = config.style.tintColor
+        iconView.contentTintColor = config.style.foregroundColor
         iconView.translatesAutoresizingMaskIntoConstraints = false
         headerRow.addArrangedSubview(iconView)
 
@@ -151,7 +165,7 @@ final class BannerView: NSView {
             messageLabel.stringValue = config.message
         }
         messageLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        messageLabel.textColor = NSColor(resource: .textPrimary)
+        messageLabel.textColor = config.style.foregroundColor
         messageLabel.lineBreakMode = .byWordWrapping
         messageLabel.maximumNumberOfLines = 0
         messageLabel.isSelectable = true
@@ -165,7 +179,7 @@ final class BannerView: NSView {
         closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Dismiss")
         closeButton.bezelStyle = .inline
         closeButton.isBordered = false
-        closeButton.contentTintColor = NSColor(resource: .textSecondary)
+        closeButton.contentTintColor = config.style.secondaryForegroundColor
         closeButton.target = self
         closeButton.action = #selector(closeTapped)
         closeButton.isHidden = !config.isDismissible
@@ -251,7 +265,7 @@ final class BannerView: NSView {
         textView.isSelectable = true
         textView.drawsBackground = false
         textView.font = .systemFont(ofSize: 12)
-        textView.textColor = NSColor(resource: .textSecondary)
+        textView.textColor = config.style.secondaryForegroundColor
         textView.textContainerInset = NSSize(width: 0, height: 4)
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true

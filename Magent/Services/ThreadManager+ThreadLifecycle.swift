@@ -636,7 +636,6 @@ extension ThreadManager {
         // Header line: "Thread archived"
         let headerAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11, weight: .regular),
-            .foregroundColor: NSColor.secondaryLabelColor,
         ]
         result.append(NSAttributedString(string: "Thread archived\n", attributes: headerAttrs))
 
@@ -649,7 +648,6 @@ extension ThreadManager {
         }
         let titleAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 14, weight: .semibold),
-            .foregroundColor: NSColor.labelColor,
         ]
         result.append(NSAttributedString(string: titleText, attributes: titleAttrs))
 
@@ -657,7 +655,6 @@ extension ThreadManager {
         let monoFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         let secondaryAttrs: [NSAttributedString.Key: Any] = [
             .font: monoFont,
-            .foregroundColor: NSColor.secondaryLabelColor,
         ]
         let worktreeName = URL(fileURLWithPath: thread.worktreePath).lastPathComponent
         result.append(NSAttributedString(string: "\n\(thread.branchName)  ·  \(worktreeName)", attributes: secondaryAttrs))
@@ -666,7 +663,6 @@ extension ThreadManager {
         if let warning, !warning.isEmpty {
             let warningAttrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 12, weight: .medium),
-                .foregroundColor: NSColor.systemYellow,
             ]
             result.append(NSAttributedString(string: "\n⚠ \(warning)", attributes: warningAttrs))
         }
@@ -699,7 +695,6 @@ extension ThreadManager {
 
         let headerAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11, weight: .regular),
-            .foregroundColor: NSColor.secondaryLabelColor,
         ]
         result.append(NSAttributedString(string: "Thread restored\n", attributes: headerAttrs))
 
@@ -711,14 +706,12 @@ extension ThreadManager {
         }
         let titleAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 14, weight: .semibold),
-            .foregroundColor: NSColor.labelColor,
         ]
         result.append(NSAttributedString(string: titleText, attributes: titleAttrs))
 
         let monoFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         let secondaryAttrs: [NSAttributedString.Key: Any] = [
             .font: monoFont,
-            .foregroundColor: NSColor.secondaryLabelColor,
         ]
         let worktreeName = URL(fileURLWithPath: thread.worktreePath).lastPathComponent
         result.append(NSAttributedString(string: "\n\(thread.branchName)  ·  \(worktreeName)", attributes: secondaryAttrs))

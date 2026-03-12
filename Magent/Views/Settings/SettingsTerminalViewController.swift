@@ -7,7 +7,6 @@ final class SettingsTerminalViewController: NSViewController {
     private var settings: AppSettings!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
-    private var appearancePopup: NSPopUpButton!
     private var mouseWheelPopup: NSPopUpButton!
     private var mouseWheelDescriptionLabel: NSTextField!
     private var showScrollToBottomIndicatorCheckbox: NSButton!
@@ -34,32 +33,6 @@ final class SettingsTerminalViewController: NSViewController {
         stackView.spacing = 16
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-
-        let (appearanceCard, appearanceSection) = createSectionCard(
-            title: "Appearance",
-            description: "Choose whether Magent follows the system appearance or stays explicitly light or dark. The terminal follows the same preference."
-        )
-        stackView.addArrangedSubview(appearanceCard)
-
-        appearancePopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        appearancePopup.controlSize = .small
-        appearancePopup.font = .systemFont(ofSize: 12)
-        appearancePopup.addItems(withTitles: AppAppearanceMode.allCases.map(\.displayName))
-        if let index = AppAppearanceMode.allCases.firstIndex(of: settings.appAppearanceMode) {
-            appearancePopup.selectItem(at: index)
-        }
-        appearancePopup.target = self
-        appearancePopup.action = #selector(appearancePopupChanged)
-        appearanceSection.addArrangedSubview(
-            labeledPopupRow(label: "App appearance", popup: appearancePopup)
-        )
-
-        let appearanceNote = NSTextField(
-            wrappingLabelWithString: "System mode lets AppKit update the app chrome automatically and refreshes the embedded terminal when macOS changes appearance, including scheduled auto switching."
-        )
-        appearanceNote.font = .systemFont(ofSize: 11)
-        appearanceNote.textColor = NSColor(resource: .textSecondary)
-        appearanceSection.addArrangedSubview(appearanceNote)
 
         let (mouseCard, mouseSection) = createSectionCard(
             title: "Mouse Wheel",
@@ -156,10 +129,8 @@ final class SettingsTerminalViewController: NSViewController {
             stackView.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
 
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
-            appearanceCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             mouseCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             overlaysCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
-            appearanceNote.widthAnchor.constraint(equalTo: appearanceSection.widthAnchor),
             mouseWheelDescriptionLabel.widthAnchor.constraint(equalTo: mouseSection.widthAnchor),
             showScrollToBottomIndicatorDesc.widthAnchor.constraint(equalTo: overlaysSection.widthAnchor),
             showScrollOverlayDesc.widthAnchor.constraint(equalTo: overlaysSection.widthAnchor),
@@ -251,13 +222,6 @@ final class SettingsTerminalViewController: NSViewController {
         ])
 
         return (container, content)
-    }
-
-    @objc private func appearancePopupChanged() {
-        let index = appearancePopup.indexOfSelectedItem
-        guard AppAppearanceMode.allCases.indices.contains(index) else { return }
-        settings.appAppearanceMode = AppAppearanceMode.allCases[index]
-        saveSettingsAndNotify()
     }
 
     @objc private func mouseWheelPopupChanged() {

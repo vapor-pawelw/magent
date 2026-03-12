@@ -5,8 +5,27 @@ private enum TerminalOverlayStyle {
     static let normalAlpha: CGFloat = 0.55
     static let hoverAlpha: CGFloat = 0.90
     static let opaqueAlpha: CGFloat = 1.0
-    static let backgroundColor = NSColor(white: 0.08, alpha: 1.0).cgColor
-    static let contentTintColor = NSColor(white: 1, alpha: 0.85)
+
+    static func backgroundColor(for appearance: NSAppearance) -> NSColor {
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return NSColor(srgbRed: 0.10, green: 0.11, blue: 0.14, alpha: 0.94)
+        }
+        return NSColor.white.withAlphaComponent(0.94)
+    }
+
+    static func borderColor(for appearance: NSAppearance) -> NSColor {
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return NSColor.white.withAlphaComponent(0.12)
+        }
+        return NSColor.black.withAlphaComponent(0.10)
+    }
+
+    static func contentTintColor(for appearance: NSAppearance) -> NSColor {
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return NSColor.white.withAlphaComponent(0.88)
+        }
+        return NSColor.black.withAlphaComponent(0.72)
+    }
 }
 
 /// A compact, draggable, semi-transparent floating overlay that exposes three
@@ -29,6 +48,7 @@ final class TerminalScrollOverlayView: NSView {
     private let upButton = NSButton()
     private let downButton = NSButton()
     private let toBottomButton = NSButton()
+    private let buttonStack = NSStackView()
     private var trackingArea: NSTrackingArea?
 
     override init(frame: NSRect) {
@@ -40,8 +60,8 @@ final class TerminalScrollOverlayView: NSView {
 
     private func setup() {
         wantsLayer = true
-        layer?.backgroundColor = TerminalOverlayStyle.backgroundColor
         alphaValue = TerminalOverlayStyle.normalAlpha
+        layer?.borderWidth = 1
 
         let btnSize: CGFloat = 24
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
@@ -56,7 +76,6 @@ final class TerminalScrollOverlayView: NSView {
             btn.imagePosition = .imageOnly
             btn.isBordered = false
             btn.bezelStyle = .inline
-            btn.contentTintColor = TerminalOverlayStyle.contentTintColor
             btn.toolTip = tip
             btn.target = self
             btn.action = action
@@ -66,23 +85,43 @@ final class TerminalScrollOverlayView: NSView {
             btn.heightAnchor.constraint(equalToConstant: btnSize).isActive = true
         }
 
-        let stack = NSStackView(views: [upButton, downButton, toBottomButton])
-        stack.orientation = .horizontal
-        stack.spacing = 2
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
+        buttonStack.orientation = .horizontal
+        buttonStack.spacing = 2
+        buttonStack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+        buttonStack.translatesAutoresizingMaskIntoConstraints = false
+        buttonStack.addArrangedSubview(upButton)
+        buttonStack.addArrangedSubview(downButton)
+        buttonStack.addArrangedSubview(toBottomButton)
+        addSubview(buttonStack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            buttonStack.topAnchor.constraint(equalTo: topAnchor),
+            buttonStack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            buttonStack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            buttonStack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+
+        updateAppearance()
     }
 
     override func layout() {
         super.layout()
         layer?.cornerRadius = bounds.height / 2
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    private func updateAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = TerminalOverlayStyle.backgroundColor(for: effectiveAppearance).cgColor
+            layer?.borderColor = TerminalOverlayStyle.borderColor(for: effectiveAppearance).cgColor
+            let contentTint = TerminalOverlayStyle.contentTintColor(for: effectiveAppearance)
+            upButton.contentTintColor = contentTint
+            downButton.contentTintColor = contentTint
+            toBottomButton.contentTintColor = contentTint
+        }
     }
 
     // MARK: - Hover
@@ -159,20 +198,18 @@ final class TerminalScrollToBottomPillButton: NSView {
 
     private func setup() {
         wantsLayer = true
-        layer?.backgroundColor = TerminalOverlayStyle.backgroundColor
         alphaValue = Self.restingAlpha
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
+        layer?.borderWidth = 1
 
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
         iconView.image = NSImage(systemSymbolName: "arrow.down.to.line", accessibilityDescription: "Scroll to bottom")?
             .withSymbolConfiguration(symbolConfig)
-        iconView.contentTintColor = TerminalOverlayStyle.contentTintColor
         iconView.imageScaling = .scaleProportionallyDown
         iconView.translatesAutoresizingMaskIntoConstraints = false
 
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        titleLabel.textColor = TerminalOverlayStyle.contentTintColor
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -192,6 +229,23 @@ final class TerminalScrollToBottomPillButton: NSView {
             contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.contentInsets.right),
             contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.contentInsets.bottom),
         ])
+
+        updateAppearance()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    private func updateAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = TerminalOverlayStyle.backgroundColor(for: effectiveAppearance).cgColor
+            layer?.borderColor = TerminalOverlayStyle.borderColor(for: effectiveAppearance).cgColor
+            let contentTint = TerminalOverlayStyle.contentTintColor(for: effectiveAppearance)
+            iconView.contentTintColor = contentTint
+            titleLabel.textColor = contentTint
+        }
     }
 
     override func mouseUp(with event: NSEvent) {

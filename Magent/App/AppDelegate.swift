@@ -199,15 +199,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     private func applyAppAppearanceAndTerminalPreferences() {
         let settings = PersistenceService.shared.loadSettings()
+        let appAppearance: NSAppearance?
 
         switch settings.appAppearanceMode {
         case .system:
-            NSApp.appearance = nil
+            appAppearance = nil
         case .light:
-            NSApp.appearance = NSAppearance(named: .aqua)
+            appAppearance = NSAppearance(named: .aqua)
         case .dark:
-            NSApp.appearance = NSAppearance(named: .darkAqua)
+            appAppearance = NSAppearance(named: .darkAqua)
         }
+        NSApp.appearance = appAppearance
+        refreshWindowAppearances(using: appAppearance)
 
         let terminalAppearance: GhosttyEmbeddedAppearanceMode
         switch settings.appAppearanceMode {
@@ -235,6 +238,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 mouseWheelBehavior: mouseWheelBehavior
             )
         )
+    }
+
+    private func refreshWindowAppearances(using appearance: NSAppearance?) {
+        for window in NSApp.windows {
+            window.appearance = appearance
+            window.invalidateShadow()
+            window.contentView?.needsLayout = true
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.contentView?.needsDisplay = true
+            window.displayIfNeeded()
+        }
     }
 
     private func handleSystemAppearanceChanged() {

@@ -140,6 +140,14 @@ The correct order in `applyEmbeddedPreferences`:
 
 `refreshAppearanceIfNeeded()` should call `applyEmbeddedPreferences(embeddedPreferences)` rather than just `applyAppearanceMode()` alone, so existing surfaces are explicitly updated and not just the app-level preference.
 
+## Existing Surface Refresh Contract
+
+Updating the app-level Ghostty color scheme is not sufficient on its own for already-open tabs.
+
+- After resolving the new light/dark scheme, also call `ghostty_surface_set_color_scheme(surface, colorScheme)` for every registered surface.
+- Follow that with `ghostty_surface_refresh(surface)` so the visible terminal redraws immediately.
+- Keep the AppKit side in sync too: when Magent changes `NSApp.appearance`, invalidate existing windows/content views so terminal-adjacent chrome (top bar buttons, overlay pills, TOC panel) re-resolves its dynamic colors in the same turn.
+
 ## Overlay Z-Order Contract (mAgent)
 
 When terminal overlays are enabled (for example, the prompt Table of Contents or the scroll controls pill), they must remain visible above terminal content during tab switches and session view recreation.
@@ -151,3 +159,11 @@ When terminal overlays are enabled (for example, the prompt Table of Contents or
 **Rule**: Any overlay that must float above the terminal must be added directly to `terminalContainer` (the same container that hosts `TerminalSurfaceView` instances), not to the view controller's root `view`.
 
 **Bring-to-front after lazy tab add**: Terminal views are added lazily on first tab selection. After adding a new `TerminalSurfaceView` to `terminalContainer`, call `addSubview(_:positioned:above:relativeTo: nil)` on every overlay to keep them on top. See `bringPromptTOCOverlayToFront()` and `bringScrollOverlaysToFront()` in `ThreadDetailViewController+PromptTOC.swift` and `ThreadDetailViewController+ScrollFAB.swift`.
+
+## Overlay Appearance Contract
+
+Terminal overlays must respond to appearance changes the same way the surrounding terminal chrome does.
+
+- Do not hard-code a permanently dark overlay palette for controls that remain visible in Light mode.
+- Overlay views that draw their own layers should update those colors from `viewDidChangeEffectiveAppearance()`.
+- This applies to the scroll-controls pill, the floating `Scroll to bottom` pill, and the Prompt TOC panel/header/resize affordance.

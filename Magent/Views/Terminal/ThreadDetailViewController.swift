@@ -7,8 +7,15 @@ import MagentCore
 /// NSView that keeps its layer background synced with the .appBackground color asset
 /// across both light and dark appearance changes.
 private final class AppBackgroundView: NSView {
+    var onEffectiveAppearanceChanged: (() -> Void)?
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        updateBackgroundColor()
+        onEffectiveAppearanceChanged?()
+    }
+
+    private func updateBackgroundColor() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             self.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
         }
@@ -31,6 +38,7 @@ final class ThreadDetailViewController: NSViewController {
     let threadManager = ThreadManager.shared
     let tabBarStack = NSStackView()
     let terminalContainer: NSView = AppBackgroundView()
+    let topBar = NSStackView()
     let openPRButton = NSButton()
     let openInJiraButton = NSButton()
     let openInXcodeButton = NSButton()
@@ -117,7 +125,11 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     override func loadView() {
-        view = AppBackgroundView()
+        let rootView = AppBackgroundView()
+        rootView.onEffectiveAppearanceChanged = { [weak self] in
+            self?.refreshTerminalChromeAppearance()
+        }
+        view = rootView
     }
 
     override func viewDidLoad() {
@@ -312,15 +324,20 @@ final class ThreadDetailViewController: NSViewController {
         separator.setContentHuggingPriority(.required, for: .vertical)
         separator.setContentCompressionResistancePriority(.required, for: .vertical)
 
-        let topBar = NSStackView(views: [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, togglePromptTOCButton, separator, archiveThreadButton])
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
         topBar.translatesAutoresizingMaskIntoConstraints = false
+        for view in [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, togglePromptTOCButton, separator, archiveThreadButton] {
+            topBar.addArrangedSubview(view)
+        }
 
         terminalContainer.translatesAutoresizingMaskIntoConstraints = false
         terminalContainer.wantsLayer = true
         terminalContainer.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
+        (terminalContainer as? AppBackgroundView)?.onEffectiveAppearanceChanged = { [weak self] in
+            self?.refreshTerminalChromeAppearance()
+        }
 
         view.addSubview(topBar)
         view.addSubview(terminalContainer)
@@ -343,6 +360,7 @@ final class ThreadDetailViewController: NSViewController {
         setupScrollFAB()
         setupScrollOverlay()
         refreshOverlayVisibilitySettings()
+        refreshTerminalChromeAppearance()
     }
 
     // MARK: - Tab Setup
@@ -643,6 +661,51 @@ final class ThreadDetailViewController: NSViewController {
     @objc private func handleSettingsChanged(_ notification: Notification) {
         refreshOverlayVisibilitySettings()
         updateTerminalScrollControlsState()
+    }
+
+    private var topBarButtons: [NSButton] {
+        [
+            addTabButton,
+            openInXcodeButton,
+            openInFinderButton,
+            openPRButton,
+            openInJiraButton,
+            reviewButton,
+            exportContextButton,
+            togglePromptTOCButton,
+            archiveThreadButton,
+        ]
+    }
+
+    private func refreshTerminalChromeAppearance() {
+        guard isViewLoaded else { return }
+
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            view.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
+            terminalContainer.layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
+            archiveThreadButton.image = NSImage(
+                systemSymbolName: "archivebox",
+                accessibilityDescription: String(localized: .ThreadStrings.threadArchiveTitle)
+            )
+            reviewButton.image = NSImage(
+                systemSymbolName: "eye",
+                accessibilityDescription: String(localized: .NotificationStrings.reviewChanges)
+            )
+            exportContextButton.image = NSImage(
+                systemSymbolName: "square.and.arrow.up",
+                accessibilityDescription: String(localized: .NotificationStrings.contextExport)
+            )
+            addTabButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Tab")
+            updatePromptTOCToggleButtonState(canShow: promptTOCCanShowForCurrentTab)
+
+            for button in topBarButtons {
+                button.appearance = view.effectiveAppearance
+                button.needsDisplay = true
+            }
+
+            topBar.needsDisplay = true
+            pinSeparator.needsDisplay = true
+        }
     }
 
 }

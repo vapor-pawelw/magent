@@ -11,18 +11,18 @@ All notable changes to this project will be documented in this file.
 - Auto-rename no longer triggers when terminal commands are typed in an agent session — it now checks that an agent process (Claude or Codex) is actually running before treating pane output as a submitted prompt.
 ### Terminal
 - Added a terminal mouse-wheel setting so Magent can default wheel input to terminal scrolling, inherit the user's Ghostty config, or let prompts/apps capture wheel input.
-- App appearance can now follow macOS or be forced to Light/Dark, and the embedded terminal stays aligned with that choice.
-- Fixed terminal surfaces remaining dark after switching to Light mode; the color scheme is now applied before surface configs are refreshed so all open terminals update immediately.
+- App appearance can now follow macOS or be forced to Light/Dark, and open terminals now switch immediately along with terminal overlays and the terminal top bar.
+- Fixed terminal overlays and other terminal chrome staying dark after switching to Light mode; open Ghostty surfaces now receive the new color scheme directly during appearance refresh.
 
 ### Sidebar
 - Fixed the main worktree row title being invisible in Light mode (white text on a light background); the text color now adapts to the selection state and the current appearance.
 
 ### Settings
-- Added a dedicated `Terminal` settings category for appearance, wheel behavior, and terminal overlay visibility, keeping terminal controls out of `General`.
+- Added a dedicated `Appearance` settings category. Terminal keeps wheel behavior and terminal overlay visibility, while app light/dark mode moved out of Terminal.
 - Fixed settings section cards remaining dark after switching to Light mode; dynamic asset colors are now resolved in the correct appearance context when the mode changes.
 
 ### General
-- Fixed the terminal pane top bar and background staying dark after switching to Light mode.
+- Banner notifications now keep high-contrast text and icons on their fixed tinted backgrounds instead of reusing semantic light/dark text colors.
 
 ## 1.2.1 - 2026-03-12
 

@@ -1070,6 +1070,11 @@ private final class PromptTOCEntryRowView: NSView {
         updateAppearance()
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
     private func setupUI() {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
@@ -1137,6 +1142,9 @@ final class PromptTableOfContentsView: NSView {
     private let emptyLabel = NSTextField(labelWithString: "No prompts yet")
     private let spinner = NSProgressIndicator()
     private let closeButton = NSButton()
+    private let headerBackgroundView = NSView()
+    private let headerIcon = NSImageView()
+    private var resizeHandleIconView: NSImageView?
     private var rowViews: [PromptTOCEntryRowView] = []
     private var selectedEntryIndex: Int?
     private var tocEntries: [PromptTOCEntry] = []
@@ -1237,6 +1245,11 @@ final class PromptTableOfContentsView: NSView {
         ))
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
         updateBackground(animated: true)
@@ -1264,21 +1277,15 @@ final class PromptTableOfContentsView: NSView {
         // Keep TOC above terminal surfaces that are added later.
         layer?.zPosition = 10
         layer?.cornerRadius = 8
-        layer?.backgroundColor = NSColor(resource: .surface).cgColor
         alphaValue = Self.normalAlpha
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
 
-        let headerBackgroundView = NSView()
         headerBackgroundView.translatesAutoresizingMaskIntoConstraints = false
         headerBackgroundView.wantsLayer = true
-        headerBackgroundView.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.14).cgColor
         headerBackgroundView.layer?.cornerRadius = 8
         headerBackgroundView.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
 
-        let headerIcon = NSImageView()
         headerIcon.image = NSImage(systemSymbolName: "list.bullet.rectangle.portrait", accessibilityDescription: nil)
-        headerIcon.contentTintColor = NSColor(resource: .textSecondary)
         headerIcon.translatesAutoresizingMaskIntoConstraints = false
         headerIcon.widthAnchor.constraint(equalToConstant: 12).isActive = true
         headerIcon.heightAnchor.constraint(equalToConstant: 12).isActive = true
@@ -1412,6 +1419,8 @@ final class PromptTableOfContentsView: NSView {
             cornerHandles[3].trailingAnchor.constraint(equalTo: trailingAnchor),
             cornerHandles[3].bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+
+        updateAppearance()
     }
 
     private func clearRows() {
@@ -1553,10 +1562,10 @@ final class PromptTableOfContentsView: NSView {
                     systemSymbolName: "arrow.up.left.and.arrow.down.right",
                     accessibilityDescription: "Resize Table of Contents"
                 )
-                icon.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.8)
                 icon.translatesAutoresizingMaskIntoConstraints = false
                 icon.toolTip = "Drag to resize"
                 view.addSubview(icon)
+                resizeHandleIconView = icon
                 NSLayoutConstraint.activate([
                     icon.widthAnchor.constraint(equalToConstant: 12),
                     icon.heightAnchor.constraint(equalToConstant: 12),
@@ -1572,6 +1581,16 @@ final class PromptTableOfContentsView: NSView {
         selectedEntryIndex = entryIndex
         for row in rowViews {
             row.isSelected = row.entryIndex == entryIndex
+        }
+    }
+
+    private func updateAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor(resource: .surface).cgColor
+            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+            headerBackgroundView.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.14).cgColor
+            headerIcon.contentTintColor = NSColor(resource: .textSecondary)
+            resizeHandleIconView?.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.8)
         }
     }
 }
