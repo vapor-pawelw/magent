@@ -45,6 +45,7 @@
 **Sidebar (`ThreadListViewController`)**
 - `outlineViewDoubleClicked(_:)` detects double-click on the section name hit area (via `sectionHeaderHitArea(_:)`) and calls `beginRenamingSection(...)`.
 - A single-click on a section header is deliberately debounced (`scheduleSectionNameToggle`) so the first click of a double-click does not toggle section expand/collapse. The pending toggle is cancelled when a double-click is confirmed.
+- Active drag sessions now suppress section/project header disclosure entirely, so dragging a thread across the sidebar cannot expand/collapse headers until the pointer is released and the next real click occurs.
 - `activeSectionRename` tuple (`projectId`, `sectionId`, `originalName`) tracks the in-progress rename. Row rendering shows an inline `NSTextField` (identified by `sectionInlineRenameFieldIdentifier`) in place of the static label when `activeSectionRename` matches.
 - `finishSectionRename(commit:)` validates and persists via `persistSectionRename(...)`, posts `magentSectionsDidChange` on success, or shows a banner on failure and re-focuses the field.
 - `persistSectionRename(...)` handles both project-scoped sections (`settings.projects[i].threadSections`) and global sections (`settings.threadSections`) with duplicate-name guards.
@@ -62,4 +63,5 @@
 
 - The sidebar uses `NSUserInterfaceItemIdentifier` to identify the inline rename field (not integer tags), matching the existing pattern in that file.
 - The single-click toggle debouce key (`sectionToggleKey(projectId:sectionId:)`) must be cancelled before starting a rename so the section doesn't collapse immediately after the rename field appears.
+- Keep drag-session gating at the outline-view layer as well as the section-name toggle path. Project headers can still auto-disclose through AppKit unless `shouldExpandItem` / `shouldCollapseItem` are blocked during drag.
 - Rename persistence reads fresh settings from disk (`persistence.loadSettings()`) rather than the in-memory copy to avoid clobbering concurrent mutations.

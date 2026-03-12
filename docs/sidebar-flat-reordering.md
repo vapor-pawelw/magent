@@ -8,6 +8,7 @@ This thread changed flat-sidebar behavior so projects whose section grouping is 
 - New unpinned threads are created at the bottom of the visible unpinned list, regardless of their stored section.
 - Auto-reorder-on-completion moves a finished thread to the top of its visible pin group in flat mode, matching sectioned-mode semantics.
 - Users can drag regular threads within a project to reorder them in flat mode.
+- Drag-hovering over project or section headers while reordering does not expand/collapse them; disclosure stays click-only.
 - Dragging still respects the pinned/unpinned split used by the flat list:
   - pinned threads can only move within the pinned block
   - unpinned threads can only move within the unpinned block
@@ -22,6 +23,7 @@ This thread changed flat-sidebar behavior so projects whose section grouping is 
 - `assignThreadToBottomOfVisiblePinGroup(...)` is used by thread creation, section moves, and pin toggles so flat-mode ordering stays consistent across lifecycle events.
 - `bumpThreadToTopOfSection(...)` now uses the same project-wide ordering scope in flat mode, so agent completions rise within the visible pin group without needing to move sections.
 - `ThreadListViewController+DataSource.swift` handles flat-list drops on `SidebarProject` by computing the insertion index within the visible pin group and calling `reorderThreadInVisibleProjectList(...)`.
+- `SidebarOutlineView` tracks local/destination drag state so `shouldSelectItem`, `shouldExpandItem`, and `shouldCollapseItem` can suppress header disclosure while a drag is active.
 - Persistence still uses the existing `displayOrder` field; there is still no separate flat-order storage model.
 
 ## Gotchas
@@ -29,4 +31,5 @@ This thread changed flat-sidebar behavior so projects whose section grouping is 
 - In flat mode, treat "ordering scope" and "stored section" as separate concepts. Ordering is project-wide, but `sectionId` must stay untouched unless the user explicitly moves the thread between visible sections.
 - Keep flat drag validation project-scoped. Cross-project drops are not supported in the sidebar.
 - Preserve the pinned/unpinned boundary in both validation and accept-drop handling, otherwise the visible flat list and persisted `displayOrder` groups diverge.
+- Do not reintroduce hover-driven disclosure while a mouse drag is active. Header expand/collapse is intentionally click-only so drag reordering does not mutate sidebar structure mid-gesture.
 - If you reintroduce section-order flattening for hidden sections, creation/completion/manual reorder behavior will disagree again because lifecycle code now assumes flat mode is one combined section.

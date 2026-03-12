@@ -250,6 +250,24 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         reloadData()
         return true
     }
+
+    func outlineView(
+        _ outlineView: NSOutlineView,
+        draggingSession session: NSDraggingSession,
+        willBeginAt screenPoint: NSPoint,
+        forItems items: [Any]
+    ) {
+        (outlineView as? SidebarOutlineView)?.noteLocalDragWillBegin()
+    }
+
+    func outlineView(
+        _ outlineView: NSOutlineView,
+        draggingSession session: NSDraggingSession,
+        endedAt screenPoint: NSPoint,
+        operation: NSDragOperation
+    ) {
+        (outlineView as? SidebarOutlineView)?.noteLocalDragDidEnd()
+    }
 }
 
 // MARK: - NSOutlineViewDelegate
@@ -392,7 +410,24 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         false
     }
 
+    func outlineView(_ outlineView: NSOutlineView, shouldExpandItem item: Any) -> Bool {
+        if allowsProgrammaticOutlineDisclosureChanges {
+            return true
+        }
+        return (outlineView as? SidebarOutlineView)?.isDragInteractionActive != true
+    }
+
+    func outlineView(_ outlineView: NSOutlineView, shouldCollapseItem item: Any) -> Bool {
+        if allowsProgrammaticOutlineDisclosureChanges {
+            return true
+        }
+        return (outlineView as? SidebarOutlineView)?.isDragInteractionActive != true
+    }
+
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
+        if (outlineView as? SidebarOutlineView)?.isDragInteractionActive == true {
+            return false
+        }
         if item is SidebarSpacer {
             return false
         }

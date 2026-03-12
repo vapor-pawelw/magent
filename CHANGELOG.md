@@ -15,6 +15,9 @@ All notable changes to this project will be documented in this file.
 ### Thread
 - Terminal tabs now set their startup directory only when a tmux session is created, instead of re-sending `cd <worktree>` every time the app reattaches to an existing session.
 
+### Sidebar
+- Dragging a thread over sidebar project or section headers no longer expands/collapses them; disclosure now reacts only to clicks.
+
 ## 1.2.0 - 2026-03-11
 
 

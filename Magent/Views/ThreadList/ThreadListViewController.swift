@@ -10,12 +10,41 @@ protocol ThreadListDelegate: AnyObject {
     func threadListDidRequestSettings(_ controller: ThreadListViewController)
 }
 
-private final class SidebarOutlineView: NSOutlineView {
+final class SidebarOutlineView: NSOutlineView {
     var suppressSelectionAutoScroll = false
+    private(set) var isDragInteractionActive = false
+
+    func noteLocalDragWillBegin() {
+        isDragInteractionActive = true
+    }
+
+    func noteLocalDragDidEnd() {
+        isDragInteractionActive = false
+    }
 
     override func scrollRowToVisible(_ row: Int) {
         guard !suppressSelectionAutoScroll else { return }
         super.scrollRowToVisible(row)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        isDragInteractionActive = true
+        return super.draggingEntered(sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        isDragInteractionActive = true
+        return super.draggingUpdated(sender)
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        isDragInteractionActive = false
+        super.draggingExited(sender)
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        super.concludeDragOperation(sender)
+        isDragInteractionActive = false
     }
 }
 
@@ -81,6 +110,7 @@ final class ThreadListViewController: NSViewController {
     private var lastFittedOutlineWidth: CGFloat = 0
     private var currentScrollTopOffset: CGFloat = 0
     var currentSettings = AppSettings()
+    var allowsProgrammaticOutlineDisclosureChanges = false
 
     private struct SidebarScrollSnapshot {
         let origin: NSPoint
@@ -503,6 +533,8 @@ final class ThreadListViewController: NSViewController {
         // Expand projects that are not in the collapsed set; section visibility is
         // controlled by per-project section collapse state.
         let collapsedIds = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
+        allowsProgrammaticOutlineDisclosureChanges = true
+        defer { allowsProgrammaticOutlineDisclosureChanges = false }
         for project in sidebarProjects {
             let isCollapsed = collapsedIds.contains(project.projectId.uuidString)
             if isCollapsed {
