@@ -667,6 +667,12 @@ final class ThreadDetailViewController: NSViewController {
 
         if let previousMouseWheelBehavior,
            previousMouseWheelBehavior != settings.terminalMouseWheelBehavior {
+            // Wheel behavior is a surface-time Ghostty setting, so update the shared
+            // embedded prefs before recreating any terminal surfaces.
+            GhosttyAppManager.shared.applyEmbeddedPreferences(
+                embeddedPreferences(for: settings),
+                effectiveAppearance: view.effectiveAppearance
+            )
             reloadTerminalViewsForUpdatedTerminalPreferences()
         }
         refreshOverlayVisibilitySettings()
@@ -733,6 +739,33 @@ final class ThreadDetailViewController: NSViewController {
             topBar.needsDisplay = true
             pinSeparator.needsDisplay = true
         }
+    }
+
+    private func embeddedPreferences(for settings: AppSettings) -> GhosttyEmbeddedPreferences {
+        let appearanceMode: GhosttyEmbeddedAppearanceMode
+        switch settings.appAppearanceMode {
+        case .system:
+            appearanceMode = .system
+        case .light:
+            appearanceMode = .light
+        case .dark:
+            appearanceMode = .dark
+        }
+
+        let mouseWheelBehavior: GhosttyEmbeddedMouseWheelBehavior
+        switch settings.terminalMouseWheelBehavior {
+        case .magentDefaultScroll:
+            mouseWheelBehavior = .magentDefaultScroll
+        case .inheritGhosttyGlobal:
+            mouseWheelBehavior = .inheritGhosttyGlobal
+        case .allowAppsToCapture:
+            mouseWheelBehavior = .allowAppsToCapture
+        }
+
+        return GhosttyEmbeddedPreferences(
+            appearanceMode: appearanceMode,
+            mouseWheelBehavior: mouseWheelBehavior
+        )
     }
 
 }

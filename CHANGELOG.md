@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Terminal
 - Fixed Ghostty terminals remaining dark in Light mode: the override config now writes explicit `background`/`foreground` colors for light appearance (white/black) since `window-theme = light` only affects window chrome and `ghostty_surface_set_color_scheme` is a no-op when ghostty's default conditional state is already `.light`. System mode also applies light colors when the OS is in light mode.
 - Fixed the terminal wheel-behavior setting not taking effect for already-open embedded Ghostty tabs; switching between scroll-history, app-capture, and Ghostty-global modes now reapplies immediately.
+- Fixed Ghostty surface-level `reload_config` actions being ignored in embedded terminals, so current-terminal wheel-behavior changes now refresh the selected surface instead of only the app-wide setting path working.
 - Unselected tab borders in dark mode are now slightly more visible.
 
 ### Agents
