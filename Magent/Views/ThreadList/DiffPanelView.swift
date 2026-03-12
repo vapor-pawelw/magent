@@ -426,11 +426,6 @@ final class DiffPanelView: NSView {
 
         let showCommitsTab = !commits.isEmpty
         commitsTabButton.isHidden = !showCommitsTab
-        if !showCommitsTab && activeTab == .commits {
-            activeTab = .changes
-        } else if entries.isEmpty && showCommitsTab {
-            activeTab = .commits
-        }
 
         updateTabTitles()
 
