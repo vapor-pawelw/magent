@@ -121,7 +121,7 @@ Magent's embedded terminal should keep Ghostty's global user config, then layer 
 
 - Load Ghostty defaults/user config first with `ghostty_config_load_default_files(...)`.
 - Apply Magent's explicit overrides afterwards from a generated config file so user Ghostty settings still work for everything else.
-- Keep overrides narrow and intentional. Current embedded overrides are settings-driven behaviors such as wheel capture policy; do not blanket-disable user Ghostty config again unless Magent stops exposing those options itself.
+- Keep overrides narrow and intentional. Current embedded overrides are settings-driven behaviors such as wheel capture policy, plus a temporary `scrollbar = never` override so embedded terminals stay chrome-free while Magent relies on its own scroll affordances. Do not blanket-disable user Ghostty config again unless Magent stops exposing those options itself.
 
 ## Reference Implementation
 
@@ -142,7 +142,7 @@ The correct order in `applyEmbeddedPreferences`:
 
 ## window-theme Does NOT Change Terminal Colors
 
-**Critical gotcha**: `window-theme = light/dark` in ghostty config only affects the **window chrome** (title bar appearance, scrollbar style). It does **not** change the terminal background or text colors.
+**Critical gotcha**: `window-theme = light/dark` in ghostty config only affects the **window chrome** (title bar appearance, scrollbar style). It does **not** change the terminal background or text colors. In Magent's embedded terminal this matters only indirectly right now because the generated override config also forces `scrollbar = never`.
 
 `ghostty_surface_set_color_scheme(LIGHT)` is a **no-op** for newly created surfaces. The reason: ghostty's internal `ConditionalState` defaults to `.light`, so the `colorSchemeCallback` guard (`if current == new: return`) fires immediately and the config is never reloaded. Even when it does fire, without conditional theme blocks in the user's ghostty config (e.g. `[os-theme = light] { background = white }`), there is nothing to reload — ghostty's hardcoded default background is `#282c34` (dark) regardless of the color scheme.
 

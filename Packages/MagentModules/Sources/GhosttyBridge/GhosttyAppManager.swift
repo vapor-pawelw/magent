@@ -251,6 +251,9 @@ public final class GhosttyAppManager {
     ) -> String? {
         var lines: [String] = []
 
+        // Keep Magent's embedded terminal chrome-free until we add an app-level toggle.
+        lines.append("scrollbar = never")
+
         // Bake the color scheme into the config so Ghostty uses it when processing
         // app/surface config updates, rather than defaulting to dark.
         //
