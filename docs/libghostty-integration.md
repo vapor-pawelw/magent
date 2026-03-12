@@ -129,6 +129,17 @@ The Ghostty macOS app source is the definitive reference:
 - `macos/Sources/Ghostty/` — App lifecycle, config
 - `macos/Sources/Features/Terminal/` — Surface/terminal view implementation
 
+## Color Scheme Update Order
+
+When the user changes the app appearance setting, `GhosttyAppManager.applyEmbeddedPreferences` must call `ghostty_app_set_color_scheme` **before** `ghostty_app_update_config` / `ghostty_surface_update_config`. If the color scheme is set after the surface config updates, surfaces re-render during the config refresh using the old color scheme — meaning the terminal stays dark after switching to Light.
+
+The correct order in `applyEmbeddedPreferences`:
+1. `ghostty_app_set_color_scheme(app, newColorScheme)` — set first
+2. `ghostty_app_update_config(app, config)` — then update app config
+3. `ghostty_surface_update_config(surface, config)` for each registered surface — triggers re-render with new scheme
+
+`refreshAppearanceIfNeeded()` should call `applyEmbeddedPreferences(embeddedPreferences)` rather than just `applyAppearanceMode()` alone, so existing surfaces are explicitly updated and not just the app-level preference.
+
 ## Overlay Z-Order Contract (mAgent)
 
 When terminal overlays are enabled (for example, the prompt Table of Contents or the scroll controls pill), they must remain visible above terminal content during tab switches and session view recreation.

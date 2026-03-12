@@ -32,6 +32,23 @@
 - Both section editors use `NSColorPanel.shared`, so they must set the active `sectionId` and temporarily detach target/action before assigning `panel.color`, then restore the callback after the programmatic update.
 - App appearance is applied centrally from `AppDelegate`: `NSApp.appearance` controls the AppKit chrome, and Ghostty receives the matching light/dark preference through `GhosttyAppManager`.
 
+## Appearance Mode Switch Gotchas
+
+When appearance changes (`NSApp.appearance` is reassigned), CALayer `backgroundColor` and `borderColor` set as `CGColor` do **not** auto-update — they are fixed values baked in at assignment time. Views that rely on asset-catalog colors for their layer must re-resolve inside `viewDidChangeEffectiveAppearance` using:
+
+```swift
+override func viewDidChangeEffectiveAppearance() {
+    super.viewDidChangeEffectiveAppearance()
+    effectiveAppearance.performAsCurrentDrawingAppearance {
+        layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
+    }
+}
+```
+
+Without `performAsCurrentDrawingAppearance`, calling `.cgColor` on a dynamic `NSColor` may resolve against the previous (wrong) appearance. See `SettingsSectionCardView` and `AppBackgroundView` (in `ThreadDetailViewController.swift`) for reference implementations.
+
+For views whose appearance cannot be caught via `viewDidChangeEffectiveAppearance` (e.g. `NSViewController` subclasses, which do not have this hook), use a dedicated `NSView` subclass as the backing view and override the hook there.
+
 ## Gotchas
 
 - Keep `General` and `Threads` split by user mental model, not by which `AppSettings` fields happen to sit near each other in the model.
