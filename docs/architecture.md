@@ -146,6 +146,7 @@ Prompt row interaction/visual rules:
 Navigation behavior:
 - TOC selection uses tmux copy-mode positioning (`scrollHistoryLineToTop`) so the selected prompt line is anchored at the top of the viewport whenever enough lines exist below it.
 - Terminal scrollback fallback controls in the terminal panel must route through tmux copy-mode commands (`page-up`, `page-down-and-cancel`, cancel-to-bottom) instead of relying on Ghostty wheel events, because in-agent wheel handling can be captured by the running tool.
+- Treat embedded Ghostty mouse-wheel behavior as surface-time configuration: when Magent changes the wheel override (`mouse-reporting`) for already-open tabs, recreate the `TerminalSurfaceView` instances so the new behavior is applied immediately instead of assuming `ghostty_*_update_config` will retune existing surfaces.
 - App appearance is a single shared setting: it must drive both `NSApp.appearance` for AppKit chrome and Ghostty's light/dark color scheme so the sidebar/top bars/terminal never drift apart. In `System` mode, refresh Ghostty on app activation and when macOS broadcasts `AppleInterfaceThemeChangedNotification`.
 - Scroll-to-bottom FAB visibility must not depend only on Ghostty scrollbar callbacks; refresh it from tmux `#{scroll_position}` as the source of truth so the button still appears after real upward scrolls when Ghostty's scrollbar notifications lag or go missing.
 - Keep tmux pane scrollbars in `modal` mode so users get a visible history indicator while using those fallback controls.

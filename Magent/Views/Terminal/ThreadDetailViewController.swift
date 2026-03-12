@@ -89,6 +89,7 @@ final class ThreadDetailViewController: NSViewController {
     var showScrollToBottomIndicator = true
     var showTerminalScrollOverlay = true
     var showPromptTOCOverlay = true
+    var currentTerminalMouseWheelBehavior: TerminalMouseWheelBehavior?
 
     // MARK: - Inline Diff Viewer
     var diffVC: InlineDiffViewController?
@@ -145,6 +146,7 @@ final class ThreadDetailViewController: NSViewController {
         refreshXcodeButton()
         refreshReviewButtonVisibility()
         ensureLoadingOverlay()
+        currentTerminalMouseWheelBehavior = PersistenceService.shared.loadSettings().terminalMouseWheelBehavior
 
         // Observe dead session notifications for mid-use terminal replacement
         NotificationCenter.default.addObserver(
@@ -659,8 +661,33 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     @objc private func handleSettingsChanged(_ notification: Notification) {
+        let settings = PersistenceService.shared.loadSettings()
+        let previousMouseWheelBehavior = currentTerminalMouseWheelBehavior
+        currentTerminalMouseWheelBehavior = settings.terminalMouseWheelBehavior
+
+        if let previousMouseWheelBehavior,
+           previousMouseWheelBehavior != settings.terminalMouseWheelBehavior {
+            reloadTerminalViewsForUpdatedTerminalPreferences()
+        }
         refreshOverlayVisibilitySettings()
         updateTerminalScrollControlsState()
+    }
+
+    private func reloadTerminalViewsForUpdatedTerminalPreferences() {
+        guard !terminalViews.isEmpty else { return }
+
+        let selectedIndex = min(currentTabIndex, terminalViews.count - 1)
+        let sessionNames = thread.tmuxSessionNames
+
+        for terminalView in terminalViews {
+            terminalView.removeFromSuperview()
+        }
+
+        terminalViews = sessionNames.map(makeTerminalView(for:))
+
+        if sessionNames.indices.contains(selectedIndex) {
+            selectTab(at: selectedIndex)
+        }
     }
 
     private var topBarButtons: [NSButton] {

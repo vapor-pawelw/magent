@@ -127,6 +127,7 @@ Before the app is usable, the user must complete a configuration step:
 - The terminal panel must expose a reliable scrollback fallback that does not depend on mouse-wheel behavior inside the agent session.
 - Users must be able to page up, page down, and jump back to live output even when the embedded terminal forwards wheel input to the agent instead of tmux scrollback.
 - Users must be able to choose whether Magent overrides wheel input to scroll terminal history, allows apps/prompts to capture it, or inherits the user's Ghostty global setting.
+- Changing that wheel-behavior setting must take effect immediately for already-open terminals, not only for newly created tabs.
 - The page-up/page-down/jump controls may live in floating terminal chrome instead of the top bar, as long as they stay visible and usable above the embedded terminal surface.
 - The bottom-left floating `Scroll to bottom` pill should appear only after the user has scrolled meaningfully away from live output, not on tiny incidental near-bottom scrolls.
 - Floating terminal scroll overlays should keep the default 48 pt bottom clearance. The bottom-right multi-action overlay may use a semi-transparent idle state with hover opacity, while the bottom-left `Scroll to bottom` pill should stay fully opaque with no hover-specific fade.
