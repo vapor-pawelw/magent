@@ -498,6 +498,7 @@ extension ThreadManager {
                 (sessionRenameMap[key] ?? key, value)
             }
         )
+        _ = remapSessionAgentTypes(threadIndex: index, sessionRenameMap: sessionRenameMap)
         threads[index].sessionConversationIDs = Dictionary(
             uniqueKeysWithValues: threads[index].sessionConversationIDs.map { key, value in
                 (sessionRenameMap[key] ?? key, value)
@@ -942,6 +943,10 @@ extension ThreadManager {
         if let conversationID = currentThread.sessionConversationIDs[sessionName] {
             threads[index].sessionConversationIDs.removeValue(forKey: sessionName)
             threads[index].sessionConversationIDs[resolvedSessionName] = conversationID
+        }
+        if let sessionAgentType = currentThread.sessionAgentTypes[sessionName] {
+            threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
+            threads[index].sessionAgentTypes[resolvedSessionName] = sessionAgentType
         }
         if let promptHistory = currentThread.submittedPromptsBySession[sessionName] {
             threads[index].submittedPromptsBySession.removeValue(forKey: sessionName)

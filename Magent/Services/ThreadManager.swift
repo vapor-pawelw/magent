@@ -94,6 +94,12 @@ var dirtyCheckTickCounter: Int = 0
                 threads[i].sessionConversationIDs = filteredConversationIDs
                 didMigrate = true
             }
+            if await migrateSessionAgentTypes(threadIndex: i) {
+                didMigrate = true
+            }
+            if pruneSessionAgentTypesToKnownSessions(threadIndex: i) {
+                didMigrate = true
+            }
             if pruneSubmittedPromptHistoryToKnownSessions(threadIndex: i) {
                 didMigrate = true
             }

@@ -64,10 +64,13 @@ extension ThreadDetailViewController {
         let sessionName = thread.tmuxSessionNames[index]
 
         guard preparedSessions.contains(sessionName) else {
-            let selectedAgentType = threadManager.effectiveAgentType(for: thread.projectId)
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.startLoadingOverlayTracking(sessionName: sessionName, agentType: selectedAgentType)
+                let sessionAgentType = await self.threadManager.loadingOverlayAgentType(
+                    for: self.thread,
+                    sessionName: sessionName
+                )
+                self.startLoadingOverlayTracking(sessionName: sessionName, agentType: sessionAgentType)
                 await self.ensureSessionPrepared(sessionName: sessionName) { [weak self] action in
                     guard let self,
                           sessionName == self.loadingOverlaySessionName else { return }

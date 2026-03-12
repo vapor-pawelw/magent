@@ -166,33 +166,6 @@ extension ThreadManager {
 
     // MARK: - Busy Session Sync
 
-    private enum DetectedRunningAgent {
-        case claude
-        case codex
-        case none
-    }
-
-    /// Detects the running agent from the foreground process name and child process args.
-    /// Returns `.none` when no known agent is detected (terminal or unknown).
-    private func detectRunningAgent(
-        paneCommand: String,
-        childProcesses: [(pid: pid_t, args: String)]
-    ) -> DetectedRunningAgent {
-        // Check the foreground process name first
-        let commandLower = paneCommand.lowercased()
-        if commandLower.contains("claude") { return .claude }
-        if commandLower.contains("codex") { return .codex }
-
-        // Check child process args (handles shell-wrapper launches like `zsh -c 'claude ...'`)
-        for child in childProcesses {
-            let argsLower = child.args.lowercased()
-            if argsLower.contains("claude") { return .claude }
-            if argsLower.contains("codex") { return .codex }
-        }
-
-        return .none
-    }
-
     /// Syncs `busySessions` by detecting what agent is actually running in each pane,
     /// then applying agent-specific idle/busy logic. If no known agent is detected
     /// (terminal session), the session is treated as not busy.
@@ -268,13 +241,13 @@ extension ThreadManager {
                 if threads[ti].waitingForInputSessions.contains(session) { continue }
 
                 let children = childProcessesByPid[paneState.pid] ?? []
-                let detectedAgent = detectRunningAgent(
+                let detectedAgent = detectedRunningAgentType(
                     paneCommand: paneState.command,
                     childProcesses: children
                 )
 
                 switch detectedAgent {
-                case .codex:
+                case .codex?:
                     // Codex: busy only while "• esc to interrupt)" is visible in the latest scope
                     let isBusy = await paneShowsEscToInterrupt(sessionName: session)
                     guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
@@ -295,7 +268,7 @@ extension ThreadManager {
                         busyChangedThreadIds.insert(threads[i].id)
                     }
 
-                case .claude:
+                case .claude?:
                     // Claude: skip if a completion bell was received recently — the bell fires
                     // just before process exit, so the process name can lag behind briefly.
                     let recentlyCompleted: Bool = {
@@ -350,7 +323,7 @@ extension ThreadManager {
                         }
                     }
 
-                case .none:
+                case .custom?, nil:
                     // No known agent detected — terminal session or agent has exited.
                     // Clear any stale busy/waiting/rate-limit state.
                     guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }

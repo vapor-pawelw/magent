@@ -339,7 +339,7 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         let settings = PersistenceService.shared.loadSettings()
-        let selectedAgentType = threadManager.effectiveAgentType(for: thread.projectId)
+        let defaultAgentType = threadManager.effectiveAgentType(for: thread.projectId)
 
         // Determine tab order with pinned tabs first
         let pinnedSet = Set(thread.pinnedTmuxSessions)
@@ -351,7 +351,7 @@ final class ThreadDetailViewController: NSViewController {
             let slug = TmuxSessionNaming.repoSlug(from:
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
             )
-            let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(TmuxSessionNaming.defaultTabDisplayName(for: selectedAgentType))
+            let firstTabSlug = TmuxSessionNaming.sanitizeForTmux(TmuxSessionNaming.defaultTabDisplayName(for: defaultAgentType))
             let fallbackName: String
             if thread.isMain {
                 fallbackName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: nil, tabSlug: firstTabSlug)
@@ -359,7 +359,7 @@ final class ThreadDetailViewController: NSViewController {
                 fallbackName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
             }
             sessions = [fallbackName]
-            threadManager.registerFallbackSession(fallbackName, for: thread.id, agentType: selectedAgentType)
+            threadManager.registerFallbackSession(fallbackName, for: thread.id, agentType: defaultAgentType)
             // Refresh local copy after manager update
             if let latest = threadManager.threads.first(where: { $0.id == thread.id }) {
                 thread = latest
@@ -389,6 +389,10 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         let initialSessionName = orderedSessions[initialIndex]
+        let initialAgentType = await threadManager.loadingOverlayAgentType(
+            for: thread,
+            sessionName: initialSessionName
+        )
 
         await MainActor.run {
             preparedSessions.removeAll()
@@ -397,7 +401,7 @@ final class ThreadDetailViewController: NSViewController {
             backgroundSessionPreparationTask?.cancel()
             backgroundSessionPreparationTask = nil
 
-            startLoadingOverlayTracking(sessionName: initialSessionName, agentType: selectedAgentType)
+            startLoadingOverlayTracking(sessionName: initialSessionName, agentType: initialAgentType)
 
             for (i, sessionName) in orderedSessions.enumerated() {
                 let title = thread.displayName(for: sessionName, at: i)

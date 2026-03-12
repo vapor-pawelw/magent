@@ -245,7 +245,9 @@ User Action (+ button)
 
 - `ThreadDetailViewController` prepares the selected tab first during thread switch, then continues recreating remaining tabs in the background. Tabs that have not been prepared yet still call `ThreadManager.recreateSessionIfNeeded(...)` on first selection so they can reuse a live tmux session or recover a missing/mismatched one without blocking the whole thread switch.
 - Keep the fast path cheap: if the tmux session already exists and matches the expected thread/worktree context, return before doing slower resume bookkeeping such as agent conversation-ID refresh.
+- Persist the resolved agent type per tmux session (`sessionAgentTypes` plus `MAGENT_AGENT_TYPE`) and use that stored session-level value for recreation/resume logic; do not reinterpret an old tab from the project's current default agent.
 - The loading overlay must follow the actual selected session, not the first tab in the thread. Its secondary detail line is reserved for non-routine recovery actions reported by session recreation; normal agent startup should continue to show only `Starting agent...`.
+- For already-live sessions, loading UI should prefer runtime process detection (`pane_current_command` + child args) over persisted configuration. If the pane is back at a shell, dismiss/skip the startup overlay rather than waiting for agent-ready markers that will never appear.
 
 ## tmux Session Ownership
 

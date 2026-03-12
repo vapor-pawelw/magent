@@ -97,9 +97,154 @@ extension ThreadManager {
         return resolveAgentType(for: projectId, requestedAgentType: nil, settings: settings)
     }
 
+    func detectedRunningAgentType(
+        paneCommand: String,
+        childProcesses: [(pid: pid_t, args: String)]
+    ) -> AgentType? {
+        let commandLower = paneCommand.lowercased()
+        if commandLower.contains("claude") { return .claude }
+        if commandLower.contains("codex") { return .codex }
+
+        for child in childProcesses {
+            let argsLower = child.args.lowercased()
+            if argsLower.contains("claude") { return .claude }
+            if argsLower.contains("codex") { return .codex }
+        }
+
+        return nil
+    }
+
     func agentType(for thread: MagentThread, sessionName: String) -> AgentType? {
         guard thread.agentTmuxSessions.contains(sessionName) else { return nil }
+        if let stored = thread.sessionAgentTypes[sessionName] {
+            return stored
+        }
+        if let inferred = inferredStoredAgentType(for: thread, sessionName: sessionName) {
+            return inferred
+        }
         return effectiveAgentType(for: thread.projectId)
+    }
+
+    func loadingOverlayAgentType(for thread: MagentThread, sessionName: String) async -> AgentType? {
+        guard thread.agentTmuxSessions.contains(sessionName) else { return nil }
+
+        let persistedAgentType = agentType(for: thread, sessionName: sessionName)
+        guard await tmux.hasSession(name: sessionName) else {
+            return persistedAgentType
+        }
+
+        let paneStates = await tmux.activePaneStates(forSessions: [sessionName])
+        guard let paneState = paneStates[sessionName] else {
+            return persistedAgentType
+        }
+
+        let childProcessesByPid = paneState.pid > 0
+            ? await tmux.childProcesses(forParents: [paneState.pid])
+            : [:]
+        let children = childProcessesByPid[paneState.pid] ?? []
+
+        if let runningAgent = detectedRunningAgentType(
+            paneCommand: paneState.command,
+            childProcesses: children
+        ) {
+            return runningAgent
+        }
+
+        let shellCommands: Set<String> = ["sh", "bash", "zsh", "fish", "ksh", "tcsh", "csh"]
+        if shellCommands.contains(paneState.command.lowercased()) {
+            return nil
+        }
+
+        return persistedAgentType
+    }
+
+    func migrateSessionAgentTypes(threadIndex index: Int) async -> Bool {
+        guard threads.indices.contains(index) else { return false }
+
+        let validAgentSessions = Set(threads[index].agentTmuxSessions)
+        let filtered = threads[index].sessionAgentTypes.filter { validAgentSessions.contains($0.key) }
+        var updated = filtered
+        var changed = filtered.count != threads[index].sessionAgentTypes.count
+
+        for sessionName in threads[index].agentTmuxSessions {
+            guard updated[sessionName] == nil else { continue }
+            if let live = await liveSessionAgentType(sessionName: sessionName)
+                ?? inferredStoredAgentType(for: threads[index], sessionName: sessionName)
+                ?? effectiveAgentType(for: threads[index].projectId) {
+                updated[sessionName] = live
+                changed = true
+            }
+        }
+
+        guard changed else { return false }
+        threads[index].sessionAgentTypes = updated
+        return true
+    }
+
+    @discardableResult
+    func remapSessionAgentTypes(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
+        guard threads.indices.contains(index) else { return false }
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        let remapped = Dictionary(
+            uniqueKeysWithValues: threads[index].sessionAgentTypes.map { key, value in
+                (sessionRenameMap[key] ?? key, value)
+            }
+        )
+        guard remapped != threads[index].sessionAgentTypes else { return false }
+        threads[index].sessionAgentTypes = remapped
+        return true
+    }
+
+    @discardableResult
+    func pruneSessionAgentTypesToKnownSessions(threadIndex index: Int) -> Bool {
+        guard threads.indices.contains(index) else { return false }
+
+        let validAgentSessions = Set(threads[index].agentTmuxSessions)
+        let filtered = threads[index].sessionAgentTypes.filter { validAgentSessions.contains($0.key) }
+        guard filtered != threads[index].sessionAgentTypes else { return false }
+        threads[index].sessionAgentTypes = filtered
+        return true
+    }
+
+    private func inferredStoredAgentType(for thread: MagentThread, sessionName: String) -> AgentType? {
+        if let customName = thread.customTabNames[sessionName] {
+            let trimmed = customName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if trimmed == "claude" || trimmed == "claude code" {
+                return .claude
+            }
+            if trimmed == "codex" {
+                return .codex
+            }
+            if trimmed == "custom" {
+                return .custom
+            }
+        }
+
+        let components = sessionName
+            .split(separator: "-")
+            .map { $0.lowercased() }
+        if components.contains("claude") {
+            return .claude
+        }
+        if components.contains("codex") {
+            return .codex
+        }
+        if components.contains("custom") {
+            return .custom
+        }
+
+        return nil
+    }
+
+    private func liveSessionAgentType(sessionName: String) async -> AgentType? {
+        guard let rawValue = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_AGENT_TYPE")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              !rawValue.isEmpty else {
+            return nil
+        }
+        return AgentType(rawValue: rawValue)
     }
 
     // MARK: - Agent Conversation IDs

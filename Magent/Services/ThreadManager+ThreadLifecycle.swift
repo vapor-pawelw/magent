@@ -183,6 +183,7 @@ extension ThreadManager {
             branchName: branchName,
             tmuxSessionNames: [tmuxSessionName],
             agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
+            sessionAgentTypes: selectedAgentType.map { [tmuxSessionName: $0] } ?? [:],
             sectionId: settings.defaultSection(for: project.id)?.id,
             lastSelectedTmuxSessionName: tmuxSessionName,
             customTabNames: [tmuxSessionName: firstTabDisplayName],
@@ -279,6 +280,7 @@ extension ThreadManager {
             branchName: "",
             tmuxSessionNames: [tmuxSessionName],
             agentTmuxSessions: selectedAgentType != nil ? [tmuxSessionName] : [],
+            sessionAgentTypes: selectedAgentType.map { [tmuxSessionName: $0] } ?? [:],
             isMain: true,
             lastSelectedTmuxSessionName: tmuxSessionName,
             customTabNames: [tmuxSessionName: firstTabDisplayName]
@@ -618,6 +620,7 @@ extension ThreadManager {
         thread.tmuxSessionNames = []
         thread.agentTmuxSessions = []
         thread.sessionConversationIDs = [:]
+        thread.sessionAgentTypes = [:]
         thread.pinnedTmuxSessions = []
         thread.lastSelectedTmuxSessionName = nil
         thread.customTabNames = [:]

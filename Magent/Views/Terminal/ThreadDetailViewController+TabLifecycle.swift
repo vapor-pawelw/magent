@@ -292,7 +292,7 @@ extension ThreadDetailViewController {
 
         ensureLoadingOverlay()
 
-        guard thread.agentTmuxSessions.contains(sessionName) else {
+        guard thread.agentTmuxSessions.contains(sessionName), let agentType else {
             dismissLoadingOverlay()
             return
         }

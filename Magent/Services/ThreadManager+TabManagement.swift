@@ -145,6 +145,9 @@ extension ThreadManager {
         let shouldMarkAsAgentTab = (currentThread.isMain || useAgentCommand) && selectedAgentType != nil
         if shouldMarkAsAgentTab {
             threads[index].agentTmuxSessions.append(tmuxSessionName)
+            if let selectedAgentType {
+                threads[index].sessionAgentTypes[tmuxSessionName] = selectedAgentType
+            }
             threads[index].agentHasRun = true
         }
         try persistence.saveActiveThreads(threads)
@@ -214,6 +217,9 @@ extension ThreadManager {
         threads[index].tmuxSessionNames.append(sessionName)
         if agentType != nil {
             threads[index].agentTmuxSessions.append(sessionName)
+            if let agentType {
+                threads[index].sessionAgentTypes[sessionName] = agentType
+            }
             threads[index].agentHasRun = true
         }
         threads[index].customTabNames[sessionName] = TmuxSessionNaming.defaultTabDisplayName(for: agentType)
@@ -275,6 +281,7 @@ extension ThreadManager {
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
         threads[index].agentTmuxSessions.removeAll { $0 == sessionName }
         threads[index].sessionConversationIDs.removeValue(forKey: sessionName)
+        threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
         threads[index].unreadCompletionSessions.remove(sessionName)
         threads[index].busySessions.remove(sessionName)
         threads[index].waitingForInputSessions.remove(sessionName)
