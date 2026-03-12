@@ -1,6 +1,6 @@
 # Prompt TOC Parser Notes
 
-This document covers the Prompt TOC parsing and jump behavior that was adjusted in the `fix-claude-toc` thread.
+This document covers Prompt TOC parsing and jump behavior.
 
 ## User-facing behavior
 
@@ -14,7 +14,7 @@ This document covers the Prompt TOC parsing and jump behavior that was adjusted 
 - Prompt extraction lives in `Magent/Views/Terminal/ThreadDetailViewController+PromptTOC.swift`.
 - Prompt navigation lives in `Packages/MagentModules/Sources/TmuxCore/TmuxService.swift` in `scrollHistoryLineToTop(...)`.
 - Parser line indexes are derived from full `tmux capture-pane -S - -E -` output and are therefore top-relative.
-- tmux copy-mode `goto-line` is bottom-relative (`1` is the newest line), so TOC navigation must convert from capture-pane top-relative indexes using current `history_size + pane_height` before issuing `goto-line`.
+- TOC navigation enters tmux copy-mode, jumps to `history-top`, then walks the cursor down by `lineIndex + paneHeight - 1`. That cursor-relative positioning produces the exact scroll offset needed to put the selected top-relative capture-pane line at the top of the viewport whenever enough lines remain below it.
 
 ## Claude Code gotchas
 
@@ -22,12 +22,12 @@ This document covers the Prompt TOC parsing and jump behavior that was adjusted 
 - Current Claude Code sessions also give submitted prompt rows a distinct non-default dark background. Treat that background as a positive signal that the row is a real submitted prompt.
 - Claude's bottom composer area can include a blank prompt row and decorative divider rows. Those rows must be treated as bottom-cluster chrome and excluded from confirmation logic.
 
-## What changed in this thread
+## What changed in recent TOC fixes
 
 - Claude prompt placeholder detection became agent-aware: Codex still uses dim/grey placeholder filtering, while Claude no longer treats dimness alone as placeholder evidence.
 - Claude prompt parsing now recognizes the dark prompt-row background as a positive submission signal.
 - Bottom-cluster exclusion now includes blank prompt rows and footer divider rows.
-- TOC jump behavior now uses tmux `goto-line` plus `scroll-top` with top-relative to bottom-relative line conversion instead of `history-top` plus a long cursor walk.
+- TOC jump behavior now uses `history-top` plus a bounded cursor walk, replacing the previous `goto-line`/`scroll-top` mapping that could land on the wrong history line.
 
 ## Auto-rename gate: agent process detection
 
@@ -40,5 +40,5 @@ Auto-rename-on-first-prompt fires only when an agent (Claude or Codex) process i
 ## Future debugging checklist
 
 - If Claude prompts disappear again, capture the pane with attributes (`tmux capture-pane -e -p -S - -E -`) and inspect both foreground and background styling before changing placeholder heuristics.
-- If TOC selection jumps to the wrong place, verify whether tmux line numbers are being interpreted from the top or bottom before changing parser indexes.
-- If a selected prompt lands below the top edge near the end of the conversation, check whether there are enough lines below it to satisfy tmux `scroll-top`; near-bottom prompts cannot always be top-anchored.
+- If TOC selection jumps to the wrong place, verify the mapping between top-relative `capture-pane` indexes and tmux copy-mode cursor positioning before changing parser indexes.
+- If a selected prompt lands below the top edge near the end of the conversation, check whether there are enough lines below it to fill a full viewport; near-bottom prompts cannot always be top-anchored.
