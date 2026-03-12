@@ -400,14 +400,20 @@ public final class TmuxService: Sendable {
             .map(String.init)
         let historySize = parts.first.flatMap(Int.init) ?? 0
         let paneHeight = parts.dropFirst().first.flatMap(Int.init) ?? 1
-        let totalLineCount = max(1, historySize + max(1, paneHeight))
-        // tmux copy-mode `goto-line` counts from the bottom of history (1 = newest line),
-        // while TOC parser indexes lines from the top of `capture-pane` output.
-        let tmuxLineNumber = max(1, totalLineCount - normalizedLine)
-        let command =
+        let clampedTopLineIndex = min(normalizedLine, max(0, historySize))
+        let downCount = max(0, clampedTopLineIndex + max(1, paneHeight) - 1)
+
+        // `capture-pane -S - -E -` returns lines indexed from the top of the full
+        // history, but tmux copy-mode navigation is anchored to the cursor position.
+        // Starting from `history-top` and walking `paneHeight - 1` lines past the
+        // target gives the exact scroll position that places the requested history
+        // line at the top whenever enough lines remain below it.
+        var command =
             "tmux copy-mode -t \(shellQuote(sessionName)); " +
-            "tmux send-keys -t \(shellQuote(sessionName)) -X goto-line \(tmuxLineNumber); " +
-            "tmux send-keys -t \(shellQuote(sessionName)) -X scroll-top"
+            "tmux send-keys -t \(shellQuote(sessionName)) -X history-top"
+        if downCount > 0 {
+            command += "; tmux send-keys -t \(shellQuote(sessionName)) -X -N \(downCount) cursor-down"
+        }
         _ = try await ShellExecutor.run(command)
     }
 
