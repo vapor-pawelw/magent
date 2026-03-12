@@ -195,6 +195,7 @@ Shell startup uses a managed `ZDOTDIR` wrapper so Magent can source the user's s
 
 - Terminal startup should flow through `terminalStartCommand(...)`, which launches a login shell with `MAGENT_START_CWD` and applies the final `cd` from the managed `.zshrc` after user shell config has loaded.
 - Agent startup should flow through `agentStartCommand(...)`, which must use an interactive login zsh shell (`-il`) so `.zshrc` PATH setup is available before resolving agent binaries like `claude` or `codex`.
+- Agent binary invocations must use the `command <agent>` shell built-in prefix (e.g. `command claude`, `command codex`) to bypass any shell function wrappers or aliases the user may have defined. The ZDOTDIR wrapper intentionally loads user shell config so PATH is set up correctly, but user-defined `claude`/`codex` functions can inject conflicting flags. `command` resolves only the binary, not functions.
 - A one-time `cd` in user `.zshrc` is expected and should be overridden by `MAGENT_START_CWD` during session creation.
 - Reattaching to an existing tmux session must not inject `cd` again. Existing terminal state is authoritative once the session is live; only fresh session creation should enforce the starting directory.
 
