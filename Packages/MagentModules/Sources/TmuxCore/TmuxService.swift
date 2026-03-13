@@ -425,28 +425,22 @@ public final class TmuxService: Sendable {
     /// near the top of the viewport when enough lines are available below it.
     public func scrollHistoryLineToTop(sessionName: String, lineIndex: Int) async throws {
         let normalizedLine = max(0, lineIndex)
-        let metrics = try await ShellExecutor.run(
-            "tmux display-message -p -t \(shellQuote(sessionName)) '#{history_size} #{pane_height}'"
-        )
-        let parts = metrics
-            .split(whereSeparator: \.isWhitespace)
-            .map(String.init)
-        let historySize = parts.first.flatMap(Int.init) ?? 0
-        let paneHeight = parts.dropFirst().first.flatMap(Int.init) ?? 1
-        let clampedTopLineIndex = min(normalizedLine, max(0, historySize))
-        let downCount = max(0, clampedTopLineIndex + max(1, paneHeight) - 1)
-
-        // `capture-pane -S - -E -` returns lines indexed from the top of the full
-        // history, but tmux copy-mode navigation is anchored to the cursor position.
-        // Starting from `history-top` and walking `paneHeight - 1` lines past the
-        // target gives the exact scroll position that places the requested history
-        // line at the top whenever enough lines remain below it.
-        var command =
-            "tmux copy-mode -t \(shellQuote(sessionName)); " +
-            "tmux send-keys -t \(shellQuote(sessionName)) -X history-top"
-        if downCount > 0 {
-            command += "; tmux send-keys -t \(shellQuote(sessionName)) -X -N \(downCount) cursor-down"
-        }
+        let sn = shellQuote(sessionName)
+        // history-top + scroll-down is race-condition-free: depends only on lineIndex (stable;
+        // lines above it never shift) — not on historySize (grows as agent outputs).
+        //
+        // `scroll-down` moves the viewport 1 line toward newer content without depending on
+        // cursor_y. After history-top (viewport top = 0) + N scroll-downs, viewport top = N.
+        // So N = lineIndex places the capture-pane lineIndex at the top of the viewport. ✓
+        //
+        // All commands are chained with \; (tmux's own command separator) so the tmux client
+        // delivers them to the server in ONE IPC message. The server processes the full list
+        // before its next event-loop iteration, preventing any intermediate render of the
+        // history-top state that would produce a visible double-jump flash.
+        let scrollPart = normalizedLine > 0
+            ? " \\; send-keys -t \(sn) -X -N \(normalizedLine) scroll-down"
+            : ""
+        let command = "tmux copy-mode -t \(sn) \\; send-keys -t \(sn) -X history-top\(scrollPart)"
         _ = try await ShellExecutor.run(command)
     }
 
