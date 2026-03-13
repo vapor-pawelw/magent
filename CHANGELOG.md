@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- _No notable changes yet._
+
+## 1.2.2 - 2026-03-13
+
+
 ### Table of Contents
 - The TOC now rests as a compact floating capsule (185×36pt) showing "Table of Contents" and a badge count; hovering expands it to the full panel with an animation, then collapses back when the cursor leaves.
 - Removed the toolbar toggle button and the in-panel × close button; the TOC is always-on and can be disabled in Settings.
@@ -63,6 +68,7 @@ All notable changes to this project will be documented in this file.
 - Banner message text is now centered between the icon and dismiss button for a balanced layout.
 - Timed in-app banners now always show a dismiss button and support swipe-to-dismiss in any direction, while long-running progress banners remain pinned until the operation completes.
 - Fixed archive/restore banner text jumping to centered alignment after interaction; banner headlines now stay leading-aligned and no longer enter selectable text-editing mode.
+
 
 ## 1.2.1 - 2026-03-12
 
