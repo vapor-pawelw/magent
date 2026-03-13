@@ -29,8 +29,15 @@ The Ghostty scroll **must happen after** the tmux redraw, not before. Calling it
 
 The surface is resolved by `sessionName` at execution time (via `thread.tmuxSessionNames.firstIndex(of:)`), not by the index captured before the async work, since tabs may be closed or reordered during the 80 ms delay.
 
+## Mouse event absorption
+
+`TerminalScrollOverlayView` overrides `mouseDown`, `mouseDragged`, and `mouseUp` with empty implementations to prevent mouse events from escaping the overlay. Without this, clicks in the inset padding around the three buttons fall through the responder chain and reach the Ghostty surface, which starts a text selection.
+
+The `TerminalScrollToBottomPillButton` FAB does not need the same treatment because its `mouseUp` override gives AppKit a reason to track the event pair within the view, which implicitly prevents propagation.
+
 ## Gotchas
 
 - Keep terminal overlays attached to `terminalContainer` and re-added above terminal surfaces after lazy tab creation; otherwise Ghostty's metal-backed surface can render over them. See `docs/libghostty-integration.md`.
 - Avoid using constraint changes for the standalone pill's entrance/exit animation. Constraint-driven movement would couple layout state to transient animation state and can leave the pill in the wrong resting position if visibility toggles rapidly.
 - Do not call `bindingAction("scroll_to_bottom")` before `TmuxService.scrollToBottom()` resolves. Ghostty's scrollback grows when tmux redraws after exiting copy-mode, so a premature Ghostty scroll anchors to a stale bottom and the fresh live-pane content ends up off-screen.
+- `TerminalScrollOverlayView` must absorb mouse events (override `mouseDown/Dragged/Up` to do nothing). The NSButton children handle their own events; without absorbing container-level events the inset padding areas leak clicks to the terminal.

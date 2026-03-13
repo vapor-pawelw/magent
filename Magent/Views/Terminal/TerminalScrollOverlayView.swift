@@ -153,6 +153,18 @@ final class TerminalScrollOverlayView: NSView {
         }
     }
 
+    // MARK: - Mouse event absorption
+    //
+    // Override mouse events to prevent them from propagating to the Ghostty
+    // terminal surface below. Without this, clicks in the padding areas between
+    // buttons fall through the responder chain and trigger text selection in
+    // the terminal. The buttons themselves absorb their own events; we only
+    // need to handle the gaps/insets of the container view.
+
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseDragged(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {}
+
     // MARK: - Actions
 
     @objc private func upTapped()       { onScrollUp?() }

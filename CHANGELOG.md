@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Fixed Prompt TOC prompt selection landing at the wrong scrollback position; prompt taps now use deterministic tmux copy-mode positioning that keeps the selected prompt at the top whenever enough lines exist below it.
 
 ### Terminal
+- Fixed clicks on the bottom-right scroll-controls overlay (page-up/down/jump-to-bottom pill) starting an unwanted text selection in the terminal; the overlay now absorbs all mouse events so none leak through to the Ghostty surface below.
 - `Continue in...` context handoff files now live in a transient worktrees-side cache with unique filenames and automatic cleanup, so transfers no longer dirty the repo and concurrent handoffs do not collide.
 - Prompt TOC "Copy prompt" now copies the full submitted prompt instead of the 3-line TOC preview text.
 - Fixed the terminal scrollbar reappearing during tmux history browsing; Magent now keeps tmux `pane-scrollbars` disabled so embedded Ghostty panes stay chrome-free.
