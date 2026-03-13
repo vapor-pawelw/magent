@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Table of Contents
+- Fixed TOC staying hidden after updating from a version where it had been manually dismissed; the stale "hidden" flag is now cleared on launch.
 
 ## 1.2.2 - 2026-03-13
 

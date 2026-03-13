@@ -54,10 +54,6 @@ private enum PromptANSIForeground: Equatable {
 
 extension ThreadDetailViewController {
 
-    var isPromptTOCManuallyHidden: Bool {
-        UserDefaults.standard.bool(forKey: Self.promptTOCVisibilityDefaultsKey)
-    }
-
     func setupPromptTOCOverlay() {
         let tocView = PromptTableOfContentsView()
         tocView.translatesAutoresizingMaskIntoConstraints = false
@@ -766,7 +762,6 @@ extension ThreadDetailViewController {
 
     private func handlePromptTOCDrag(_ gesture: NSPanGestureRecognizer) {
         guard let tocView = promptTOCView else { return }
-        guard !isPromptTOCManuallyHidden else { return }
 
         switch gesture.state {
         case .began:
@@ -800,7 +795,6 @@ extension ThreadDetailViewController {
 
     private func handlePromptTOCResize(_ gesture: NSPanGestureRecognizer, corner: TOCResizeCorner) {
         guard promptTOCView != nil else { return }
-        guard !isPromptTOCManuallyHidden else { return }
         guard let widthConstraint = promptTOCWidthConstraint,
               let heightConstraint = promptTOCHeightConstraint,
               let topConstraint = promptTOCTopConstraint,
@@ -943,10 +937,15 @@ extension ThreadDetailViewController {
         let canShow = promptTOCCanShowForCurrentTab && showPromptTOCOverlay
         updatePromptTOCToggleButtonState(canShow: canShow)
 
-        let shouldShow = canShow && !isPromptTOCManuallyHidden
-        promptTOCView?.isHidden = !shouldShow
+        // The manual-hide toggle was removed in v1.2.2 (no close button/toolbar toggle).
+        // Clear any stale UserDefaults flag so updated installs aren't permanently stuck hidden.
+        if UserDefaults.standard.object(forKey: Self.promptTOCVisibilityDefaultsKey) != nil {
+            UserDefaults.standard.removeObject(forKey: Self.promptTOCVisibilityDefaultsKey)
+        }
 
-        guard shouldShow else { return }
+        promptTOCView?.isHidden = !canShow
+
+        guard canShow else { return }
 
         bringPromptTOCOverlayToFront()
         if restoringPosition, let sessionName = promptTOCSessionName {
@@ -956,15 +955,11 @@ extension ThreadDetailViewController {
     }
 
     func togglePromptTOCVisibility() {
-        guard promptTOCCanShowForCurrentTab, showPromptTOCOverlay else { return }
-        let nextHiddenState = !isPromptTOCManuallyHidden
-        UserDefaults.standard.set(nextHiddenState, forKey: Self.promptTOCVisibilityDefaultsKey)
-        NotificationCenter.default.post(name: .magentPromptTOCVisibilityChanged, object: nil)
-        applyPromptTOCVisibility(restoringPosition: !nextHiddenState)
+        // No-op: manual toggle UI was removed in v1.2.2. TOC visibility is controlled via Settings only.
     }
 
     @objc func handlePromptTOCVisibilityChanged(_ notification: Notification) {
-        applyPromptTOCVisibility(restoringPosition: !isPromptTOCManuallyHidden)
+        applyPromptTOCVisibility(restoringPosition: true)
     }
 
     private func savePromptTOCPosition(for sessionName: String) {
