@@ -6,7 +6,14 @@ public final class TmuxService: Sendable {
 
     public static let shared = TmuxService()
     private let agentCompletionEventsPath = "/tmp/magent-agent-completion-events.log"
+    private let mouseOpenableURLStatePath = "/tmp/magent-tmux-mouse-openable-url-state.tsv"
     private let paneCache = PaneCaptureCache()
+    private static let linkBoundaryCharacters = CharacterSet(
+        charactersIn: "<>[](){}\"'`.,;:!?"
+    )
+    private static let linkDetector = try? NSDataDetector(
+        types: NSTextCheckingResult.CheckingType.link.rawValue
+    )
     public struct ZombieParentSummary {
         public let parentPid: Int
         public let zombieCount: Int
@@ -41,6 +48,8 @@ public final class TmuxService: Sendable {
         // Keep tmux scrollbars off; otherwise they reappear inside embedded Ghostty
         // and look like Ghostty's own scrollbar regressed.
         _ = try? await ShellExecutor.run("tmux set-option -g pane-scrollbars off")
+        await ensureTerminalFeature("xterm*:hyperlinks")
+        await configureMouseOpenableURLTracking()
         await configureBellMonitoring(resetEventLog: true)
     }
 
@@ -85,6 +94,233 @@ public final class TmuxService: Sendable {
         }
         // Install the bell-watcher script used by pipe-pane on agent sessions.
         installBellWatcherScript()
+    }
+
+    private func configureMouseOpenableURLTracking() async {
+        installMouseOpenableURLCaptureScript()
+        let emptySentinel = "__MAGENT_EMPTY__"
+        let binding = """
+        run-shell "\(mouseOpenableURLCaptureScriptPath) #{q:session_name} #{?mouse_hyperlink,#{q:mouse_hyperlink},\(emptySentinel)} #{?mouse_word,#{q:mouse_word},\(emptySentinel)} #{?mouse_x,#{mouse_x},-1} #{?mouse_line,#{q:mouse_line},\(emptySentinel)}" ; select-pane -t = ; send-keys -M
+        """
+        _ = try? await ShellExecutor.run(
+            "tmux bind-key -T root MouseDown1Pane \(shellQuote(binding))"
+        )
+    }
+
+    private func ensureTerminalFeature(_ feature: String) async {
+        let current = (try? await ShellExecutor.run("tmux show -gv terminal-features")) ?? ""
+        let existing = current
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+        guard !existing.contains(feature) else { return }
+        _ = try? await ShellExecutor.run("tmux set-option -ga terminal-features \(shellQuote(feature))")
+    }
+
+    public func recentMouseOpenableURL(sessionName: String, maxAge: TimeInterval = 2) -> String? {
+        guard let contents = try? String(contentsOfFile: mouseOpenableURLStatePath, encoding: .utf8) else {
+            return nil
+        }
+        let line = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty else { return nil }
+
+        let parts = line.split(separator: "\t", maxSplits: 5, omittingEmptySubsequences: false)
+        guard parts.count == 6,
+              let timestamp = TimeInterval(parts[0]),
+              parts[1] == Substring(sessionName) else {
+            return nil
+        }
+
+        guard Date().timeIntervalSince1970 - timestamp <= maxAge else { return nil }
+
+        if let hyperlink = normalizedOpenableURL(from: String(parts[2])) {
+            return hyperlink
+        }
+        if let word = normalizedOpenableURL(from: String(parts[3])) {
+            return word
+        }
+
+        let mouseX = Int(parts[4])
+        let lineBase64 = String(parts[5])
+        guard let lineData = Data(base64Encoded: lineBase64),
+              let mouseLine = String(data: lineData, encoding: .utf8) else {
+            return nil
+        }
+        return detectedLink(in: mouseLine, nearColumn: mouseX)
+    }
+
+    public func visibleOpenableURL(
+        sessionName: String,
+        xFraction: Double,
+        yFraction: Double
+    ) async -> String? {
+        guard let metadataOutput = try? await ShellExecutor.run(
+            "tmux display-message -p -t \(shellQuote(sessionName)) '#{pane_width}\t#{pane_height}\t#{pane_in_mode}'"
+        ) else {
+            return nil
+        }
+
+        let metadata = metadataOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: "\t", omittingEmptySubsequences: false)
+        guard metadata.count == 3,
+              let paneWidth = Int(metadata[0]),
+              let paneHeight = Int(metadata[1]) else {
+            return nil
+        }
+
+        let inMode = metadata[2] != "0"
+        let captureCommand = inMode
+            ? "tmux capture-pane -p -N -M -t \(shellQuote(sessionName))"
+            : "tmux capture-pane -p -N -t \(shellQuote(sessionName))"
+        guard let visibleOutput = try? await ShellExecutor.run(captureCommand) else {
+            return nil
+        }
+
+        var visibleLines = visibleOutput.split(
+            separator: "\n",
+            omittingEmptySubsequences: false
+        ).map(String.init)
+        if visibleLines.count > paneHeight, visibleLines.last == "" {
+            visibleLines.removeLast()
+        }
+
+        let clampedX = min(max(xFraction, 0), 0.999_999)
+        let clampedY = min(max(yFraction, 0), 0.999_999)
+        let column = min(max(Int(floor(clampedX * Double(paneWidth))), 0), max(paneWidth - 1, 0))
+        let row = min(max(Int(floor(clampedY * Double(paneHeight))), 0), max(paneHeight - 1, 0))
+
+        if row < visibleLines.count,
+           let lineURL = detectedLink(in: visibleLines[row], nearColumn: column) {
+            return lineURL
+        }
+
+        if row > 0, row - 1 < visibleLines.count,
+           let lineURL = detectedLink(in: visibleLines[row - 1], nearColumn: column) {
+            return lineURL
+        }
+
+        if row + 1 < visibleLines.count,
+           let lineURL = detectedLink(in: visibleLines[row + 1], nearColumn: column) {
+            return lineURL
+        }
+
+        return nil
+    }
+
+    private func normalizedOpenableURL(from rawValue: String?) -> String? {
+        guard let rawValue else { return nil }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        var candidates = [trimmed]
+        let stripped = trimmed.trimmingCharacters(in: Self.linkBoundaryCharacters)
+        if !stripped.isEmpty, stripped != trimmed {
+            candidates.append(stripped)
+        }
+
+        for candidate in candidates {
+            if let urlString = Self.detectedLink(in: candidate) {
+                return urlString
+            }
+            if candidate.hasPrefix("www."),
+               let url = URL(string: "https://\(candidate)") {
+                return url.absoluteString
+            }
+        }
+
+        return nil
+    }
+
+    private static func detectedLink(in candidate: String) -> String? {
+        guard let linkDetector else { return nil }
+        let range = NSRange(candidate.startIndex..<candidate.endIndex, in: candidate)
+        guard let match = linkDetector.firstMatch(in: candidate, options: [], range: range),
+              match.range.location == 0,
+              match.range.length == range.length,
+              let url = match.url else {
+            return nil
+        }
+        return url.absoluteString
+    }
+
+    private func detectedLink(in line: String, nearColumn mouseX: Int?) -> String? {
+        guard let linkDetector = Self.linkDetector else { return nil }
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+        let matches = linkDetector.matches(in: line, options: [], range: range)
+        guard !matches.isEmpty else { return nil }
+
+        let bestMatch: NSTextCheckingResult
+        if let mouseX {
+            if let containing = matches.first(where: { mouseX >= $0.range.location && mouseX < $0.range.location + $0.range.length }) {
+                bestMatch = containing
+            } else {
+                bestMatch = matches.min {
+                    distance(from: mouseX, to: $0.range) < distance(from: mouseX, to: $1.range)
+                } ?? matches[0]
+            }
+        } else {
+            bestMatch = matches[0]
+        }
+
+        return bestMatch.url?.absoluteString
+    }
+
+    private func distance(from point: Int, to range: NSRange) -> Int {
+        if point < range.location {
+            return range.location - point
+        }
+        let end = range.location + range.length
+        if point >= end {
+            return point - end
+        }
+        return 0
+    }
+
+    private var mouseOpenableURLCaptureScriptPath: String {
+        "/tmp/magent-mouse-openable-url-capture.sh"
+    }
+
+    private func installMouseOpenableURLCaptureScript() {
+        let path = mouseOpenableURLCaptureScriptPath
+        let marker = "# magent-mouse-openable-url-capture-v2"
+        if let existing = try? String(contentsOfFile: path, encoding: .utf8), existing.hasPrefix(marker) {
+            return
+        }
+
+        let script = """
+        \(marker)
+        #!/bin/sh
+        session_name="$1"
+        mouse_hyperlink="$2"
+        mouse_word="$3"
+        mouse_x="$4"
+        mouse_line="$5"
+
+        if [ "$mouse_hyperlink" = "__MAGENT_EMPTY__" ]; then
+          mouse_hyperlink=""
+        fi
+        if [ "$mouse_word" = "__MAGENT_EMPTY__" ]; then
+          mouse_word=""
+        fi
+        if [ "$mouse_line" = "__MAGENT_EMPTY__" ]; then
+          mouse_line=""
+        fi
+
+        line_base64=$(printf '%s' "$mouse_line" | base64 | tr -d '\n')
+
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+          "$(date +%s)" \
+          "$session_name" \
+          "$mouse_hyperlink" \
+          "$mouse_word" \
+          "$mouse_x" \
+          "$line_base64" \
+          > "\(mouseOpenableURLStatePath)"
+        """
+        try? script.write(toFile: path, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: path
+        )
     }
 
     /// Sets up `pipe-pane` on a tmux session to detect bell characters (0x07) in pane output.

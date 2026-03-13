@@ -1,6 +1,12 @@
 import Cocoa
 import GhosttyKit
 
+private final class PassthroughVisualEffectView: NSVisualEffectView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+}
+
 /// NSView subclass that hosts a ghostty terminal surface with Metal rendering.
 public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClient {
 
@@ -14,6 +20,8 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     // Text input
     private var markedText = NSMutableAttributedString()
+    private let linkHoverOverlay = PassthroughVisualEffectView()
+    private let linkHoverLabel = NSTextField(labelWithString: "")
 
     /// Called when user presses Cmd+C. Host app should copy tmux buffer to system clipboard.
     public var onCopy: (() -> Void)?
@@ -21,8 +29,18 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     public var onSubmitLine: ((String) -> Void)?
     /// Called after the user scrolls the terminal surface.
     public var onScroll: (() -> Void)?
+    /// Returns a tmux-reported openable URL under the most recent mouse click for this view's session.
+    public var resolveTmuxMouseOpenableURL: (() -> String?)?
+    /// Resolves a visible URL near the current mouse position using normalized pane coordinates.
+    public var resolveTmuxVisibleOpenableURL: ((_ xFraction: Double, _ yFraction: Double) async -> String?)?
 
     private var currentInputLine = ""
+    private var hoveredLinkSource: HoveredLinkSource?
+    private var hoveredLinkURL: String?
+    private var pendingLinkOpenURL: String?
+    private var pendingCommandClick = false
+    private var hoverProbeSerial = 0
+    private var hoverProbeTask: Task<Void, Never>?
     private static let supportedDropTypes: [NSPasteboard.PasteboardType] = [
         .fileURL,
         .URL,
@@ -33,6 +51,18 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     private static let shellPathUnescapedCharset = CharacterSet(
         charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._/:"
     )
+    private static let linkBoundaryCharacters = CharacterSet(
+        charactersIn: "<>[](){}\"'`.,;:!?"
+    )
+    private static let linkDetector = try? NSDataDetector(
+        types: NSTextCheckingResult.CheckingType.link.rawValue
+    )
+
+    private enum HoveredLinkSource {
+        case ghostty
+        case renderedWord
+        case visiblePane
+    }
 
     override public var acceptsFirstResponder: Bool { true }
 
@@ -42,6 +72,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
         wantsLayer = true
         registerForDraggedTypes(Self.supportedDropTypes)
+        configureLinkHoverOverlay()
     }
 
     @available(*, unavailable)
@@ -290,6 +321,8 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
             composing: false
         )
         _ = ghostty_surface_key(surface, keyEvent)
+        sendCurrentMousePos(mods: mods)
+        refreshHoveredLinkForCurrentMouseLocation()
     }
 
     private func captureSubmittedLineIfNeeded(from event: NSEvent) {
@@ -483,36 +516,92 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         }
         let area = NSTrackingArea(
             rect: frame,
-            options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            options: [.mouseMoved, .mouseEnteredAndExited, .cursorUpdate, .activeAlways, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
         addTrackingArea(area)
     }
 
+    override public func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: hoveredLinkURL == nil ? .arrow : .pointingHand)
+    }
+
+    override public func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        sendMousePos(event)
+        refreshHoveredLink(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override public func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        cancelHoverProbe()
+        setHoveredLink(nil)
+    }
+
+    override public func cursorUpdate(with event: NSEvent) {
+        super.cursorUpdate(with: event)
+        updateCursorForCurrentMouseLocation()
+    }
+
     override public func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        sendMousePos(event)
+        refreshHoveredLink(at: convert(event.locationInWindow, from: nil))
+        pendingCommandClick = shouldAttemptCommandLinkOpen(with: event)
+        if shouldHandleDirectLinkOpen(with: event) {
+            pendingLinkOpenURL = hoveredLinkURL
+            return
+        }
         let mods = Self.ghosttyMods(event.modifierFlags)
         guard let surface else { return }
         ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, mods)
     }
 
     override public func mouseUp(with event: NSEvent) {
+        sendMousePos(event)
+        refreshHoveredLink(at: convert(event.locationInWindow, from: nil))
+        if let pendingLinkOpenURL {
+            self.pendingLinkOpenURL = nil
+            pendingCommandClick = false
+            if shouldHandleDirectLinkOpen(with: event), hoveredLinkURL == pendingLinkOpenURL {
+                GhosttyAppManager.shared.openURL(pendingLinkOpenURL)
+            }
+            return
+        }
         let mods = Self.ghosttyMods(event.modifierFlags)
         guard let surface else { return }
         ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, mods)
+
+        if pendingCommandClick,
+           let url = resolveTmuxMouseOpenableURL?(),
+           shouldAttemptCommandLinkOpen(with: event) {
+            GhosttyAppManager.shared.openURL(url)
+        }
+        pendingCommandClick = false
     }
 
     override public func mouseDragged(with event: NSEvent) {
+        if pendingLinkOpenURL != nil {
+            pendingLinkOpenURL = nil
+            pendingCommandClick = false
+            return
+        }
+        if pendingCommandClick {
+            pendingCommandClick = false
+        }
         sendMousePos(event)
     }
 
     override public func mouseMoved(with event: NSEvent) {
         sendMousePos(event)
+        refreshHoveredLink(at: convert(event.locationInWindow, from: nil))
     }
 
     override public func rightMouseDown(with event: NSEvent) {
         guard let surface else { return super.rightMouseDown(with: event) }
+        sendMousePos(event)
         let mods = Self.ghosttyMods(event.modifierFlags)
         if !ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, mods) {
             super.rightMouseDown(with: event)
@@ -521,6 +610,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     override public func rightMouseUp(with event: NSEvent) {
         guard let surface else { return super.rightMouseUp(with: event) }
+        sendMousePos(event)
         let mods = Self.ghosttyMods(event.modifierFlags)
         if !ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT, mods) {
             super.rightMouseUp(with: event)
@@ -533,6 +623,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     override public func otherMouseDown(with event: NSEvent) {
         guard let surface else { return }
+        sendMousePos(event)
         let mods = Self.ghosttyMods(event.modifierFlags)
         let button = mouseButton(for: event.buttonNumber)
         ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, button, mods)
@@ -540,6 +631,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     override public func otherMouseUp(with event: NSEvent) {
         guard let surface else { return }
+        sendMousePos(event)
         let mods = Self.ghosttyMods(event.modifierFlags)
         let button = mouseButton(for: event.buttonNumber)
         ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, button, mods)
@@ -550,13 +642,133 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     }
 
     private func sendMousePos(_ event: NSEvent) {
-        guard let surface else { return }
         let pos = convert(event.locationInWindow, from: nil)
+        sendMousePos(at: pos, mods: Self.ghosttyMods(event.modifierFlags))
+    }
+
+    private func sendCurrentMousePos(mods: ghostty_input_mods_e) {
+        guard let window else { return }
+        let pos = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard bounds.contains(pos) else { return }
+        sendMousePos(at: pos, mods: mods)
+    }
+
+    private func sendMousePos(at pos: NSPoint, mods: ghostty_input_mods_e) {
+        guard let surface else { return }
         // Ghostty expects y=0 at top, NSView has y=0 at bottom
         let x = pos.x
-        let y = frame.height - pos.y
-        let mods = Self.ghosttyMods(event.modifierFlags)
+        let y = bounds.height - pos.y
         ghostty_surface_mouse_pos(surface, x, y, mods)
+    }
+
+    private func shouldAttemptCommandLinkOpen(with event: NSEvent) -> Bool {
+        guard event.modifierFlags.contains(.command) else { return false }
+        guard !event.modifierFlags.contains(.control),
+              !event.modifierFlags.contains(.option) else { return false }
+        let pos = convert(event.locationInWindow, from: nil)
+        return bounds.contains(pos)
+    }
+
+    private func shouldHandleDirectLinkOpen(with event: NSEvent) -> Bool {
+        guard hoveredLinkURL != nil else { return false }
+        return shouldAttemptCommandLinkOpen(with: event)
+    }
+
+    private func refreshHoveredLinkForCurrentMouseLocation() {
+        guard let window else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        refreshHoveredLink(at: point)
+    }
+
+    private func refreshHoveredLink(at point: NSPoint) {
+        guard bounds.contains(point) else {
+            cancelHoverProbe()
+            if hoveredLinkSource != .ghostty {
+                applyHoveredLink(nil, source: nil)
+            }
+            return
+        }
+
+        if let renderedWordURL = renderedWordOpenableURL() {
+            cancelHoverProbe()
+            if hoveredLinkSource != .ghostty {
+                applyHoveredLink(renderedWordURL, source: .renderedWord)
+            }
+            return
+        }
+
+        scheduleTmuxHoverProbe(at: point)
+    }
+
+    private func scheduleTmuxHoverProbe(at point: NSPoint) {
+        guard let resolveTmuxVisibleOpenableURL else {
+            if hoveredLinkSource == .visiblePane || hoveredLinkSource == .renderedWord {
+                applyHoveredLink(nil, source: nil)
+            }
+            return
+        }
+
+        hoverProbeTask?.cancel()
+        hoverProbeSerial += 1
+        let probeSerial = hoverProbeSerial
+        let xFraction = bounds.width > 0 ? Double(point.x / bounds.width) : 0
+        let yFromTop = bounds.height > 0 ? Double((bounds.height - point.y) / bounds.height) : 0
+
+        hoverProbeTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(45))
+            guard !Task.isCancelled else { return }
+            let url = await resolveTmuxVisibleOpenableURL(xFraction, yFromTop)
+            await MainActor.run { [weak self] in
+                guard let self, self.hoverProbeSerial == probeSerial else { return }
+                if self.hoveredLinkSource == .ghostty {
+                    return
+                }
+                let source: HoveredLinkSource? = url == nil ? nil : .visiblePane
+                self.applyHoveredLink(url, source: source)
+            }
+        }
+    }
+
+    private func cancelHoverProbe() {
+        hoverProbeTask?.cancel()
+        hoverProbeTask = nil
+        hoverProbeSerial += 1
+    }
+
+    private func refreshHoveredLinkFromRenderedWord() {
+        guard let renderedWordURL = renderedWordOpenableURL() else {
+            guard hoveredLinkSource == .renderedWord else { return }
+            applyHoveredLink(nil, source: nil)
+            return
+        }
+
+        if hoveredLinkSource == .ghostty {
+            return
+        }
+
+        applyHoveredLink(renderedWordURL, source: .renderedWord)
+    }
+
+    private func renderedWordOpenableURL() -> String? {
+        guard let surface else { return nil }
+
+        var text = ghostty_text_s(
+            tl_px_x: 0,
+            tl_px_y: 0,
+            offset_start: 0,
+            offset_len: 0,
+            text: nil,
+            text_len: 0
+        )
+        guard ghostty_surface_quicklook_word(surface, &text),
+              let pointer = text.text else {
+            return nil
+        }
+        defer { ghostty_surface_free_text(surface, &text) }
+
+        let bytes = UnsafeRawBufferPointer(start: pointer, count: Int(text.text_len))
+        let renderedWord = String(decoding: bytes, as: UTF8.self)
+        return Self.normalizedOpenableURL(from: renderedWord)
     }
 
     private func mouseButton(for buttonNumber: Int) -> ghostty_input_mouse_button_e {
@@ -570,6 +782,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     override public func scrollWheel(with event: NSEvent) {
         guard let surface else { return }
+        sendMousePos(event)
 
         var x = event.scrollingDeltaX
         var y = event.scrollingDeltaY
@@ -725,6 +938,126 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         if currentInputLine.count > 600 {
             currentInputLine = String(currentInputLine.suffix(600))
         }
+    }
+
+    private func configureLinkHoverOverlay() {
+        linkHoverOverlay.translatesAutoresizingMaskIntoConstraints = false
+        linkHoverOverlay.blendingMode = .withinWindow
+        linkHoverOverlay.material = .hudWindow
+        linkHoverOverlay.state = .active
+        linkHoverOverlay.isHidden = true
+        linkHoverOverlay.alphaValue = 0
+        linkHoverOverlay.wantsLayer = true
+        linkHoverOverlay.layer?.cornerRadius = 10
+        linkHoverOverlay.layer?.cornerCurve = .continuous
+
+        linkHoverLabel.translatesAutoresizingMaskIntoConstraints = false
+        linkHoverLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+        linkHoverLabel.lineBreakMode = .byTruncatingMiddle
+        linkHoverLabel.maximumNumberOfLines = 1
+        linkHoverLabel.textColor = .labelColor
+
+        linkHoverOverlay.addSubview(linkHoverLabel)
+        addSubview(linkHoverOverlay)
+
+        NSLayoutConstraint.activate([
+            linkHoverOverlay.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 12),
+            linkHoverOverlay.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            linkHoverOverlay.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
+            linkHoverOverlay.centerXAnchor.constraint(equalTo: centerXAnchor),
+            linkHoverOverlay.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, multiplier: 0.75),
+
+            linkHoverLabel.leadingAnchor.constraint(equalTo: linkHoverOverlay.leadingAnchor, constant: 12),
+            linkHoverLabel.trailingAnchor.constraint(equalTo: linkHoverOverlay.trailingAnchor, constant: -12),
+            linkHoverLabel.topAnchor.constraint(equalTo: linkHoverOverlay.topAnchor, constant: 7),
+            linkHoverLabel.bottomAnchor.constraint(equalTo: linkHoverOverlay.bottomAnchor, constant: -7),
+        ])
+    }
+
+    public func setHoveredLink(_ urlString: String?) {
+        let normalizedURL = urlString?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nextURL = normalizedURL?.isEmpty == false ? normalizedURL : nil
+        applyHoveredLink(nextURL, source: nextURL == nil ? nil : .ghostty)
+    }
+
+    private func applyHoveredLink(_ nextURL: String?, source: HoveredLinkSource?) {
+        let normalizedSource = nextURL == nil ? nil : source
+        guard hoveredLinkURL != nextURL || hoveredLinkSource != normalizedSource else { return }
+        hoveredLinkURL = nextURL
+        hoveredLinkSource = normalizedSource
+        toolTip = nextURL
+        updateLinkHoverOverlay(for: nextURL)
+        window?.invalidateCursorRects(for: self)
+        updateCursorForCurrentMouseLocation()
+    }
+
+    private func updateLinkHoverOverlay(for urlString: String?) {
+        let visible = urlString != nil
+        if let urlString {
+            linkHoverLabel.stringValue = urlString
+        }
+
+        if visible == !linkHoverOverlay.isHidden {
+            return
+        }
+
+        if visible {
+            linkHoverOverlay.isHidden = false
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = visible ? 0.08 : 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            linkHoverOverlay.animator().alphaValue = visible ? 1 : 0
+        } completionHandler: { [weak self] in
+            guard let self else { return }
+            if !visible {
+                self.linkHoverOverlay.isHidden = true
+            }
+        }
+    }
+
+    private static func normalizedOpenableURL(from rawValue: String?) -> String? {
+        guard let rawValue else { return nil }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        var candidates = [trimmed]
+        let stripped = trimmed.trimmingCharacters(in: linkBoundaryCharacters)
+        if !stripped.isEmpty, stripped != trimmed {
+            candidates.append(stripped)
+        }
+
+        for candidate in candidates {
+            if let urlString = detectedLink(in: candidate) {
+                return urlString
+            }
+            if candidate.hasPrefix("www."),
+               let url = URL(string: "https://\(candidate)") {
+                return url.absoluteString
+            }
+        }
+
+        return nil
+    }
+
+    private static func detectedLink(in candidate: String) -> String? {
+        guard let linkDetector else { return nil }
+        let range = NSRange(candidate.startIndex..<candidate.endIndex, in: candidate)
+        guard let match = linkDetector.firstMatch(in: candidate, options: [], range: range),
+              match.range.location == 0,
+              match.range.length == range.length,
+              let url = match.url else {
+            return nil
+        }
+        return url.absoluteString
+    }
+
+    private func updateCursorForCurrentMouseLocation() {
+        guard let window else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard bounds.contains(point) else { return }
+        (hoveredLinkURL == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
     }
 
     private static func shellEscapePathForPaste(_ path: String) -> String {

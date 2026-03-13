@@ -245,3 +245,32 @@ Terminal overlays must respond to appearance changes the same way the surroundin
 - Do not hard-code a permanently dark overlay palette for controls that remain visible in Light mode.
 - Overlay views that draw their own layers should update those colors from `viewDidChangeEffectiveAppearance()`.
 - This applies to the scroll-controls pill, the floating `Scroll to bottom` pill, and the Prompt TOC panel/header/resize affordance.
+
+## Link Opening and Hover (GHOSTTY_ACTION_OPEN_URL / GHOSTTY_ACTION_MOUSE_OVER_LINK)
+
+Ghostty fires two actions for link interaction:
+
+- `GHOSTTY_ACTION_MOUSE_OVER_LINK` — hover events; `action.action.mouse_over_link.url` and `.len` give the OSC 8 URL (empty string when leaving a link).
+- `GHOSTTY_ACTION_OPEN_URL` — user activated a link (e.g. Cmd+click in ghostty); `action.action.open_url.url` and `.len`.
+
+Both require `copiedGhosttyString(pointer, length:)` to read the C string safely:
+- If `length > 0`, copy exactly that many bytes (avoids relying on a null terminator).
+- Otherwise fall back to `String(cString:)`.
+- Return `nil` for empty strings so callers get a proper optional.
+
+**Hover flow in `GhosttyAppManager`**: `setHoveredLink(_:surfaceAddress:)` looks up the `TerminalSurfaceView` via the registered surface map and calls `surfaceView.setHoveredLink(urlString)`.
+
+**`TerminalSurfaceView` link detection priority** (highest to lowest):
+1. **Ghostty-native** (`HoveredLinkSource.ghostty`): set by `GHOSTTY_ACTION_MOUSE_OVER_LINK`; never overridden by lower-priority sources.
+2. **Rendered word** (`HoveredLinkSource.renderedWord`): `ghostty_surface_quicklook_word` returns the word under the cursor; run through `NSDataDetector` to check if it is a URL.
+3. **Visible pane** (`HoveredLinkSource.visiblePane`): after a 45 ms debounce, query `TmuxService.visibleOpenableURL(sessionName:xFraction:yFraction:)` which runs `tmux capture-pane -N` and scans the target row ±1 for URLs.
+
+`refreshHoveredLink(at:)` is called on every mouse move/enter/key event. When the mouse leaves the bounds, `setHoveredLink(nil)` is called unconditionally.
+
+**Cmd+click open flow** (two independent paths):
+- *Direct* (link already detected): `mouseDown` records `pendingLinkOpenURL`; `mouseUp` confirms both Cmd is still held and the cursor is still on the same URL, then calls `GhosttyAppManager.shared.openURL`.
+- *tmux fallback* (no ghostty/rendered-word link): `mouseDown` records `pendingCommandClick`; `mouseUp` calls `TmuxService.recentMouseOpenableURL(sessionName:)` which reads the state file written by the tmux `MouseDown1Pane` binding. This covers plain-text URLs not reported by ghostty.
+
+**OSC 8 tmux prerequisite**: On startup, `TmuxService.configure()` calls `ensureTerminalFeature("xterm*:hyperlinks")` to ensure tmux passes OSC 8 sequences through to ghostty.
+
+**Link hover overlay**: `TerminalSurfaceView` contains a `PassthroughVisualEffectView` pill anchored 12pt from the bottom center. It animates in (80 ms) on link hover and out (120 ms) on clear. `PassthroughVisualEffectView` returns `nil` from `hitTest` so it never intercepts mouse events.

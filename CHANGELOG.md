@@ -7,6 +7,9 @@ All notable changes to this project will be documented in this file.
 ### Updates
 - Update progress is now shown inside the app: tapping Update downloads and unpacks the new version in-app (with "Downloading…" / "Preparing update…" banners), so the app only closes at the very end to swap the binary and relaunch — eliminating the long invisible wait.
 
+### Terminal
+- Links in the terminal are now clickable: Cmd+click opens URLs in the default browser. Hovering over a link shows an animated URL pill at the bottom of the terminal and changes the cursor to a pointing hand. Link detection combines ghostty-native OSC 8 hyperlinks, the word under the cursor, and tmux pane content — so most URLs work regardless of whether they were written with escape codes.
+
 ### Thread
 - Tabs opened via the Review button are now named `<Agent>-review` (e.g. `Claude-review`) instead of plain `<Agent>`, making them easy to distinguish from regular agent tabs.
 - Archive suggestion and commit counts in the Changes panel now use the actual remote base branch detected from git history (e.g. `origin/develop`) instead of a stored branch name, so they remain accurate when the worktree switches branches.
