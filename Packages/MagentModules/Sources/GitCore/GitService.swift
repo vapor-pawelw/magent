@@ -327,21 +327,45 @@ public final class GitService: Sendable {
             && result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Returns `true` when the branch has commits beyond `baseBranch` and all of them
-    /// have been merged or cherry-picked into `baseBranch`.
-    ///
-    /// When `forkPointCommit` is provided, it's used to distinguish "branch was merged"
-    /// from "brand new branch with no commits" in the case where HEAD is an ancestor of baseBranch.
-    public func isFullyDelivered(worktreePath: String, baseBranch: String, forkPointCommit: String? = nil) async -> Bool {
-        let headTip = await ShellExecutor.execute("git rev-parse HEAD", workingDirectory: worktreePath)
-        let head = headTip.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !head.isEmpty else { return false }
+    /// Returns the current HEAD commit hash, or `nil` on failure.
+    public func currentCommit(worktreePath: String) async -> String? {
+        let result = await ShellExecutor.execute("git rev-parse HEAD", workingDirectory: worktreePath)
+        let hash = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard result.exitCode == 0, !hash.isEmpty else { return nil }
+        return hash
+    }
 
-        // If we know the fork point, use it to short-circuit: no work done → not delivered.
-        if let forkPoint = forkPointCommit, !forkPoint.isEmpty, head == forkPoint {
-            return false
+    /// Detects the remote base branch for the current HEAD by walking commit history and
+    /// returning the closest remote ancestor branch (e.g. "origin/develop").
+    /// Excludes the current branch's own remote tracking ref.
+    /// Returns `nil` if no remote ancestor is found.
+    public func detectBaseBranch(worktreePath: String, currentBranch: String) async -> String? {
+        // Walk decorated commit history — git finds the nearest ancestor commit that has a
+        // remote ref. Much faster than per-commit shell loops since git does the walk itself.
+        let result = await ShellExecutor.execute(
+            "git log --decorate=full --simplify-by-decoration --format='%D' HEAD",
+            workingDirectory: worktreePath
+        )
+        guard result.exitCode == 0 else { return nil }
+        let lines = result.stdout.components(separatedBy: "\n")
+        let excluded = "refs/remotes/origin/\(currentBranch)"
+        for line in lines {
+            let refs = line.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            for ref in refs {
+                guard ref.hasPrefix("refs/remotes/origin/"),
+                      ref != "refs/remotes/origin/HEAD",
+                      ref != excluded else { continue }
+                return String(ref.dropFirst("refs/remotes/".count)) // e.g. "origin/develop"
+            }
         }
+        return nil
+    }
 
+    /// Returns `true` when all commits on HEAD are present in `baseBranch` (via merge,
+    /// fast-forward, or cherry-pick). Callers must guard against fresh/empty branches using
+    /// `MagentThread.hasEverDoneWork` before calling this — an empty `baseBranch..HEAD` log
+    /// on a never-touched branch would also return `true`.
+    public func isFullyDelivered(worktreePath: String, baseBranch: String) async -> Bool {
         // Check if the branch has commits not reachable from baseBranch.
         let logResult = await ShellExecutor.execute(
             "git log \(shellQuote(baseBranch))..HEAD --oneline",
@@ -351,7 +375,7 @@ public final class GitService: Sendable {
         let hasUnmergedCommits = !logResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
         if hasUnmergedCommits {
-            // Branch has commits not yet in baseBranch — check if they were cherry-picked
+            // Branch has commits not yet in baseBranch — check if they were cherry-picked.
             let cherry = await ShellExecutor.execute(
                 "git cherry \(shellQuote(baseBranch)) HEAD",
                 workingDirectory: worktreePath
@@ -362,45 +386,9 @@ public final class GitService: Sendable {
             return !cherryOutput.components(separatedBy: "\n").contains(where: { $0.hasPrefix("+") })
         }
 
-        // baseBranch..HEAD is empty — branch was either merged or has no work.
-        // If we have a fork point and got here, HEAD != forkPoint → branch was merged.
-        if forkPointCommit != nil {
-            return true
-        }
-
-        // No fork point (old thread) — two checks:
-
-        // 1. FF-merged: HEAD is at baseBranch tip (or baseBranch has no commits beyond HEAD).
-        //    This detects fast-forward merges where no merge commit exists.
-        let aheadResult = await ShellExecutor.execute(
-            "git log HEAD..\(shellQuote(baseBranch)) --oneline",
-            workingDirectory: worktreePath
-        )
-        if aheadResult.exitCode == 0,
-           aheadResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return true
-        }
-
-        // 2. Merge-commit: HEAD is a non-first parent of a merge commit on baseBranch.
-        //    Only check 2nd+ parents (the merged branch tips), not the first parent
-        //    (the main-line commit), to avoid false-positives when the branch was
-        //    created from a commit that happens to be the main-side parent of a merge.
-        let mergeCheck = await ShellExecutor.execute(
-            "git log --merges --ancestry-path HEAD..\(shellQuote(baseBranch)) --format=%P",
-            workingDirectory: worktreePath
-        )
-        guard mergeCheck.exitCode == 0 else { return false }
-        let parentLines = mergeCheck.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-            .components(separatedBy: "\n")
-            .filter { !$0.isEmpty }
-        for line in parentLines {
-            let parents = line.components(separatedBy: " ")
-            // Skip first parent (main-line); check 2nd+ parents (merged branches)
-            if parents.dropFirst().contains(head) {
-                return true
-            }
-        }
-        return false
+        // baseBranch..HEAD is empty — base has everything HEAD has (FF, merge, or fresh).
+        // The caller's hasEverDoneWork guard distinguishes "merged" from "never touched".
+        return true
     }
 
     // MARK: - Merge Base, Commit Log & File Data

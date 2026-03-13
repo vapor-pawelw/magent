@@ -130,6 +130,22 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     /// `nil` means the thread predates path snapshotting and should fall back to
     /// current project settings during archive.
     public var localFileSyncPathsSnapshot: [String]?
+    /// Persisted flag — set the first time this thread's worktree becomes dirty or has commits
+    /// ahead of its base branch on any branch. Used to guard archive suggestions so a brand-new,
+    /// untouched worktree is never suggested for archiving.
+    public var hasEverDoneWork: Bool
+
+    // MARK: - Computed
+
+    /// The last path component of `worktreePath`, used as the key in per-project worktree caches.
+    public var worktreeKey: String {
+        (worktreePath as NSString).lastPathComponent
+    }
+
+    /// The currently checked-out branch name; prefers the live-detected value over the persisted one.
+    public var currentBranch: String {
+        actualBranch ?? branchName
+    }
 
     // Transient (not persisted) — tracks which agent sessions are currently working
     public var busySessions: Set<String> = []
@@ -184,7 +200,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     }
 
     public var showArchiveSuggestion: Bool {
-        isFullyDelivered && !isDirty && !hasAgentBusy && !hasWaitingForInput
+        hasEverDoneWork && isFullyDelivered && !isDirty && !hasAgentBusy && !hasWaitingForInput
     }
 
     /// True only when every tab in the thread currently reports an active rate-limit message.
@@ -246,6 +262,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case isThreadIconManuallySet
         case submittedPromptsBySession
         case localFileSyncPathsSnapshot
+        case hasEverDoneWork
     }
 
     public init(
@@ -279,7 +296,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         threadIcon: ThreadIcon = .other,
         isThreadIconManuallySet: Bool = false,
         submittedPromptsBySession: [String: [String]] = [:],
-        localFileSyncPathsSnapshot: [String]? = nil
+        localFileSyncPathsSnapshot: [String]? = nil,
+        hasEverDoneWork: Bool = false
     ) {
         self.id = id
         self.projectId = projectId
@@ -312,6 +330,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.isThreadIconManuallySet = isThreadIconManuallySet
         self.submittedPromptsBySession = submittedPromptsBySession
         self.localFileSyncPathsSnapshot = localFileSyncPathsSnapshot
+        self.hasEverDoneWork = hasEverDoneWork
     }
 
     public init(from decoder: Decoder) throws {
@@ -347,6 +366,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             ?? (threadIcon != .other)
         submittedPromptsBySession = try container.decodeIfPresent([String: [String]].self, forKey: .submittedPromptsBySession) ?? [:]
         localFileSyncPathsSnapshot = try container.decodeIfPresent([String].self, forKey: .localFileSyncPathsSnapshot)
+        hasEverDoneWork = try container.decodeIfPresent(Bool.self, forKey: .hasEverDoneWork) ?? false
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -398,6 +418,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             try container.encode(submittedPromptsBySession, forKey: .submittedPromptsBySession)
         }
         try container.encodeIfPresent(localFileSyncPathsSnapshot, forKey: .localFileSyncPathsSnapshot)
+        if hasEverDoneWork {
+            try container.encode(hasEverDoneWork, forKey: .hasEverDoneWork)
+        }
     }
 }
 
