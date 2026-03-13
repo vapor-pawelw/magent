@@ -79,10 +79,22 @@ extension ThreadDetailViewController {
         }
 
         terminalContainer.addSubview(tocView)
+        tocView.onHoverStateChanged = { [weak self] expanded in
+            self?.handleTOCHoverStateChanged(expanded)
+        }
+        tocView.onCollapseCompleted = { [weak self] in
+            guard let self else { return }
+            // Guard against re-hover that arrived before the animation finished.
+            guard !(self.promptTOCView?.isExpanded ?? false) else { return }
+            self.promptTOCWidthConstraint?.constant = Self.promptTOCCollapsedWidth
+            self.promptTOCHeightConstraint?.constant = Self.promptTOCCollapsedHeight
+            self.terminalContainer.layoutSubtreeIfNeeded()
+        }
+
         let top = tocView.topAnchor.constraint(equalTo: terminalContainer.topAnchor, constant: 12)
         let trailing = tocView.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor, constant: -12)
-        let width = tocView.widthAnchor.constraint(equalToConstant: Self.promptTOCMinimumWidth)
-        let height = tocView.heightAnchor.constraint(equalToConstant: Self.promptTOCMinimumHeight)
+        let width = tocView.widthAnchor.constraint(equalToConstant: Self.promptTOCCollapsedWidth)
+        let height = tocView.heightAnchor.constraint(equalToConstant: Self.promptTOCCollapsedHeight)
         promptTOCTopConstraint = top
         promptTOCTrailingConstraint = trailing
         promptTOCWidthConstraint = width
@@ -857,6 +869,10 @@ extension ThreadDetailViewController {
             terminalContainer.layoutSubtreeIfNeeded()
             clampPromptTOCPositionIfNeeded()
         case .ended, .cancelled:
+            // Capture final expanded size after user resizes.
+            if let w = promptTOCWidthConstraint, let h = promptTOCHeightConstraint {
+                promptTOCExpandedSize = NSSize(width: w.constant, height: h.constant)
+            }
             clampPromptTOCPositionIfNeeded()
             if let sessionName = promptTOCSessionName {
                 savePromptTOCSize(for: sessionName)
@@ -887,6 +903,22 @@ extension ThreadDetailViewController {
 
         top.constant = terminalContainer.bounds.height - (origin.y + tocView.frame.height)
         trailing.constant = origin.x + tocView.frame.width - terminalContainer.bounds.width
+    }
+
+    private func handleTOCHoverStateChanged(_ expanded: Bool) {
+        guard let widthConstraint = promptTOCWidthConstraint,
+              let heightConstraint = promptTOCHeightConstraint else { return }
+        if expanded {
+            // Restore to the user's last expanded size.
+            widthConstraint.constant = promptTOCExpandedSize.width
+            heightConstraint.constant = promptTOCExpandedSize.height
+            terminalContainer.layoutSubtreeIfNeeded()
+            clampPromptTOCPositionIfNeeded()
+        } else {
+            // Capture current expanded size; the actual frame shrink happens in onCollapseCompleted
+            // (after the fade-out animation finishes) so content isn't clipped mid-animation.
+            promptTOCExpandedSize = NSSize(width: widthConstraint.constant, height: heightConstraint.constant)
+        }
     }
 
     func updatePromptTOCToggleButtonState(canShow: Bool) {
@@ -941,12 +973,16 @@ extension ThreadDetailViewController {
         // Don't persist position while diff viewer is open — bounds are reduced and
         // the saved normalized values would be wrong relative to the full container.
         guard diffVC == nil else { return }
-        guard let tocView = promptTOCView else { return }
-        let availableWidth = max(1, terminalContainer.bounds.width - tocView.frame.width)
-        let availableHeight = max(1, terminalContainer.bounds.height - tocView.frame.height)
+        guard promptTOCView != nil else { return }
+        // Always normalize relative to the expanded size so drag-while-collapsed
+        // produces consistent restored positions.
+        let expandedWidth = promptTOCExpandedSize.width
+        let expandedHeight = promptTOCExpandedSize.height
+        let availableWidth = max(1, terminalContainer.bounds.width - expandedWidth)
+        let availableHeight = max(1, terminalContainer.bounds.height - expandedHeight)
 
-        let x = terminalContainer.bounds.width - tocView.frame.width + (promptTOCTrailingConstraint?.constant ?? 0)
-        let y = terminalContainer.bounds.height - tocView.frame.height - (promptTOCTopConstraint?.constant ?? 0)
+        let x = terminalContainer.bounds.width - expandedWidth + (promptTOCTrailingConstraint?.constant ?? 0)
+        let y = terminalContainer.bounds.height - expandedHeight - (promptTOCTopConstraint?.constant ?? 0)
         let normalizedX = min(max(0, x / availableWidth), 1)
         let normalizedY = min(max(0, y / availableHeight), 1)
 
@@ -957,9 +993,8 @@ extension ThreadDetailViewController {
     }
 
     private func savePromptTOCSize(for sessionName: String) {
-        guard let width = promptTOCWidthConstraint, let height = promptTOCHeightConstraint else { return }
-        let storedWidth = max(Self.promptTOCMinimumWidth, width.constant)
-        let storedHeight = max(Self.promptTOCMinimumHeight, height.constant)
+        let storedWidth = max(Self.promptTOCMinimumWidth, promptTOCExpandedSize.width)
+        let storedHeight = max(Self.promptTOCMinimumHeight, promptTOCExpandedSize.height)
         UserDefaults.standard.set(
             [storedWidth, storedHeight],
             forKey: promptTOCSizeDefaultsKey(for: sessionName)
@@ -969,36 +1004,37 @@ extension ThreadDetailViewController {
     private func restorePromptTOCPosition(for sessionName: String) {
         guard let values = UserDefaults.standard.array(forKey: promptTOCPositionDefaultsKey(for: sessionName)) as? [Double],
               values.count == 2,
-              let tocView = promptTOCView,
               let top = promptTOCTopConstraint,
               let trailing = promptTOCTrailingConstraint else {
             // Default to bottom-right with generous bottom padding so the TOC
             // stays clear of the prompt / status bar area at the bottom.
-            let tocHeight = promptTOCHeightConstraint?.constant ?? Self.promptTOCMinimumHeight
+            let expandedHeight = promptTOCExpandedSize.height
             let bottomPadding: CGFloat = 120
-            let topConstant = terminalContainer.bounds.height - tocHeight - bottomPadding
+            let topConstant = terminalContainer.bounds.height - expandedHeight - bottomPadding
             promptTOCTopConstraint?.constant = max(12, topConstant)
             promptTOCTrailingConstraint?.constant = -12
             return
         }
 
+        // Position is normalized relative to the expanded size so it remains consistent
+        // regardless of whether the TOC is currently collapsed or expanded.
         let normalizedX = min(max(0, values[0]), 1)
         let normalizedY = min(max(0, values[1]), 1)
-        let availableWidth = max(0, terminalContainer.bounds.width - tocView.frame.width)
-        let availableHeight = max(0, terminalContainer.bounds.height - tocView.frame.height)
+        let expandedWidth = promptTOCExpandedSize.width
+        let expandedHeight = promptTOCExpandedSize.height
+        let availableWidth = max(0, terminalContainer.bounds.width - expandedWidth)
+        let availableHeight = max(0, terminalContainer.bounds.height - expandedHeight)
         let originX = availableWidth * normalizedX
         let originY = availableHeight * normalizedY
 
-        top.constant = terminalContainer.bounds.height - (originY + tocView.frame.height)
-        trailing.constant = originX + tocView.frame.width - terminalContainer.bounds.width
+        top.constant = terminalContainer.bounds.height - (originY + expandedHeight)
+        trailing.constant = originX + expandedWidth - terminalContainer.bounds.width
     }
 
     private func restorePromptTOCSize(for sessionName: String) {
-        guard let width = promptTOCWidthConstraint, let height = promptTOCHeightConstraint else { return }
         guard let values = UserDefaults.standard.array(forKey: promptTOCSizeDefaultsKey(for: sessionName)) as? [Double],
               values.count == 2 else {
-            width.constant = Self.promptTOCMinimumWidth
-            height.constant = Self.promptTOCMinimumHeight
+            promptTOCExpandedSize = NSSize(width: Self.promptTOCMinimumWidth, height: Self.promptTOCMinimumHeight)
             return
         }
 
@@ -1006,8 +1042,10 @@ extension ThreadDetailViewController {
         let minimumHeight = Self.promptTOCMinimumHeight
         let maxWidth = max(minimumWidth, terminalContainer.bounds.width - 8)
         let maxHeight = max(minimumHeight, terminalContainer.bounds.height - 8)
-        width.constant = min(max(minimumWidth, values[0]), maxWidth)
-        height.constant = min(max(minimumHeight, values[1]), maxHeight)
+        promptTOCExpandedSize = NSSize(
+            width: min(max(minimumWidth, values[0]), maxWidth),
+            height: min(max(minimumHeight, values[1]), maxHeight)
+        )
     }
 
     private func promptTOCPositionDefaultsKey(for sessionName: String) -> String {
@@ -1139,6 +1177,8 @@ final class PromptTableOfContentsView: NSView {
     var onCloseRequested: (() -> Void)?
     var onDragGesture: ((NSPanGestureRecognizer) -> Void)?
     var onResizeGesture: ((NSPanGestureRecognizer, TOCResizeCorner) -> Void)?
+    var onHoverStateChanged: ((Bool) -> Void)?
+    var onCollapseCompleted: (() -> Void)?
 
     private let titleLabel = NSTextField(labelWithString: "Table of Contents")
     private let subtitleLabel = NSTextField(labelWithString: "")
@@ -1150,10 +1190,14 @@ final class PromptTableOfContentsView: NSView {
     private let headerBackgroundView = NSView()
     private let headerIcon = NSImageView()
     private var resizeHandleIconView: NSImageView?
+    private var cornerHandleViews: [NSView] = []
+    private var scrollBottomConstraint: NSLayoutConstraint!
+    private var scrollViewCollapseConstraint: NSLayoutConstraint!
     private var rowViews: [PromptTOCEntryRowView] = []
     private var selectedEntryIndex: Int?
     private var tocEntries: [PromptTOCEntry] = []
     private var isHovered = false
+    private(set) var isExpanded = false
     private var shouldRestoreScrollToBottomAfterReload = true
     private var preservedScrollOffsetY: CGFloat = 0
 
@@ -1257,12 +1301,18 @@ final class PromptTableOfContentsView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
+        isExpanded = true
+        onHoverStateChanged?(true)
         updateBackground(animated: true)
+        setCollapsedState(false, animated: true)
     }
 
     override func mouseExited(with event: NSEvent) {
         isHovered = false
+        isExpanded = false
+        onHoverStateChanged?(false)
         updateBackground(animated: true)
+        setCollapsedState(true, animated: true)
     }
 
     private func updateBackground(animated: Bool) {
@@ -1282,6 +1332,7 @@ final class PromptTableOfContentsView: NSView {
         // Keep TOC above terminal surfaces that are added later.
         layer?.zPosition = 10
         layer?.cornerRadius = 8
+        layer?.masksToBounds = true
         alphaValue = Self.normalAlpha
         layer?.borderWidth = 1
 
@@ -1373,6 +1424,7 @@ final class PromptTableOfContentsView: NSView {
 
         let cornerSize: CGFloat = 18
         let cornerHandles = makeCornerHandles(size: cornerSize)
+        cornerHandleViews = cornerHandles
 
         addSubview(headerBackgroundView)
         addSubview(headerStack)
@@ -1380,6 +1432,9 @@ final class PromptTableOfContentsView: NSView {
         addSubview(scrollView)
         addSubview(emptyLabel)
         for handle in cornerHandles { addSubview(handle) }
+
+        scrollBottomConstraint = scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8)
+        scrollViewCollapseConstraint = scrollView.heightAnchor.constraint(equalToConstant: 0)
 
         NSLayoutConstraint.activate([
             headerBackgroundView.topAnchor.constraint(equalTo: topAnchor),
@@ -1397,7 +1452,7 @@ final class PromptTableOfContentsView: NSView {
             scrollView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 8),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+            scrollBottomConstraint,
 
             emptyLabel.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
             emptyLabel.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
@@ -1426,6 +1481,62 @@ final class PromptTableOfContentsView: NSView {
         ])
 
         updateAppearance()
+        setCollapsedState(true, animated: false)
+    }
+
+    private func setCollapsedState(_ collapsed: Bool, animated: Bool) {
+        let targetRadius: CGFloat = collapsed ? 22 : 8
+
+        // Animate corner radius via CABasicAnimation (NSAnimationContext doesn't cover layer.cornerRadius).
+        if animated {
+            let anim = CABasicAnimation(keyPath: "cornerRadius")
+            anim.fromValue = layer?.cornerRadius
+            anim.toValue = targetRadius
+            anim.duration = collapsed ? 0.18 : 0.15
+            anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer?.add(anim, forKey: "tocCornerRadius")
+        }
+        layer?.cornerRadius = targetRadius
+
+        // Toggle scrollView layout constraints to avoid AutoLayout conflicts in collapsed mode.
+        scrollViewCollapseConstraint.isActive = collapsed
+        scrollBottomConstraint.isActive = !collapsed
+
+        if animated {
+            if !collapsed {
+                // Expanding: pre-show views at alpha=0 so they can fade in.
+                scrollView.alphaValue = 0
+                scrollView.isHidden = false
+                headerBackgroundView.alphaValue = 0
+                headerBackgroundView.isHidden = false
+                cornerHandleViews.forEach { $0.alphaValue = 0; $0.isHidden = false }
+            }
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = collapsed ? 0.15 : 0.12
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                scrollView.animator().alphaValue = collapsed ? 0 : 1
+                headerBackgroundView.animator().alphaValue = collapsed ? 0 : 1
+                cornerHandleViews.forEach { $0.animator().alphaValue = collapsed ? 0 : 1 }
+            }, completionHandler: { [weak self] in
+                guard let self else { return }
+                if collapsed {
+                    self.scrollView.isHidden = true
+                    self.headerBackgroundView.isHidden = true
+                    self.emptyLabel.isHidden = true
+                    self.cornerHandleViews.forEach { $0.isHidden = true }
+                    // Reset alpha for the next expansion cycle.
+                    self.scrollView.alphaValue = 1
+                    self.headerBackgroundView.alphaValue = 1
+                    self.cornerHandleViews.forEach { $0.alphaValue = 1 }
+                    self.onCollapseCompleted?()
+                }
+            })
+        } else {
+            scrollView.isHidden = collapsed
+            headerBackgroundView.isHidden = collapsed
+            if collapsed { emptyLabel.isHidden = true }
+            cornerHandleViews.forEach { $0.isHidden = collapsed }
+        }
     }
 
     private func clearRows() {

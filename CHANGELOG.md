@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Table of Contents
+- The TOC now rests as a compact floating capsule showing "Table of Contents" and prompt count; hovering expands it to the full panel with an animation, then collapses back when the cursor leaves.
 - Fixed Prompt TOC prompt selection landing at the wrong scrollback position; prompt taps now use deterministic tmux copy-mode positioning that keeps the selected prompt at the top whenever enough lines exist below it.
 
 ### Terminal
