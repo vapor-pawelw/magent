@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - Tabs opened via the Review button are now named `<Agent>-review` (e.g. `Claude-review`) instead of plain `<Agent>`, making them easy to distinguish from regular agent tabs.
+- Archive suggestion and commit counts in the Changes panel now use the actual remote base branch detected from git history (e.g. `origin/develop`) instead of a stored branch name, so they remain accurate when the worktree switches branches.
+- Archive is only suggested after the worktree has actually done work (become dirty or accumulated commits); fresh untouched worktrees are never suggested for archiving regardless of how the branch state looks.
 
 ### Table of Contents
 - Fixed TOC staying hidden after updating from a version where it had been manually dismissed; the stale "hidden" flag is now cleared on launch.
