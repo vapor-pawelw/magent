@@ -9,7 +9,8 @@ extension ThreadManager {
         to thread: MagentThread,
         useAgentCommand: Bool = false,
         requestedAgentType: AgentType? = nil,
-        initialPrompt: String? = nil
+        initialPrompt: String? = nil,
+        tabNameSuffix: String? = nil
     ) async throws -> Tab {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
             throw ThreadManagerError.threadNotFound
@@ -58,7 +59,7 @@ extension ThreadManager {
             }
 
             tabDisplayName = uniqueTabDisplayName(
-                baseName: requestedTabBaseName,
+                baseName: requestedTabBaseName + (tabNameSuffix ?? ""),
                 in: currentThread
             )
             let tabSlug = Self.sanitizeForTmux(tabDisplayName)
@@ -97,7 +98,7 @@ extension ThreadManager {
             }
 
             tabDisplayName = uniqueTabDisplayName(
-                baseName: requestedTabBaseName,
+                baseName: requestedTabBaseName + (tabNameSuffix ?? ""),
                 in: currentThread
             )
             let tabSlug = Self.sanitizeForTmux(tabDisplayName)

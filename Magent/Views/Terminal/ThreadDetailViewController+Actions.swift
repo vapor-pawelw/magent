@@ -259,14 +259,15 @@ extension ThreadDetailViewController {
         }
     }
 
-    private func addTab(using agentType: AgentType?, useAgentCommand: Bool, initialPrompt: String? = nil) {
+    private func addTab(using agentType: AgentType?, useAgentCommand: Bool, initialPrompt: String? = nil, tabNameSuffix: String? = nil) {
         Task {
             do {
                 let tab = try await threadManager.addTab(
                     to: thread,
                     useAgentCommand: useAgentCommand,
                     requestedAgentType: agentType,
-                    initialPrompt: initialPrompt
+                    initialPrompt: initialPrompt,
+                    tabNameSuffix: tabNameSuffix
                 )
                 let latestThread = self.threadManager.threads.first(where: { $0.id == self.thread.id }) ?? self.thread
                 _ = await self.threadManager.recreateSessionIfNeeded(
@@ -425,7 +426,7 @@ extension ThreadDetailViewController {
             return
         }
 
-        addTab(using: agentType, useAgentCommand: true, initialPrompt: reviewPrompt())
+        addTab(using: agentType, useAgentCommand: true, initialPrompt: reviewPrompt(), tabNameSuffix: "-review")
     }
 
     private func defaultReviewAgentType(from settings: AppSettings) -> AgentType? {
