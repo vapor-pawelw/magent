@@ -68,9 +68,6 @@ extension ThreadDetailViewController {
         tocView.onRenameFromEntry = { [weak self] entryIndex in
             self?.handlePromptTOCRenameFromEntry(entryIndex: entryIndex)
         }
-        tocView.onCloseRequested = { [weak self] in
-            self?.togglePromptTOCVisibility()
-        }
         tocView.onDragGesture = { [weak self] gesture in
             self?.handlePromptTOCDrag(gesture)
         }
@@ -937,23 +934,9 @@ extension ThreadDetailViewController {
     }
 
     func updatePromptTOCToggleButtonState(canShow: Bool) {
-        guard showPromptTOCOverlay else {
-            togglePromptTOCButton.isHidden = true
-            togglePromptTOCButton.isEnabled = false
-            togglePromptTOCButton.image = NSImage(
-                systemSymbolName: "list.bullet.rectangle",
-                accessibilityDescription: "Toggle Table of Contents"
-            )
-            togglePromptTOCButton.toolTip = "Table of Contents is disabled in Settings"
-            return
-        }
-
-        togglePromptTOCButton.isHidden = false
-        togglePromptTOCButton.isEnabled = canShow
-        let isShown = canShow && !isPromptTOCManuallyHidden
-        let symbolName = isShown ? "list.bullet.rectangle.fill" : "list.bullet.rectangle"
-        togglePromptTOCButton.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Toggle Table of Contents")
-        togglePromptTOCButton.toolTip = isShown ? "Hide Table of Contents" : "Show Table of Contents"
+        // The toggle button is no longer in the toolbar — the TOC is always-on as a floating
+        // capsule. Users can disable it via Settings. Keep the button hidden.
+        togglePromptTOCButton.isHidden = true
     }
 
     func applyPromptTOCVisibility(restoringPosition: Bool = false) {
@@ -1189,7 +1172,6 @@ enum TOCResizeCorner {
 final class PromptTableOfContentsView: NSView {
     var onSelectEntry: ((Int) -> Void)?
     var onRenameFromEntry: ((Int) -> Void)?
-    var onCloseRequested: (() -> Void)?
     var onDragGesture: ((NSPanGestureRecognizer) -> Void)?
     var onResizeGesture: ((NSPanGestureRecognizer, TOCResizeCorner) -> Void)?
     var onHoverStateChanged: ((Bool) -> Void)?
@@ -1202,7 +1184,6 @@ final class PromptTableOfContentsView: NSView {
     private let scrollView = NSScrollView()
     private let emptyLabel = NSTextField(labelWithString: "No prompts yet")
     private let spinner = NSProgressIndicator()
-    private let closeButton = NSButton()
     private let headerBackgroundView = NSView()
     private let headerIcon = NSImageView()
     private var resizeHandleIconView: NSImageView?
@@ -1364,7 +1345,7 @@ final class PromptTableOfContentsView: NSView {
         titleLabel.textColor = NSColor(resource: .textPrimary)
         titleLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
 
-        countLabel.font = .systemFont(ofSize: 14, weight: .bold)
+        countLabel.font = .systemFont(ofSize: 13, weight: .bold)
         countLabel.textColor = NSColor(resource: .textPrimary)
         countLabel.translatesAutoresizingMaskIntoConstraints = false
         countLabel.setContentHuggingPriority(.required, for: .horizontal)
@@ -1374,16 +1355,16 @@ final class PromptTableOfContentsView: NSView {
 
         countBadgeView.translatesAutoresizingMaskIntoConstraints = false
         countBadgeView.wantsLayer = true
-        countBadgeView.layer?.cornerRadius = 12
+        countBadgeView.layer?.cornerRadius = 10
         countBadgeView.layer?.masksToBounds = true
         countBadgeView.setContentHuggingPriority(.required, for: .horizontal)
         countBadgeView.setContentHuggingPriority(.required, for: .vertical)
         countBadgeView.addSubview(countLabel)
         NSLayoutConstraint.activate([
-            countLabel.topAnchor.constraint(equalTo: countBadgeView.topAnchor, constant: 3),
-            countLabel.bottomAnchor.constraint(equalTo: countBadgeView.bottomAnchor, constant: -3),
-            countLabel.leadingAnchor.constraint(equalTo: countBadgeView.leadingAnchor, constant: 7),
-            countLabel.trailingAnchor.constraint(equalTo: countBadgeView.trailingAnchor, constant: -7),
+            countBadgeView.heightAnchor.constraint(equalToConstant: 20),
+            countLabel.centerYAnchor.constraint(equalTo: countBadgeView.centerYAnchor),
+            countLabel.leadingAnchor.constraint(equalTo: countBadgeView.leadingAnchor, constant: 6),
+            countLabel.trailingAnchor.constraint(equalTo: countBadgeView.trailingAnchor, constant: -6),
         ])
 
         spinner.style = .spinning
@@ -1394,25 +1375,10 @@ final class PromptTableOfContentsView: NSView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        closeButton.translatesAutoresizingMaskIntoConstraints = false
-        closeButton.isBordered = false
-        closeButton.bezelStyle = .inline
-        closeButton.image = NSImage(
-            systemSymbolName: "xmark.circle.fill",
-            accessibilityDescription: "Hide Table of Contents"
-        )
-        closeButton.contentTintColor = NSColor(resource: .textSecondary)
-        closeButton.imageScaling = .scaleProportionallyDown
-        closeButton.toolTip = "Hide Table of Contents"
-        closeButton.target = self
-        closeButton.action = #selector(handleCloseButtonTapped)
-        closeButton.setContentHuggingPriority(.required, for: .horizontal)
-        closeButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-
         let headerStack = NSStackView(views: [headerIcon, titleLabel, NSView(), countBadgeView, spinner])
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
-        headerStack.spacing = 6
+        headerStack.spacing = 5
         headerStack.translatesAutoresizingMaskIntoConstraints = false
 
         let pan = NSPanGestureRecognizer(target: self, action: #selector(handleDrag(_:)))
@@ -1457,7 +1423,6 @@ final class PromptTableOfContentsView: NSView {
 
         addSubview(headerBackgroundView)
         addSubview(headerStack)
-        addSubview(closeButton)
         addSubview(scrollView)
         addSubview(emptyLabel)
         for handle in cornerHandles { addSubview(handle) }
@@ -1471,12 +1436,9 @@ final class PromptTableOfContentsView: NSView {
             headerBackgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
             headerBackgroundView.bottomAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 8),
 
-            closeButton.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-
             headerStack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             headerStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            headerStack.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -4),
+            headerStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
 
             scrollView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 8),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
@@ -1517,42 +1479,47 @@ final class PromptTableOfContentsView: NSView {
         let targetRadius: CGFloat = collapsed ? 18 : 8
 
         if animated {
-            if !collapsed {
-                // Expanding: swap constraints and notify controller so the frame animation
-                // starts with the correct scroll-content layout already active.
-                scrollViewCollapseConstraint.isActive = false
-                scrollBottomConstraint.isActive = true
-                onHoverStateChanged?(true)
-
-                // Pre-show content views at alpha 0 so they can fade in.
-                scrollView.alphaValue = 0
-                scrollView.isHidden = false
-                headerBackgroundView.alphaValue = 0
-                headerBackgroundView.isHidden = false
-                cornerHandleViews.forEach { $0.alphaValue = 0; $0.isHidden = false }
-            } else {
-                // Collapsing: notify controller to capture the current expanded size
-                // before we start the fade-out; frame shrink is deferred to onCollapseCompleted.
-                onHoverStateChanged?(false)
-            }
-
             // Animate corner radius via CABasicAnimation (not covered by NSAnimationContext).
             let anim = CABasicAnimation(keyPath: "cornerRadius")
             anim.fromValue = layer?.cornerRadius
             anim.toValue = targetRadius
-            anim.duration = collapsed ? 0.15 : 0.18
+            anim.duration = collapsed ? 0.15 : 0.22
             anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             layer?.add(anim, forKey: "tocCornerRadius")
 
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = collapsed ? 0.13 : 0.14
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                scrollView.animator().alphaValue = collapsed ? 0 : 1
-                headerBackgroundView.animator().alphaValue = collapsed ? 0 : 1
-                cornerHandleViews.forEach { $0.animator().alphaValue = collapsed ? 0 : 1 }
-            }, completionHandler: { [weak self] in
-                guard let self else { return }
-                if collapsed {
+            if !collapsed {
+                // Expanding: swap constraints so scroll content is laid out inside the growing
+                // frame, then notify the controller to start the frame animation.
+                scrollViewCollapseConstraint.isActive = false
+                scrollBottomConstraint.isActive = true
+                onHoverStateChanged?(true)
+
+                // Delay content reveal until AFTER the frame has finished expanding so rows
+                // don't appear to clip/slide in from the top while the panel is growing.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) { [weak self] in
+                    guard let self, self.isExpanded else { return }
+                    self.scrollView.alphaValue = 0
+                    self.scrollView.isHidden = false
+                    self.headerBackgroundView.alphaValue = 0
+                    self.headerBackgroundView.isHidden = false
+                    self.cornerHandleViews.forEach { $0.alphaValue = 0; $0.isHidden = false }
+                    NSAnimationContext.runAnimationGroup { ctx in
+                        ctx.duration = 0.14
+                        self.scrollView.animator().alphaValue = 1
+                        self.headerBackgroundView.animator().alphaValue = 1
+                        self.cornerHandleViews.forEach { $0.animator().alphaValue = 1 }
+                    }
+                }
+            } else {
+                // Collapsing: notify controller to capture the expanded size, then fade out.
+                onHoverStateChanged?(false)
+                NSAnimationContext.runAnimationGroup({ ctx in
+                    ctx.duration = 0.13
+                    scrollView.animator().alphaValue = 0
+                    headerBackgroundView.animator().alphaValue = 0
+                    cornerHandleViews.forEach { $0.animator().alphaValue = 0 }
+                }, completionHandler: { [weak self] in
+                    guard let self else { return }
                     self.scrollView.isHidden = true
                     self.headerBackgroundView.isHidden = true
                     self.emptyLabel.isHidden = true
@@ -1563,8 +1530,8 @@ final class PromptTableOfContentsView: NSView {
                     self.scrollViewCollapseConstraint.isActive = true
                     self.scrollBottomConstraint.isActive = false
                     self.onCollapseCompleted?()
-                }
-            })
+                })
+            }
         } else {
             scrollViewCollapseConstraint.isActive = collapsed
             scrollBottomConstraint.isActive = !collapsed
@@ -1661,10 +1628,6 @@ final class PromptTableOfContentsView: NSView {
 
     @objc private func handleDrag(_ gesture: NSPanGestureRecognizer) {
         onDragGesture?(gesture)
-    }
-
-    @objc private func handleCloseButtonTapped() {
-        onCloseRequested?()
     }
 
     @objc private func handleResizeTopLeft(_ gesture: NSPanGestureRecognizer) {

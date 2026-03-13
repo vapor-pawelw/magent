@@ -33,7 +33,7 @@ final class ThreadDetailViewController: NSViewController {
     static let promptTOCVisibilityDefaultsKey = "MagentPromptTOCVisibilityHidden"
     static let promptTOCMinimumWidth: CGFloat = 320
     static let promptTOCMinimumHeight: CGFloat = 250
-    static let promptTOCCollapsedWidth: CGFloat = 210
+    static let promptTOCCollapsedWidth: CGFloat = 185
     static let promptTOCCollapsedHeight: CGFloat = 36
 
     var thread: MagentThread
@@ -333,7 +333,7 @@ final class ThreadDetailViewController: NSViewController {
         topBar.spacing = 8
         topBar.alignment = .centerY
         topBar.translatesAutoresizingMaskIntoConstraints = false
-        for view in [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, togglePromptTOCButton, separator, archiveThreadButton] {
+        for view in [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, separator, archiveThreadButton] {
             topBar.addArrangedSubview(view)
         }
 
@@ -708,7 +708,6 @@ final class ThreadDetailViewController: NSViewController {
             openInJiraButton,
             reviewButton,
             exportContextButton,
-            togglePromptTOCButton,
             archiveThreadButton,
         ]
     }
