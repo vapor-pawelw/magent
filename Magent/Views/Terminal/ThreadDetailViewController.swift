@@ -33,8 +33,8 @@ final class ThreadDetailViewController: NSViewController {
     static let promptTOCVisibilityDefaultsKey = "MagentPromptTOCVisibilityHidden"
     static let promptTOCMinimumWidth: CGFloat = 320
     static let promptTOCMinimumHeight: CGFloat = 250
-    static let promptTOCCollapsedWidth: CGFloat = 220
-    static let promptTOCCollapsedHeight: CGFloat = 44
+    static let promptTOCCollapsedWidth: CGFloat = 210
+    static let promptTOCCollapsedHeight: CGFloat = 36
 
     var thread: MagentThread
     let threadManager = ThreadManager.shared

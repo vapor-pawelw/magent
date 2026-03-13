@@ -86,9 +86,17 @@ extension ThreadDetailViewController {
             guard let self else { return }
             // Guard against re-hover that arrived before the animation finished.
             guard !(self.promptTOCView?.isExpanded ?? false) else { return }
-            self.promptTOCWidthConstraint?.constant = Self.promptTOCCollapsedWidth
-            self.promptTOCHeightConstraint?.constant = Self.promptTOCCollapsedHeight
-            self.terminalContainer.layoutSubtreeIfNeeded()
+            let cw = Self.promptTOCCollapsedWidth
+            let ch = Self.promptTOCCollapsedHeight
+            NSAnimationContext.runAnimationGroup { [weak self] ctx in
+                guard let self else { return }
+                ctx.duration = 0.18
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                ctx.allowsImplicitAnimation = true
+                self.promptTOCWidthConstraint?.constant = cw
+                self.promptTOCHeightConstraint?.constant = ch
+                self.terminalContainer.layoutSubtreeIfNeeded()
+            }
         }
 
         let top = tocView.topAnchor.constraint(equalTo: terminalContainer.topAnchor, constant: 12)
@@ -909,11 +917,18 @@ extension ThreadDetailViewController {
         guard let widthConstraint = promptTOCWidthConstraint,
               let heightConstraint = promptTOCHeightConstraint else { return }
         if expanded {
-            // Restore to the user's last expanded size.
-            widthConstraint.constant = promptTOCExpandedSize.width
-            heightConstraint.constant = promptTOCExpandedSize.height
-            terminalContainer.layoutSubtreeIfNeeded()
-            clampPromptTOCPositionIfNeeded()
+            let w = promptTOCExpandedSize.width
+            let h = promptTOCExpandedSize.height
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.22
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                ctx.allowsImplicitAnimation = true
+                widthConstraint.constant = w
+                heightConstraint.constant = h
+                terminalContainer.layoutSubtreeIfNeeded()
+            }, completionHandler: { [weak self] in
+                self?.clampPromptTOCPositionIfNeeded()
+            })
         } else {
             // Capture current expanded size; the actual frame shrink happens in onCollapseCompleted
             // (after the fade-out animation finishes) so content isn't clipped mid-animation.
@@ -1181,7 +1196,8 @@ final class PromptTableOfContentsView: NSView {
     var onCollapseCompleted: (() -> Void)?
 
     private let titleLabel = NSTextField(labelWithString: "Table of Contents")
-    private let subtitleLabel = NSTextField(labelWithString: "")
+    private let countBadgeView = NSView()
+    private let countLabel = NSTextField(labelWithString: "0")
     private let rowsStack = NSStackView()
     private let scrollView = NSScrollView()
     private let emptyLabel = NSTextField(labelWithString: "No prompts yet")
@@ -1218,7 +1234,7 @@ final class PromptTableOfContentsView: NSView {
     func setLoading(agentType: AgentType?) {
         preservedScrollOffsetY = currentScrollOffsetY()
         shouldRestoreScrollToBottomAfterReload = isScrolledToBottomOrNearBottom()
-        subtitleLabel.stringValue = subtitle(forCount: nil, agentType: agentType)
+        countLabel.stringValue = "…"
         spinner.isHidden = false
         spinner.startAnimation(nil)
         emptyLabel.isHidden = true
@@ -1232,7 +1248,7 @@ final class PromptTableOfContentsView: NSView {
         let previousSelection = selectedEntryIndex
         let shouldScrollToBottom = shouldRestoreScrollToBottomAfterReload
         tocEntries = entries
-        subtitleLabel.stringValue = subtitle(forCount: entries.count, agentType: agentType)
+        countLabel.stringValue = "\(entries.count)"
         spinner.stopAnimation(nil)
         spinner.isHidden = true
         clearRows()
@@ -1302,7 +1318,6 @@ final class PromptTableOfContentsView: NSView {
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
         isExpanded = true
-        onHoverStateChanged?(true)
         updateBackground(animated: true)
         setCollapsedState(false, animated: true)
     }
@@ -1310,7 +1325,6 @@ final class PromptTableOfContentsView: NSView {
     override func mouseExited(with event: NSEvent) {
         isHovered = false
         isExpanded = false
-        onHoverStateChanged?(false)
         updateBackground(animated: true)
         setCollapsedState(true, animated: true)
     }
@@ -1348,9 +1362,29 @@ final class PromptTableOfContentsView: NSView {
 
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         titleLabel.textColor = NSColor(resource: .textPrimary)
+        titleLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
 
-        subtitleLabel.font = .systemFont(ofSize: 10, weight: .regular)
-        subtitleLabel.textColor = NSColor(resource: .textSecondary)
+        countLabel.font = .systemFont(ofSize: 14, weight: .bold)
+        countLabel.textColor = NSColor(resource: .textPrimary)
+        countLabel.translatesAutoresizingMaskIntoConstraints = false
+        countLabel.setContentHuggingPriority(.required, for: .horizontal)
+        countLabel.setContentHuggingPriority(.required, for: .vertical)
+        countLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        countLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+
+        countBadgeView.translatesAutoresizingMaskIntoConstraints = false
+        countBadgeView.wantsLayer = true
+        countBadgeView.layer?.cornerRadius = 12
+        countBadgeView.layer?.masksToBounds = true
+        countBadgeView.setContentHuggingPriority(.required, for: .horizontal)
+        countBadgeView.setContentHuggingPriority(.required, for: .vertical)
+        countBadgeView.addSubview(countLabel)
+        NSLayoutConstraint.activate([
+            countLabel.topAnchor.constraint(equalTo: countBadgeView.topAnchor, constant: 3),
+            countLabel.bottomAnchor.constraint(equalTo: countBadgeView.bottomAnchor, constant: -3),
+            countLabel.leadingAnchor.constraint(equalTo: countBadgeView.leadingAnchor, constant: 7),
+            countLabel.trailingAnchor.constraint(equalTo: countBadgeView.trailingAnchor, constant: -7),
+        ])
 
         spinner.style = .spinning
         spinner.controlSize = .small
@@ -1375,12 +1409,7 @@ final class PromptTableOfContentsView: NSView {
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
         closeButton.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        let textStack = NSStackView(views: [titleLabel, subtitleLabel])
-        textStack.orientation = .vertical
-        textStack.spacing = 1
-        textStack.alignment = .leading
-
-        let headerStack = NSStackView(views: [headerIcon, textStack, NSView(), spinner])
+        let headerStack = NSStackView(views: [headerIcon, titleLabel, NSView(), countBadgeView, spinner])
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
         headerStack.spacing = 6
@@ -1485,34 +1514,38 @@ final class PromptTableOfContentsView: NSView {
     }
 
     private func setCollapsedState(_ collapsed: Bool, animated: Bool) {
-        let targetRadius: CGFloat = collapsed ? 22 : 8
-
-        // Animate corner radius via CABasicAnimation (NSAnimationContext doesn't cover layer.cornerRadius).
-        if animated {
-            let anim = CABasicAnimation(keyPath: "cornerRadius")
-            anim.fromValue = layer?.cornerRadius
-            anim.toValue = targetRadius
-            anim.duration = collapsed ? 0.18 : 0.15
-            anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            layer?.add(anim, forKey: "tocCornerRadius")
-        }
-        layer?.cornerRadius = targetRadius
-
-        // Toggle scrollView layout constraints to avoid AutoLayout conflicts in collapsed mode.
-        scrollViewCollapseConstraint.isActive = collapsed
-        scrollBottomConstraint.isActive = !collapsed
+        let targetRadius: CGFloat = collapsed ? 18 : 8
 
         if animated {
             if !collapsed {
-                // Expanding: pre-show views at alpha=0 so they can fade in.
+                // Expanding: swap constraints and notify controller so the frame animation
+                // starts with the correct scroll-content layout already active.
+                scrollViewCollapseConstraint.isActive = false
+                scrollBottomConstraint.isActive = true
+                onHoverStateChanged?(true)
+
+                // Pre-show content views at alpha 0 so they can fade in.
                 scrollView.alphaValue = 0
                 scrollView.isHidden = false
                 headerBackgroundView.alphaValue = 0
                 headerBackgroundView.isHidden = false
                 cornerHandleViews.forEach { $0.alphaValue = 0; $0.isHidden = false }
+            } else {
+                // Collapsing: notify controller to capture the current expanded size
+                // before we start the fade-out; frame shrink is deferred to onCollapseCompleted.
+                onHoverStateChanged?(false)
             }
+
+            // Animate corner radius via CABasicAnimation (not covered by NSAnimationContext).
+            let anim = CABasicAnimation(keyPath: "cornerRadius")
+            anim.fromValue = layer?.cornerRadius
+            anim.toValue = targetRadius
+            anim.duration = collapsed ? 0.15 : 0.18
+            anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer?.add(anim, forKey: "tocCornerRadius")
+
             NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = collapsed ? 0.15 : 0.12
+                ctx.duration = collapsed ? 0.13 : 0.14
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 scrollView.animator().alphaValue = collapsed ? 0 : 1
                 headerBackgroundView.animator().alphaValue = collapsed ? 0 : 1
@@ -1524,19 +1557,24 @@ final class PromptTableOfContentsView: NSView {
                     self.headerBackgroundView.isHidden = true
                     self.emptyLabel.isHidden = true
                     self.cornerHandleViews.forEach { $0.isHidden = true }
-                    // Reset alpha for the next expansion cycle.
                     self.scrollView.alphaValue = 1
                     self.headerBackgroundView.alphaValue = 1
                     self.cornerHandleViews.forEach { $0.alphaValue = 1 }
+                    self.scrollViewCollapseConstraint.isActive = true
+                    self.scrollBottomConstraint.isActive = false
                     self.onCollapseCompleted?()
                 }
             })
         } else {
+            scrollViewCollapseConstraint.isActive = collapsed
+            scrollBottomConstraint.isActive = !collapsed
             scrollView.isHidden = collapsed
             headerBackgroundView.isHidden = collapsed
             if collapsed { emptyLabel.isHidden = true }
             cornerHandleViews.forEach { $0.isHidden = collapsed }
         }
+
+        layer?.cornerRadius = targetRadius
     }
 
     private func clearRows() {
@@ -1572,18 +1610,6 @@ final class PromptTableOfContentsView: NSView {
         let targetOffsetY = min(max(0, preservedScrollOffsetY), maxOffsetY)
         contentView.scroll(to: NSPoint(x: 0, y: targetOffsetY))
         scrollView.reflectScrolledClipView(contentView)
-    }
-
-    private func subtitle(forCount count: Int?, agentType: AgentType?) -> String {
-        let agentLabel = switch agentType {
-        case .codex: "Codex"
-        case .claude: "Claude Code"
-        case .custom: "Custom"
-        case nil: "Session"
-        }
-        guard let count else { return "\(agentLabel) · Loading..." }
-        let noun = count == 1 ? "prompt" : "prompts"
-        return "\(agentLabel) · \(count) \(noun)"
     }
 
     @objc private func handleEntryRowTap(_ gesture: NSClickGestureRecognizer) {
@@ -1707,6 +1733,8 @@ final class PromptTableOfContentsView: NSView {
             headerBackgroundView.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.14).cgColor
             headerIcon.contentTintColor = NSColor(resource: .textSecondary)
             resizeHandleIconView?.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.8)
+            countBadgeView.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.1).cgColor
+            countLabel.textColor = NSColor(resource: .textPrimary)
         }
     }
 }
