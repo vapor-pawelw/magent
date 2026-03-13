@@ -47,6 +47,8 @@ magent-cli create-thread --project <name> [options]
 If neither `--name` nor `--description` is given, a random name is generated.
 `--base-thread` and `--base-branch` are mutually exclusive.
 
+**Timeout note**: `create-thread` allows up to 120 seconds for the server to respond, since it involves git worktree creation (can be slow on large repos) and optionally an AI agent call to generate a slug from `--description`. Prefer `--name` over `--description` when you want the exact name and faster response.
+
 ### list-projects
 
 List all registered projects.

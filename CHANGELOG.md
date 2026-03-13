@@ -18,6 +18,9 @@ All notable changes to this project will be documented in this file.
 - Fixed mouse-wheel scrolling not working after app restart: terminal history scrolling now works via tmux copy-mode (requires tmux mouse support enabled by Magent). The "Scroll terminal history" mode forces copy-mode on every scroll-up event; "Send wheel input to apps/prompts" restores tmux's default behavior.
 - Unselected tab borders in dark mode are now slightly more visible.
 
+### CLI
+- Fixed `magent-cli create-thread` silently producing no output and not creating the thread: the IPC socket timeout was too short (5s) for operations that involve git worktree creation on large repos or AI-based name generation from `--description`. Timeouts are now 120s for `create-thread`, 60s for `create-tab` and `auto-rename-thread`, and 10s for all other commands.
+
 ### Agents
 - Fixed Codex failing to launch when a user shell function for `codex` injects `--dangerously-bypass-approvals-and-sandbox`, which conflicts with the equivalent `--yolo` flag in newer Codex versions. Agent binaries are now invoked with the `command` built-in to bypass shell wrappers, and the Codex resume command is updated to use `--yolo`.
 

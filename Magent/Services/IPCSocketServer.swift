@@ -5,7 +5,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v20"
+    private static let cliVersion = "magent-cli-v21"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -327,7 +327,7 @@ actor IPCSocketServer {
         }
 
         send_request() {
-            printf '%s\n' "$1" | nc -U "$SOCKET" -w 5 2>/dev/null
+            printf '%s\n' "$1" | nc -U "$SOCKET" -w "${2:-10}" 2>/dev/null
         }
 
         send_checked_request() {
@@ -641,7 +641,7 @@ actor IPCSocketServer {
             [ -n "$base_thread" ] && json="$json,$(json_kv baseThreadName "$base_thread")"
             [ -n "$base_branch" ] && json="$json,$(json_kv baseBranch "$base_branch")"
             json="$json}"
-            send_request "$json"
+            send_request "$json" 120
             ;;
         list-projects)
             send_request "{$(json_kv command list-projects)}"
@@ -797,7 +797,7 @@ actor IPCSocketServer {
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
             [ -n "$prompt" ] && json="$json,$(json_kv prompt "$prompt")"
             json="$json}"
-            send_request "$json"
+            send_request "$json" 60
             ;;
         close-tab)
             thread=""; tab_index=""; session=""
@@ -838,7 +838,7 @@ actor IPCSocketServer {
             done
             [ -z "$prompt" ] && [ -n "$description" ] && prompt="$description"
             [ -n "$thread" ] && [ -n "$prompt" ] || die "Usage: magent-cli auto-rename-thread --thread <name> --prompt <text>"
-            send_request "{$(json_kv command auto-rename-thread),$(json_kv threadName "$thread"),$(json_kv prompt "$prompt")}"
+            send_request "{$(json_kv command auto-rename-thread),$(json_kv threadName "$thread"),$(json_kv prompt "$prompt")}" 60
             ;;
         rename-branch|rename-thread-exact)
             thread=""; name=""
