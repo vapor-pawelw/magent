@@ -209,6 +209,25 @@ public final class GhosttyAppManager {
         applyEmbeddedPreferences(embeddedPreferences, effectiveAppearance: effectiveAppearance)
     }
 
+    public func openURL(_ urlString: String) {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else {
+            Self.log("openURL: invalid URL '\(urlString)'")
+            return
+        }
+        if !NSWorkspace.shared.open(url) {
+            Self.log("openURL: NSWorkspace failed for '\(trimmed)'")
+        }
+    }
+
+    public func setHoveredLink(_ urlString: String?, surfaceAddress: Int) {
+        guard let surface = registeredSurfaces[surfaceAddress],
+              let surfaceView = terminalSurfaceView(for: surface) else {
+            return
+        }
+        surfaceView.setHoveredLink(urlString)
+    }
+
     private func startDisplayLinkIfNeeded() {
         guard displayLink == nil else { return }
         CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
@@ -345,9 +364,7 @@ public final class GhosttyAppManager {
     }
 
     private func effectiveAppearance(for surface: ghostty_surface_t) -> NSAppearance? {
-        guard let userData = ghostty_surface_userdata(surface) else { return nil }
-        let surfaceView = Unmanaged<TerminalSurfaceView>.fromOpaque(userData).takeUnretainedValue()
-        return surfaceView.effectiveAppearance
+        terminalSurfaceView(for: surface)?.effectiveAppearance
     }
 
     private func resolvedColorScheme(for effectiveAppearance: NSAppearance? = nil) -> ghostty_color_scheme_e {
@@ -365,6 +382,11 @@ public final class GhosttyAppManager {
         let appearance = (effectiveAppearance ?? NSApp.effectiveAppearance).bestMatch(from: [.darkAqua, .aqua])
         return appearance == .darkAqua ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT
     }
+
+    private func terminalSurfaceView(for surface: ghostty_surface_t) -> TerminalSurfaceView? {
+        guard let userData = ghostty_surface_userdata(surface) else { return nil }
+        return Unmanaged<TerminalSurfaceView>.fromOpaque(userData).takeUnretainedValue()
+    }
 }
 
 // MARK: - C callbacks
@@ -375,6 +397,18 @@ public final class GhosttyAppManager {
 /// Wraps a raw pointer so it can be sent across isolation boundaries.
 private struct SendableRawPointer: @unchecked Sendable {
     public let pointer: UnsafeMutableRawPointer?
+}
+
+private func copiedGhosttyString(_ pointer: UnsafePointer<CChar>?, length: Int) -> String? {
+    guard let pointer else { return nil }
+    if length > 0 {
+        let bytes = UnsafeRawBufferPointer(start: pointer, count: length)
+        let string = String(decoding: bytes, as: UTF8.self)
+        return string.isEmpty ? nil : string
+    }
+
+    let string = String(cString: pointer)
+    return string.isEmpty ? nil : string
 }
 
 private func ghosttyWakeupCallback(_ userdata: UnsafeMutableRawPointer?) {
@@ -395,8 +429,28 @@ private func ghosttyActionCallback(
          GHOSTTY_ACTION_MOUSE_SHAPE,
          GHOSTTY_ACTION_MOUSE_VISIBILITY,
          GHOSTTY_ACTION_RING_BELL,
-         GHOSTTY_ACTION_PWD,
-         GHOSTTY_ACTION_OPEN_URL:
+         GHOSTTY_ACTION_PWD:
+        return true
+    case GHOSTTY_ACTION_MOUSE_OVER_LINK:
+        guard target.tag == GHOSTTY_TARGET_SURFACE,
+              let surface = target.target.surface else { return false }
+        let surfaceAddr = Int(bitPattern: surface)
+        let hoveredURL = copiedGhosttyString(
+            action.action.mouse_over_link.url,
+            length: action.action.mouse_over_link.len
+        )
+        Task { @MainActor in
+            GhosttyAppManager.shared.setHoveredLink(hoveredURL, surfaceAddress: surfaceAddr)
+        }
+        return true
+    case GHOSTTY_ACTION_OPEN_URL:
+        let openedURL = copiedGhosttyString(
+            action.action.open_url.url,
+            length: Int(action.action.open_url.len)
+        ) ?? ""
+        Task { @MainActor in
+            GhosttyAppManager.shared.openURL(openedURL)
+        }
         return true
     case GHOSTTY_ACTION_SCROLLBAR:
         guard target.tag == GHOSTTY_TARGET_SURFACE else { return false }

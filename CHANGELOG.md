@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Terminal
+- Links in the terminal are now clickable: Cmd+click opens URLs in the default browser. Hovering over a link shows an animated URL pill at the bottom of the terminal and changes the cursor to a pointing hand. Link detection combines ghostty-native OSC 8 hyperlinks, the word under the cursor, and tmux pane content — so most URLs work regardless of whether they were written with escape codes.
 
 ## 1.2.2 - 2026-03-13
 
