@@ -43,6 +43,7 @@ final class ThreadDetailViewController: NSViewController {
     let openInJiraButton = NSButton()
     let openInXcodeButton = NSButton()
     let openInFinderButton = NSButton()
+    let resyncLocalPathsButton = NSButton()
     let archiveThreadButton = NSButton()
     let reviewButton = NSButton()
     let exportContextButton = NSButton()
@@ -285,6 +286,17 @@ final class ThreadDetailViewController: NSViewController {
             ? String(localized: .ThreadStrings.threadOpenProjectRootInFinder)
             : String(localized: .ThreadStrings.threadOpenWorktreeInFinder)
 
+        resyncLocalPathsButton.bezelStyle = .texturedRounded
+        resyncLocalPathsButton.image = NSImage(
+            systemSymbolName: "arrow.triangle.2.circlepath",
+            accessibilityDescription: "Resync Local Paths"
+        )
+        resyncLocalPathsButton.imageScaling = .scaleProportionallyDown
+        resyncLocalPathsButton.target = self
+        resyncLocalPathsButton.action = #selector(resyncLocalPathsTapped)
+        resyncLocalPathsButton.toolTip = "Resync Local Sync Paths from the main repo"
+        resyncLocalPathsButton.isHidden = thread.isMain
+
         archiveThreadButton.bezelStyle = .texturedRounded
         archiveThreadButton.image = NSImage(
             systemSymbolName: "archivebox",
@@ -330,7 +342,7 @@ final class ThreadDetailViewController: NSViewController {
         topBar.spacing = 8
         topBar.alignment = .centerY
         topBar.translatesAutoresizingMaskIntoConstraints = false
-        for view in [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, togglePromptTOCButton, separator, archiveThreadButton] {
+        for view in [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, togglePromptTOCButton, resyncLocalPathsButton, separator, archiveThreadButton] {
             topBar.addArrangedSubview(view)
         }
 
@@ -706,6 +718,7 @@ final class ThreadDetailViewController: NSViewController {
             reviewButton,
             exportContextButton,
             togglePromptTOCButton,
+            resyncLocalPathsButton,
             archiveThreadButton,
         ]
     }
@@ -727,6 +740,10 @@ final class ThreadDetailViewController: NSViewController {
             exportContextButton.image = NSImage(
                 systemSymbolName: "square.and.arrow.up",
                 accessibilityDescription: String(localized: .NotificationStrings.contextExport)
+            )
+            resyncLocalPathsButton.image = NSImage(
+                systemSymbolName: "arrow.triangle.2.circlepath",
+                accessibilityDescription: "Resync Local Paths"
             )
             addTabButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Tab")
             updatePromptTOCToggleButtonState(canShow: promptTOCCanShowForCurrentTab)

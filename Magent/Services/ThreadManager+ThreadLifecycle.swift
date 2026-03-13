@@ -98,8 +98,9 @@ extension ThreadManager {
         )
 
         let localFileSyncPathsSnapshot = project.normalizedLocalFileSyncPaths
+        let missingLocalSyncPaths: [String]
         do {
-            try await syncConfiguredLocalPathsIntoWorktree(
+            missingLocalSyncPaths = try await syncConfiguredLocalPathsIntoWorktree(
                 project: project,
                 worktreePath: worktreePath,
                 syncPaths: localFileSyncPathsSnapshot
@@ -213,6 +214,17 @@ extension ThreadManager {
         try persistence.saveActiveThreads(threads)
         await MainActor.run {
             delegate?.threadManager(self, didCreateThread: thread)
+            if !missingLocalSyncPaths.isEmpty {
+                let noun = missingLocalSyncPaths.count == 1 ? "path" : "paths"
+                BannerManager.shared.show(
+                    message: "Thread created, but \(missingLocalSyncPaths.count) local sync \(noun) were missing in the source repo.",
+                    style: .warning,
+                    duration: 8.0,
+                    details: missingLocalSyncPaths.joined(separator: "\n"),
+                    detailsCollapsedTitle: "Show missing paths",
+                    detailsExpandedTitle: "Hide missing paths"
+                )
+            }
         }
 
         // Inject terminal command and agent context

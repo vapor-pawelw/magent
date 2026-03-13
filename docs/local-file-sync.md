@@ -25,8 +25,22 @@ After `git worktree add`, Magent copies each configured path from the project re
 The thread also stores a snapshot of that normalized path list at creation time. Later project setting changes only affect newly created threads.
 
 - Missing source path in repo root: skipped
+- After thread creation, Magent shows a warning banner listing any configured sync paths that were missing in the source repo
 - Existing destination in new worktree: overwritten for configured path contents
+- Directory entries are materialized as directories during sync-in, including empty folders and trees that only contain empty subdirectories
 - If sync-in fails, thread creation rolls back by removing the newly created worktree
+
+## Manual Resync Into Thread
+
+Non-main threads expose a top-bar `Resync Local Sync Paths` action that copies the thread's eligible local sync paths from the main repo worktree into the thread again.
+
+- Uses the thread's snapshotted path list, filtered to paths that are still configured on the project
+- Prompts before overwriting conflicting files/directories already present in the thread worktree
+- Supports `Override`, `Override All`, `Ignore`, and `Cancel`
+- Shows a warning banner with missing repo-relative source paths instead of failing the resync
+- Materializes directory entries in the thread worktree, including empty directories
+- Uses the same `Override` / `Ignore` / `Cancel` conflict prompt style as archive
+- Holding Option changes `Override` to `Override All` and `Ignore` to `Ignore All` for the rest of that resync
 
 ## Archive Behavior
 
@@ -64,9 +78,9 @@ Conflicts are detected when merge-back would overwrite existing destination data
 Interactive archive (UI) offers:
 
 - `Override` (current conflict only)
-- `Override All` (all remaining conflicts in this archive)
 - `Ignore` (skip current conflict)
 - `Cancel Archive` (abort archive)
+- Holding Option changes `Override` to `Override All` and `Ignore` to `Ignore All` for the rest of that sync run
 
 Non-interactive archive flows skip conflicting targets by default (no destructive overwrite prompt).
 

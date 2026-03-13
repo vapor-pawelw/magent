@@ -173,6 +173,62 @@ extension ThreadDetailViewController {
         }
     }
 
+    @objc func resyncLocalPathsTapped() {
+        guard !thread.isMain else { return }
+
+        let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let settings = PersistenceService.shared.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else {
+            BannerManager.shared.show(message: "Could not find the project for this thread.", style: .error)
+            return
+        }
+
+        let syncPaths = threadManager.effectiveLocalSyncPaths(for: currentThread, project: project)
+        guard !syncPaths.isEmpty else {
+            BannerManager.shared.show(message: "No Local Sync Paths are configured for this thread.", style: .warning)
+            return
+        }
+
+        Task {
+            do {
+                let missingPaths = try await self.threadManager.syncConfiguredLocalPathsIntoWorktree(
+                    project: project,
+                    worktreePath: currentThread.worktreePath,
+                    syncPaths: syncPaths,
+                    promptForConflicts: true
+                )
+
+                await MainActor.run {
+                    if missingPaths.isEmpty {
+                        BannerManager.shared.show(
+                            message: "Local Sync Paths refreshed from the main repo.",
+                            style: .info
+                        )
+                    } else {
+                        let noun = missingPaths.count == 1 ? "path was" : "paths were"
+                        BannerManager.shared.show(
+                            message: "Local Sync refresh finished, but \(missingPaths.count) configured \(noun) missing in the main repo.",
+                            style: .warning,
+                            duration: 8.0,
+                            details: missingPaths.joined(separator: "\n"),
+                            detailsCollapsedTitle: "Show missing paths",
+                            detailsExpandedTitle: "Hide missing paths"
+                        )
+                    }
+                }
+            } catch ThreadManagerError.archiveCancelled {
+                return
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: "Failed to resync Local Sync Paths: \(error.localizedDescription)",
+                        style: .error
+                    )
+                }
+            }
+        }
+    }
+
     @objc func addTabTapped() {
         presentAddTabAgentMenu()
     }

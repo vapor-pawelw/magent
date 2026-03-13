@@ -23,6 +23,10 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - Auto-rename no longer triggers when terminal commands are typed in an agent session — it now checks that an agent process (Claude or Codex) is actually running before treating pane output as a submitted prompt.
+- Fixed local-sync directory entries on thread creation so empty folders and directory trees containing only empty subfolders are copied into new worktrees again; the archive-only "copy dirs on demand" rule no longer suppresses sync-in.
+- Non-main threads now include a top-bar `Resync Local Sync Paths` action that copies configured local-sync files/directories from the main repo back into the thread worktree, with conflict prompts and missing-path warnings.
+- Local-sync conflict alerts now use simpler `Override` / `Ignore` / `Cancel` buttons, with Option-key variants for `Override All` and `Ignore All` shown directly in the alert.
+- Thread creation now warns when configured Local Sync Paths are missing in the source repo, with the missing repo-relative paths listed in the banner details instead of silently skipping them.
 ### Terminal
 - Fixed "Scroll to bottom" on both the scroll overlay and the FAB pill landing with the last output at the top of the viewport; Ghostty's viewport is now scrolled after tmux redraws the live pane, not before.
 - Added a terminal mouse-wheel setting so Magent can default wheel input to terminal scrolling, inherit the user's Ghostty config, or let prompts/apps capture wheel input.

@@ -15,6 +15,7 @@ extension ThreadManager {
         case overwrite
         case overwriteAll
         case skip
+        case skipAll
         case cancel
     }
 
@@ -39,19 +40,36 @@ extension ThreadManager {
         let fileHashes: [String: String]
     }
 
+    private enum LocalSyncDirectoryMaterialization {
+        case onDemand
+        case always
+    }
+
+    private enum LocalSyncConflictDirection {
+        case intoWorktree
+        case intoRepo
+    }
+
     // MARK: - Local Sync In (Repo -> Worktree)
 
     func syncConfiguredLocalPathsIntoWorktree(
         project: Project,
         worktreePath: String,
-        syncPaths: [String]
-    ) async throws {
-        guard !syncPaths.isEmpty else { return }
+        syncPaths: [String],
+        promptForConflicts: Bool = false
+    ) async throws -> [String] {
+        guard !syncPaths.isEmpty else { return [] }
 
-        var overwriteAll = true
+        var missingPaths: [String] = []
+        let conflictMode: LocalSyncConflictMode = promptForConflicts ? .prompt : .overwrite
+        var overwriteAll = !promptForConflicts
+        var ignoreAll = false
         for relativePath in syncPaths {
             let sourcePath = (project.repoPath as NSString).appendingPathComponent(relativePath)
-            guard localSyncItemKind(atPath: sourcePath) != nil else { continue }
+            guard localSyncItemKind(atPath: sourcePath) != nil else {
+                missingPaths.append(relativePath)
+                continue
+            }
 
             let destinationPath = (worktreePath as NSString).appendingPathComponent(relativePath)
             do {
@@ -60,8 +78,11 @@ extension ThreadManager {
                     destinationPath: destinationPath,
                     relativePath: relativePath,
                     destinationRootPath: worktreePath,
-                    conflictMode: .overwrite,
-                    overwriteAll: &overwriteAll
+                    conflictMode: conflictMode,
+                    overwriteAll: &overwriteAll,
+                    ignoreAll: &ignoreAll,
+                    conflictDirection: .intoWorktree,
+                    directoryMaterialization: .always
                 )
             } catch let error as ThreadManagerError {
                 throw error
@@ -81,6 +102,7 @@ extension ThreadManager {
             )
         }
         try await saveLocalSyncBaselineManifest(worktreePath: worktreePath, fileHashes: baselineHashes)
+        return missingPaths
     }
 
     // MARK: - Local Sync Back (Worktree -> Repo)
@@ -96,6 +118,7 @@ extension ThreadManager {
         let baselineHashes = await loadLocalSyncBaselineFileHashes(worktreePath: worktreePath)
         let conflictMode: LocalSyncConflictMode = promptForConflicts ? .prompt : .skip
         var overwriteAll = false
+        var ignoreAll = false
         for relativePath in syncPaths {
             let sourcePath = (worktreePath as NSString).appendingPathComponent(relativePath)
             guard localSyncItemKind(atPath: sourcePath) != nil else { continue }
@@ -109,7 +132,10 @@ extension ThreadManager {
                     destinationRootPath: project.repoPath,
                     conflictMode: conflictMode,
                     overwriteAll: &overwriteAll,
-                    baselineFileHashes: baselineHashes
+                    ignoreAll: &ignoreAll,
+                    conflictDirection: .intoRepo,
+                    baselineFileHashes: baselineHashes,
+                    directoryMaterialization: .onDemand
                 )
             } catch let error as ThreadManagerError {
                 throw error
@@ -142,7 +168,10 @@ extension ThreadManager {
         destinationRootPath: String,
         conflictMode: LocalSyncConflictMode,
         overwriteAll: inout Bool,
-        baselineFileHashes: [String: String]? = nil
+        ignoreAll: inout Bool,
+        conflictDirection: LocalSyncConflictDirection,
+        baselineFileHashes: [String: String]? = nil,
+        directoryMaterialization: LocalSyncDirectoryMaterialization
     ) async throws {
         do {
             guard let sourceKind = localSyncItemKind(atPath: sourcePath) else { return }
@@ -150,6 +179,18 @@ extension ThreadManager {
 
             switch sourceKind {
             case .directory:
+                if directoryMaterialization == .always {
+                    let ready = try await ensureLocalSyncDirectoryExists(
+                        atPath: destinationPath,
+                        relativePath: relativePath,
+                        conflictMode: conflictMode,
+                        overwriteAll: &overwriteAll,
+                        ignoreAll: &ignoreAll,
+                        conflictDirection: conflictDirection
+                    )
+                    guard ready else { return }
+                }
+
                 // Recurse first and only materialize destination directories if a child
                 // file actually needs to be copied. This avoids dirtying repo root by
                 // creating empty directories when no file-level sync is needed.
@@ -166,7 +207,10 @@ extension ThreadManager {
                         destinationRootPath: destinationRootPath,
                         conflictMode: conflictMode,
                         overwriteAll: &overwriteAll,
-                        baselineFileHashes: baselineFileHashes
+                        ignoreAll: &ignoreAll,
+                        conflictDirection: conflictDirection,
+                        baselineFileHashes: baselineFileHashes,
+                        directoryMaterialization: directoryMaterialization
                     )
                 }
 
@@ -185,7 +229,9 @@ extension ThreadManager {
                         destinationRootPath: destinationRootPath,
                         relativeDirectoryPath: parentRelativePath,
                         conflictMode: conflictMode,
-                        overwriteAll: &overwriteAll
+                        overwriteAll: &overwriteAll,
+                        ignoreAll: &ignoreAll,
+                        conflictDirection: conflictDirection
                     )
                     guard parentReady else { return }
                 }
@@ -200,7 +246,9 @@ extension ThreadManager {
                                 kind: .directoryBlocksFile
                             ),
                             conflictMode: conflictMode,
-                            overwriteAll: &overwriteAll
+                            overwriteAll: &overwriteAll,
+                            ignoreAll: &ignoreAll,
+                            conflictDirection: conflictDirection
                         )
                         guard shouldOverwrite else { return }
                         try fm.removeItem(atPath: destinationPath)
@@ -219,7 +267,9 @@ extension ThreadManager {
                                 kind: .fileDifferent
                             ),
                             conflictMode: conflictMode,
-                            overwriteAll: &overwriteAll
+                            overwriteAll: &overwriteAll,
+                            ignoreAll: &ignoreAll,
+                            conflictDirection: conflictDirection
                         )
                         guard shouldOverwrite else { return }
                         try fm.removeItem(atPath: destinationPath)
@@ -241,7 +291,9 @@ extension ThreadManager {
         destinationRootPath: String,
         relativeDirectoryPath: String,
         conflictMode: LocalSyncConflictMode,
-        overwriteAll: inout Bool
+        overwriteAll: inout Bool,
+        ignoreAll: inout Bool,
+        conflictDirection: LocalSyncConflictDirection
     ) async throws -> Bool {
         let components = relativeDirectoryPath.split(separator: "/").map(String.init)
         guard !components.isEmpty else { return true }
@@ -257,7 +309,9 @@ extension ThreadManager {
                 atPath: currentDestinationPath,
                 relativePath: currentRelativePath,
                 conflictMode: conflictMode,
-                overwriteAll: &overwriteAll
+                overwriteAll: &overwriteAll,
+                ignoreAll: &ignoreAll,
+                conflictDirection: conflictDirection
             )
             guard ready else { return false }
         }
@@ -269,7 +323,9 @@ extension ThreadManager {
         atPath destinationPath: String,
         relativePath: String,
         conflictMode: LocalSyncConflictMode,
-        overwriteAll: inout Bool
+        overwriteAll: inout Bool,
+        ignoreAll: inout Bool,
+        conflictDirection: LocalSyncConflictDirection
     ) async throws -> Bool {
         let fm = FileManager.default
         if let existingKind = localSyncItemKind(atPath: destinationPath) {
@@ -284,7 +340,9 @@ extension ThreadManager {
                         kind: .fileBlocksDirectory
                     ),
                     conflictMode: conflictMode,
-                    overwriteAll: &overwriteAll
+                    overwriteAll: &overwriteAll,
+                    ignoreAll: &ignoreAll,
+                    conflictDirection: conflictDirection
                 )
                 guard shouldOverwrite else { return false }
                 try fm.removeItem(atPath: destinationPath)
@@ -429,7 +487,9 @@ extension ThreadManager {
     private func shouldOverwriteLocalSyncConflict(
         _ conflict: LocalSyncConflict,
         conflictMode: LocalSyncConflictMode,
-        overwriteAll: inout Bool
+        overwriteAll: inout Bool,
+        ignoreAll: inout Bool,
+        conflictDirection: LocalSyncConflictDirection
     ) async throws -> Bool {
         switch conflictMode {
         case .overwrite:
@@ -438,7 +498,8 @@ extension ThreadManager {
             return false
         case .prompt:
             if overwriteAll { return true }
-            let choice = presentLocalSyncConflictAlert(conflict)
+            if ignoreAll { return false }
+            let choice = presentLocalSyncConflictAlert(conflict, direction: conflictDirection)
             switch choice {
             case .overwrite:
                 return true
@@ -447,6 +508,9 @@ extension ThreadManager {
                 return true
             case .skip:
                 return false
+            case .skipAll:
+                ignoreAll = true
+                return false
             case .cancel:
                 throw ThreadManagerError.archiveCancelled
             }
@@ -454,34 +518,83 @@ extension ThreadManager {
     }
 
     @MainActor
-    private func presentLocalSyncConflictAlert(_ conflict: LocalSyncConflict) -> LocalSyncConflictChoice {
+    private func presentLocalSyncConflictAlert(
+        _ conflict: LocalSyncConflict,
+        direction: LocalSyncConflictDirection
+    ) -> LocalSyncConflictChoice {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = String(localized: .ThreadStrings.threadArchiveConflictTitle(conflict.relativePath))
 
         let destinationPath = conflict.destinationPath
             .replacingOccurrences(of: NSHomeDirectory(), with: "~")
-        switch conflict.kind {
-        case .fileDifferent:
-            alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictFileDifferent(destinationPath))
-        case .fileBlocksDirectory:
-            alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictFileBlocksDirectory(destinationPath))
-        case .directoryBlocksFile:
-            alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictDirectoryBlocksFile(destinationPath))
+
+        switch direction {
+        case .intoRepo:
+            alert.messageText = String(localized: .ThreadStrings.threadArchiveConflictTitle(conflict.relativePath))
+            switch conflict.kind {
+            case .fileDifferent:
+                alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictFileDifferent(destinationPath))
+            case .fileBlocksDirectory:
+                alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictFileBlocksDirectory(destinationPath))
+            case .directoryBlocksFile:
+                alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictDirectoryBlocksFile(destinationPath))
+            }
+        case .intoWorktree:
+            alert.messageText = "Resync Local Paths Conflict"
+            switch conflict.kind {
+            case .fileDifferent:
+                alert.informativeText =
+                    "The worktree already has a different file at \"\(destinationPath)\". Override it with the copy from the main repo?"
+            case .fileBlocksDirectory:
+                alert.informativeText =
+                    "The worktree has a file at \"\(destinationPath)\", but local sync needs a directory there. Override it with the directory from the main repo?"
+            case .directoryBlocksFile:
+                alert.informativeText =
+                    "The worktree has a directory at \"\(destinationPath)\", but local sync needs a file there. Override it with the file from the main repo?"
+            }
         }
 
-        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictOverride))
-        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictOverrideAll))
-        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictIgnore))
-        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictCancelArchive))
+        let optionHint = "\n\nHold Option for \"Override All\" or \"Ignore All\"."
+        alert.informativeText += optionHint
 
-        switch alert.runModal() {
+        let overrideButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictOverride))
+        let ignoreButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictIgnore))
+        let cancelTitle: String = switch direction {
+        case .intoRepo:
+            String(localized: .ThreadStrings.threadArchiveConflictCancelArchive)
+        case .intoWorktree:
+            String(localized: .CommonStrings.commonCancel)
+        }
+        alert.addButton(withTitle: cancelTitle)
+
+        var optionHeld = NSEvent.modifierFlags.contains(.option)
+        func updateButtonTitles() {
+            overrideButton.title = optionHeld
+                ? String(localized: .ThreadStrings.threadArchiveConflictOverrideAll)
+                : String(localized: .ThreadStrings.threadArchiveConflictOverride)
+            ignoreButton.title = optionHeld
+                ? "Ignore All"
+                : String(localized: .ThreadStrings.threadArchiveConflictIgnore)
+        }
+        updateButtonTitles()
+
+        let monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            optionHeld = event.modifierFlags.contains(.option)
+            updateButtonTitles()
+            return event
+        }
+
+        let response = alert.runModal()
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
+
+        let useAllChoice = optionHeld || (NSApp.currentEvent?.modifierFlags.contains(.option) == true)
+        switch response {
         case .alertFirstButtonReturn:
-            return .overwrite
+            return useAllChoice ? .overwriteAll : .overwrite
         case .alertSecondButtonReturn:
-            return .overwriteAll
-        case .alertThirdButtonReturn:
-            return .skip
+            return useAllChoice ? .skipAll : .skip
         default:
             return .cancel
         }
