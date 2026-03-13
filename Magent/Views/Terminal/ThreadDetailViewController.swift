@@ -33,6 +33,8 @@ final class ThreadDetailViewController: NSViewController {
     static let promptTOCVisibilityDefaultsKey = "MagentPromptTOCVisibilityHidden"
     static let promptTOCMinimumWidth: CGFloat = 320
     static let promptTOCMinimumHeight: CGFloat = 250
+    static let promptTOCCollapsedWidth: CGFloat = 185
+    static let promptTOCCollapsedHeight: CGFloat = 36
 
     var thread: MagentThread
     let threadManager = ThreadManager.shared
@@ -83,6 +85,7 @@ final class ThreadDetailViewController: NSViewController {
     var scrollFABAnimationGeneration: UInt = 0
 
     var promptTOCDragStartOrigin: NSPoint = .zero
+    var promptTOCExpandedSize: NSSize = NSSize(width: 320, height: 250)
     var promptTOCResizeStartSize: NSSize = .zero
     var promptTOCResizeStartTop: CGFloat = 0
     var promptTOCResizeStartTrailing: CGFloat = 0
@@ -342,7 +345,7 @@ final class ThreadDetailViewController: NSViewController {
         topBar.spacing = 8
         topBar.alignment = .centerY
         topBar.translatesAutoresizingMaskIntoConstraints = false
-        for view in [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, togglePromptTOCButton, resyncLocalPathsButton, separator, archiveThreadButton] {
+        for view in [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, resyncLocalPathsButton, separator, archiveThreadButton] {
             topBar.addArrangedSubview(view)
         }
 
@@ -717,7 +720,6 @@ final class ThreadDetailViewController: NSViewController {
             openInJiraButton,
             reviewButton,
             exportContextButton,
-            togglePromptTOCButton,
             resyncLocalPathsButton,
             archiveThreadButton,
         ]

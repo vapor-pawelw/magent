@@ -10,6 +10,40 @@ This document covers Prompt TOC parsing and jump behavior.
 - When enough lines exist below the selected prompt, the selected prompt should land at the top edge of the terminal viewport.
 - TOC rows may show only a 3-line preview, but prompt actions like `Copy prompt` should use the full submitted prompt text.
 
+## TOC capsule/hover UI
+
+- The TOC rests as a compact 185×36pt floating capsule showing a "Table of Contents" title and a badge with the prompt count.
+- Hovering expands the capsule to the full panel (default 320×250pt, user-resizable) with animation; mouse exit collapses it back.
+- The toolbar toggle button and in-panel × close button are removed — TOC is always-on; users disable it in Settings.
+- No agent name appears in the header; only the title and count badge.
+
+### Animation sequence
+
+**Expand (hover enter):**
+1. Corner radius animates 18pt → 8pt via `CABasicAnimation` (0.22s).
+2. Scroll constraints swap: `scrollViewCollapseConstraint` deactivated, `scrollBottomConstraint` activated.
+3. Controller frame expands via `NSAnimationContext` (0.22s, easeOut).
+4. After 0.20s delay, scroll view + header background + corner handles fade in (0.14s) — delayed so rows don't clip while the frame is still growing.
+
+**Collapse (hover exit):**
+1. Scroll view + header background + corner handles fade out (0.13s).
+2. On completion: hide views, swap constraints back, call `onCollapseCompleted`.
+3. Controller frame shrinks via `NSAnimationContext` (0.18s, easeIn).
+4. Corner radius animates 8pt → 18pt via `CABasicAnimation` (0.15s).
+
+### Race condition: rapid hover
+
+The collapse completion handler is guarded by `!isExpanded`. If the user re-hovers before the 0.13s fade-out completes:
+- `isExpanded` is set to `true` in `mouseEntered` before `setCollapsedState(false)` is called.
+- The stale collapse completion fires and checks `!isExpanded` → guard passes, completion is a no-op.
+- This prevents the stale handler from swapping scroll constraints back to collapsed state mid-expansion.
+
+`isExpanded` is set eagerly (before animation) in `mouseEntered`/`mouseExited` so it serves as the authoritative signal for pending completion handlers.
+
+### Position normalization
+
+Position is always normalized relative to `promptTOCExpandedSize` (not the current frame). Dragging the collapsed capsule saves position relative to the expanded dimensions so restoring later yields the correct panel position.
+
 ## Implementation details
 
 - Prompt extraction lives in `Magent/Views/Terminal/ThreadDetailViewController+PromptTOC.swift`.

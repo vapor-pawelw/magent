@@ -117,8 +117,12 @@ Before the app is usable, the user must complete a configuration step:
 - TOC entry ordering follows actual submission order for that session.
 - If the TOC is already scrolled to the bottom, appending a newly confirmed prompt must keep the list pinned to the bottom.
 - TOC panel must be draggable and resizable by the user.
-- The minimum TOC size is the original default size (320x250).
-- TOC visibility is a single app-wide preference: toggling show/hide in one thread panel must immediately apply to other open thread panels and persist across app relaunches.
+- The minimum TOC expanded size is 320×250pt.
+- TOC rests as a compact floating capsule (185×36pt) showing "Table of Contents" and a prompt count badge; hovering expands it to the full panel with animation, then collapses back when the cursor leaves.
+- The toolbar toggle button and in-panel × close button are removed; the TOC is always-on. Users can disable it entirely in Settings.
+- The prompt count badge is a pill-shaped 20pt-tall view with a 13pt bold number. No agent name is shown in the TOC header.
+- Position is normalized relative to the expanded size so dragging the capsule does not corrupt the restored expanded-panel position.
+- TOC visibility is a single app-wide preference: toggling show/hide in Settings must immediately apply to other open thread panels and persist across app relaunches.
 - Selecting a TOC row must jump to that prompt and anchor it at the top of the terminal scroll viewport when possible.
 - Prompt rows support up to 3 lines and use subtle alternating background stripes for readability.
 - TOC context-menu actions that operate on prompt text (for example `Copy prompt`) must use the full submitted prompt payload, not the 3-line row preview.
