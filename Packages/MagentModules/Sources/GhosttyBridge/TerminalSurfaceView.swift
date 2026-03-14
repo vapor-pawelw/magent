@@ -51,16 +51,8 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     private static let shellPathUnescapedCharset = CharacterSet(
         charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._/:"
     )
-    private static let linkBoundaryCharacters = CharacterSet(
-        charactersIn: "<>[](){}\"'`.,;:!?"
-    )
-    private static let linkDetector = try? NSDataDetector(
-        types: NSTextCheckingResult.CheckingType.link.rawValue
-    )
-
     private enum HoveredLinkSource {
         case ghostty
-        case renderedWord
         case visiblePane
     }
 
@@ -692,10 +684,12 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         scheduleHoverProbe(at: point)
     }
 
-    // Debounced probe: waits 45 ms after the last mouse move, then checks for a URL under
-    // the cursor. Rendered-word detection (Ghostty C API + NSDataDetector) runs first on the
-    // main actor; tmux visible-pane scan is the async fallback. Both run after the debounce
-    // so that neither blocks the main thread on every mouse-move event.
+    // Debounced probe: waits 45 ms after the last mouse move, then falls back to a tmux
+    // visible-pane scan for URLs that Ghostty's native OSC 8 detection didn't catch.
+    // ghostty_surface_quicklook_word is intentionally NOT called here — calling Ghostty
+    // C API from a MainActor.run block inside a background Task deadlocks against
+    // ghostty_app_tick, which also needs the main actor. Ghostty's own MOUSE_OVER_LINK
+    // callback (setHoveredLink) handles the rendered-word/OSC 8 case natively.
     private func scheduleHoverProbe(at point: NSPoint) {
         hoverProbeTask?.cancel()
         hoverProbeSerial += 1
@@ -708,30 +702,18 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
             try? await Task.sleep(for: .milliseconds(45))
             guard !Task.isCancelled else { return }
 
-            // Rendered-word check on the main actor (Ghostty surface access + NSDataDetector).
-            // If Ghostty already owns the hover state, skip all probes — no C API, no tmux.
-            // Returns (url: nil, skipTmux: true) on serial mismatch or Ghostty ownership.
-            let probeResult: (url: String?, skipTmux: Bool) = await MainActor.run { [weak self] in
-                guard let self, self.hoverProbeSerial == probeSerial else { return (nil, true) }
-                if self.hoveredLinkSource == .ghostty { return (nil, true) }
-                return (self.renderedWordOpenableURL(), false)
+            // If Ghostty already detected a link natively, the tmux probe is moot.
+            let shouldSkip = await MainActor.run { [weak self] () -> Bool in
+                guard let self, self.hoverProbeSerial == probeSerial else { return true }
+                return self.hoveredLinkSource == .ghostty
             }
-            guard !probeResult.skipTmux else { return }
+            guard !shouldSkip else { return }
 
-            if let renderedWordURL = probeResult.url {
-                await MainActor.run { [weak self] in
-                    guard let self, self.hoverProbeSerial == probeSerial,
-                          self.hoveredLinkSource != .ghostty else { return }
-                    self.applyHoveredLink(renderedWordURL, source: .renderedWord)
-                }
-                return
-            }
-
-            // tmux visible-pane fallback.
+            // tmux visible-pane fallback for URLs Ghostty didn't detect via OSC 8.
             guard let resolveTmux else {
                 await MainActor.run { [weak self] in
                     guard let self, self.hoverProbeSerial == probeSerial else { return }
-                    if self.hoveredLinkSource == .visiblePane || self.hoveredLinkSource == .renderedWord {
+                    if self.hoveredLinkSource == .visiblePane {
                         self.applyHoveredLink(nil, source: nil)
                     }
                 }
@@ -752,28 +734,6 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         hoverProbeTask?.cancel()
         hoverProbeTask = nil
         hoverProbeSerial += 1
-    }
-
-    private func renderedWordOpenableURL() -> String? {
-        guard let surface else { return nil }
-
-        var text = ghostty_text_s(
-            tl_px_x: 0,
-            tl_px_y: 0,
-            offset_start: 0,
-            offset_len: 0,
-            text: nil,
-            text_len: 0
-        )
-        guard ghostty_surface_quicklook_word(surface, &text),
-              let pointer = text.text else {
-            return nil
-        }
-        defer { ghostty_surface_free_text(surface, &text) }
-
-        let bytes = UnsafeRawBufferPointer(start: pointer, count: Int(text.text_len))
-        let renderedWord = String(decoding: bytes, as: UTF8.self)
-        return Self.normalizedOpenableURL(from: renderedWord)
     }
 
     private func mouseButton(for buttonNumber: Int) -> ghostty_input_mouse_button_e {
@@ -1020,42 +980,6 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
                 self.linkHoverOverlay.isHidden = true
             }
         }
-    }
-
-    private static func normalizedOpenableURL(from rawValue: String?) -> String? {
-        guard let rawValue else { return nil }
-        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        var candidates = [trimmed]
-        let stripped = trimmed.trimmingCharacters(in: linkBoundaryCharacters)
-        if !stripped.isEmpty, stripped != trimmed {
-            candidates.append(stripped)
-        }
-
-        for candidate in candidates {
-            if let urlString = detectedLink(in: candidate) {
-                return urlString
-            }
-            if candidate.hasPrefix("www."),
-               let url = URL(string: "https://\(candidate)") {
-                return url.absoluteString
-            }
-        }
-
-        return nil
-    }
-
-    private static func detectedLink(in candidate: String) -> String? {
-        guard let linkDetector else { return nil }
-        let range = NSRange(candidate.startIndex..<candidate.endIndex, in: candidate)
-        guard let match = linkDetector.firstMatch(in: candidate, options: [], range: range),
-              match.range.location == 0,
-              match.range.length == range.length,
-              let url = match.url else {
-            return nil
-        }
-        return url.absoluteString
     }
 
     private func updateCursorForCurrentMouseLocation() {
