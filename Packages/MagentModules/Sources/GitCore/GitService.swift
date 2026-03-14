@@ -666,6 +666,28 @@ public final class GitService: Sendable {
         return combined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : combined
     }
 
+    /// Returns per-file diff stats for a single commit (files changed in that commit).
+    public func commitDiffStats(worktreePath: String, commitHash: String) async -> [FileDiffEntry] {
+        let numstatResult = await ShellExecutor.execute(
+            "git -c core.quotePath=false show --numstat --format= \(shellQuote(commitHash))",
+            workingDirectory: worktreePath
+        )
+        guard numstatResult.exitCode == 0 else { return [] }
+        // All files in a commit are "committed" status
+        return parseDiffEntries(numstatOutput: numstatResult.stdout, statusMap: [:])
+    }
+
+    /// Returns the full unified diff output for a single commit.
+    public func commitDiffContent(worktreePath: String, commitHash: String) async -> String? {
+        let diffResult = await ShellExecutor.execute(
+            "git -c core.quotePath=false show --no-color \(shellQuote(commitHash))",
+            workingDirectory: worktreePath
+        )
+        guard diffResult.exitCode == 0 else { return nil }
+        let output = diffResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return output.isEmpty ? nil : diffResult.stdout
+    }
+
     /// Returns the unified diff for a single file comparing the worktree to its base branch.
     public func diffContentForFile(worktreePath: String, baseBranch: String, relativePath: String) async -> String? {
         guard let mergeBase = await mergeBase(worktreePath: worktreePath, baseBranch: baseBranch) else { return nil }

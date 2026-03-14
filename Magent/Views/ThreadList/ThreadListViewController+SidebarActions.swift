@@ -337,6 +337,22 @@ extension ThreadListViewController {
         refreshDiffPanel(for: thread, resetPagination: false)
     }
 
+    func handleCommitSelected(_ commitHash: String?) {
+        guard let commitHash else {
+            // "Uncommitted" selected — CHANGES tab already has working-tree entries; nothing to load
+            return
+        }
+        guard let thread = selectedThreadFromState() else { return }
+        let worktreePath = thread.worktreePath
+        Task {
+            let entries = await GitService.shared.commitDiffStats(worktreePath: worktreePath, commitHash: commitHash)
+            await MainActor.run {
+                guard self.selectedThreadID == thread.id else { return }
+                self.diffPanelView.updateCommitEntries(hash: commitHash, entries: entries, subject: "")
+            }
+        }
+    }
+
     func refreshDiffPanelContext(for thread: MagentThread) {
         let current = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
         let branchName = current.isMain ? nil : (current.actualBranch ?? current.branchName)

@@ -417,6 +417,9 @@ final class ThreadListViewController: NSViewController {
         diffPanelView.onLoadMoreCommits = { [weak self] in
             self?.loadMoreCommitsForSelectedThread()
         }
+        diffPanelView.onCommitSelected = { [weak self] commitHash in
+            self?.handleCommitSelected(commitHash)
+        }
         view.addSubview(diffPanelView)
 
         // Branch mismatch warning below diff panel

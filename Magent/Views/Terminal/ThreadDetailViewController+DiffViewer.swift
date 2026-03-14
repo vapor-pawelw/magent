@@ -159,16 +159,22 @@ extension ThreadDetailViewController {
 
     // MARK: - Inline Diff Viewer
 
-    func showDiffViewer(scrollToFile: String? = nil) {
-        NSLog("[DiffViewer] showDiffViewer called, scrollToFile=%@, diffVC=%@, isLoading=%d, view.window=%@",
-              scrollToFile ?? "nil", String(describing: diffVC), isLoadingDiffViewer ? 1 : 0,
+    func showDiffViewer(scrollToFile: String? = nil, commitHash: String? = nil) {
+        NSLog("[DiffViewer] showDiffViewer called, scrollToFile=%@, commitHash=%@, diffVC=%@, isLoading=%d, view.window=%@",
+              scrollToFile ?? "nil", commitHash ?? "nil", String(describing: diffVC), isLoadingDiffViewer ? 1 : 0,
               String(describing: view.window))
 
         if let existing = diffVC {
-            if let file = scrollToFile {
-                existing.expandFile(file, collapseOthers: false)
+            // If the commit context changed, reload the viewer entirely
+            if currentDiffCommitHash != commitHash {
+                hideDiffViewer()
+                // Fall through to create new viewer below
+            } else {
+                if let file = scrollToFile {
+                    existing.expandFile(file, collapseOthers: false)
+                }
+                return
             }
-            return
         }
 
         // Prevent duplicate creation if async load is already in progress
@@ -177,14 +183,27 @@ extension ThreadDetailViewController {
 
         let worktreePath = thread.worktreePath
         let baseBranch = thread.isMain ? nil : threadManager.resolveBaseBranch(for: thread)
-        NSLog("[DiffViewer] starting async load, baseBranch=%@, worktreePath=%@",
-              baseBranch ?? "HEAD", worktreePath)
+        NSLog("[DiffViewer] starting async load, baseBranch=%@, worktreePath=%@, commitHash=%@",
+              baseBranch ?? "HEAD", worktreePath, commitHash ?? "nil")
         Task {
             let diffContent: String?
             let mergeBase: String?
             let entries: [FileDiffEntry]
 
-            if let baseBranch {
+            if let commitHash {
+                // Show diff for a specific commit (git show)
+                async let diffContentTask = GitService.shared.commitDiffContent(
+                    worktreePath: worktreePath,
+                    commitHash: commitHash
+                )
+                async let entriesTask = GitService.shared.commitDiffStats(
+                    worktreePath: worktreePath,
+                    commitHash: commitHash
+                )
+                diffContent = await diffContentTask
+                mergeBase = "\(commitHash)^"
+                entries = await entriesTask
+            } else if let baseBranch {
                 async let diffContentTask = GitService.shared.diffContent(
                     worktreePath: worktreePath,
                     baseBranch: baseBranch
@@ -273,6 +292,7 @@ extension ThreadDetailViewController {
                 NSLog("[DiffViewer] calling setDiffContent")
                 vc.setDiffContent(diffContent, fileCount: fileCount, worktreePath: worktreePath, mergeBase: mergeBase)
                 diffVC = vc
+                currentDiffCommitHash = commitHash
                 isLoadingDiffViewer = false
                 NSLog("[DiffViewer] setDiffContent done")
 
@@ -304,13 +324,15 @@ extension ThreadDetailViewController {
         vc.view.removeFromSuperview()
         vc.removeFromParent()
         diffVC = nil
+        currentDiffCommitHash = nil
         isLoadingDiffViewer = false
 
         terminalBottomToView?.isActive = true
     }
 
     func refreshDiffViewerIfVisible() {
-        guard diffVC != nil else { return }
+        // Don't refresh when viewing a specific commit's diff — it doesn't change
+        guard diffVC != nil, currentDiffCommitHash == nil else { return }
         let worktreePath = thread.worktreePath
         let baseBranch = thread.isMain ? nil : threadManager.resolveBaseBranch(for: thread)
         Task {
