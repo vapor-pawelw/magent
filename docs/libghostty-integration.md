@@ -4,25 +4,7 @@
 
 Source: https://github.com/ghostty-org/ghostty
 
-Pinned default ref for this repo bootstrap script: `v1.3.1`.
-
-## Version Upgrade Checklist
-
-When upgrading Ghostty to a new version, update **all three** of these in the same commit:
-
-1. **`scripts/bootstrap-ghosttykit.sh`** — default value of `GHOSTTY_REF` (line: `GHOSTTY_REF="${GHOSTTY_REF:-vX.Y.Z}"`)
-2. **`scripts/rebuild-and-relaunch.sh`** — default value of `PINNED_GHOSTTY_REF` (line: `PINNED_GHOSTTY_REF="${MAGENT_GHOSTTY_REF:-vX.Y.Z}"`)
-3. **`docs/libghostty-integration.md`** — the "Pinned default ref" line above and the Zig version table below (if the required Zig version changed)
-
-The release workflow (`.github/workflows/release.yml`) calls `bootstrap-ghosttykit.sh` without a `--ref` argument, so it automatically picks up the default. No changes needed there unless the build flags change.
-
-After bumping, rebuild locally and verify that `Libraries/GhosttyKit.xcframework/.ghostty-ref` matches the new version:
-```bash
-./scripts/bootstrap-ghosttykit.sh
-cat Libraries/GhosttyKit.xcframework/.ghostty-ref   # should print the new ref
-```
-
-Also check whether any C API signatures changed (especially callback types — see the per-version notes below) and update `GhosttyBridge` accordingly.
+Pinned default ref for this repo bootstrap script: `v1.3.0`.
 
 **Zig version requirements (strict):**
 - Ghostty 1.0.x / 1.1.x: Zig 0.13.0
@@ -36,7 +18,7 @@ Also check whether any C API signatures changed (especially callback types — s
 
 To build a different Ghostty ref:
 ```bash
-GHOSTTY_REF=v1.3.1 ./scripts/bootstrap-ghosttykit.sh
+GHOSTTY_REF=v1.3.0 ./scripts/bootstrap-ghosttykit.sh
 ```
 
 **Build command used by bootstrap script:**
@@ -113,14 +95,12 @@ typedef struct {
   bool supports_selection_clipboard;
   wakeup_cb          // Signal to pump event loop
   action_cb          // Handle ~60 action types
-  read_clipboard_cb  // returns bool (since v1.3.1; was void in v1.3.0)
+  read_clipboard_cb
   confirm_read_clipboard_cb
   write_clipboard_cb
   close_surface_cb
 } ghostty_runtime_config_s;
 ```
-
-**`read_clipboard_cb` return type** (changed in v1.3.1): The callback must return `bool` — return `true` if the clipboard read was accepted/initiated, `false` to decline. Magent always returns `true` since we always dispatch the async read.
 
 ### Metal Rendering
 libghostty manages Metal rendering internally. The host app only:
@@ -265,32 +245,3 @@ Terminal overlays must respond to appearance changes the same way the surroundin
 - Do not hard-code a permanently dark overlay palette for controls that remain visible in Light mode.
 - Overlay views that draw their own layers should update those colors from `viewDidChangeEffectiveAppearance()`.
 - This applies to the scroll-controls pill, the floating `Scroll to bottom` pill, and the Prompt TOC panel/header/resize affordance.
-
-## Link Opening and Hover (GHOSTTY_ACTION_OPEN_URL / GHOSTTY_ACTION_MOUSE_OVER_LINK)
-
-Ghostty fires two actions for link interaction:
-
-- `GHOSTTY_ACTION_MOUSE_OVER_LINK` — hover events; `action.action.mouse_over_link.url` and `.len` give the OSC 8 URL (empty string when leaving a link).
-- `GHOSTTY_ACTION_OPEN_URL` — user activated a link (e.g. Cmd+click in ghostty); `action.action.open_url.url` and `.len`.
-
-Both require `copiedGhosttyString(pointer, length:)` to read the C string safely:
-- If `length > 0`, copy exactly that many bytes (avoids relying on a null terminator).
-- Otherwise fall back to `String(cString:)`.
-- Return `nil` for empty strings so callers get a proper optional.
-
-**Hover flow in `GhosttyAppManager`**: `setHoveredLink(_:surfaceAddress:)` looks up the `TerminalSurfaceView` via the registered surface map and calls `surfaceView.setHoveredLink(urlString)`.
-
-**`TerminalSurfaceView` link detection priority** (highest to lowest):
-1. **Ghostty-native** (`HoveredLinkSource.ghostty`): set by `GHOSTTY_ACTION_MOUSE_OVER_LINK`; never overridden by lower-priority sources.
-2. **Rendered word** (`HoveredLinkSource.renderedWord`): `ghostty_surface_quicklook_word` returns the word under the cursor; run through `NSDataDetector` to check if it is a URL.
-3. **Visible pane** (`HoveredLinkSource.visiblePane`): after a 45 ms debounce, query `TmuxService.visibleOpenableURL(sessionName:xFraction:yFraction:)` which runs `tmux capture-pane -N` and scans the target row ±1 for URLs.
-
-`refreshHoveredLink(at:)` is called on every mouse move/enter/key event. When the mouse leaves the bounds, `setHoveredLink(nil)` is called unconditionally.
-
-**Cmd+click open flow** (two independent paths):
-- *Direct* (link already detected): `mouseDown` records `pendingLinkOpenURL`; `mouseUp` confirms both Cmd is still held and the cursor is still on the same URL, then calls `GhosttyAppManager.shared.openURL`.
-- *tmux fallback* (no ghostty/rendered-word link): `mouseDown` records `pendingCommandClick`; `mouseUp` calls `TmuxService.recentMouseOpenableURL(sessionName:)` which reads the state file written by the tmux `MouseDown1Pane` binding. This covers plain-text URLs not reported by ghostty.
-
-**OSC 8 tmux prerequisite**: On startup, `TmuxService.configure()` calls `ensureTerminalFeature("xterm*:hyperlinks")` to ensure tmux passes OSC 8 sequences through to ghostty.
-
-**Link hover overlay**: `TerminalSurfaceView` contains a `PassthroughVisualEffectView` pill anchored 12pt from the bottom center. It animates in (80 ms) on link hover and out (120 ms) on clear. `PassthroughVisualEffectView` returns `nil` from `hitTest` so it never intercepts mouse events.

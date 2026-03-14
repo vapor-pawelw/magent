@@ -4,21 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-### Appearance
-- New "Don't override agent color theme" checkbox in Appearance settings: when enabled, Magent won't force a color theme on Claude or Codex at startup, letting agents use their own default theme.
-
-### Diff Viewer
-- Fixed image diffs spilling over adjacent file sections with oversized borders; images now use true aspect-fit scaling (up or down proportionally) instead of scale-down-only, and a duplicate conflicting height constraint was removed.
 ### Updates
 - Update progress is now shown inside the app: tapping Update downloads and unpacks the new version in-app (with "Downloading…" / "Preparing update…" banners), so the app only closes at the very end to swap the binary and relaunch — eliminating the long invisible wait.
 
-### Terminal
-- Fixed a crash and full UI freeze introduced with link hover detection: calling the Ghostty word-under-cursor C API from a background Task deadlocked against Ghostty's 60 fps render loop (both competed for the main actor). That code path is now removed entirely — Ghostty's native OSC 8 callback handles rendered-word detection, and a debounced tmux fallback covers everything else.
-- Fixed significant UI lag introduced with link hover detection: the Ghostty C API call and URL checks were running synchronously on the main thread for every mouse-move event; both are now behind a 45 ms debounce and skipped entirely when Ghostty already owns the hover state via OSC 8.
-- Links in the terminal are now clickable: Cmd+click opens URLs in the default browser. Hovering over a link shows an animated URL pill at the bottom of the terminal and changes the cursor to a pointing hand. Link detection combines ghostty-native OSC 8 hyperlinks and tmux pane content.
-
 ### Thread
-- Merged PRs and MRs are now detected and shown alongside open ones: the sidebar row, top-right button, tooltip, and context menu all display the PR/MR number with a "(✅ Merged)" suffix so you can see at a glance that the branch has landed.
 - Tabs opened via the Review button are now named `<Agent>-review` (e.g. `Claude-review`) instead of plain `<Agent>`, making them easy to distinguish from regular agent tabs.
 - Archive suggestion and commit counts in the Changes panel now use the actual remote base branch detected from git history (e.g. `origin/develop`) instead of a stored branch name, so they remain accurate when the worktree switches branches.
 - Archive is only suggested after the worktree has actually done work (become dirty or accumulated commits); fresh untouched worktrees are never suggested for archiving regardless of how the branch state looks.

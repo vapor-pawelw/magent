@@ -527,16 +527,6 @@ final class ThreadDetailViewController: NSViewController {
         view.onScroll = { [weak self] in
             self?.scheduleScrollFABVisibilityRefresh()
         }
-        view.resolveTmuxMouseOpenableURL = { [sessionName = sessionName] in
-            TmuxService.shared.recentMouseOpenableURL(sessionName: sessionName)
-        }
-        view.resolveTmuxVisibleOpenableURL = { [sessionName = sessionName] xFraction, yFraction in
-            await TmuxService.shared.visibleOpenableURL(
-                sessionName: sessionName,
-                xFraction: xFraction,
-                yFraction: yFraction
-            )
-        }
         return view
     }
 
