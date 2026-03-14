@@ -29,8 +29,11 @@ extension ThreadManager {
     }
 
     private func runSessionMonitorTick() {
+        guard !isSessionMonitorTickRunning else { return }
+        isSessionMonitorTickRunning = true
         let shouldRunStaleCleanup = shouldRunStaleSessionCleanupTick()
         Task {
+            defer { self.isSessionMonitorTickRunning = false }
             await self.checkForMissingWorktrees()
             await self.checkForDeadSessions()
             if shouldRunStaleCleanup {
