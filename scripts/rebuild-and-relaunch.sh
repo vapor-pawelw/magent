@@ -8,7 +8,7 @@ APP_NAME="${MAGENT_APP_NAME:-Magent}"
 WORKSPACE="${MAGENT_WORKSPACE:-Magent.xcworkspace}"
 GHOSTTY_LIB_REL="Libraries/GhosttyKit.xcframework/macos-arm64_x86_64/libghostty.a"
 GHOSTTY_REF_METADATA_REL="Libraries/GhosttyKit.xcframework/.ghostty-ref"
-PINNED_GHOSTTY_REF="${MAGENT_GHOSTTY_REF:-v1.3.0}"
+PINNED_GHOSTTY_REF="${MAGENT_GHOSTTY_REF:-v1.3.1}"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
