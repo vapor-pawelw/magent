@@ -375,7 +375,7 @@ private final class ImageDiffContentView: NSView {
 
     private func makeImageView() -> ClickableDiffImageView {
         let iv = ClickableDiffImageView()
-        iv.imageScaling = .scaleProportionallyDown
+        iv.imageScaling = .scaleProportionallyUpOrDown
         iv.imageAlignment = .alignCenter
         iv.translatesAutoresizingMaskIntoConstraints = false
         iv.wantsLayer = true
@@ -525,8 +525,9 @@ private final class ImageDiffContentView: NSView {
             guard let image else { return Self.minimumPlaceholderHeight }
             let aspect = image.size.height / max(image.size.width, 1)
             let widthFitHeight = availableWidth * aspect
-            let intrinsicHeight = max(image.size.height, Self.minimumPlaceholderHeight)
-            return min(widthFitHeight, intrinsicHeight, maxRenderedHeight)
+            // With scaleProportionallyUpOrDown (aspect-fit), the image always scales to fill
+            // the frame proportionally — no need to cap at intrinsic size.
+            return max(min(widthFitHeight, maxRenderedHeight), Self.minimumPlaceholderHeight)
         }
 
         switch mode {
@@ -744,7 +745,6 @@ private final class DiffSectionView: NSView {
 
     // Image mode
     private var imageContentView: ImageDiffContentView?
-    private var imageHeightConstraint: NSLayoutConstraint?
     var onImageClick: ((NSImageView, NSImage) -> Void)? {
         didSet {
             imageContentView?.onImageClick = onImageClick
@@ -1008,9 +1008,8 @@ private final class DiffSectionView: NSView {
         imageView.onImageClick = onImageClick
         addSubview(imageView)
 
-        let ihc = imageView.heightAnchor.constraint(equalToConstant: 200)
-        imageHeightConstraint = ihc
-
+        // ImageDiffContentView manages its own height via its internal heightConstraint.
+        // Do NOT add an external height constraint here — that would conflict.
         expandedBottomConstraint = imageView.bottomAnchor.constraint(equalTo: bottomAnchor)
         collapsedBottomConstraint = headerView.bottomAnchor.constraint(equalTo: bottomAnchor)
         collapsedBottomConstraint.isActive = false
@@ -1020,7 +1019,6 @@ private final class DiffSectionView: NSView {
             imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
             imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
             expandedBottomConstraint,
-            ihc,
         ])
 
         imageContentView = imageView
@@ -1028,20 +1026,11 @@ private final class DiffSectionView: NSView {
 
     func setImages(before: NSImage?, after: NSImage?) {
         imageContentView?.setImages(before: before, after: after)
-        // Update the outer height constraint to match what ImageDiffContentView computed
-        if let icv = imageContentView {
-            icv.layoutSubtreeIfNeeded()
-            imageHeightConstraint?.constant = icv.fittingSize.height
-        }
     }
 
     func updateContentWidth(_ width: CGFloat) {
         if isImageMode {
             imageContentView?.updateContentWidth(width)
-            if let icv = imageContentView {
-                icv.layoutSubtreeIfNeeded()
-                imageHeightConstraint?.constant = icv.fittingSize.height
-            }
             return
         }
         // Update gap views

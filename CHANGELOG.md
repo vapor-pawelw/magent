@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Diff Viewer
+- Fixed image diffs spilling over adjacent file sections with oversized borders; images now use true aspect-fit scaling (up or down proportionally) instead of scale-down-only, and a duplicate conflicting height constraint was removed.
+
 ### Updates
 - Update progress is now shown inside the app: tapping Update downloads and unpacks the new version in-app (with "Downloading…" / "Preparing update…" banners), so the app only closes at the very end to swap the binary and relaunch — eliminating the long invisible wait.
 
