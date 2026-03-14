@@ -689,40 +689,54 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
             return
         }
 
-        if let renderedWordURL = renderedWordOpenableURL() {
-            cancelHoverProbe()
-            if hoveredLinkSource != .ghostty {
-                applyHoveredLink(renderedWordURL, source: .renderedWord)
-            }
-            return
-        }
-
-        scheduleTmuxHoverProbe(at: point)
+        scheduleHoverProbe(at: point)
     }
 
-    private func scheduleTmuxHoverProbe(at point: NSPoint) {
-        guard let resolveTmuxVisibleOpenableURL else {
-            if hoveredLinkSource == .visiblePane || hoveredLinkSource == .renderedWord {
-                applyHoveredLink(nil, source: nil)
-            }
-            return
-        }
-
+    // Debounced probe: waits 45 ms after the last mouse move, then checks for a URL under
+    // the cursor. Rendered-word detection (Ghostty C API + NSDataDetector) runs first on the
+    // main actor; tmux visible-pane scan is the async fallback. Both run after the debounce
+    // so that neither blocks the main thread on every mouse-move event.
+    private func scheduleHoverProbe(at point: NSPoint) {
         hoverProbeTask?.cancel()
         hoverProbeSerial += 1
         let probeSerial = hoverProbeSerial
         let xFraction = bounds.width > 0 ? Double(point.x / bounds.width) : 0
         let yFromTop = bounds.height > 0 ? Double((bounds.height - point.y) / bounds.height) : 0
+        let resolveTmux = resolveTmuxVisibleOpenableURL
 
         hoverProbeTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(45))
             guard !Task.isCancelled else { return }
-            let url = await resolveTmuxVisibleOpenableURL(xFraction, yFromTop)
+
+            // Rendered-word check on the main actor (Ghostty surface access + NSDataDetector).
+            let renderedWordURL = await MainActor.run { [weak self] () -> String? in
+                guard let self, self.hoverProbeSerial == probeSerial else { return nil }
+                return self.renderedWordOpenableURL()
+            }
+            if let renderedWordURL {
+                await MainActor.run { [weak self] in
+                    guard let self, self.hoverProbeSerial == probeSerial,
+                          self.hoveredLinkSource != .ghostty else { return }
+                    self.applyHoveredLink(renderedWordURL, source: .renderedWord)
+                }
+                return
+            }
+
+            // tmux visible-pane fallback.
+            guard let resolveTmux else {
+                await MainActor.run { [weak self] in
+                    guard let self, self.hoverProbeSerial == probeSerial else { return }
+                    if self.hoveredLinkSource == .visiblePane || self.hoveredLinkSource == .renderedWord {
+                        self.applyHoveredLink(nil, source: nil)
+                    }
+                }
+                return
+            }
+
+            let url = await resolveTmux(xFraction, yFromTop)
             await MainActor.run { [weak self] in
                 guard let self, self.hoverProbeSerial == probeSerial else { return }
-                if self.hoveredLinkSource == .ghostty {
-                    return
-                }
+                if self.hoveredLinkSource == .ghostty { return }
                 let source: HoveredLinkSource? = url == nil ? nil : .visiblePane
                 self.applyHoveredLink(url, source: source)
             }
@@ -733,20 +747,6 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         hoverProbeTask?.cancel()
         hoverProbeTask = nil
         hoverProbeSerial += 1
-    }
-
-    private func refreshHoveredLinkFromRenderedWord() {
-        guard let renderedWordURL = renderedWordOpenableURL() else {
-            guard hoveredLinkSource == .renderedWord else { return }
-            applyHoveredLink(nil, source: nil)
-            return
-        }
-
-        if hoveredLinkSource == .ghostty {
-            return
-        }
-
-        applyHoveredLink(renderedWordURL, source: .renderedWord)
     }
 
     private func renderedWordOpenableURL() -> String? {
