@@ -1356,10 +1356,18 @@ final class InlineDiffViewController: NSViewController {
     }
 
     private func applyStickyHeader(_ section: DiffSectionView) {
+        let didChange = currentStickySection !== section
         currentStickySection = section
         stickyPathLabel.stringValue = section.displayPath
         stickyPathLabel.toolTip = section.displayPath
         populateStatsStack(stickyStatsStack, additions: section.additions, deletions: section.deletions, isImage: section.isImageMode)
+        if didChange {
+            NotificationCenter.default.post(
+                name: .magentDiffViewerScrolledToFile,
+                object: nil,
+                userInfo: ["filePath": section.filePath]
+            )
+        }
     }
 
     private func showStickyPlaceholder(_ text: String) {

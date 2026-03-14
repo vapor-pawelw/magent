@@ -1013,6 +1013,7 @@ extension Notification.Name {
     static let magentOpenSettings = Notification.Name("magentOpenSettings")
     static let magentShowDiffViewer = Notification.Name("magentShowDiffViewer")
     static let magentHideDiffViewer = Notification.Name("magentHideDiffViewer")
+    static let magentDiffViewerScrolledToFile = Notification.Name("magentDiffViewerScrolledToFile")
     static let magentNavigateToThread = Notification.Name("magentNavigateToThread")
     static let magentPullRequestInfoChanged = Notification.Name("magentPullRequestInfoChanged")
     static let magentPromptTOCVisibilityChanged = Notification.Name("magentPromptTOCVisibilityChanged")

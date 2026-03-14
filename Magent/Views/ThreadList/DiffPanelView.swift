@@ -106,6 +106,14 @@ final class DiffPanelView: NSView {
 
     var onLoadMoreCommits: (() -> Void)?
 
+    private var scrollSyncObserver: NSObjectProtocol?
+
+    deinit {
+        if let observer = scrollSyncObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setupViews()
@@ -247,6 +255,16 @@ final class DiffPanelView: NSView {
             stackView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
         ])
 
+        scrollSyncObserver = NotificationCenter.default.addObserver(
+            forName: .magentDiffViewerScrolledToFile,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self,
+                  let filePath = notification.userInfo?["filePath"] as? String else { return }
+            self.syncSelectionFromDiffViewer(filePath: filePath)
+        }
+
         clear()
     }
 
@@ -362,6 +380,18 @@ final class DiffPanelView: NSView {
             name: .magentHideDiffViewer,
             object: nil
         )
+    }
+
+    /// Updates selection to match the diff viewer's sticky header without re-triggering the diff viewer.
+    private func syncSelectionFromDiffViewer(filePath: String) {
+        guard activeTab == .changes, selectedFilePath != filePath else { return }
+        selectedFilePath = filePath
+        updateRowSelectionAppearance()
+        // Scroll the matching row into view.
+        for case let row as DiffFileRowView in stackView.arrangedSubviews where row.filePath == filePath {
+            row.scrollToVisible(row.bounds)
+            break
+        }
     }
 
     private func selectFileForContextMenu(_ filePath: String) {
