@@ -98,6 +98,8 @@ final class ThreadDetailViewController: NSViewController {
     // MARK: - Inline Diff Viewer
     var diffVC: InlineDiffViewController?
     var isLoadingDiffViewer = false
+    /// The commit hash currently shown in the diff viewer, or nil for working-tree diff.
+    var currentDiffCommitHash: String? = nil
     var terminalBottomToView: NSLayoutConstraint?
     var terminalBottomToDiff: NSLayoutConstraint?
     var diffHeightConstraint: NSLayoutConstraint?
@@ -678,7 +680,8 @@ final class ThreadDetailViewController: NSViewController {
 
     @objc private func handleShowDiffViewerNotification(_ notification: Notification) {
         let filePath = notification.userInfo?["filePath"] as? String
-        showDiffViewer(scrollToFile: filePath)
+        let commitHash = notification.userInfo?["commitHash"] as? String
+        showDiffViewer(scrollToFile: filePath, commitHash: commitHash)
     }
 
     @objc private func handleHideDiffViewerNotification() {
