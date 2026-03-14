@@ -6,6 +6,24 @@ Source: https://github.com/ghostty-org/ghostty
 
 Pinned default ref for this repo bootstrap script: `v1.3.1`.
 
+## Version Upgrade Checklist
+
+When upgrading Ghostty to a new version, update **all three** of these in the same commit:
+
+1. **`scripts/bootstrap-ghosttykit.sh`** — default value of `GHOSTTY_REF` (line: `GHOSTTY_REF="${GHOSTTY_REF:-vX.Y.Z}"`)
+2. **`scripts/rebuild-and-relaunch.sh`** — default value of `PINNED_GHOSTTY_REF` (line: `PINNED_GHOSTTY_REF="${MAGENT_GHOSTTY_REF:-vX.Y.Z}"`)
+3. **`docs/libghostty-integration.md`** — the "Pinned default ref" line above and the Zig version table below (if the required Zig version changed)
+
+The release workflow (`.github/workflows/release.yml`) calls `bootstrap-ghosttykit.sh` without a `--ref` argument, so it automatically picks up the default. No changes needed there unless the build flags change.
+
+After bumping, rebuild locally and verify that `Libraries/GhosttyKit.xcframework/.ghostty-ref` matches the new version:
+```bash
+./scripts/bootstrap-ghosttykit.sh
+cat Libraries/GhosttyKit.xcframework/.ghostty-ref   # should print the new ref
+```
+
+Also check whether any C API signatures changed (especially callback types — see the per-version notes below) and update `GhosttyBridge` accordingly.
+
 **Zig version requirements (strict):**
 - Ghostty 1.0.x / 1.1.x: Zig 0.13.0
 - Ghostty 1.2.x: Zig 0.14.1
