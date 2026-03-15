@@ -94,7 +94,7 @@ final class ResizeHandleView: NSView {
 // MARK: - Settings Category
 
 enum SettingsCategory: Int, CaseIterable {
-    case general, terminal, threads, agents, notifications, projects, appearance, jira
+    case general, terminal, threads, agents, notifications, projects, appearance, jira, debug
 
     static var visibleCategories: [SettingsCategory] {
         allCases.filter(\.isVisible)
@@ -104,6 +104,12 @@ enum SettingsCategory: Int, CaseIterable {
         switch self {
         case .jira:
             AppFeatures.jiraIntegrationEnabled
+        case .debug:
+#if DEBUG
+            true
+#else
+            false
+#endif
         default:
             true
         }
@@ -123,6 +129,7 @@ enum SettingsCategory: Int, CaseIterable {
                 String(localized: .CommonStrings.settingsCategoryJira),
                 for: .jiraIntegration
             )
+        case .debug: return "Debug"
         }
     }
 
@@ -136,6 +143,7 @@ enum SettingsCategory: Int, CaseIterable {
         case .projects: return "folder"
         case .appearance: return "circle.lefthalf.filled"
         case .jira: return "ticket"
+        case .debug: return "ladybug"
         }
     }
 }
@@ -154,6 +162,9 @@ final class SettingsSplitViewController: NSSplitViewController {
     private let projectsVC = SettingsProjectsViewController()
     private let appearanceVC = SettingsAppearanceViewController()
     private lazy var jiraVC = SettingsJiraViewController()
+#if DEBUG
+    private let debugVC = SettingsDebugViewController()
+#endif
     private var detailSplitItem: NSSplitViewItem!
     private var currentCategory: SettingsCategory = .general
 
@@ -196,6 +207,9 @@ final class SettingsSplitViewController: NSSplitViewController {
         if AppFeatures.jiraIntegrationEnabled {
             allVCs.append(jiraVC)
         }
+#if DEBUG
+        allVCs.append(debugVC)
+#endif
         for vc in allVCs {
             detailContainerVC.addChild(vc)
             vc.view.translatesAutoresizingMaskIntoConstraints = false
@@ -220,6 +234,9 @@ final class SettingsSplitViewController: NSSplitViewController {
         if AppFeatures.jiraIntegrationEnabled {
             jiraVC.view.isHidden = category != .jira
         }
+#if DEBUG
+        debugVC.view.isHidden = category != .debug
+#endif
     }
 
     fileprivate func showCategory(_ category: SettingsCategory) {

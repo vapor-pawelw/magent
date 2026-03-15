@@ -111,13 +111,46 @@
         }
       }
     },
+    "configurationDependencyInstallButton": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install..."
+          }
+        }
+      }
+    },
     "configurationDependencyNotFound": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ - not found. %@"
+            "value": "%@ — not found"
+          }
+        }
+      }
+    },
+    "configurationRecheckDependencies": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-check"
+          }
+        }
+      }
+    },
+    "configurationWorktreeExplanation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each thread is an isolated git worktree — a separate checkout on its own branch. Worktrees let you work on multiple features at once without stashing or switching branches. Magent creates a new branch and a dedicated folder next to your repository for each thread."
           }
         }
       }

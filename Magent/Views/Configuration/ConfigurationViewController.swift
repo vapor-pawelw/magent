@@ -42,6 +42,7 @@ final class ConfigurationViewController: NSViewController {
         nextButton.keyEquivalent = "\r"
 
         setupUI()
+        dependencyCheckView.onRecheck = { [weak self] in self?.checkDependencies() }
         showStep(0)
         checkDependencies()
     }
@@ -235,6 +236,8 @@ final class ConfigurationViewController: NSViewController {
 
 final class DependencyCheckView: NSView {
 
+    var onRecheck: (() -> Void)?
+
     private let stack = NSStackView()
     private let titleLabel = NSTextField(labelWithString: "")
 
@@ -274,6 +277,8 @@ final class DependencyCheckView: NSView {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         titleLabel.stringValue = String(localized: .ConfigurationStrings.configurationDependenciesTitle)
 
+        let anyMissing = statuses.contains { !$0.isInstalled }
+
         for status in statuses {
             let row = NSStackView()
             row.orientation = .horizontal
@@ -290,13 +295,61 @@ final class DependencyCheckView: NSView {
             let label = NSTextField(labelWithString: "")
             label.stringValue = status.isInstalled
                 ? String(localized: .ConfigurationStrings.configurationDependencyInstalled(status.name, status.path ?? String(localized: .CommonStrings.commonUnknown)))
-                : String(localized: .ConfigurationStrings.configurationDependencyNotFound(status.name, status.installHint))
+                : String(localized: .ConfigurationStrings.configurationDependencyNotFound(status.name))
             label.font = .preferredFont(forTextStyle: .body)
             label.maximumNumberOfLines = 0
 
             row.addArrangedSubview(icon)
             row.addArrangedSubview(label)
+
+            if !status.isInstalled {
+                let installButton = NSButton(
+                    title: String(localized: .ConfigurationStrings.configurationDependencyInstallButton),
+                    target: self,
+                    action: #selector(installButtonTapped(_:))
+                )
+                installButton.bezelStyle = .rounded
+                installButton.identifier = NSUserInterfaceItemIdentifier(status.name)
+                row.addArrangedSubview(installButton)
+            }
+
             stack.addArrangedSubview(row)
+        }
+
+        if anyMissing {
+            let recheckButton = NSButton(
+                title: String(localized: .ConfigurationStrings.configurationRecheckDependencies),
+                target: self,
+                action: #selector(recheckTapped)
+            )
+            recheckButton.bezelStyle = .rounded
+            stack.addArrangedSubview(recheckButton)
+        }
+    }
+
+    @objc private func installButtonTapped(_ sender: NSButton) {
+        installDependency(named: sender.identifier?.rawValue ?? "")
+    }
+
+    @objc private func recheckTapped() {
+        onRecheck?()
+    }
+
+    private func installDependency(named name: String) {
+        switch name {
+        case "git":
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")
+            process.arguments = ["--install"]
+            try? process.run()
+        case "tmux":
+            let script = "#!/bin/bash\nbrew install tmux\nexec bash\n"
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("magent-install-tmux.command")
+            try? script.write(to: url, atomically: true, encoding: .utf8)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+            NSWorkspace.shared.open(url)
+        default:
+            break
         }
     }
 }
@@ -321,6 +374,10 @@ final class AddProjectView: NSView {
         titleLabel.font = .preferredFont(forTextStyle: .headline)
         titleLabel.maximumNumberOfLines = 0
 
+        let explanationLabel = NSTextField(wrappingLabelWithString: String(localized: .ConfigurationStrings.configurationWorktreeExplanation))
+        explanationLabel.font = .preferredFont(forTextStyle: .body)
+        explanationLabel.textColor = .secondaryLabelColor
+
         addButton.bezelStyle = .rounded
         addButton.target = self
         addButton.action = #selector(addTapped)
@@ -328,7 +385,7 @@ final class AddProjectView: NSView {
         projectsStack.orientation = .vertical
         projectsStack.spacing = 8
 
-        let stack = NSStackView(views: [titleLabel, addButton, projectsStack])
+        let stack = NSStackView(views: [titleLabel, explanationLabel, addButton, projectsStack])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 16
