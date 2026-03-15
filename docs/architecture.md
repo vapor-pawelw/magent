@@ -279,6 +279,16 @@ Each tmux session created by Magent is tagged with `MAGENT_THREAD_ID` (the ownin
 - `ThreadManager+SessionRecreation.swift` — session recreation/recovery
 
 **Why this matters**: Worktree names are reused when a thread is archived and a new thread is opened on the same branch/worktree name. Without ownership tracking, the old stale tmux session would be adopted by the new thread, restoring the previous agent session. The fix in `isValidExistingSession(...)` checks `MAGENT_THREAD_ID` first; if absent (old sessions), it falls back to comparing `session_created` timestamp against `thread.createdAt` — sessions older than the thread are rejected.
+## ThreadManager Concurrency Contract
+
+`ThreadManager` is a plain `final class` (not an actor). Its mutable `threads: [MagentThread]` array must only be mutated on the **MainActor** to avoid data races.
+
+**The trap**: async methods that mutate `threads` are typically called from `@MainActor` tasks. As long as the mutation happens synchronously (before any `await`), it runs on MainActor and is safe. But once the method crosses an `await` (e.g. a shell command via `ShellExecutor`), the continuation may resume on the cooperative thread pool — **off** MainActor. If two callers both reach the mutation point concurrently, the `[MagentThread]` array is accessed from two threads simultaneously → crash.
+
+**Rule**: any private helper that mutates `threads` after an `await` must be annotated `@MainActor`. Example: `removeTabBySessionName` in `ThreadManager+TabManagement.swift` — after `await tmux.killSession(...)`, all mutations are protected by `@MainActor`, which ensures the continuation is re-scheduled on the MainActor rather than running on the thread pool.
+
+**Secondary guard**: after an `@MainActor` method resumes from an `await`, other MainActor work (from a different concurrent task) may have run. Always re-validate index bounds against the live `threads` array after an `await` before accessing `threads[index]`.
+
 ## Platform Scope
 
 - **macOS**: Full experience — sidebar + terminal + tabs, keyboard-driven

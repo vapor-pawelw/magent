@@ -275,8 +275,13 @@ extension ThreadManager {
         try await removeTabBySessionName(threadIndex: index, sessionName: sessionName)
     }
 
+    @MainActor
     private func removeTabBySessionName(threadIndex index: Int, sessionName: String) async throws {
         try? await tmux.killSession(name: sessionName)
+
+        // Guard re-checked after the async killSession suspension: another concurrent close
+        // might have shifted or removed indices while killSession was running.
+        guard index < threads.count else { return }
 
         // Also remove from pinned, agent, unread completion, waiting, and custom tab names if present
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
@@ -296,8 +301,6 @@ extension ThreadManager {
         }
         try persistence.saveActiveThreads(threads)
 
-        await MainActor.run {
-            delegate?.threadManager(self, didUpdateThreads: threads)
-        }
+        delegate?.threadManager(self, didUpdateThreads: threads)
     }
 }
