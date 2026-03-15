@@ -115,6 +115,10 @@ This manual path intentionally skips first-prompt eligibility gates (for example
 When parsing combined rename payloads, treat only the first `SLUG:` line as the slug field before checking for the `EMPTY` sentinel. Multi-line model replies also include `DESC:` and `TYPE:` lines; checking the whole tail can incorrectly sanitize `SLUG: EMPTY` into the literal branch name `empty`.
 Generated descriptions should stay semantically aligned with the slug and read like concrete task labels in the sidebar, not abstract nouns unless the prompt is explicitly about that concept.
 
+**Rename payload cache (`promptRenameResultCache`):** Every non-failed AI rename result (slug+description or "question" classification) is cached in `ThreadManager.promptRenameResultCache` keyed by `(threadId, normalizedPrompt)`. Both the TOC-triggered path and the sheet-triggered path check this cache before calling the agent. This means repeated renames or a right-click rename on a previously used prompt resolve instantly without a second agent call. The cache is cleared on thread archive and delete.
+
+**Early auto-rename from launch sheet:** `createThread` fires `autoRenameThreadAfterFirstPromptIfNeeded` in an unstructured `Task` immediately after the tmux session is created, using the prompt captured from the launch sheet. This means the thread typically gets a meaningful name before the agent has finished loading. `didAutoRenameFromFirstPrompt` is the deduplication guard — when the early trigger runs first and sets this flag, the TOC-based trigger skips the same prompt later. If the early trigger loses the `autoRenameInProgress` race (another rename is already in flight), it exits gracefully; the TOC path will pick it up instead.
+
 ### 4.3 Prompt TOC Source of Truth
 
 Prompt TOC content is confirmation-driven, not raw-keystroke-driven. Persist per-session TOC-confirmed prompt history only after pane evidence shows the prompt is no longer just active bottom composer text.

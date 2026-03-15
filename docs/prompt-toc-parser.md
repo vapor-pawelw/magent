@@ -74,6 +74,18 @@ Auto-rename-on-first-prompt fires only when an agent (Claude or Codex) process i
 - If the pane is at a plain shell (agent not yet started, exited via Ctrl+C, etc.) the check returns `nil` and the rename is skipped silently.
 - This check is separate from the prompt TOC itself — TOC entries are still parsed and displayed regardless; only the auto-rename trigger is gated.
 
+## Two auto-rename trigger paths
+
+There are now two independent paths that can fire auto-rename for a thread's first prompt:
+
+1. **Early path (launch sheet):** `createThread` fires `autoRenameThreadAfterFirstPromptIfNeeded` in an unstructured `Task` immediately after the tmux session is created, using the prompt captured from the launch sheet. This path bypasses the agent-process-detection gate because the agent is not yet running at that point — the prompt is already known from the sheet. It typically completes before the agent has even started processing.
+
+2. **TOC path (confirmed pane):** The existing path — fires when the prompt TOC parser confirms a new submitted prompt in the pane. This path goes through the agent-process-detection gate.
+
+**Deduplication:** Both paths share the `didAutoRenameFromFirstPrompt` flag. Whichever fires first and succeeds sets the flag; the other path sees it set and exits early. `autoRenameInProgress` prevents concurrent AI calls from both paths running simultaneously.
+
+**Rename payload cache:** Both paths check `promptRenameResultCache` (keyed by `threadId + normalizedPrompt`) before calling the agent. If the early path already cached a result, the TOC path reuses it instantly. See architecture.md §4.2 for details.
+
 ## TOC scroll navigation: full history of attempts and lessons learned
 
 This section documents every approach tried for `scrollHistoryLineToTop`, the failure mode of each, and why the final solution works. Took many iterations to reach a correct solution — record everything for the next time.
