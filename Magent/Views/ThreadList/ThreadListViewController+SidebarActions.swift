@@ -328,15 +328,13 @@ extension ThreadListViewController {
 
         Task {
             do {
-                _ = try await self.threadManager.createThread(
+                let thread = try await self.threadManager.createThread(
                     project: project,
                     requestedAgentType: requestedAgentType,
                     useAgentCommand: useAgentCommand,
                     initialPrompt: initialPrompt,
-                    shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
                     requestedName: requestedBranchName,
-                    requestedBaseBranch: baseBranch,
-                    requestedTaskDescription: taskDescription
+                    requestedBaseBranch: baseBranch
                 )
                 await MainActor.run {
                     if let pendingPromptFileURL,
