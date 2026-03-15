@@ -43,28 +43,118 @@ enum AgentLaunchPromptDraftStore {
         drafts.removeValue(forKey: scope.storageKey)
         persistence.saveAgentLaunchPromptDrafts(drafts)
     }
+}
 
-    /// Schedules a `clearAll` that fires once `magentAgentKeysInjected` fires for `sessionName`.
-    /// Falls back to clearing after 60 s in case injection never fires (e.g. session dies).
+/// All fields the user filled in before submitting the launch sheet.
+/// Persisted to `/tmp` as JSON so a crash between submission and tmux injection
+/// doesn't silently lose the user's work.
+struct PendingInitialPrompt: Codable {
+    enum ScopeKind: String, Codable {
+        case newThread
+        case newTab
+    }
+    let scopeKind: ScopeKind
+    /// Set for `newThread` — identifies which project to open the sheet on.
+    let projectId: UUID?
+    /// Set for `newTab` — identifies which thread the tab was being added to.
+    let threadId: UUID?
+    let prompt: String
+    let description: String?
+    let branchName: String?
+    let agentType: AgentType?
+    let createdAt: Date
+}
+
+/// Manages crash-recovery temp files for submitted (but not yet injected) initial prompts.
+///
+/// When the user accepts the launch sheet, their prompt is written to a unique JSON file
+/// under `/tmp` before the draft in persistent storage is cleared. The file survives app
+/// crashes and is only removed once the tmux keys have been confirmed as injected. This
+/// lets users immediately re-open the sheet without seeing stale text while still
+/// protecting against losing a long prompt if something goes wrong mid-creation.
+/// On the next launch, `loadAll()` finds leftover files and surfaces them for recovery.
+enum PendingInitialPromptStore {
+    private static let encoder = JSONEncoder()
+    private static let decoder = JSONDecoder()
+
+    /// Writes all submitted fields to a unique temp file and returns its URL.
+    /// Returns `nil` if the write fails (non-fatal — the in-memory result still carries the data).
+    static func save(
+        prompt: String,
+        description: String?,
+        branchName: String?,
+        agentType: AgentType?,
+        scope: AgentLaunchPromptDraftScope
+    ) -> URL? {
+        let scopeKind: PendingInitialPrompt.ScopeKind
+        let projectId: UUID?
+        let threadId: UUID?
+        switch scope {
+        case .newThread(let pid): scopeKind = .newThread; projectId = pid; threadId = nil
+        case .newTab(let tid):   scopeKind = .newTab;    projectId = nil; threadId = tid
+        }
+        let record = PendingInitialPrompt(
+            scopeKind: scopeKind,
+            projectId: projectId,
+            threadId: threadId,
+            prompt: prompt,
+            description: description.flatMap { $0.isEmpty ? nil : $0 },
+            branchName: branchName.flatMap { $0.isEmpty ? nil : $0 },
+            agentType: agentType,
+            createdAt: Date()
+        )
+        let url = URL(fileURLWithPath: "/tmp/magent-pending-prompt-\(UUID().uuidString).json")
+        guard let data = try? encoder.encode(record) else { return nil }
+        try? data.write(to: url)
+        return url
+    }
+
+    /// Returns all leftover pending-prompt files from `/tmp`, sorted oldest first.
+    static func loadAll() -> [(url: URL, prompt: PendingInitialPrompt)] {
+        let tmpDir = URL(fileURLWithPath: "/tmp")
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: tmpDir, includingPropertiesForKeys: nil
+        ) else { return [] }
+        return contents
+            .filter { $0.lastPathComponent.hasPrefix("magent-pending-prompt-") && $0.pathExtension == "json" }
+            .compactMap { url -> (URL, PendingInitialPrompt)? in
+                guard let data = try? Data(contentsOf: url),
+                      let record = try? decoder.decode(PendingInitialPrompt.self, from: data)
+                else { return nil }
+                return (url, record)
+            }
+            .sorted { $0.1.createdAt < $1.1.createdAt }
+    }
+
+    /// Schedules deletion of `fileURL` once `magentAgentKeysInjected` fires for `sessionName`.
+    /// Falls back to deleting after 60 s in case injection never fires (e.g. session dies).
     @MainActor
-    static func clearAllAfterInjection(for scope: AgentLaunchPromptDraftScope, sessionName: String) {
+    static func clearAfterInjection(fileURL: URL, sessionName: String) {
         final class Once: @unchecked Sendable { var token: NSObjectProtocol? }
         let once = Once()
         once.token = NotificationCenter.default.addObserver(
             forName: .magentAgentKeysInjected, object: nil, queue: .main
         ) { [once] notification in
             guard (notification.userInfo?["sessionName"] as? String) == sessionName else { return }
-            AgentLaunchPromptDraftStore.clearAll(for: scope)
+            try? FileManager.default.removeItem(at: fileURL)
             if let t = once.token { NotificationCenter.default.removeObserver(t) }
             once.token = nil
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [once] in
             guard let t = once.token else { return }
-            AgentLaunchPromptDraftStore.clearAll(for: scope)
+            try? FileManager.default.removeItem(at: fileURL)
             NotificationCenter.default.removeObserver(t)
             once.token = nil
         }
     }
+}
+
+/// Prefill values applied to the launch sheet when opening it to recover a crashed submission.
+struct AgentLaunchSheetPrefill {
+    let prompt: String
+    let description: String?
+    let branchName: String?
+    let agentType: AgentType?
 }
 
 enum AgentLastSelectionStore {
@@ -97,6 +187,34 @@ struct AgentLaunchSheetConfig {
     let terminalInjectionPrefill: String?
     /// When an Agent is selected and the prompt field is empty, prefill with this value.
     let agentContextPrefill: String?
+    /// When non-nil, the sheet opens pre-populated with recovered content instead of the saved draft.
+    let recoveryPrefill: AgentLaunchSheetPrefill?
+
+    init(
+        title: String,
+        acceptButtonTitle: String,
+        draftScope: AgentLaunchPromptDraftScope,
+        availableAgents: [AgentType],
+        defaultAgentType: AgentType?,
+        subtitle: String?,
+        showDescriptionAndBranchFields: Bool,
+        autoGenerateHint: String?,
+        terminalInjectionPrefill: String?,
+        agentContextPrefill: String?,
+        recoveryPrefill: AgentLaunchSheetPrefill? = nil
+    ) {
+        self.title = title
+        self.acceptButtonTitle = acceptButtonTitle
+        self.draftScope = draftScope
+        self.availableAgents = availableAgents
+        self.defaultAgentType = defaultAgentType
+        self.subtitle = subtitle
+        self.showDescriptionAndBranchFields = showDescriptionAndBranchFields
+        self.autoGenerateHint = autoGenerateHint
+        self.terminalInjectionPrefill = terminalInjectionPrefill
+        self.agentContextPrefill = agentContextPrefill
+        self.recoveryPrefill = recoveryPrefill
+    }
 }
 
 struct AgentLaunchSheetResult {
@@ -105,6 +223,9 @@ struct AgentLaunchSheetResult {
     let prompt: String?
     let description: String?
     let branchName: String?
+    /// Temp file holding the submitted prompt for crash recovery.
+    /// Exists only when `prompt` is non-nil; deleted once injection is confirmed.
+    let pendingPromptFileURL: URL?
 }
 
 /// A rounded chip view that shows accent-tinted background, adapting correctly to light/dark mode.
@@ -167,11 +288,19 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         window.delegate = self
         buildPickerItems()
         setupUI()
-        applyLastSelection()
-        // Sync previousMode to the restored selection before loading draft
-        previousMode = currentMode
-        loadDraft(mode: currentMode)
-        applyPrefillIfNeeded()
+        if let prefill = config.recoveryPrefill {
+            // Recovery mode: pre-select the recovered agent type, then populate fields.
+            // Skip draft loading — we're restoring submitted content, not a mid-edit draft.
+            applyRecoveryAgentSelection(prefill)
+            previousMode = currentMode
+            applyRecoveryPrefill(prefill)
+        } else {
+            applyLastSelection()
+            // Sync previousMode to the restored selection before loading draft
+            previousMode = currentMode
+            loadDraft(mode: currentMode)
+            applyPrefillIfNeeded()
+        }
         updatePromptAreaEnabled()
         resizeWindowToFitContent()
     }
@@ -241,6 +370,23 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             return
         }
         agentPicker.selectItem(at: index)
+    }
+
+    private func applyRecoveryAgentSelection(_ prefill: AgentLaunchSheetPrefill) {
+        guard let agentType = prefill.agentType,
+              let index = pickerItems.firstIndex(where: {
+                  if case .agent(let t, _) = $0 { return t == agentType }
+                  return false
+              }) else { return }
+        agentPicker.selectItem(at: index)
+    }
+
+    private func applyRecoveryPrefill(_ prefill: AgentLaunchSheetPrefill) {
+        promptTextView.string = prefill.prompt
+        if config.showDescriptionAndBranchFields {
+            descriptionField.stringValue = prefill.description ?? ""
+            branchField.stringValue = prefill.branchName ?? ""
+        }
     }
 
     private func setupUI() {
@@ -653,6 +799,24 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         AgentLastSelectionStore.save(item.storageRaw, for: config.draftScope)
 
+        // Write crash-recovery temp file before clearing the draft, so the submitted
+        // content is safe even if the app crashes during thread/tab creation.
+        let agentType: AgentType? = {
+            if case .agent(let t, _) = item { return t }
+            return nil
+        }()
+        let pendingPromptFileURL = rawPrompt.isEmpty ? nil : PendingInitialPromptStore.save(
+            prompt: rawPrompt,
+            description: rawDesc.isEmpty ? nil : rawDesc,
+            branchName: rawBranch.isEmpty ? nil : rawBranch,
+            agentType: agentType,
+            scope: config.draftScope
+        )
+
+        // Clear draft immediately — the modal is now clean if the user opens it again
+        // while the thread/tab is still being created in the background.
+        AgentLaunchPromptDraftStore.clearAll(for: config.draftScope)
+
         switch item {
         case .terminal:
             finish(with: AgentLaunchSheetResult(
@@ -660,7 +824,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 useAgentCommand: false,
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: nil,
-                branchName: nil
+                branchName: nil,
+                pendingPromptFileURL: pendingPromptFileURL
             ))
         case .agent(let type, _):
             finish(with: AgentLaunchSheetResult(
@@ -668,7 +833,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 useAgentCommand: true,
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: rawDesc.isEmpty ? nil : rawDesc,
-                branchName: rawBranch.isEmpty ? nil : rawBranch
+                branchName: rawBranch.isEmpty ? nil : rawBranch,
+                pendingPromptFileURL: pendingPromptFileURL
             ))
         }
     }
