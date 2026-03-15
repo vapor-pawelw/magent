@@ -291,6 +291,13 @@ extension ThreadDetailViewController {
         loadingPollTimer?.invalidate()
         loadingPollTimer = nil
 
+        // Clean up any previous injection observers
+        for obs in loadingOverlayInjectionObservers {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        loadingOverlayInjectionObservers.removeAll()
+        loadingOverlayWaitingForInjection = false
+
         ensureLoadingOverlay()
         loadingLabel?.stringValue = String(localized: .ThreadStrings.tabStartingAgent)
 
@@ -304,6 +311,29 @@ extension ThreadDetailViewController {
         loadingDetailLabel?.stringValue = ""
         loadingDetailLabel?.isHidden = true
         loadingOverlaySessionName = sessionName
+
+        // Observe injection lifecycle: keep overlay alive until keys are actually sent
+        let startedObs = NotificationCenter.default.addObserver(
+            forName: .magentAgentInjectionStarted,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            guard (notification.userInfo?["sessionName"] as? String) == sessionName else { return }
+            self.loadingOverlayWaitingForInjection = true
+        }
+
+        let injectedObs = NotificationCenter.default.addObserver(
+            forName: .magentAgentKeysInjected,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            guard (notification.userInfo?["sessionName"] as? String) == sessionName else { return }
+            self.dismissLoadingOverlay()
+        }
+
+        loadingOverlayInjectionObservers = [startedObs, injectedObs]
 
         let startTime = Date()
         let maxWait: TimeInterval = 15
@@ -326,6 +356,7 @@ extension ThreadDetailViewController {
                 let ready = await self.isAgentReady(sessionName: sessionName, agentType: agentType)
                 if ready {
                     await MainActor.run {
+                        guard !self.loadingOverlayWaitingForInjection else { return }
                         self.loadingPollTimer?.invalidate()
                         self.loadingPollTimer = nil
                         self.dismissLoadingOverlay()
@@ -340,6 +371,7 @@ extension ThreadDetailViewController {
             if ready {
                 await MainActor.run {
                     guard self.loadingOverlaySessionName == sessionName else { return }
+                    guard !self.loadingOverlayWaitingForInjection else { return }
                     self.dismissLoadingOverlay()
                 }
             }
@@ -358,6 +390,12 @@ extension ThreadDetailViewController {
     func dismissLoadingOverlay() {
         loadingPollTimer?.invalidate()
         loadingPollTimer = nil
+
+        loadingOverlayWaitingForInjection = false
+        for obs in loadingOverlayInjectionObservers {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        loadingOverlayInjectionObservers.removeAll()
 
         guard let overlay = loadingOverlay else { return }
         overlay.animator().alphaValue = 0

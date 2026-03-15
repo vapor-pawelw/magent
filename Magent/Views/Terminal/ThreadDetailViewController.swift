@@ -65,6 +65,10 @@ final class ThreadDetailViewController: NSViewController {
     var loadingDetailLabel: NSTextField?
     var loadingPollTimer: Timer?
     var loadingOverlaySessionName: String?
+    /// Set to true while `injectAfterStart` has a prompt in-flight; prevents the
+    /// poll timer from dismissing the overlay before keys are actually sent.
+    var loadingOverlayWaitingForInjection = false
+    var loadingOverlayInjectionObservers: [NSObjectProtocol] = []
     var preparedSessions: Set<String> = []
     var sessionPreparationTasks: [String: Task<Void, Never>] = [:]
     var backgroundSessionPreparationTask: Task<Void, Never>?
