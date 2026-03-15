@@ -10,6 +10,7 @@ extension ThreadManager {
         useAgentCommand: Bool = false,
         requestedAgentType: AgentType? = nil,
         initialPrompt: String? = nil,
+        shouldSubmitInitialPrompt: Bool = true,
         tabNameSuffix: String? = nil
     ) async throws -> Tab {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
@@ -170,9 +171,10 @@ extension ThreadManager {
             terminalCommand: injection.terminalCommand,
             agentContext: isAgentTab ? injection.agentContext : "",
             initialPrompt: initialPrompt,
+            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
             agentType: selectedAgentType
         )
-        if initialPrompt?.isEmpty == false, isAgentTab {
+        if initialPrompt?.isEmpty == false, isAgentTab, shouldSubmitInitialPrompt {
             scheduleAgentConversationIDRefresh(threadId: currentThread.id, sessionName: tmuxSessionName)
         }
 

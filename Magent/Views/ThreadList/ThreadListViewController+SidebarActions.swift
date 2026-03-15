@@ -16,19 +16,12 @@ extension ThreadListViewController {
         }
 
         guard let project = projectFromProjectHeaderButton(sender) else { return }
-
-        let isOptionClick = NSApp.currentEvent?.modifierFlags.contains(.option) == true
-        if isOptionClick {
-            let useAgentCommand = threadManager.effectiveAgentType(for: project.id) != nil
-            createThread(
-                for: project,
-                requestedAgentType: nil,
-                useAgentCommand: useAgentCommand
-            )
-            return
+        let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+        if isOptionPressed {
+            createThread(for: project, requestedAgentType: nil, useAgentCommand: true)
+        } else {
+            presentNewThreadSheet(for: project, anchorView: sender)
         }
-
-        presentProjectAgentMenu(project: project, anchorView: sender)
     }
 
     @objc func toggleSectionExpanded(_ sender: NSButton) {
@@ -216,9 +209,47 @@ extension ThreadListViewController {
         return projects.first
     }
 
-    private func presentProjectAgentMenu(project: Project, anchorView: NSView) {
-        let menu = buildAgentSubmenu(for: project)
-        menu.popUp(positioning: nil, at: NSPoint(x: anchorView.bounds.minX, y: anchorView.bounds.minY), in: anchorView)
+    private func presentNewThreadSheet(for project: Project, anchorView: NSView, baseBranch: String? = nil) {
+        guard let window = view.window else { return }
+        let settings = persistence.loadSettings()
+
+        var autoHintParts: [String] = []
+        if settings.autoRenameBranches { autoHintParts.append("branch") }
+        if settings.autoSetThreadDescription { autoHintParts.append("description") }
+        let autoGenerateHint: String? = autoHintParts.isEmpty ? nil : {
+            let joined = autoHintParts.joined(separator: " and ")
+            let cap = joined.prefix(1).uppercased() + joined.dropFirst()
+            return "\(cap) will be auto-generated from the first prompt if left blank."
+        }()
+
+        let injection = threadManager.effectiveInjection(for: project.id)
+        let config = AgentLaunchSheetConfig(
+            title: "New Thread",
+            acceptButtonTitle: "Create Thread",
+            draftScope: .newThread(projectId: project.id),
+            availableAgents: settings.availableActiveAgents,
+            defaultAgentType: threadManager.effectiveAgentType(for: project.id),
+            subtitle: "Project: \(project.name)",
+            showDescriptionAndBranchFields: true,
+            autoGenerateHint: autoGenerateHint,
+            terminalInjectionPrefill: injection.terminalCommand.isEmpty ? nil : injection.terminalCommand,
+            agentContextPrefill: injection.agentContext.isEmpty ? nil : injection.agentContext
+        )
+        let controller = AgentLaunchPromptSheetController(config: config)
+        controller.present(for: window) { [weak self] result in
+            guard let self, let result else { return }
+            self.createThread(
+                for: project,
+                requestedAgentType: result.agentType,
+                useAgentCommand: result.useAgentCommand,
+                baseBranch: baseBranch,
+                initialPrompt: result.prompt,
+                shouldSubmitInitialPrompt: true,
+                taskDescription: result.description,
+                requestedBranchName: result.branchName,
+                pendingPromptFileURL: result.pendingPromptFileURL
+            )
+        }
     }
 
     func buildAgentSubmenu(for project: Project, extraData: [String: String] = [:]) -> NSMenu {
@@ -273,14 +304,24 @@ extension ThreadListViewController {
             return
         }
         guard let project = preferredProjectForQuickCreate(from: projects) else { return }
-        presentProjectAgentMenu(project: project, anchorView: outlineView)
+        let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+        if isOptionPressed {
+            createThread(for: project, requestedAgentType: nil, useAgentCommand: true)
+        } else {
+            presentNewThreadSheet(for: project, anchorView: outlineView)
+        }
     }
 
     func createThread(
         for project: Project,
         requestedAgentType: AgentType? = nil,
         useAgentCommand: Bool = true,
-        baseBranch: String? = nil
+        baseBranch: String? = nil,
+        initialPrompt: String? = nil,
+        shouldSubmitInitialPrompt: Bool = true,
+        taskDescription: String? = nil,
+        requestedBranchName: String? = nil,
+        pendingPromptFileURL: URL? = nil
     ) {
         isCreatingThread = true
         reloadData()
@@ -291,9 +332,20 @@ extension ThreadListViewController {
                     project: project,
                     requestedAgentType: requestedAgentType,
                     useAgentCommand: useAgentCommand,
-                    requestedBaseBranch: baseBranch
+                    initialPrompt: initialPrompt,
+                    shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                    requestedName: requestedBranchName,
+                    requestedBaseBranch: baseBranch,
+                    requestedTaskDescription: taskDescription
                 )
                 await MainActor.run {
+                    if let pendingPromptFileURL,
+                       let sessionName = thread.tmuxSessionNames.first {
+                        PendingInitialPromptStore.clearAfterInjection(
+                            fileURL: pendingPromptFileURL,
+                            sessionName: sessionName
+                        )
+                    }
                     self.isCreatingThread = false
                     self.reloadData()
                 }
@@ -308,6 +360,138 @@ extension ThreadListViewController {
                     )
                 }
             }
+        }
+    }
+
+    // MARK: - Pending Prompt Recovery
+
+    /// Called once on first appearance. Scans `/tmp` for any unsubmitted prompt files
+    /// left behind by a previous crash and surfaces a banner for each one so the user
+    /// can reopen the creation sheet with all fields pre-populated.
+    func checkForPendingPromptRecovery() {
+        let pending = PendingInitialPromptStore.loadAll()
+        guard !pending.isEmpty else { return }
+
+        // Show banners sequentially — when the user acts on or dismisses one, the next appears.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            self?.showNextRecoveryBanner(pending: pending, index: 0)
+        }
+    }
+
+    private func showNextRecoveryBanner(pending: [(url: URL, prompt: PendingInitialPrompt)], index: Int) {
+        guard index < pending.count else { return }
+        let (url, record) = pending[index]
+        let settings = persistence.loadSettings()
+        let remaining = pending.count - index
+        let countSuffix = remaining > 1 ? " (\(index + 1) of \(pending.count))" : ""
+
+        let next = { [weak self] in
+            self?.showNextRecoveryBanner(pending: pending, index: index + 1)
+        }
+
+        switch record.scopeKind {
+        case .newThread:
+            guard let projectId = record.projectId,
+                  let project = settings.projects.first(where: { $0.id == projectId }) else {
+                try? FileManager.default.removeItem(at: url)
+                next()
+                return
+            }
+            let prefill = AgentLaunchSheetPrefill(
+                prompt: record.prompt,
+                description: record.description,
+                branchName: record.branchName,
+                agentType: record.agentType
+            )
+            BannerManager.shared.show(
+                message: "Unsubmitted thread prompt recovered — Project: \(project.name)\(countSuffix)",
+                style: .warning,
+                duration: nil,
+                isDismissible: true,
+                actions: [
+                    BannerAction(title: "Reopen") { [weak self] in
+                        // File stays alive; a new pending file will be created on next submit.
+                        // Delete original once the recovery sheet is closed (submitted or cancelled).
+                        self?.presentRecoverySheet(for: project, originalPendingURL: url, prefill: prefill)
+                        next()
+                    },
+                    BannerAction(title: "Discard") {
+                        try? FileManager.default.removeItem(at: url)
+                        next()
+                    }
+                ]
+            )
+
+        case .newTab:
+            guard let threadId = record.threadId,
+                  let thread = threadManager.threads.first(where: { $0.id == threadId }),
+                  let project = settings.projects.first(where: { $0.id == thread.projectId }) else {
+                try? FileManager.default.removeItem(at: url)
+                next()
+                return
+            }
+            let prefill = AgentLaunchSheetPrefill(
+                prompt: record.prompt,
+                description: nil,
+                branchName: nil,
+                agentType: record.agentType
+            )
+            BannerManager.shared.show(
+                message: "Unsubmitted tab prompt recovered — Thread: \(thread.name)\(countSuffix)",
+                style: .warning,
+                duration: nil,
+                isDismissible: true,
+                actions: [
+                    BannerAction(title: "Reopen as Thread") { [weak self] in
+                        self?.presentRecoverySheet(for: project, originalPendingURL: url, prefill: prefill)
+                        next()
+                    },
+                    BannerAction(title: "Discard") {
+                        try? FileManager.default.removeItem(at: url)
+                        next()
+                    }
+                ]
+            )
+        }
+    }
+
+    /// Opens a new-thread creation sheet pre-populated with `prefill`.
+    /// Deletes `originalPendingURL` when the sheet is closed (whether submitted or cancelled).
+    private func presentRecoverySheet(
+        for project: Project,
+        originalPendingURL: URL,
+        prefill: AgentLaunchSheetPrefill
+    ) {
+        guard let window = view.window else { return }
+        let settings = persistence.loadSettings()
+        let config = AgentLaunchSheetConfig(
+            title: "New Thread",
+            acceptButtonTitle: "Create Thread",
+            draftScope: .newThread(projectId: project.id),
+            availableAgents: settings.availableActiveAgents,
+            defaultAgentType: threadManager.effectiveAgentType(for: project.id),
+            subtitle: "Project: \(project.name)",
+            showDescriptionAndBranchFields: true,
+            autoGenerateHint: nil,
+            terminalInjectionPrefill: nil,
+            agentContextPrefill: nil,
+            recoveryPrefill: prefill
+        )
+        let controller = AgentLaunchPromptSheetController(config: config)
+        controller.present(for: window) { [weak self] result in
+            // Delete original recovery file — user has seen and acted on it.
+            try? FileManager.default.removeItem(at: originalPendingURL)
+            guard let self, let result else { return }
+            self.createThread(
+                for: project,
+                requestedAgentType: result.agentType,
+                useAgentCommand: result.useAgentCommand,
+                initialPrompt: result.prompt,
+                shouldSubmitInitialPrompt: true,
+                taskDescription: result.description,
+                requestedBranchName: result.branchName,
+                pendingPromptFileURL: result.pendingPromptFileURL
+            )
         }
     }
 

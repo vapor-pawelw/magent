@@ -183,6 +183,7 @@ final class ThreadListViewController: NSViewController {
             object: nil
         )
         updateGlobalRateLimitSummary()
+        checkForPendingPromptRecovery()
     }
 
     override func viewDidLayout() {

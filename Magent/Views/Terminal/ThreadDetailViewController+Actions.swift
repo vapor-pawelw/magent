@@ -230,36 +230,51 @@ extension ThreadDetailViewController {
     }
 
     @objc func addTabTapped() {
-        presentAddTabAgentMenu()
-    }
-
-    private func presentAddTabAgentMenu() {
-        let settings = PersistenceService.shared.loadSettings()
-        let menu = NSMenu()
-        AgentMenuBuilder.populate(
-            menu: menu,
-            menuTitle: String(localized: .ThreadStrings.threadNewTabMenuTitle),
-            defaultAgentName: threadManager.effectiveAgentType(for: thread.projectId)?.displayName,
-            activeAgents: settings.availableActiveAgents,
-            target: self,
-            action: #selector(addTabMenuItemTapped(_:))
-        )
-        menu.popUp(positioning: nil, at: NSPoint(x: addTabButton.bounds.minX, y: addTabButton.bounds.minY), in: addTabButton)
-    }
-
-    @objc private func addTabMenuItemTapped(_ sender: NSMenuItem) {
-        guard let selection = AgentMenuBuilder.parseSelection(from: sender) else { return }
-        switch selection.mode {
-        case .terminal:
-            addTab(using: nil, useAgentCommand: false)
-        case .agent(let agentType):
-            addTab(using: agentType, useAgentCommand: true)
-        case .projectDefault:
+        let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+        if isOptionPressed {
             addTab(using: nil, useAgentCommand: true)
+        } else {
+            presentNewTabSheet()
         }
     }
 
-    private func addTab(using agentType: AgentType?, useAgentCommand: Bool, initialPrompt: String? = nil, tabNameSuffix: String? = nil) {
+    private func presentNewTabSheet() {
+        guard let window = view.window else { return }
+        let settings = PersistenceService.shared.loadSettings()
+        let injection = threadManager.effectiveInjection(for: thread.projectId)
+        let config = AgentLaunchSheetConfig(
+            title: "New Tab",
+            acceptButtonTitle: "Add Tab",
+            draftScope: .newTab(threadId: thread.id),
+            availableAgents: settings.availableActiveAgents,
+            defaultAgentType: threadManager.effectiveAgentType(for: thread.projectId),
+            subtitle: "Thread: \(thread.name)",
+            showDescriptionAndBranchFields: false,
+            autoGenerateHint: nil,
+            terminalInjectionPrefill: injection.terminalCommand.isEmpty ? nil : injection.terminalCommand,
+            agentContextPrefill: injection.agentContext.isEmpty ? nil : injection.agentContext
+        )
+        let controller = AgentLaunchPromptSheetController(config: config)
+        controller.present(for: window) { [weak self] result in
+            guard let self, let result else { return }
+            self.addTab(
+                using: result.agentType,
+                useAgentCommand: result.useAgentCommand,
+                initialPrompt: result.prompt,
+                shouldSubmitInitialPrompt: true,
+                pendingPromptFileURL: result.pendingPromptFileURL
+            )
+        }
+    }
+
+    private func addTab(
+        using agentType: AgentType?,
+        useAgentCommand: Bool,
+        initialPrompt: String? = nil,
+        shouldSubmitInitialPrompt: Bool = true,
+        pendingPromptFileURL: URL? = nil,
+        tabNameSuffix: String? = nil
+    ) {
         Task {
             do {
                 let tab = try await threadManager.addTab(
@@ -267,6 +282,7 @@ extension ThreadDetailViewController {
                     useAgentCommand: useAgentCommand,
                     requestedAgentType: agentType,
                     initialPrompt: initialPrompt,
+                    shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
                     tabNameSuffix: tabNameSuffix
                 )
                 let latestThread = self.threadManager.threads.first(where: { $0.id == self.thread.id }) ?? self.thread
@@ -275,6 +291,12 @@ extension ThreadDetailViewController {
                     thread: latestThread
                 )
                 await MainActor.run {
+                    if let pendingPromptFileURL {
+                        PendingInitialPromptStore.clearAfterInjection(
+                            fileURL: pendingPromptFileURL,
+                            sessionName: tab.tmuxSessionName
+                        )
+                    }
                     self.hideEmptyState()
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated
@@ -302,7 +324,12 @@ extension ThreadDetailViewController {
     }
 
     func addTabFromKeyboard() {
-        addTabTapped()
+        let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+        if isOptionPressed {
+            addTab(using: nil, useAgentCommand: true)
+        } else {
+            presentNewTabSheet()
+        }
     }
 
     // MARK: - Update & Rename
@@ -539,4 +566,5 @@ extension ThreadDetailViewController {
             }
         }
     }
+
 }
