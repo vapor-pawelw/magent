@@ -31,6 +31,7 @@ All notable changes to this project will be documented in this file.
 - Fixed: threads can no longer be dragged across projects when sections are enabled.
 
 ### Thread
+- Auto-rename now starts immediately when the initial prompt sheet is accepted, rather than waiting for the prompt to appear in the agent's transcript. For threads with an initial prompt, the name is typically resolved before the agent has finished loading.
 - AI rename results (slug, description, icon) are now cached per thread and prompt. Re-using a previously auto-renamed prompt (e.g. right-clicking a TOC entry to rename back) skips the agent call and reuses the cached result immediately.
 - The new thread prompt sheet now shows a project picker when you have more than one project, so you can switch the target project before creating the thread.
 - Creating a new thread or tab now opens a prompt sheet where you can write the initial message, choose an agent, and (for threads) set a description and branch name — all before creation starts. Option-click the + button to skip the sheet and create immediately with the project default.

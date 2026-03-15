@@ -259,6 +259,27 @@ extension ThreadManager {
                 scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: tmuxSessionName)
             }
 
+            // Trigger auto-rename early — using the initial prompt from the launch sheet — so
+            // the thread gets a meaningful name before the agent even starts processing.
+            // Runs in an unstructured Task so it doesn't delay createThread's return.
+            // Deduplication: didAutoRenameFromFirstPrompt is set to true by the rename job,
+            // so the TOC-based trigger later sees the flag and skips the same prompt.
+            // Serialization: autoRenameInProgress prevents concurrent rename AI calls.
+            if let prompt = initialPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !prompt.isEmpty,
+               useAgentCommand,
+               selectedAgentType != nil {
+                let threadId = thread.id
+                let sessionName = tmuxSessionName
+                Task {
+                    _ = await autoRenameThreadAfterFirstPromptIfNeeded(
+                        threadId: threadId,
+                        sessionName: sessionName,
+                        prompt: prompt
+                    )
+                }
+            }
+
             return thread
         } catch {
             // Clean up the pending thread from in-memory state; it was never persisted.
