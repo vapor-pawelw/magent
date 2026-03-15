@@ -495,8 +495,14 @@ public final class TmuxService: Sendable {
 
     /// Sends text without pressing Enter — use `sendEnter` separately to submit.
     public func sendText(sessionName: String, text: String) async throws {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("magent-tmux-buffer-\(UUID().uuidString).txt")
+        try text.write(to: tempURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
         _ = try await ShellExecutor.run(
-            "tmux send-keys -t \(shellQuote(sessionName)) \(shellQuote(text))"
+            "tmux load-buffer \(shellQuote(tempURL.path)); " +
+            "tmux paste-buffer -d -t \(shellQuote(sessionName))"
         )
     }
 
