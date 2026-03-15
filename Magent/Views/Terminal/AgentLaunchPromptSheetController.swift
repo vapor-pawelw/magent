@@ -728,10 +728,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let newScope = AgentLaunchPromptDraftScope.newThread(projectId: newProject.id)
         guard case .newThread(let oldId) = currentDraftScope, oldId != newProject.id else { return }
 
-        // Save draft for the project we're leaving, then switch scope and load the new draft.
-        persistDraft()
+        // Just update the scope — no save, no load.
+        // Drafts are saved only when the user actually types (textDidChange), so switching
+        // projects neither persists the current content to the old project nor overwrites
+        // the prompt with the new project's saved draft. Whatever is in the field stays.
         currentDraftScope = newScope
-        loadDraft(mode: currentMode)
     }
 
     private func makeNoticeBox(icon symbolName: String, text: String, color: NSColor) -> NSView {
@@ -917,12 +918,6 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         // Clear draft immediately — the modal is now clean if the user opens it again
         // while the thread/tab is still being created in the background.
         AgentLaunchPromptDraftStore.clearAll(for: currentDraftScope)
-        // Also clear the initial scope if the user switched projects.
-        if case .newThread(let initId) = config.draftScope,
-           case .newThread(let curId) = currentDraftScope,
-           initId != curId {
-            AgentLaunchPromptDraftStore.clearAll(for: config.draftScope)
-        }
 
         let selectedProject: Project? = {
             guard let picker = projectPicker else { return nil }
