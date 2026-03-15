@@ -417,7 +417,7 @@ extension SettingsProjectsViewController {
         terminalInjectionTextView = createOverrideSection(
             in: overridesStack,
             title: "Terminal Injection",
-            description: "Empty = use global default. \(terminalDesc)",
+            description: "Pre-filled into the prompt when creating a terminal session. Empty = use global default. \(terminalDesc)",
             value: project.terminalInjectionCommand ?? "",
             font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
@@ -438,7 +438,7 @@ extension SettingsProjectsViewController {
         agentContextTextView = createOverrideSection(
             in: overridesStack,
             title: "Agent Context",
-            description: "Empty = use global default. \(contextDesc)",
+            description: "Pre-filled into the prompt field when creating an agent session; skipped when you provide your own prompt. Empty = use global default. \(contextDesc)",
             value: project.agentContextInjection ?? "",
             font: .systemFont(ofSize: 13)
         )

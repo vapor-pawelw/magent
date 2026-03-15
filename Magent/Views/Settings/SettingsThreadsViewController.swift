@@ -221,7 +221,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         terminalInjectionTextView = createTextEditorSection(
             in: injectionSection,
             title: "Terminal Injection Command",
-            description: "Shell command auto-sent to every new terminal tab after creation.",
+            description: "Pre-filled into the prompt field when creating a terminal session. Sent as a shell command on start if submitted as-is, or replaced by whatever you type.",
             value: settings.terminalInjectionCommand,
             font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
@@ -229,7 +229,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         agentContextTextView = createTextEditorSection(
             in: injectionSection,
             title: "Agent Context Injection",
-            description: "Text auto-typed into every new agent prompt after startup.",
+            description: "Pre-filled into the prompt field when creating an agent session. Sent as the initial message if submitted as-is, or replaced by whatever you type. Skipped when you provide your own initial prompt.",
             value: settings.agentContextInjection,
             font: .systemFont(ofSize: 13)
         )
