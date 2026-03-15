@@ -334,7 +334,7 @@ extension ThreadListViewController {
         guard let thread = selectedThreadFromState() else { return }
         let nextLimit = diffPanelCommitLimitByThreadId[thread.id, default: diffPanelCommitPageSize] + diffPanelCommitPageSize
         diffPanelCommitLimitByThreadId[thread.id] = nextLimit
-        refreshDiffPanel(for: thread, resetPagination: false)
+        refreshDiffPanel(for: thread, resetPagination: false, preserveSelection: true)
     }
 
     func handleCommitSelected(_ commitHash: String?) {
@@ -360,7 +360,7 @@ extension ThreadListViewController {
         diffPanelView.updateBranchInfo(branchName: branchName, baseBranch: baseBranch)
     }
 
-    func refreshDiffPanel(for thread: MagentThread, resetPagination: Bool = true) {
+    func refreshDiffPanel(for thread: MagentThread, resetPagination: Bool = true, preserveSelection: Bool = false) {
         if resetPagination || diffPanelCommitLimitByThreadId[thread.id] == nil {
             diffPanelCommitLimitByThreadId[thread.id] = diffPanelCommitPageSize
         }
@@ -408,7 +408,8 @@ extension ThreadListViewController {
                     forceVisible: current.isMain,
                     worktreePath: current.worktreePath,
                     branchName: current.isMain ? nil : (current.actualBranch ?? current.branchName),
-                    baseBranch: baseBranch
+                    baseBranch: baseBranch,
+                    preserveSelection: preserveSelection
                 )
             }
         }

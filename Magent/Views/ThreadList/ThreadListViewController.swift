@@ -222,7 +222,7 @@ final class ThreadListViewController: NSViewController {
         // If the completed thread is currently selected, refresh the diff panel
         guard let selected = selectedThreadFromState(),
               selected.id == threadId else { return }
-        refreshDiffPanel(for: selected)
+        refreshDiffPanel(for: selected, preserveSelection: true)
     }
 
     @objc private func globalRateLimitSummaryDidChange() {

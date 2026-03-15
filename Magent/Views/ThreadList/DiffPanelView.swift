@@ -524,22 +524,32 @@ final class DiffPanelView: NSView {
         forceVisible: Bool = false,
         worktreePath: String? = nil,
         branchName: String? = nil,
-        baseBranch: String? = nil
+        baseBranch: String? = nil,
+        preserveSelection: Bool = false
     ) {
         uncommittedEntries = newEntries
         commits = newCommits
-        commitEntries = []
-        selectedCommitHash = nil
-        selectedFilePath = nil
         self.worktreePath = worktreePath
         self.hasMoreCommits = hasMoreCommits
         self.forceVisible = forceVisible
 
+        // Preserve current commit selection and tab if the selected commit still exists in new data
+        let hashStillExists = preserveSelection && selectedCommitHash != nil
+            && newCommits.contains(where: { $0.shortHash == selectedCommitHash })
+        if hashStillExists {
+            // Keep selectedCommitHash and activeTab; clear only the loaded entry list so it reloads
+            commitEntries = []
+            selectedFilePath = nil
+        } else {
+            selectedCommitHash = nil
+            commitEntries = []
+            selectedFilePath = nil
+            // Reset to COMMITS tab (leftmost/default)
+            activeTab = .commits
+        }
+
         // Show COMMITS tab if there are any commits to browse
         commitsTabButton.isHidden = newCommits.isEmpty && newEntries.isEmpty && !forceVisible
-
-        // Reset to COMMITS tab (leftmost/default)
-        activeTab = .commits
 
         updateTabTitles()
 
@@ -552,6 +562,11 @@ final class DiffPanelView: NSView {
 
         setPanelVisible(true)
         rebuildRows()
+
+        // If a commit selection was preserved, re-trigger entry loading (commitEntries was cleared)
+        if hashStillExists, let hash = selectedCommitHash {
+            onCommitSelected?(hash)
+        }
 
         updateBranchInfo(branchName: branchName, baseBranch: baseBranch)
     }
@@ -627,6 +642,7 @@ final class DiffPanelView: NSView {
     }
 
     private func rebuildCommitsRows() {
+        commitContextLabel.isHidden = true
         // "Uncommitted" row — always present at top
         let uncommittedRow = makeUncommittedRow()
         stackView.addArrangedSubview(uncommittedRow)

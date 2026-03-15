@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 - New "Don't override agent color theme" checkbox in Appearance settings: when enabled, Magent won't force a color theme on Claude or Codex at startup, letting agents use their own default theme.
 
 ### Changes Panel
+- Fixed: selecting a commit or switching to the CHANGES tab is now preserved across background refreshes (e.g. agent completion); the panel no longer auto-jumps back to "Uncommitted".
+- Fixed: the "from \<hash\> · \<message\>" subtitle no longer lingers on the COMMITS tab after a background refresh resets the selection.
 - COMMITS is now the left-most (default) tab in the bottom panel; it always shows an "Uncommitted" row at the top so you can quickly switch between working-tree changes and any branch commit.
 - Selecting "Uncommitted" in the COMMITS tab shows the same working-tree file list as before; selecting a commit switches the CHANGES tab to the files changed in that commit, with a subtitle ("from \<hash\> · \<message\>") below the tab bar.
 - The inline diff viewer now matches the selection: clicking a file while a commit is selected shows that commit's diff; switching back to "Uncommitted" restores the working-tree diff.
