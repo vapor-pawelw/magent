@@ -486,6 +486,7 @@ extension ThreadManager {
         // 6. Update model fields and persist (worktreePath stays the same)
         threads[index].name = trimmed
         threads[index].branchName = newBranchName
+        threads[index].actualBranch = newBranchName
         threads[index].tmuxSessionNames = newSessionNames
         threads[index].agentTmuxSessions = newAgentSessions
         threads[index].pinnedTmuxSessions = newPinnedSessions
