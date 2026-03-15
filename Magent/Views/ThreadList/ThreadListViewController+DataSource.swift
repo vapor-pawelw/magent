@@ -867,7 +867,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         } else {
             // Same thread re-selected (e.g. reloadData() programmatically restores the outline
             // selection after a structural reload). Preserve the active tab and commit selection.
-            refreshDiffPanel(for: resolved, preserveSelection: true)
+            // resetPagination:false keeps the previously-loaded commit range intact so the
+            // selected commit doesn't fall off the list.
+            refreshDiffPanel(for: resolved, resetPagination: false, preserveSelection: true)
         }
     }
 }
@@ -919,7 +921,9 @@ extension ThreadListViewController: ThreadManagerDelegate {
         if let selected = selectedThreadFromState() {
             refreshBranchMismatchView(for: selected)
             if didStructuralReload {
-                refreshDiffPanel(for: selected, preserveSelection: true)
+                // resetPagination:false preserves the currently-loaded commit count so a
+                // structural reload doesn't shrink the list and lose the selected commit hash.
+                refreshDiffPanel(for: selected, resetPagination: false, preserveSelection: true)
             } else {
                 refreshDiffPanelContext(for: selected)
             }

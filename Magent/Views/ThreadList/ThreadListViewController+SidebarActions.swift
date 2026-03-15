@@ -366,6 +366,13 @@ extension ThreadListViewController {
         }
         let commitLimit = diffPanelCommitLimitByThreadId[thread.id] ?? diffPanelCommitPageSize
 
+        // Increment the generation for this thread. The task captures this value and
+        // abandons its result if a newer call has since arrived — preventing a slow
+        // no-preserve task (spawned at thread selection) from overwriting the result
+        // of a faster preserve task (spawned by a background structural reload).
+        let generation = (diffPanelRefreshGeneration[thread.id] ?? 0) + 1
+        diffPanelRefreshGeneration[thread.id] = generation
+
         Task {
             let current = self.threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
             let entries: [FileDiffEntry]
@@ -401,6 +408,8 @@ extension ThreadListViewController {
 
             await MainActor.run {
                 guard self.selectedThreadID == current.id else { return }
+                // Discard stale results: a newer refresh call was made after this task was spawned.
+                guard (self.diffPanelRefreshGeneration[current.id] ?? 0) == generation else { return }
                 self.diffPanelView.update(
                     with: entries,
                     commits: commits,

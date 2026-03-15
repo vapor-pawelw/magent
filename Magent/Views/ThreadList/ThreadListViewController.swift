@@ -117,6 +117,10 @@ final class ThreadListViewController: NSViewController {
     var allowsProgrammaticOutlineDisclosureChanges = false
     var diffPanelCommitLimitByThreadId: [UUID: Int] = [:]
     let diffPanelCommitPageSize = 10
+    /// Monotonically-increasing generation per thread. Incremented each time refreshDiffPanel is called.
+    /// The active Task captures its generation at spawn time and bails if a newer call has since arrived,
+    /// preventing stale no-preserve tasks from overwriting later preserve tasks.
+    var diffPanelRefreshGeneration: [UUID: Int] = [:]
     private(set) var selectedThreadID: UUID?
 
     private struct SidebarScrollSnapshot {
@@ -219,10 +223,12 @@ final class ThreadListViewController: NSViewController {
 
     @objc private func agentCompletionDetected(_ notification: Notification) {
         guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
-        // If the completed thread is currently selected, refresh the diff panel
+        // If the completed thread is currently selected, refresh the diff panel.
+        // resetPagination:false keeps the existing commit range intact so the selected
+        // commit stays in the list after the agent's new commit lands.
         guard let selected = selectedThreadFromState(),
               selected.id == threadId else { return }
-        refreshDiffPanel(for: selected, preserveSelection: true)
+        refreshDiffPanel(for: selected, resetPagination: false, preserveSelection: true)
     }
 
     @objc private func globalRateLimitSummaryDidChange() {
