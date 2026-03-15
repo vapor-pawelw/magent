@@ -725,8 +725,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
     }
 
-    private func persistDraft() {
-        let mode = currentMode
+    private func persistDraft(mode: String? = nil) {
+        let mode = mode ?? currentMode
         AgentLaunchPromptDraftStore.save(
             AgentLaunchPromptDraft(
                 prompt: promptTextView.string,
@@ -759,7 +759,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             return
         }
         // Save current text to the mode we're leaving, then load the new mode's draft
-        persistDraft()
+        persistDraft(mode: previousMode)
         previousMode = newMode
         loadDraft(mode: newMode)
         applyPrefillIfNeeded()
