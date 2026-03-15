@@ -27,6 +27,7 @@ All notable changes to this project will be documented in this file.
 - Links in the terminal are now clickable: Cmd+click opens URLs in the default browser. Hovering over a link shows an animated URL pill at the bottom of the terminal and changes the cursor to a pointing hand. Link detection combines ghostty-native OSC 8 hyperlinks and tmux pane content.
 
 ### Thread
+- Fixed: Claude sessions were not showing as busy when the status bar included trailing context after "esc to interrupt" (e.g. `7% until auto-compact`); the busy-detection regex now matches regardless of trailing content.
 - The "Resync Local Sync Paths" top-bar button is now hidden when the parent project has no Local Sync Paths configured; it reappears automatically once paths are added in Settings.
 - Archive suggestion now also appears when the thread's PR or MR has been merged — even before the local base branch is fetched — so the archivebox shows up as soon as GitHub or GitLab confirms the merge.
 - Merged PRs and MRs are now detected and shown alongside open ones: the sidebar row, top-right button, tooltip, and context menu all display the PR/MR number with a "(✅ Merged)" suffix so you can see at a glance that the branch has landed.

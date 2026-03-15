@@ -378,8 +378,9 @@ extension ThreadManager {
 
         // Claude can render status with leading context, e.g.:
         // "⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt"
+        // May also have trailing content like "7% until auto-compact"
         return line.range(
-            of: #"\s·\s*esc to interrupt\)?\s*$"#,
+            of: #"\s·\s*esc to interrupt\b"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
     }
