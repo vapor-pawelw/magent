@@ -105,6 +105,8 @@ final class ThreadDetailViewController: NSViewController {
     var isLoadingDiffViewer = false
     /// The commit hash currently shown in the diff viewer, or nil for working-tree diff.
     var currentDiffCommitHash: String? = nil
+    /// When true, the diff viewer shows working-tree changes only (ignores base branch).
+    var currentDiffForceWorkingTree: Bool = false
     var terminalBottomToView: NSLayoutConstraint?
     var terminalBottomToDiff: NSLayoutConstraint?
     var diffHeightConstraint: NSLayoutConstraint?
@@ -723,7 +725,8 @@ final class ThreadDetailViewController: NSViewController {
     @objc private func handleShowDiffViewerNotification(_ notification: Notification) {
         let filePath = notification.userInfo?["filePath"] as? String
         let commitHash = notification.userInfo?["commitHash"] as? String
-        showDiffViewer(scrollToFile: filePath, commitHash: commitHash)
+        let forceWorkingTree = (notification.userInfo?["mode"] as? String) == "uncommitted"
+        showDiffViewer(scrollToFile: filePath, commitHash: commitHash, forceWorkingTreeDiff: forceWorkingTree)
     }
 
     @objc private func handleHideDiffViewerNotification() {

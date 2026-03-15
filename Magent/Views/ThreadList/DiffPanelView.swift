@@ -133,6 +133,14 @@ final class DiffPanelView: NSView {
     private var hasMoreCommits = false
     private var forceVisible = false
 
+    // MARK: - Commit detail mode
+    private var isInCommitDetailMode = false
+    private var commitDetailHash: String? = nil
+    private var commitDetailEntries: [FileDiffEntry] = []
+    private let commitDetailHeaderView = NSView()
+    private let backButton = NSButton()
+    private let commitDetailTitleLabel = NSTextField(labelWithString: "")
+
     private var heightConstraint: NSLayoutConstraint!
     private var expandedHeight: CGFloat = DiffPanelView.defaultHeight
     private static let minHeight: CGFloat = 60
@@ -147,8 +155,8 @@ final class DiffPanelView: NSView {
     var onLoadMoreCommits: (() -> Void)?
     /// Called when the user selects a commit (nil = "Uncommitted").
     var onCommitSelected: ((String?) -> Void)?
-    /// Called when the user double-taps a commit row (nil = "Uncommitted").
-    var onCommitDoubleTapped: ((String?, NSView) -> Void)?
+    /// Called when the user double-taps a commit row (nil = "Uncommitted"). Second arg is display title.
+    var onCommitDoubleTapped: ((String?, String) -> Void)?
 
     /// The entries currently shown in the CHANGES tab.
     private var activeEntries: [FileDiffEntry] {
@@ -266,6 +274,39 @@ final class DiffPanelView: NSView {
         branchInfoLabel.isHidden = true
         addSubview(branchInfoLabel)
 
+        // Commit detail header — replaces tab bar in commit detail mode
+        backButton.title = "‹ Back"
+        backButton.font = .systemFont(ofSize: 11, weight: .semibold)
+        backButton.contentTintColor = NSColor.controlAccentColor
+        backButton.isBordered = false
+        backButton.target = self
+        backButton.action = #selector(backButtonTapped)
+        backButton.translatesAutoresizingMaskIntoConstraints = false
+
+        commitDetailTitleLabel.font = .systemFont(ofSize: 11)
+        commitDetailTitleLabel.textColor = NSColor(resource: .textSecondary)
+        commitDetailTitleLabel.lineBreakMode = .byTruncatingMiddle
+        commitDetailTitleLabel.maximumNumberOfLines = 1
+        commitDetailTitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        commitDetailTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        commitDetailHeaderView.translatesAutoresizingMaskIntoConstraints = false
+        commitDetailHeaderView.isHidden = true
+        commitDetailHeaderView.addSubview(backButton)
+        commitDetailHeaderView.addSubview(commitDetailTitleLabel)
+        addSubview(commitDetailHeaderView)
+
+        backButton.setContentHuggingPriority(.required, for: .horizontal)
+
+        NSLayoutConstraint.activate([
+            backButton.leadingAnchor.constraint(equalTo: commitDetailHeaderView.leadingAnchor, constant: 8),
+            backButton.centerYAnchor.constraint(equalTo: commitDetailHeaderView.centerYAnchor),
+
+            commitDetailTitleLabel.leadingAnchor.constraint(equalTo: backButton.trailingAnchor, constant: 4),
+            commitDetailTitleLabel.trailingAnchor.constraint(equalTo: commitDetailHeaderView.trailingAnchor, constant: -12),
+            commitDetailTitleLabel.centerYAnchor.constraint(equalTo: commitDetailHeaderView.centerYAnchor),
+        ])
+
         let savedHeight = UserDefaults.standard.object(forKey: Self.heightKey) as? CGFloat ?? Self.defaultHeight
         let clampedHeight = min(max(savedHeight, Self.minHeight), Self.maxHeight)
         expandedHeight = clampedHeight
@@ -301,6 +342,11 @@ final class DiffPanelView: NSView {
             branchInfoLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             branchInfoLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             branchInfoLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+
+            commitDetailHeaderView.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4),
+            commitDetailHeaderView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            commitDetailHeaderView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            commitDetailHeaderView.heightAnchor.constraint(equalTo: tabBarStack.heightAnchor),
 
             heightConstraint,
 
@@ -416,7 +462,13 @@ final class DiffPanelView: NSView {
         window?.makeFirstResponder(self)
         NSLog("[DiffPanel] posting magentShowDiffViewer notification")
         var userInfo: [String: Any] = ["filePath": filePath]
-        if let hash = selectedCommitHash {
+        if isInCommitDetailMode {
+            if let hash = commitDetailHash {
+                userInfo["commitHash"] = hash
+            } else {
+                userInfo["mode"] = "uncommitted"
+            }
+        } else if let hash = selectedCommitHash {
             userInfo["commitHash"] = hash
         }
         NotificationCenter.default.post(
@@ -540,6 +592,9 @@ final class DiffPanelView: NSView {
         self.hasMoreCommits = hasMoreCommits
         self.forceVisible = forceVisible
 
+        // Always exit commit detail mode when panel data is refreshed (thread change)
+        resetCommitDetailMode()
+
         // Preserve current commit selection and tab if requested
         let hashStillExists = preserveSelection && selectedCommitHash != nil
             && newCommits.contains(where: { $0.shortHash == selectedCommitHash })
@@ -610,6 +665,7 @@ final class DiffPanelView: NSView {
     }
 
     func clear() {
+        resetCommitDetailMode()
         uncommittedEntries = []
         commitEntries = []
         commits = []
@@ -646,6 +702,10 @@ final class DiffPanelView: NSView {
 
     private func rebuildRows() {
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        if isInCommitDetailMode {
+            rebuildCommitDetailRows()
+            return
+        }
         switch activeTab {
         case .commits:
             rebuildCommitsRows()
@@ -790,6 +850,60 @@ final class DiffPanelView: NSView {
         rebuildRows()
     }
 
+    // MARK: - Commit Detail Mode
+
+    func enterCommitDetailMode(hash: String?, title: String, entries: [FileDiffEntry]) {
+        isInCommitDetailMode = true
+        commitDetailHash = hash
+        commitDetailEntries = entries
+        commitDetailTitleLabel.stringValue = title
+        selectedFilePath = nil
+
+        tabBarStack.isHidden = true
+        infoButton.isHidden = true
+        commitContextLabel.isHidden = true
+        commitDetailHeaderView.isHidden = false
+
+        rebuildRows()
+    }
+
+    @objc private func backButtonTapped() {
+        resetCommitDetailMode()
+        activeTab = .commits
+        selectedCommitHash = nil
+        commitEntries = []
+        updateTabTitles()
+        rebuildRows()
+        NotificationCenter.default.post(name: .magentHideDiffViewer, object: nil)
+    }
+
+    private func resetCommitDetailMode() {
+        guard isInCommitDetailMode else { return }
+        isInCommitDetailMode = false
+        commitDetailHash = nil
+        commitDetailEntries = []
+        commitDetailHeaderView.isHidden = true
+        tabBarStack.isHidden = false
+        // infoButton visibility is restored by updateTabTitles()
+    }
+
+    private func rebuildCommitDetailRows() {
+        if commitDetailEntries.isEmpty {
+            let msg = commitDetailHash == nil ? "No uncommitted changes" : "No changes in this commit"
+            let row = makeEmptyStateRow(message: msg)
+            stackView.addArrangedSubview(row)
+            row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
+            row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+        } else {
+            for entry in commitDetailEntries {
+                let row = makeEntryRow(entry)
+                stackView.addArrangedSubview(row)
+                row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
+                row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+            }
+        }
+    }
+
     private func makeUncommittedRow() -> NSView {
         let container = CommitRowView(commitHash: "__uncommitted__")
         container.translatesAutoresizingMaskIntoConstraints = false
@@ -798,7 +912,7 @@ final class DiffPanelView: NSView {
             self?.selectCommit(nil)
         }
         container.onDoubleClick = { [weak self] _ in
-            self?.onCommitDoubleTapped?(nil, container)
+            self?.onCommitDoubleTapped?(nil, "Uncommitted changes")
         }
 
         let label = NSTextField(labelWithString: "Uncommitted")
@@ -973,7 +1087,10 @@ final class DiffPanelView: NSView {
             self?.selectCommit(hash)
         }
         container.onDoubleClick = { [weak self] hash in
-            self?.onCommitDoubleTapped?(hash, container)
+            guard let self else { return }
+            let subject = self.commits.first(where: { $0.shortHash == hash })?.subject ?? ""
+            let title = subject.isEmpty ? hash : "\(hash) — \(subject)"
+            self.onCommitDoubleTapped?(hash, title)
         }
 
         let hashLabel = NSTextField(labelWithString: commit.shortHash)

@@ -432,8 +432,8 @@ final class ThreadListViewController: NSViewController {
         diffPanelView.onCommitSelected = { [weak self] commitHash in
             self?.handleCommitSelected(commitHash)
         }
-        diffPanelView.onCommitDoubleTapped = { [weak self] commitHash, sourceView in
-            self?.showCommitFilesPopover(commitHash: commitHash, relativeTo: sourceView)
+        diffPanelView.onCommitDoubleTapped = { [weak self] commitHash, title in
+            self?.handleCommitDoubleTapped(commitHash, title: title)
         }
         view.addSubview(diffPanelView)
 

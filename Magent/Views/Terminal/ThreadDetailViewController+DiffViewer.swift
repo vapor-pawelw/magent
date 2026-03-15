@@ -159,14 +159,14 @@ extension ThreadDetailViewController {
 
     // MARK: - Inline Diff Viewer
 
-    func showDiffViewer(scrollToFile: String? = nil, commitHash: String? = nil) {
+    func showDiffViewer(scrollToFile: String? = nil, commitHash: String? = nil, forceWorkingTreeDiff: Bool = false) {
         NSLog("[DiffViewer] showDiffViewer called, scrollToFile=%@, commitHash=%@, diffVC=%@, isLoading=%d, view.window=%@",
               scrollToFile ?? "nil", commitHash ?? "nil", String(describing: diffVC), isLoadingDiffViewer ? 1 : 0,
               String(describing: view.window))
 
         if let existing = diffVC {
-            // If the commit context changed, reload the viewer entirely
-            if currentDiffCommitHash != commitHash {
+            // If the commit context or working-tree mode changed, reload the viewer entirely
+            if currentDiffCommitHash != commitHash || currentDiffForceWorkingTree != forceWorkingTreeDiff {
                 hideDiffViewer()
                 // Fall through to create new viewer below
             } else {
@@ -180,6 +180,7 @@ extension ThreadDetailViewController {
         // Prevent duplicate creation if async load is already in progress
         guard !isLoadingDiffViewer else { return }
         isLoadingDiffViewer = true
+        currentDiffForceWorkingTree = forceWorkingTreeDiff
 
         let worktreePath = thread.worktreePath
         let baseBranch = thread.isMain ? nil : threadManager.resolveBaseBranch(for: thread)
@@ -203,7 +204,7 @@ extension ThreadDetailViewController {
                 diffContent = await diffContentTask
                 mergeBase = "\(commitHash)^"
                 entries = await entriesTask
-            } else if let baseBranch {
+            } else if let baseBranch, !forceWorkingTreeDiff {
                 async let diffContentTask = GitService.shared.diffContent(
                     worktreePath: worktreePath,
                     baseBranch: baseBranch
@@ -326,6 +327,7 @@ extension ThreadDetailViewController {
         vc.removeFromParent()
         diffVC = nil
         currentDiffCommitHash = nil
+        currentDiffForceWorkingTree = false
         isLoadingDiffViewer = false
 
         terminalBottomToView?.isActive = true
@@ -336,12 +338,13 @@ extension ThreadDetailViewController {
         guard diffVC != nil, currentDiffCommitHash == nil else { return }
         let worktreePath = thread.worktreePath
         let baseBranch = thread.isMain ? nil : threadManager.resolveBaseBranch(for: thread)
+        let forceWorkingTree = currentDiffForceWorkingTree
         Task {
             let diffContent: String?
             let mergeBase: String?
             let entries: [FileDiffEntry]
 
-            if let baseBranch {
+            if let baseBranch, !forceWorkingTree {
                 async let diffContentTask = GitService.shared.diffContent(
                     worktreePath: worktreePath,
                     baseBranch: baseBranch

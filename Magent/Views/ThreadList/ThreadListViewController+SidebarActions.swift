@@ -611,22 +611,23 @@ extension ThreadListViewController {
         refreshBranchMismatchView(for: thread)
     }
 
-    // MARK: - Commit Files Popover
+    // MARK: - Commit Detail Mode
 
-    func showCommitFilesPopover(commitHash: String?, relativeTo sourceView: NSView) {
+    func handleCommitDoubleTapped(_ commitHash: String?, title: String) {
         guard let thread = selectedThreadFromState() else { return }
         let worktreePath = thread.worktreePath
-
-        let popover = NSPopover()
-        popover.behavior = .transient
-
-        let vc = CommitFilesPopoverViewController(
-            title: commitHash == nil ? "Uncommitted changes" : "Commit \(commitHash!)",
-            worktreePath: worktreePath,
-            commitHash: commitHash
-        )
-        popover.contentViewController = vc
-        popover.show(relativeTo: sourceView.bounds, of: sourceView, preferredEdge: .maxX)
+        Task {
+            let entries: [FileDiffEntry]
+            if let hash = commitHash {
+                entries = await GitService.shared.commitDiffStats(worktreePath: worktreePath, commitHash: hash)
+            } else {
+                entries = await GitService.shared.workingTreeDiffStats(worktreePath: worktreePath)
+            }
+            await MainActor.run {
+                guard self.selectedThreadID == thread.id else { return }
+                self.diffPanelView.enterCommitDetailMode(hash: commitHash, title: title, entries: entries)
+            }
+        }
     }
 
     // MARK: - Branch Mismatch
