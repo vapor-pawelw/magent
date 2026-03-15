@@ -131,6 +131,7 @@ extension ThreadDetailViewController {
         UserDefaults.standard.set(sessionName, forKey: Self.lastOpenedSessionDefaultsKey)
 
         // Clear unread completion and waiting dots for this tab
+        guard index < tabItems.count else { return }
         tabItems[index].hasUnreadCompletion = false
         tabItems[index].hasWaitingForInput = false
         threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: sessionName)
