@@ -32,6 +32,7 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - Creating a new thread or tab now opens a prompt sheet where you can write the initial message, choose an agent, and (for threads) set a description and branch name — all before creation starts. Option-click the + button to skip the sheet and create immediately with the project default.
+- Fixed: selecting Terminal in the prompt sheet now works correctly — the Accept button was silently doing nothing because the separator menu item caused an off-by-one index mismatch between the popup and the internal picker list. The label now also correctly shows "Initial command" instead of "Initial prompt" when Terminal is selected.
 - If the app crashes between accepting the prompt sheet and the agent receiving your message, the prompt is recovered on next launch with a banner offering to reopen the sheet or discard.
 - ⌘N now appears in the Thread menu in the menu bar (previously it was only handled by a key monitor).
 - Fixed: the branch name in the sidebar row now updates immediately after a manual branch rename, instead of waiting for the next background poll (~30 s).

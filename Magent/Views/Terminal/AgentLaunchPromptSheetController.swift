@@ -353,11 +353,13 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             case .agent(let type, let isDefault):
                 let title = isDefault ? "\(type.displayName) (Default)" : type.displayName
                 agentPicker.addItem(withTitle: title)
+                agentPicker.lastItem?.tag = i
             case .terminal:
                 if i > 0 {
                     agentPicker.menu?.addItem(.separator())
                 }
                 agentPicker.addItem(withTitle: "Terminal")
+                agentPicker.lastItem?.tag = i
             }
         }
 
@@ -403,6 +405,13 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(stack)
+
+        // Large title
+        let titleLabel = NSTextField(labelWithString: config.title)
+        titleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(titleLabel)
+        stack.setCustomSpacing(8, after: titleLabel)
 
         // Subtitle (project context) — shown as a prominent context chip
         var contextChip: NSView?
@@ -526,6 +535,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
             stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16),
 
+            titleLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             agentRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             agentPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
             promptLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -744,9 +754,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func selectedPickerItem() -> PickerItem? {
-        let index = agentPicker.indexOfSelectedItem
-        guard index >= 0, index < pickerItems.count else { return nil }
-        return pickerItems[index]
+        guard let tag = agentPicker.selectedItem?.tag else { return nil }
+        guard tag >= 0, tag < pickerItems.count else { return nil }
+        return pickerItems[tag]
     }
 
     private func updatePromptAreaEnabled() {
