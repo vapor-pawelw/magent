@@ -33,6 +33,14 @@ public final class PersistenceService {
         appSupportURL.appendingPathComponent("settings.json")
     }
 
+    private var agentLaunchPromptDraftsURL: URL {
+        appSupportURL.appendingPathComponent("agent-launch-prompt-drafts.json")
+    }
+
+    private var agentLastSelectionsURL: URL {
+        appSupportURL.appendingPathComponent("agent-last-selections.json")
+    }
+
     // MARK: - Threads
 
     public func loadThreads() -> [MagentThread] {
@@ -73,6 +81,32 @@ public final class PersistenceService {
     public func saveSettings(_ settings: AppSettings) throws {
         let data = try encoder.encode(settings)
         try data.write(to: settingsURL, options: .atomic)
+    }
+
+    // MARK: - Agent Launch Prompt Drafts
+
+    public func loadAgentLaunchPromptDrafts() -> [String: AgentLaunchPromptDraft] {
+        guard let data = try? Data(contentsOf: agentLaunchPromptDraftsURL) else { return [:] }
+        return (try? decoder.decode([String: AgentLaunchPromptDraft].self, from: data)) ?? [:]
+    }
+
+    public func saveAgentLaunchPromptDrafts(_ drafts: [String: AgentLaunchPromptDraft]) {
+        guard let data = try? encoder.encode(drafts) else { return }
+        try? data.write(to: agentLaunchPromptDraftsURL, options: .atomic)
+    }
+
+    // MARK: - Agent Last Selections
+
+    /// Loads last-used agent selections keyed by draft scope key.
+    /// Values are agent raw strings ("claude", "codex", "custom"), "default" for project default, or "terminal".
+    public func loadAgentLastSelections() -> [String: String] {
+        guard let data = try? Data(contentsOf: agentLastSelectionsURL) else { return [:] }
+        return (try? decoder.decode([String: String].self, from: data)) ?? [:]
+    }
+
+    public func saveAgentLastSelections(_ selections: [String: String]) {
+        guard let data = try? encoder.encode(selections) else { return }
+        try? data.write(to: agentLastSelectionsURL, options: .atomic)
     }
 
     // MARK: - Worktree Metadata Cache
