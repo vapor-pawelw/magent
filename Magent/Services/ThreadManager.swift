@@ -28,6 +28,10 @@ final class ThreadManager {
     var autoRenameInProgress: Set<UUID> = []
     /// Tracks threads for which an auto-rename failure banner has already been shown this session.
     var autoRenameFailedBannerShownThreadIds: Set<UUID> = []
+    /// Per-thread cache of AI-generated rename payloads, keyed by normalized prompt.
+    /// Avoids repeat agent calls when the same prompt is re-used for rename on the same thread.
+    /// Cleared when a thread is archived or deleted.
+    var promptRenameResultCache: [UUID: [String: CachedRenameResult]] = [:]
     /// Dedup tracker — prevents repeated "waiting for input" notifications for the same session.
     var notifiedWaitingSessions: Set<String> = []
     /// Global per-agent rate-limit cache (Claude/Codex), shared across all tabs/threads.

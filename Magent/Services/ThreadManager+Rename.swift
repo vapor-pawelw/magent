@@ -1,6 +1,14 @@
 import Foundation
 import MagentCore
 
+/// Cached result of an AI rename-payload generation for a specific (thread, prompt) pair.
+/// Avoids repeat agent calls when the same prompt is re-used for rename on the same thread.
+struct CachedRenameResult {
+    /// Generated slug. `nil` means the agent classified the prompt as a question — no rename applies.
+    let slug: String?
+    let taskDescription: GeneratedTaskDescription?
+}
+
 extension ThreadManager {
 
     // MARK: - Tmux Session Rename (two-phase to avoid collisions)
@@ -346,11 +354,20 @@ extension ThreadManager {
         }
 
         let selectedAgent = preferredAgent ?? effectiveAgentType(for: currentThread.projectId)
-        let payloadResult = await generateFirstPromptRenamePayloadViaAgent(
-            from: trimmedPrompt,
-            agentType: selectedAgent,
-            projectId: currentThread.projectId
-        )
+        let cKey = promptCacheKey(for: trimmedPrompt)
+        let payloadResult: FirstPromptRenameAttemptResult
+        if let cached = promptRenameResultCache[currentThread.id]?[cKey] {
+            // Cache hit — reuse previous AI result without another agent call.
+            payloadResult = cached.slug.map { .generated(slug: $0, taskDescription: cached.taskDescription) } ?? .question
+        } else {
+            let result = await generateFirstPromptRenamePayloadViaAgent(
+                from: trimmedPrompt,
+                agentType: selectedAgent,
+                projectId: currentThread.projectId
+            )
+            cacheRenameResult(result, threadId: currentThread.id, cacheKey: cKey)
+            payloadResult = result
+        }
 
         let slug: String
         let generatedTaskDescription: GeneratedTaskDescription?
@@ -572,22 +589,37 @@ extension ThreadManager {
 
         var slug: String?
         var generatedTaskDescription: GeneratedTaskDescription?
-        for candidateAgent in agentOrder.available {
-            switch await generateFirstPromptRenamePayloadViaAgent(
-                from: prompt,
-                agentType: candidateAgent,
-                projectId: thread.projectId
-            ) {
-            case .generated(let generatedSlug, let description):
-                slug = generatedSlug
-                generatedTaskDescription = description
-            case .question:
-                // Treated as handled for this prompt to avoid a second model call.
+        let cKey = promptCacheKey(for: prompt)
+        if let cached = promptRenameResultCache[thread.id]?[cKey] {
+            // Cache hit — reuse previous AI result without another agent call.
+            if let cachedSlug = cached.slug {
+                slug = cachedSlug
+                generatedTaskDescription = cached.taskDescription
+            } else {
+                // Previously classified as a question.
+                markFirstPromptAutoRenameHandled(threadId: thread.id)
                 return true
-            case .failed:
-                continue
             }
-            break
+        } else {
+            for candidateAgent in agentOrder.available {
+                let result = await generateFirstPromptRenamePayloadViaAgent(
+                    from: prompt,
+                    agentType: candidateAgent,
+                    projectId: thread.projectId
+                )
+                cacheRenameResult(result, threadId: thread.id, cacheKey: cKey)
+                switch result {
+                case .generated(let generatedSlug, let description):
+                    slug = generatedSlug
+                    generatedTaskDescription = description
+                case .question:
+                    // Treated as handled for this prompt to avoid a second model call.
+                    return true
+                case .failed:
+                    continue
+                }
+                break
+            }
         }
 
         guard let resolvedSlug = slug else {
@@ -631,6 +663,30 @@ extension ThreadManager {
         guard !threads[index].didAutoRenameFromFirstPrompt else { return }
         threads[index].didAutoRenameFromFirstPrompt = true
         try? persistence.saveActiveThreads(threads)
+    }
+
+    // MARK: - Rename payload cache
+
+    /// Stable cache key: whitespace-collapsed, trimmed, lowercased prompt.
+    private func promptCacheKey(for prompt: String) -> String {
+        prompt
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    /// Stores a non-failed AI result so future rename requests with the same prompt skip the agent call.
+    private func cacheRenameResult(_ result: FirstPromptRenameAttemptResult, threadId: UUID, cacheKey: String) {
+        var cache = promptRenameResultCache[threadId] ?? [:]
+        switch result {
+        case .generated(let slug, let description):
+            cache[cacheKey] = CachedRenameResult(slug: slug, taskDescription: description)
+        case .question:
+            cache[cacheKey] = CachedRenameResult(slug: nil, taskDescription: nil)
+        case .failed:
+            return
+        }
+        promptRenameResultCache[threadId] = cache
     }
 
     // MARK: - Task Description

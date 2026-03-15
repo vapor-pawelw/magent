@@ -418,6 +418,8 @@ extension ThreadManager {
             delegate?.threadManager(self, didArchiveThread: thread)
         }
 
+        promptRenameResultCache.removeValue(forKey: thread.id)
+
         // Cleanup after UI has switched away from this thread.
         for sessionName in thread.tmuxSessionNames {
             try? await tmux.killSession(name: sessionName)
@@ -565,6 +567,8 @@ extension ThreadManager {
         await MainActor.run {
             delegate?.threadManager(self, didDeleteThread: thread)
         }
+
+        promptRenameResultCache.removeValue(forKey: thread.id)
 
         // Cleanup after UI has switched away from this thread.
         for sessionName in thread.tmuxSessionNames {
