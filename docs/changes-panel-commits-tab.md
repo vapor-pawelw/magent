@@ -33,12 +33,12 @@
 - `activeTab: DiffPanelTab` — `.commits` (default, left) or `.changes` (right). Tab enum order was flipped from the original: COMMITS is now first.
 - `uncommittedEntries: [FileDiffEntry]` — always the working-tree/branch entries loaded on thread selection.
 - `commitEntries: [FileDiffEntry]` — populated by `updateCommitEntries(hash:entries:subject:)` after async load.
-- `selectedCommitHash: String?` — `nil` = "Uncommitted" selected; non-nil = a commit hash. Reset to `nil` on `update()` unless `preserveSelection: true` is passed and the hash still exists in `newCommits`.
+- `selectedCommitHash: String?` — `nil` = "Uncommitted" selected; non-nil = a commit hash. Reset to `nil` on `update()` unless `preserveSelection: true` is passed. `activeTab` is also preserved whenever `preserveSelection: true`, regardless of whether a commit hash is selected.
 - `activeEntries` computed property returns `uncommittedEntries` or `commitEntries` depending on selection.
 - `onCommitSelected: ((String?) -> Void)?` — fires on row click; nil = Uncommitted.
 - `updateCommitEntries(hash:entries:subject:)` — called by controller; only applies if `selectedCommitHash == hash` to avoid stale updates from cancelled async loads.
 - `rebuildCommitsRows()` — always hides `commitContextLabel`, then adds the "Uncommitted" `CommitRowView` first, then commits, then "Load More".
-- `update(preserveSelection:)` — when `true` and the selected commit still exists in the new commit list, keeps `selectedCommitHash` and `activeTab` unchanged, clears `commitEntries` and fires `onCommitSelected` to reload them, and hides `commitContextLabel` via `rebuildCommitsRows()`. Used by background/polling refreshes (agent completion, load-more); thread-switch calls pass `false`.
+- `update(preserveSelection:)` — when `true`, always preserves `activeTab`. If a commit hash is selected and still exists in the new commit list, also preserves `selectedCommitHash`, clears `commitEntries`, and fires `onCommitSelected` to reload them. If `selectedCommitHash` is `nil` (user is on CHANGES tab with "Uncommitted" selected), the tab is still preserved so a background refresh doesn't yank the user back to COMMITS. Hides `commitContextLabel` via `rebuildCommitsRows()`. Used by background/polling refreshes (agent completion, load-more); thread-switch calls pass `false`.
 - `rebuildChangesRows()` — shows `commitContextLabel` when `selectedCommitHash != nil`, then file rows or empty state.
 - `CommitRowView` — selectable NSView subclass (like `DiffFileRowView`) with `isSelected` highlight. Uses `"__uncommitted__"` as a sentinel hash for the Uncommitted row's `updateCommitRowSelectionAppearance`.
 
@@ -56,7 +56,7 @@
 
 ## Gotchas
 
-- **Background refresh must not reset selection**: `refreshDiffPanel` is called on agent completion and load-more, not only on thread switch. Pass `preserveSelection: true` in those cases so the user's current commit/tab is preserved. Thread-switch calls (`outlineViewSelectionDidChange`) pass `false` (default) to reset cleanly.
+- **Background refresh must not reset selection or tab**: `refreshDiffPanel` is called on agent completion and load-more, not only on thread switch. Pass `preserveSelection: true` in those cases so the user's current commit and active tab are preserved. This includes the case where `selectedCommitHash == nil` (user is on the CHANGES tab with "Uncommitted" selected) — without `preserveSelection: true`, the tab would reset to `.commits` on every background refresh. Thread-switch calls (`outlineViewSelectionDidChange`) pass `false` (default) to reset cleanly.
 - **`commitContextLabel` must be hidden in `rebuildCommitsRows()`**: the label is set in `rebuildChangesRows()` but only explicitly hidden in `commitsTabTapped()` and `clear()`. Adding `commitContextLabel.isHidden = true` at the top of `rebuildCommitsRows()` prevents the label from lingering when a background refresh switches the panel back to the COMMITS tab.
 
 - **`selectCommit` closes the diff viewer softly**: `deselectFileWithoutHidingViewer()` updates the file row highlight but does not post `magentHideDiffViewer`. The viewer stays visible but its content becomes stale until the user clicks a file. This is intentional — force-closing the viewer on every commit tap would be jarring.
