@@ -422,14 +422,34 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if allowsProgrammaticOutlineDisclosureChanges {
             return true
         }
-        return (outlineView as? SidebarOutlineView)?.isDragInteractionActive != true
+        if (outlineView as? SidebarOutlineView)?.isDragInteractionActive == true {
+            return false
+        }
+        // Block NSOutlineView's built-in keyboard-driven expand/collapse. This covers
+        // both arrow-key expand/collapse and type-select auto-expansion (where typing a
+        // letter navigates to a thread inside a collapsed section and NSOutlineView
+        // auto-expands it). Both bypass toggleSection and would not persist state.
+        if NSApp.currentEvent?.type == .keyDown {
+            return false
+        }
+        return true
     }
 
     func outlineView(_ outlineView: NSOutlineView, shouldCollapseItem item: Any) -> Bool {
         if allowsProgrammaticOutlineDisclosureChanges {
             return true
         }
-        return (outlineView as? SidebarOutlineView)?.isDragInteractionActive != true
+        if (outlineView as? SidebarOutlineView)?.isDragInteractionActive == true {
+            return false
+        }
+        // Block NSOutlineView's built-in keyboard-driven expand/collapse. This covers
+        // both arrow-key expand/collapse and type-select auto-expansion (where typing a
+        // letter navigates to a thread inside a collapsed section and NSOutlineView
+        // auto-expands it). Both bypass toggleSection and would not persist state.
+        if NSApp.currentEvent?.type == .keyDown {
+            return false
+        }
+        return true
     }
 
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
