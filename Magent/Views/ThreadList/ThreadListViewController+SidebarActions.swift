@@ -562,7 +562,6 @@ extension ThreadListViewController {
         Task {
             let current = self.threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
             let entries: [FileDiffEntry]
-            let branchDiffEntries: [FileDiffEntry]
             let commits: [BranchCommit]
             let hasMoreCommits: Bool
             let baseBranch: String?
@@ -575,23 +574,19 @@ extension ThreadListViewController {
                     limit: commitLimit + 1
                 )
                 entries = await entriesTask
-                branchDiffEntries = []
                 let commitPage = await commitsTask
                 hasMoreCommits = commitPage.count > commitLimit
                 commits = Array(commitPage.prefix(commitLimit))
             } else {
                 let resolvedBaseBranch = self.threadManager.resolveBaseBranch(for: current)
                 baseBranch = resolvedBaseBranch
-                // Fetch uncommitted (working tree vs HEAD) and full branch diff (vs merge-base) in parallel
-                async let uncommittedTask = GitService.shared.workingTreeDiffStats(worktreePath: current.worktreePath)
-                async let branchDiffTask = threadManager.refreshDiffStats(for: thread.id)
+                async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
                 async let commitsTask = GitService.shared.commitLog(
                     worktreePath: current.worktreePath,
                     baseBranch: resolvedBaseBranch,
                     limit: commitLimit + 1
                 )
-                entries = await uncommittedTask
-                branchDiffEntries = await branchDiffTask
+                entries = await entriesTask
                 let commitPage = await commitsTask
                 hasMoreCommits = commitPage.count > commitLimit
                 commits = Array(commitPage.prefix(commitLimit))
@@ -603,7 +598,6 @@ extension ThreadListViewController {
                 guard (self.diffPanelRefreshGeneration[current.id] ?? 0) == generation else { return }
                 self.diffPanelView.update(
                     with: entries,
-                    branchDiffEntries: branchDiffEntries,
                     commits: commits,
                     hasMoreCommits: hasMoreCommits,
                     forceVisible: current.isMain,
@@ -615,6 +609,24 @@ extension ThreadListViewController {
             }
         }
         refreshBranchMismatchView(for: thread)
+    }
+
+    // MARK: - Commit Files Popover
+
+    func showCommitFilesPopover(commitHash: String?, relativeTo sourceView: NSView) {
+        guard let thread = selectedThreadFromState() else { return }
+        let worktreePath = thread.worktreePath
+
+        let popover = NSPopover()
+        popover.behavior = .transient
+
+        let vc = CommitFilesPopoverViewController(
+            title: commitHash == nil ? "Uncommitted changes" : "Commit \(commitHash!)",
+            worktreePath: worktreePath,
+            commitHash: commitHash
+        )
+        popover.contentViewController = vc
+        popover.show(relativeTo: sourceView.bounds, of: sourceView, preferredEdge: .maxX)
     }
 
     // MARK: - Branch Mismatch
