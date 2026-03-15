@@ -502,7 +502,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             stack.addArrangedSubview(br)
             branchRow = br
 
-            // Tab order between the two fields
+            // Tab order: prompt → description → branch → (wraps back via window key loop)
+            promptTextView.nextKeyView = descriptionField
             descriptionField.nextKeyView = branchField
 
             // Auto-generate hint
@@ -797,6 +798,14 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 return false
             }
             acceptTapped()
+            return true
+        }
+        if commandSelector == #selector(NSResponder.insertTab(_:)) {
+            window?.selectNextKeyView(nil)
+            return true
+        }
+        if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
+            window?.selectPreviousKeyView(nil)
             return true
         }
         return false
