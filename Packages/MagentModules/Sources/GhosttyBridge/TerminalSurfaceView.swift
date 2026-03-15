@@ -156,9 +156,14 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     override public func viewWillMove(toSuperview newSuperview: NSView?) {
         super.viewWillMove(toSuperview: newSuperview)
-        if newSuperview == nil {
-            destroySurface()
-        }
+        // Do NOT call destroySurface() here. Destroying the surface while the Metal
+        // layer is still attached to the view hierarchy can cause a GPU use-after-free:
+        // the display link may still be mid-render when ghostty_surface_free is called.
+        //
+        // Instead, surface destruction is deferred to viewDidMoveToWindow(window: nil),
+        // which fires after the view (and its CAMetalLayer) is fully detached from the
+        // window. resignFirstResponder() fires between viewWillMove and viewDidMoveToWindow,
+        // so focusedSurface is cleared naturally before ghostty_surface_free is reached.
     }
 
     private func destroySurface() {
