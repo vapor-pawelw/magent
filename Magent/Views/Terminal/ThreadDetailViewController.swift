@@ -478,6 +478,7 @@ final class ThreadDetailViewController: NSViewController {
             }
 
             rebuildTabBar()
+            rebindTabActions()
 
             // Initialize indicator dots from thread model
             for (i, sessionName) in orderedSessions.enumerated() where i < tabItems.count {
