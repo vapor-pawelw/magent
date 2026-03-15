@@ -10,9 +10,16 @@
 - `Threads` owns thread naming defaults, thread sections, recently archived thread restore history, startup injection fields, and the review prompt.
 - Section color editing now reuses a single system color picker per settings screen, so switching to another section keeps the earlier section's custom dot color intact instead of resetting it.
 - Debug-only features may still appear in Settings during local development, but they should be clearly annotated with `Debug builds only` and fully hidden from release builds.
+- A dedicated `Debug` sidebar category exists in debug builds only (`#if DEBUG`). It currently exposes "Reset Onboarding State" (clears `isConfigured` and offers to relaunch) and "Relaunch App". Add new developer utilities here rather than sprinkling ad-hoc debug actions into other panes.
 
-## What Changed In This Thread
+## What Changed In Recent Threads
 
+### Debug category (improve-onboarding thread)
+- Added a `Debug` sidebar category visible only in `#if DEBUG` builds: `SettingsDebugViewController.swift`.
+- Actions: "Reset Onboarding State" (clears `isConfigured`, offers immediate relaunch) and "Relaunch App".
+- Wired into `SettingsSplitViewController` with `#if DEBUG` guards on the VC declaration, `setupDetailContainer`, and `showCategoryContent`.
+
+### Settings categories split (previous thread)
 - Added a new `Threads` sidebar category in the settings window.
 - Added a new `Terminal` sidebar category in the settings window.
 - Moved thread-related controls out of the crowded `General` pane into a dedicated controller.

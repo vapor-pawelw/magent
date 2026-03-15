@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Onboarding
+- Missing dependencies (git, tmux) now show an "Install..." button: clicking it triggers the Xcode Command Line Tools installer for git, or opens a Terminal window running `brew install tmux` for tmux. A "Re-check" button appears below the list to re-verify after installing.
+- The "Add Project" step now includes a brief explanation of how git worktrees work and how Magent uses them — one isolated checkout per branch per thread.
+
 ### Appearance
 - New "Don't override agent color theme" checkbox in Appearance settings: when enabled, Magent won't force a color theme on Claude or Codex at startup, letting agents use their own default theme.
 
