@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - New "Don't override agent color theme" checkbox in Appearance settings: when enabled, Magent won't force a color theme on Claude or Codex at startup, letting agents use their own default theme.
 
 ### Changes Panel
+- The CHANGES tab now shows only actual uncommitted changes (staged, unstaged, untracked files vs HEAD). A new BRANCH DIFF tab shows all files changed on the branch relative to its base, including committed files — previously this was mixed into CHANGES.
 - Fixed: the active tab and commit selection are now preserved across background refreshes (e.g. agent completion) and sidebar structural reloads; the panel no longer auto-jumps back to "Uncommitted" or the COMMITS tab. Background refresh calls no longer reset commit pagination, so a selected commit that was loaded beyond page 1 is no longer lost. A task generation counter ensures that a slow initial-load task (no-preserve) cannot overwrite the result of a faster background-refresh task (preserve).
 - Fixed: the "from \<hash\> · \<message\>" subtitle no longer lingers on the COMMITS tab after a background refresh resets the selection.
 - COMMITS is now the left-most (default) tab in the bottom panel; it always shows an "Uncommitted" row at the top so you can quickly switch between working-tree changes and any branch commit.
