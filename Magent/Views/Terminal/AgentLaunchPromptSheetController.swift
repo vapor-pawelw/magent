@@ -430,7 +430,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         stack.addArrangedSubview(titleLabel)
         stack.setCustomSpacing(8, after: titleLabel)
 
-        // Project picker (when multiple projects) or static context chip (single project)
+        // Project picker (multiple projects) or subtitle chip (e.g. thread context for new tab).
         var contextChip: NSView?
         var projectPickerRow: NSView?
         if projectPickerItems.count > 1, case .newThread = config.draftScope {
@@ -474,7 +474,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         rememberCheckbox.action = #selector(rememberCheckboxToggled)
         rememberCheckbox.state = PersistenceService.shared.loadSettings().rememberLastTypeSelection ? .on : .off
         rememberCheckbox.font = .systemFont(ofSize: 11)
-        rememberCheckbox.contentTintColor = NSColor.systemPink
+        rememberCheckbox.contentTintColor = .controlAccentColor
         stack.addArrangedSubview(rememberCheckbox)
         stack.setCustomSpacing(12, after: rememberCheckbox)
 
