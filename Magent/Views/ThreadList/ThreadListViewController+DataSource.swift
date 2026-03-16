@@ -481,6 +481,14 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             if suppressNextSectionRowToggle {
                 return false
             }
+            // sectionHeaderHitArea returns .other for any non-mouse event (keyboard navigation,
+            // type-select, etc.). The .other branch calls toggleSection, which would inadvertently
+            // collapse/expand sections whenever arrow-key navigation crosses a section row.
+            // Bail out early for non-mouse events — section toggling is mouse-only.
+            let currentEventType = NSApp.currentEvent?.type
+            guard currentEventType == .leftMouseDown || currentEventType == .leftMouseUp else {
+                return false
+            }
 
             switch sectionHeaderHitArea(section) {
             case .disclosure:

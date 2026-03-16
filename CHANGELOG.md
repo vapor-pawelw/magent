@@ -31,6 +31,7 @@ All notable changes to this project will be documented in this file.
 - Links in the terminal are now clickable: Cmd+click opens URLs in the default browser. Hovering over a link shows an animated URL pill at the bottom of the terminal and changes the cursor to a pointing hand. Link detection combines ghostty-native OSC 8 hyperlinks and tmux pane content.
 
 ### Sidebar
+- Fixed: keyboard navigation (arrow keys) across section headers no longer accidentally collapses or expands those sections.
 - Fixed: pressing keys (arrow keys, letter keys) while the sidebar has focus no longer accidentally expands or collapses sections.
 - Fixed: sections no longer flash expand/collapse while dragging a thread — background state updates no longer trigger a full sidebar reload mid-drag; the reload is deferred until the drag ends.
 - Fixed: threads can no longer be dragged across projects when sections are enabled.
