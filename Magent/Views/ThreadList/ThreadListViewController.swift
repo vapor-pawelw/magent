@@ -402,7 +402,7 @@ final class ThreadListViewController: NSViewController {
         outlineView.doubleAction = #selector(outlineViewDoubleClicked(_:))
 
         // Enable drag and drop
-        outlineView.registerForDraggedTypes([.string])
+        outlineView.registerForDraggedTypes([.string, .magentSectionId])
         outlineView.setDraggingSourceOperationMask(.move, forLocal: true)
 
         // Context menu
