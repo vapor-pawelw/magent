@@ -455,6 +455,8 @@ extension ThreadListViewController {
               let projectIdRaw = info["projectId"],
               let projectId = UUID(uuidString: projectIdRaw) else { return }
 
+        let afterSectionId = info["sectionId"].flatMap { UUID(uuidString: $0) }
+
         let alert = NSAlert()
         alert.messageText = "New Section"
         alert.informativeText = "Enter section name"
@@ -484,11 +486,25 @@ extension ThreadListViewController {
             return
         }
 
-        let maxOrder = sections.map(\.sortOrder).max() ?? -1
+        // Determine insertion sort order: right after the source section, or at the end
+        let sortedSections = sections.sorted { $0.sortOrder < $1.sortOrder }
+        let insertAfterOrder: Int
+        if let afterId = afterSectionId,
+           let afterSection = sortedSections.first(where: { $0.id == afterId }) {
+            insertAfterOrder = afterSection.sortOrder
+        } else {
+            insertAfterOrder = sortedSections.last.map(\.sortOrder) ?? -1
+        }
+
+        // Shift all sections that come after the insertion point
+        for i in 0..<sections.count where sections[i].sortOrder > insertAfterOrder {
+            sections[i].sortOrder += 1
+        }
+
         let newSection = ThreadSection(
             name: name,
             colorHex: ThreadSection.randomColorHex(),
-            sortOrder: maxOrder + 1
+            sortOrder: insertAfterOrder + 1
         )
         sections.append(newSection)
         if isProjectOverride {

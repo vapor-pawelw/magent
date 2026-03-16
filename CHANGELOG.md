@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 - Thread Settings › Sidebar now has a "Move completed threads to top" checkbox, letting you disable auto-reorder on agent completion without leaving the Threads tab.
 
 ### Sidebar
+- Sections can now be reordered by drag and drop directly in the sidebar, just like in Settings.
+- "Add Section…" from a section's context menu now inserts the new section immediately below the right-clicked one instead of at the end.
 - Right-clicking the + button next to a project header now shows an agent picker menu to create a thread immediately, without the prompt sheet. Left-click still opens the full sheet.
 - Right-clicking a section header now shows a context menu to add a new section, delete the section, or change its color. New sections get a random color from the palette. Color changes are reflected immediately via the system color picker.
 - Fixed: the selected thread no longer loses its highlight every few seconds due to background metadata refreshes (git status, branch state, busy state).

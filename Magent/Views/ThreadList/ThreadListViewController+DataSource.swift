@@ -1,6 +1,10 @@
 import Cocoa
 import MagentCore
 
+extension NSPasteboard.PasteboardType {
+    static let magentSectionId = NSPasteboard.PasteboardType("app.magent.section-id")
+}
+
 // MARK: - NSOutlineViewDataSource
 
 extension ThreadListViewController: NSOutlineViewDataSource {
@@ -176,8 +180,27 @@ extension ThreadListViewController: NSOutlineViewDataSource {
     // MARK: Drag & Drop
 
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
-        guard let thread = item as? MagentThread, !thread.isMain else { return nil }
-        return thread.id.uuidString as NSString
+        if let thread = item as? MagentThread, !thread.isMain {
+            return thread.id.uuidString as NSString
+        }
+        if let section = item as? SidebarSection {
+            let pbItem = NSPasteboardItem()
+            pbItem.setString(section.sectionId.uuidString, forType: .magentSectionId)
+            return pbItem
+        }
+        return nil
+    }
+
+    private func draggedSectionId(from info: NSDraggingInfo) -> UUID? {
+        guard let pbItem = info.draggingPasteboard.pasteboardItems?.first,
+              let str = pbItem.string(forType: .magentSectionId) else { return nil }
+        return UUID(uuidString: str)
+    }
+
+    private func parentProject(of section: SidebarSection) -> SidebarProject? {
+        sidebarRootItems.compactMap { $0 as? SidebarProject }.first { project in
+            project.children.contains { ($0 as? SidebarSection)?.sectionId == section.sectionId }
+        }
     }
 
     func outlineView(
@@ -186,6 +209,27 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         proposedItem item: Any?,
         proposedChildIndex index: Int
     ) -> NSDragOperation {
+        // Section reordering
+        if let sectionId = draggedSectionId(from: info) {
+            // Redirect drop-on-section → drop-before-that-section in its project
+            if let targetSection = item as? SidebarSection {
+                if let project = parentProject(of: targetSection),
+                   let sectionChildIdx = project.children.firstIndex(where: { ($0 as? SidebarSection)?.sectionId == targetSection.sectionId }) {
+                    outlineView.setDropItem(project, dropChildIndex: sectionChildIdx)
+                }
+                return .move
+            }
+            guard let project = item as? SidebarProject,
+                  index != NSOutlineViewDropOnItemIndex,
+                  project.children.contains(where: { ($0 as? SidebarSection)?.sectionId == sectionId }) else {
+                return []
+            }
+            let firstSectionIdx = project.children.firstIndex(where: { $0 is SidebarSection }) ?? project.children.count
+            let sectionCount = project.children.filter { $0 is SidebarSection }.count
+            guard index >= firstSectionIdx && index <= firstSectionIdx + sectionCount else { return [] }
+            return .move
+        }
+
         guard let thread = draggedThread(from: info) else {
             return []
         }
@@ -218,6 +262,42 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         item: Any?,
         childIndex index: Int
     ) -> Bool {
+        // Section reordering
+        if let sectionId = draggedSectionId(from: info),
+           let project = item as? SidebarProject {
+            let sectionChildren = project.children.compactMap { $0 as? SidebarSection }
+            guard let sourceSection = sectionChildren.first(where: { $0.sectionId == sectionId }) else { return false }
+
+            let firstSectionIdx = project.children.firstIndex(where: { $0 is SidebarSection }) ?? 0
+            let sourceChildIdx = project.children.firstIndex(where: { ($0 as? SidebarSection)?.sectionId == sectionId }) ?? firstSectionIdx
+            let sourceSectionIdx = sourceChildIdx - firstSectionIdx
+            let rawDest = index - firstSectionIdx
+            let destSectionIdx = sourceChildIdx < index ? rawDest - 1 : rawDest
+
+            var sections = sectionChildren
+            sections.remove(at: sourceSectionIdx)
+            sections.insert(sourceSection, at: max(0, min(destSectionIdx, sections.count)))
+
+            var settings = persistence.loadSettings()
+            guard let projectIndex = settings.projects.firstIndex(where: { $0.id == project.projectId }) else { return false }
+            let isProjectOverride = settings.projects[projectIndex].threadSections != nil
+            for (i, section) in sections.enumerated() {
+                if isProjectOverride {
+                    if let idx = settings.projects[projectIndex].threadSections?.firstIndex(where: { $0.id == section.sectionId }) {
+                        settings.projects[projectIndex].threadSections![idx].sortOrder = i
+                    }
+                } else {
+                    if let idx = settings.threadSections.firstIndex(where: { $0.id == section.sectionId }) {
+                        settings.threadSections[idx].sortOrder = i
+                    }
+                }
+            }
+            try? persistence.saveSettings(settings)
+            NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+            reloadData()
+            return true
+        }
+
         guard let thread = draggedThread(from: info) else {
             return false
         }

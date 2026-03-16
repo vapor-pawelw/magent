@@ -36,15 +36,16 @@
 
 ### User-Facing Behavior
 
-- **Sidebar**: Right-click any section header → "Add Section…" prompts for a name and adds the section with a random color from the predefined palette.
+- **Sidebar**: Right-click any section header → "Add Section…" prompts for a name and inserts the new section immediately below the right-clicked section. Sections further down have their `sortOrder` shifted up by 1.
 - **Sidebar**: Right-click any section header → "Change Color…" opens the system NSColorPanel. The color updates live as the slider moves (applied on each `projectSectionColorChanged` callback).
+- **Sidebar**: Sections can be reordered by drag and drop directly in the sidebar. Dragging a section header within the project reorders the section by updating `sortOrder` values in settings and posting `.magentSectionsDidChange`.
 - **Settings → Projects**: Color dot button in the sections table opens NSColorPanel for the same live-update flow.
-- New sections from the sidebar are always appended at the bottom (highest `sortOrder + 1`).
 - Duplicate names (case-insensitive) are rejected with a banner.
 
 ### Implementation Notes
 
-- `addSectionFromMenu(_:)` in `ThreadListViewController+ContextMenu.swift` detects project-vs-global routing the same way as delete: `settings.projects[i].threadSections != nil`.
+- `addSectionFromMenu(_:)` in `ThreadListViewController+ContextMenu.swift` detects project-vs-global routing the same way as delete: `settings.projects[i].threadSections != nil`. It reads `sectionId` from the context menu's `representedObject` to find the insertion point, shifts `sortOrder` for all later sections, then inserts the new section at `insertAfterOrder + 1`.
+- **Sidebar section drag & drop** is implemented in `ThreadListViewController+DataSource.swift`. `SidebarSection` items write their UUID to a custom `NSPasteboard.PasteboardType.magentSectionId` pasteboard type (separate from the `.string` type used for threads). The outline view must register both types via `registerForDraggedTypes([.string, .magentSectionId])`. `validateDrop` redirects ON-section hover proposals to the parent `SidebarProject` at the hovered section's child index, then validates that the drop falls within the section-only range of the project's children. `acceptDrop` removes the source section, inserts it at the destination, and reassigns `sortOrder` for all sections sequentially (0, 1, 2, …), routing writes to the project override or global sections as appropriate.
 - `changeSectionColorFromMenu(_:)` stores the target in `contextMenuSectionColorTarget: (projectId, sectionId)?` on `ThreadListViewController`, sets `self` as NSColorPanel target/action, then brings the panel forward.
 - `sectionContextMenuColorChanged(_:)` handles incremental color panel callbacks and calls `reloadData()` so the sidebar dot updates live.
 - `ThreadSection.randomColorHex()` picks from `ThreadSection.colorPalette` (10 Apple system colors).
@@ -52,6 +53,7 @@
 ### Gotchas
 
 - NSColorPanel is a shared singleton. Always call `panel.setTarget(nil); panel.setAction(nil)` before reassigning target/action to avoid stale callbacks firing on the wrong controller.
+- **Section drag type must be registered**: `outlineView.registerForDraggedTypes` must include `.magentSectionId` in addition to `.string`. If only `.string` is registered, the OS silently rejects all section drops before `validateDrop` is ever called — the drag "works" visually but no drop target is ever accepted.
 - `contextMenuSectionColorTarget` is never explicitly cleared — it is harmless if stale since `sectionContextMenuColorChanged` does nothing if the section is not found. But if the Settings color picker is opened after the sidebar picker, the Settings controller replaces the panel's target/action, so sidebar color callbacks naturally stop.
 
 ---
