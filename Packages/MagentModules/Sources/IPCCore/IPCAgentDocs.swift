@@ -5,7 +5,7 @@ public enum IPCAgentDocs {
 
     /// CLI commands available through magent-cli.
     nonisolated private static let cliCommands = """
-    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--base-thread <name> | --base-branch <name>]
+    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--base-thread <name> | --base-branch <name>] [--no-select]
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
     /tmp/magent-cli send-prompt --thread <name> --prompt <text>

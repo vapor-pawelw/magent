@@ -207,6 +207,9 @@ final class IPCCommandHandler {
             requestedSectionId = nil
         }
 
+        if request.noSelect == true {
+            threadManager.skipNextAutoSelect = true
+        }
         let thread: MagentThread
         do {
             thread = try await threadManager.createThread(
@@ -218,6 +221,7 @@ final class IPCCommandHandler {
                 requestedBaseBranch: requestedBaseBranch
             )
         } catch {
+            threadManager.skipNextAutoSelect = false
             return .failure("Failed to create thread: \(error.localizedDescription)", id: request.id)
         }
 

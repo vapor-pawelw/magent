@@ -926,6 +926,10 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 extension ThreadListViewController: ThreadManagerDelegate {
     func threadManager(_ manager: ThreadManager, didCreateThread thread: MagentThread) {
         reloadData()
+        let skipDueToIPC = manager.skipNextAutoSelect
+        manager.skipNextAutoSelect = false
+        guard !skipDueToIPC,
+              PersistenceService.shared.loadSettings().switchToNewlyCreatedThread else { return }
         let row = outlineView.row(forItem: thread)
         if row >= 0 {
             outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)

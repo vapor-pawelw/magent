@@ -256,6 +256,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let descriptionField = NSTextField()
     private let branchField = NSTextField()
     private let rememberCheckbox = NSButton(checkboxWithTitle: "Remember type selection", target: nil, action: nil)
+    private let switchToNewThreadCheckbox = NSButton(checkboxWithTitle: "Switch to new thread", target: nil, action: nil)
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
     private let acceptButton: NSButton
     private var promptScrollView: NSScrollView!
@@ -476,7 +477,16 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         rememberCheckbox.font = .systemFont(ofSize: 11)
         rememberCheckbox.contentTintColor = .controlAccentColor
         stack.addArrangedSubview(rememberCheckbox)
-        stack.setCustomSpacing(12, after: rememberCheckbox)
+        stack.setCustomSpacing(4, after: rememberCheckbox)
+
+        // Switch to new thread checkbox
+        switchToNewThreadCheckbox.target = self
+        switchToNewThreadCheckbox.action = #selector(switchToNewThreadCheckboxToggled)
+        switchToNewThreadCheckbox.state = PersistenceService.shared.loadSettings().switchToNewlyCreatedThread ? .on : .off
+        switchToNewThreadCheckbox.font = .systemFont(ofSize: 11)
+        switchToNewThreadCheckbox.contentTintColor = .controlAccentColor
+        stack.addArrangedSubview(switchToNewThreadCheckbox)
+        stack.setCustomSpacing(12, after: switchToNewThreadCheckbox)
 
         // Prompt label
         promptLabel = makeFormLabel(promptLabelText)
@@ -881,6 +891,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     @objc private func rememberCheckboxToggled() {
         var settings = PersistenceService.shared.loadSettings()
         settings.rememberLastTypeSelection = rememberCheckbox.state == .on
+        try? PersistenceService.shared.saveSettings(settings)
+    }
+
+    @objc private func switchToNewThreadCheckboxToggled() {
+        var settings = PersistenceService.shared.loadSettings()
+        settings.switchToNewlyCreatedThread = switchToNewThreadCheckbox.state == .on
         try? PersistenceService.shared.saveSettings(settings)
     }
 

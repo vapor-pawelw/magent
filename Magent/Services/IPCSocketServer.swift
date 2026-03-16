@@ -616,7 +616,7 @@ actor IPCSocketServer {
 
         case "$cmd" in
         create-thread)
-            project=""; agent=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""
+            project=""; agent=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""; no_select=""
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --project)     project="$2"; shift 2 ;;
@@ -627,10 +627,11 @@ actor IPCSocketServer {
                     --section)     section="$2"; shift 2 ;;
                     --base-thread) base_thread="$2"; shift 2 ;;
                     --base-branch) base_branch="$2"; shift 2 ;;
+                    --no-select)   no_select=1; shift ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>]"
+            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--no-select]"
             [ -z "$base_thread" ] || [ -z "$base_branch" ] || die "Use either --base-thread or --base-branch, not both"
             json="{$(json_kv command create-thread),$(json_kv project "$project")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
@@ -640,6 +641,7 @@ actor IPCSocketServer {
             [ -n "$section" ] && json="$json,$(json_kv sectionName "$section")"
             [ -n "$base_thread" ] && json="$json,$(json_kv baseThreadName "$base_thread")"
             [ -n "$base_branch" ] && json="$json,$(json_kv baseBranch "$base_branch")"
+            [ "$no_select" = "1" ] && json="$json,\"noSelect\":true"
             json="$json}"
             send_request "$json" 120
             ;;
@@ -1058,7 +1060,7 @@ actor IPCSocketServer {
             echo "  magent-cli docs                      (full IPC command reference + usage guidance)"
             echo ""
             echo "Thread commands:"
-            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>]"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--no-select]"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
             echo "  send-prompt          --thread <name> --prompt <text>"

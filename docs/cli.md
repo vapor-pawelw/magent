@@ -43,6 +43,7 @@ magent-cli create-thread --project <name> [options]
 | `--section <name>` | Place the thread in this section. |
 | `--base-thread <name>` | Use an existing thread's branch as the base for the new thread. |
 | `--base-branch <name>` | Use an explicit branch as the base for the new thread. |
+| `--no-select` | Create the thread without switching to it in the sidebar. |
 
 If neither `--name` nor `--description` is given, a random name is generated.
 `--base-thread` and `--base-branch` are mutually exclusive.
