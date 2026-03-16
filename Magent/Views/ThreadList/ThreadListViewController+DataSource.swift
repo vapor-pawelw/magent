@@ -865,6 +865,10 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     func outlineViewItemDidExpand(_ notification: Notification) {
+        // Skip during reloadData() — AppKit may fire this for items being restored
+        // programmatically in the restore loop. We don't want mid-reload state changes
+        // to overwrite UserDefaults, since collapse state was already read before the reload.
+        guard !isReloadingData else { return }
         guard let project = notification.userInfo?["NSObject"] as? SidebarProject else { return }
         var collapsed = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
         collapsed.remove(project.projectId.uuidString)
@@ -872,6 +876,11 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     func outlineViewItemDidCollapse(_ notification: Notification) {
+        // Skip during reloadData() — AppKit can fire this for previously-expanded projects
+        // when the outline view resets its expansion state. Without this guard, those projects
+        // would be written into collapsedProjectIdsKey, causing the restore loop to collapse
+        // them and hide all their sections.
+        guard !isReloadingData else { return }
         guard let project = notification.userInfo?["NSObject"] as? SidebarProject else { return }
         var collapsed = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
         collapsed.insert(project.projectId.uuidString)
