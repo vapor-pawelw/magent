@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Sidebar
+- Fixed: sections no longer expand or collapse unexpectedly during background sidebar updates (busy state, rate limits, agent completions, etc.). The root cause was that NSOutlineView was permitted to expand/collapse items on its own initiative — during reloadItem calls, nil-currentEvent callbacks, and other internal triggers — because shouldExpandItem/shouldCollapseItem returned true for all non-keyboard events. Both methods now gate every change through the programmatic restore loop exclusively.
 - Fixed: collapsing a section no longer jumps focus to the Main thread. Previously, when the selected thread was inside a just-collapsed section, the sidebar lost the selection and the next background refresh picked the Main thread automatically.
 - Fixed: clicking a section name to trigger a delayed collapse no longer fires if the user selects a thread before the double-click window expires.
 
