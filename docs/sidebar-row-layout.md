@@ -18,6 +18,7 @@ This thread refined the left-rail and spacing rules for project headers, section
 - Threads inside sections keep their extra indentation level relative to top-level rows.
 - Project separators sit closer to the following repo name, while the first repo still keeps a visible gap from the very top of the sidebar.
 - All sidebar elements (thread status markers, section disclosure buttons, project `+` button, separators) share a consistent trailing-edge inset controlled by `sidebarTrailingInset`.
+- The archive icon (`archivebox.fill`) appears in the same right-aligned trailing area as the busy spinner, completion dot, and rate-limit icons. It is independent: it can show alongside the completion dot (e.g. work delivered and agent just finished). The archive icon is hidden while the agent is busy or waiting for input.
 
 ## Implementation Notes
 
@@ -28,6 +29,7 @@ This thread refined the left-rail and spacing rules for project headers, section
   - `sidebarTrailingInset` is the single trailing-edge constant used by all sidebar elements: thread marker stack, text-only trailing fallback, section disclosure button, project `+` button, and separators. `projectDisclosureTrailingInset` and `projectSpacerDividerTrailingInset` both derive from it.
 - `ThreadListViewController+DataSource.swift` uses `threadLeadingOffset(for:in:)` to cancel AppKit outline indentation for level-1 rows while preserving extra indentation for threads nested inside sections.
 - `ThreadCell` owns the main-row accent bar and toggles it only for `configureAsMain(...)`.
+- The trailing marker stack is flat: `[prTF, jiraIV, archiveBtn, spinner, rateLimitIV, completionIV, pinIV]`. There is no `statusSlot` container. All items are direct children of the stack, and `detachesHiddenViews = true` handles spacing automatically. Spinner, rateLimitIV, and completionIV remain mutually exclusive (only one active-state icon at a time); archiveBtn is managed independently and can appear alongside any of them.
 - The main-thread leading stack uses `detachesHiddenViews = true` so hiding the row icon does not leave phantom horizontal spacing.
 
 ## Gotchas

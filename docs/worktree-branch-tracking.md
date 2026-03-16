@@ -34,7 +34,7 @@ Base branch is no longer stored as a fixed string per thread. Instead, `GitServi
 
 `MagentThread.hasEverDoneWork` is a persisted, monotonic (write-once) flag set the first time a thread's worktree becomes dirty **or** has commits ahead of its detected base branch — on any branch. It gates `showArchiveSuggestion`, ensuring brand-new untouched worktrees are never suggested for archiving.
 
-`showArchiveSuggestion` treats work as delivered when **either** `isFullyDelivered` is true (local git: no commits ahead of base) **or** `pullRequestInfo.isMerged` is true (remote: PR/MR confirmed merged via `gh`/`glab`). The PR merged path catches the common case where the remote branch was merged but the local base branch ref has not been fetched yet.
+`showArchiveSuggestion` treats work as delivered when `isFullyDelivered` is true (local git: no commits ahead of base, accounting for cherry-picks). The archive icon will not appear until the local base branch has been updated (e.g. via `git fetch`), even if the remote PR is already merged.
 
 Migration for threads created before this field existed: `refreshDeliveredStates` checks whether the stored `forkPointCommit` differs from the current HEAD; if so, work was done before the flag existed and it is set retroactively.
 

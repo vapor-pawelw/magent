@@ -24,7 +24,6 @@ final class ThreadCell: NSTableCellView {
     private var completionImageView: NSImageView?
     private var rateLimitImageView: NSImageView?
     private var busySpinner: NSProgressIndicator?
-    private var statusSlotView: NSView?
     private var trailingStackView: NSStackView?
     private weak var leadingTextStackView: NSStackView?
     private weak var secondaryRowStack: NSStackView?
@@ -289,18 +288,15 @@ final class ThreadCell: NSTableCellView {
         pinIV.translatesAutoresizingMaskIntoConstraints = false
         pinIV.setContentHuggingPriority(.required, for: .horizontal)
 
-        let statusSlot = NSView()
-        statusSlot.translatesAutoresizingMaskIntoConstraints = false
-        statusSlot.setContentHuggingPriority(.required, for: .horizontal)
-        statusSlot.setContentCompressionResistancePriority(.required, for: .horizontal)
-
         let completionIV = NSImageView()
         completionIV.translatesAutoresizingMaskIntoConstraints = false
         completionIV.setContentHuggingPriority(.required, for: .horizontal)
+        completionIV.isHidden = true
 
         let rateLimitIV = NSImageView()
         rateLimitIV.translatesAutoresizingMaskIntoConstraints = false
         rateLimitIV.setContentHuggingPriority(.required, for: .horizontal)
+        rateLimitIV.isHidden = true
 
         let archiveBtn = NSButton()
         archiveBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -321,11 +317,10 @@ final class ThreadCell: NSTableCellView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.isHidden = true
 
-        statusSlot.addSubview(spinner)
-        statusSlot.addSubview(rateLimitIV)
-        statusSlot.addSubview(completionIV)
-
-        let stack = NSStackView(views: [prTF, jiraIV, archiveBtn, statusSlot, pinIV])
+        // All trailing markers live directly in this stack. detachesHiddenViews = true means
+        // hidden items take no space, so multiple icons (e.g. archive + completion) can appear
+        // side-by-side without a fixed-size slot container.
+        let stack = NSStackView(views: [prTF, jiraIV, archiveBtn, spinner, rateLimitIV, completionIV, pinIV])
         stack.orientation = .horizontal
         stack.spacing = Self.trailingMarkerSpacing
         stack.distribution = .fill
@@ -348,23 +343,14 @@ final class ThreadCell: NSTableCellView {
             pinIV.heightAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
             archiveBtn.widthAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
             archiveBtn.heightAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
-            statusSlot.widthAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
-            statusSlot.heightAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
-            spinner.centerXAnchor.constraint(equalTo: statusSlot.centerXAnchor),
-            spinner.centerYAnchor.constraint(equalTo: statusSlot.centerYAnchor),
-            completionIV.widthAnchor.constraint(equalToConstant: completionIndicatorSize),
-            completionIV.heightAnchor.constraint(equalToConstant: completionIndicatorSize),
-            completionIV.centerXAnchor.constraint(equalTo: statusSlot.centerXAnchor),
-            completionIV.centerYAnchor.constraint(equalTo: statusSlot.centerYAnchor),
-            rateLimitIV.widthAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
-            rateLimitIV.heightAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
-            rateLimitIV.centerXAnchor.constraint(equalTo: statusSlot.centerXAnchor),
-            rateLimitIV.centerYAnchor.constraint(equalTo: statusSlot.centerYAnchor),
             spinner.widthAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
             spinner.heightAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
+            rateLimitIV.widthAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
+            rateLimitIV.heightAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
+            completionIV.widthAnchor.constraint(equalToConstant: completionIndicatorSize),
+            completionIV.heightAnchor.constraint(equalToConstant: completionIndicatorSize),
         ])
         trailingStackView = stack
-        statusSlotView = statusSlot
         prLabel = prTF
         jiraImageView = jiraIV
         pinImageView = pinIV

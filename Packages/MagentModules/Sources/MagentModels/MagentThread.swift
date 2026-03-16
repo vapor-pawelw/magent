@@ -204,8 +204,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     }
 
     public var showArchiveSuggestion: Bool {
-        let delivered = isFullyDelivered || pullRequestInfo?.isMerged == true
-        return hasEverDoneWork && delivered && !isDirty && !hasAgentBusy && !hasWaitingForInput
+        return hasEverDoneWork && isFullyDelivered && !isDirty && !hasAgentBusy && !hasWaitingForInput
     }
 
     /// True only when every tab in the thread currently reports an active rate-limit message.
