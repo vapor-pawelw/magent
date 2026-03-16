@@ -51,7 +51,7 @@ Before the app is usable, the user must complete a configuration step:
 1. User taps **"+"** button
 2. If **1 project** is configured → immediately create thread for that project
 3. If **multiple projects** → show a project selection menu first
-4. The thread appears in the sidebar immediately and is auto-selected; a "Creating thread..." overlay is shown in the detail area while background setup runs
+4. The thread appears in the sidebar immediately and is auto-selected by default; a "Creating thread..." overlay is shown in the detail area while background setup runs. A "Switch to new thread" checkbox in the new-thread sheet (default: on, persisted) controls whether focus switches to the new thread; when off, it is added to the sidebar without changing the active selection.
 5. A new git worktree is created for the selected project (background)
 6. If the project has local sync paths configured, those repo-relative files/directories are copied from the repo root into the new worktree and snapshotted onto the thread (background)
 7. A tmux session is started in the worktree directory (background)
