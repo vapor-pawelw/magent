@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Performance
+- Git status, branch, and delivery checks now run in parallel across all threads instead of sequentially, significantly reducing background polling time with many threads open.
+- Agent completion no longer triggers a full git-status scan of every thread — only the threads that just completed are refreshed.
+- Sidebar no longer rebuilds immediately on every settings-changed notification; rapid successive saves are coalesced into one reload.
+
 ### Settings
 - Thread Settings › Sidebar now has a "Move completed threads to top" checkbox, letting you disable auto-reorder on agent completion without leaving the Threads tab.
 

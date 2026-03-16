@@ -103,9 +103,10 @@ extension ThreadManager {
         guard changed else { return }
         try? persistence.saveActiveThreads(threads)
 
-        // Agent completed work — refresh dirty and delivered states for affected threads
-        await refreshDirtyStates()
+        // Refresh dirty and delivered states only for threads that just completed,
+        // not the full scan — avoids running git-status on every thread on each bell.
         for threadId in changedThreadIds {
+            await refreshDirtyState(for: threadId)
             await refreshDeliveredState(for: threadId)
         }
 

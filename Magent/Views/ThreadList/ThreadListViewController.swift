@@ -123,6 +123,7 @@ final class ThreadListViewController: NSViewController {
     var pendingReloadAfterDrag = false
     var diffPanelCommitLimitByThreadId: [UUID: Int] = [:]
     let diffPanelCommitPageSize = 10
+    private var pendingSettingsReloadWorkItem: DispatchWorkItem?
     /// Monotonically-increasing generation per thread. Incremented each time refreshDiffPanel is called.
     /// The active Task captures its generation at spawn time and bails if a newer call has since arrived,
     /// preventing stale no-preserve tasks from overwriting later preserve tasks.
@@ -243,8 +244,16 @@ final class ThreadListViewController: NSViewController {
     }
 
     @objc private func settingsDidChange() {
-        reloadData()
-        refreshSidebarLayout(forceColumnRefit: true)
+        // Debounce: settings can be saved many times in quick succession (e.g. typing in a
+        // text field, or multiple observers firing back-to-back). Coalesce into one reload
+        // after 100 ms to avoid thrashing the outline view on every keystroke.
+        pendingSettingsReloadWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.reloadData()
+            self?.refreshSidebarLayout(forceColumnRefit: true)
+        }
+        pendingSettingsReloadWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
     }
 
     // MARK: - Toolbar Buttons

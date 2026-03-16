@@ -31,11 +31,26 @@ extension ThreadManager {
 
     func refreshDirtyStates() async {
         let snapshot = threads.filter { !$0.isArchived }
+        // Run all git-status checks concurrently — sequential per-thread awaits add up fast
+        // with many threads. GitService is Sendable so safe to call from child tasks.
+        var dirtyById: [UUID: Bool] = [:]
+        await withTaskGroup(of: (UUID, Bool).self) { group in
+            for thread in snapshot {
+                let path = thread.worktreePath
+                let id = thread.id
+                group.addTask {
+                    let dirty = await self.git.isDirty(worktreePath: path)
+                    return (id, dirty)
+                }
+            }
+            for await (id, dirty) in group {
+                dirtyById[id] = dirty
+            }
+        }
         var changed = false
         var persistedChanged = false
-        for thread in snapshot {
-            let dirty = await git.isDirty(worktreePath: thread.worktreePath)
-            guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
+        for (id, dirty) in dirtyById {
+            guard let i = threads.firstIndex(where: { $0.id == id }) else { continue }
             if threads[i].isDirty != dirty {
                 threads[i].isDirty = dirty
                 changed = true
@@ -57,6 +72,27 @@ extension ThreadManager {
         }
     }
 
+    /// Refreshes the dirty state for a single thread. Returns true if the value changed.
+    @discardableResult
+    func refreshDirtyState(for threadId: UUID) async -> Bool {
+        guard let idx = threads.firstIndex(where: { $0.id == threadId }),
+              !threads[idx].isArchived else { return false }
+        let thread = threads[idx]
+        let dirty = await git.isDirty(worktreePath: thread.worktreePath)
+        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { return false }
+        var changed = false
+        if threads[i].isDirty != dirty {
+            threads[i].isDirty = dirty
+            changed = true
+        }
+        if dirty && !threads[i].isMain && !threads[i].hasEverDoneWork {
+            threads[i].hasEverDoneWork = true
+            try? persistence.saveActiveThreads(threads)
+            changed = true
+        }
+        return changed
+    }
+
     // MARK: - Delivered State
 
     func refreshDeliveredStates() async {
@@ -73,97 +109,174 @@ extension ThreadManager {
         }
 
         let snapshot = threads.filter { !$0.isArchived && !$0.isMain }
-        var changed = false
-        var persistedThreadsChanged = false
 
+        // Per-thread result from the parallel git work phase.
+        struct ThreadDeliveryResult {
+            let threadId: UUID
+            let projectId: UUID
+            let worktreeKey: String
+            let currentBranch: String
+            // Set when base branch was newly detected from git (cache needs update).
+            let detectedBaseBranch: String?
+            let resolvedBaseBranch: String
+            // hasEverDoneWork was false in snapshot but is now true.
+            let newlyHasEverDoneWork: Bool
+            // We found commits ahead this cycle — delivery is false by definition.
+            let knownHasCommitsAhead: Bool
+            // isFullyDelivered result; nil when the check was skipped.
+            let isFullyDelivered: Bool?
+        }
+
+        // Pre-compute per-thread inputs from snapshot + caches so child tasks only read
+        // captured value-type data and never touch shared mutable state.
+        struct ThreadInput {
+            let thread: MagentThread
+            let cachedBaseBranch: String?     // valid only when detectedFor matches currentBranch
+            let fallbackBaseBranch: String    // from project config
+            let forkPoint: String?            // for migration check
+        }
+
+        var inputs: [ThreadInput] = []
         for thread in snapshot {
             guard FileManager.default.fileExists(atPath: thread.worktreePath) else { continue }
-            guard var projectEntry = cacheByProjectId[thread.projectId] else { continue }
+            guard let projectEntry = cacheByProjectId[thread.projectId] else { continue }
+            let meta = projectEntry.cache.worktrees[thread.worktreeKey]
+            let cachedBase: String? = {
+                guard let detected = meta?.detectedBaseBranch,
+                      let detectedFor = meta?.detectedFor,
+                      detectedFor == thread.currentBranch else { return nil }
+                return detected
+            }()
+            inputs.append(ThreadInput(
+                thread: thread,
+                cachedBaseBranch: cachedBase,
+                fallbackBaseBranch: resolveBaseBranchFromConfig(for: thread, settings: settings),
+                forkPoint: meta?.forkPointCommit
+            ))
+        }
 
-            // Resolve base branch: use cache if valid, otherwise detect from git.
-            let baseBranch: String
-            if let meta = projectEntry.cache.worktrees[thread.worktreeKey],
-               let detected = meta.detectedBaseBranch,
-               let detectedFor = meta.detectedFor,
-               detectedFor == thread.currentBranch {
-                baseBranch = detected
-            } else if let detected = await git.detectBaseBranch(
-                worktreePath: thread.worktreePath,
-                currentBranch: thread.currentBranch
-            ) {
-                var meta = projectEntry.cache.worktrees[thread.worktreeKey] ?? WorktreeMetadata()
-                meta.detectedBaseBranch = detected
-                meta.detectedFor = thread.currentBranch
-                projectEntry.cache.worktrees[thread.worktreeKey] = meta
-                projectEntry.dirty = true
-                cacheByProjectId[thread.projectId] = projectEntry
-                baseBranch = detected
-            } else {
-                // Fall back to stored config when no remote refs exist.
-                baseBranch = resolveBaseBranchFromConfig(for: thread, settings: settings)
-            }
-
-            // Re-lookup after awaits — thread may have been archived.
-            guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
-
-            // Set hasEverDoneWork the first time commits ahead of base are detected.
-            // Track whether we already know commits exist to avoid re-running git log below.
-            var knownHasCommitsAhead = false
-            if !threads[i].hasEverDoneWork {
-                // Use -n 1 — we only need to know if any commits exist, not enumerate them.
-                let logResult = await ShellExecutor.execute(
-                    "git log \(baseBranch)..HEAD --oneline -n 1",
-                    workingDirectory: thread.worktreePath
-                )
-                let hasCommitsAhead = logResult.exitCode == 0
-                    && !logResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
-                if hasCommitsAhead || threads[i].isDirty {
-                    threads[i].hasEverDoneWork = true
-                    persistedThreadsChanged = true
-                    changed = true
-                    knownHasCommitsAhead = hasCommitsAhead
-                } else {
-                    // Migration for existing threads: if HEAD has moved past the stored fork
-                    // point, work was done and delivered before this field existed.
-                    let forkPoint = projectEntry.cache.worktrees[thread.worktreeKey]?.forkPointCommit
-                    if let forkPoint, !forkPoint.isEmpty,
-                       let head = await git.currentCommit(worktreePath: thread.worktreePath),
-                       head != forkPoint {
-                        threads[i].hasEverDoneWork = true
-                        persistedThreadsChanged = true
-                        changed = true
+        // Run all git work concurrently — each task only reads captured value-type inputs.
+        var results: [ThreadDeliveryResult] = []
+        await withTaskGroup(of: ThreadDeliveryResult?.self) { group in
+            for input in inputs {
+                let thread = input.thread
+                let snapshotHasEverDoneWork = thread.hasEverDoneWork
+                let snapshotIsDirty = thread.isDirty
+                group.addTask {
+                    // Phase 1: resolve base branch.
+                    let resolvedBase: String
+                    let detectedBase: String?
+                    if let cached = input.cachedBaseBranch {
+                        resolvedBase = cached
+                        detectedBase = nil
+                    } else if let detected = await self.git.detectBaseBranch(
+                        worktreePath: thread.worktreePath,
+                        currentBranch: thread.currentBranch
+                    ) {
+                        resolvedBase = detected
+                        detectedBase = detected
+                    } else {
+                        resolvedBase = input.fallbackBaseBranch
+                        detectedBase = nil
                     }
+
+                    // Phase 2: hasEverDoneWork check (only if not already set in snapshot).
+                    var newlyHasEverDoneWork = false
+                    var knownHasCommitsAhead = false
+                    if !snapshotHasEverDoneWork {
+                        let logResult = await ShellExecutor.execute(
+                            "git log \(resolvedBase)..HEAD --oneline -n 1",
+                            workingDirectory: thread.worktreePath
+                        )
+                        let hasCommits = logResult.exitCode == 0
+                            && !logResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        if hasCommits || snapshotIsDirty {
+                            newlyHasEverDoneWork = true
+                            knownHasCommitsAhead = hasCommits
+                        } else if let forkPoint = input.forkPoint, !forkPoint.isEmpty {
+                            // Migration: work was done + delivered before hasEverDoneWork existed.
+                            if let head = await self.git.currentCommit(worktreePath: thread.worktreePath),
+                               head != forkPoint {
+                                newlyHasEverDoneWork = true
+                            }
+                        }
+                    }
+
+                    // Phase 3: isFullyDelivered check.
+                    let hasWorkDone = snapshotHasEverDoneWork || newlyHasEverDoneWork
+                    let isFullyDelivered: Bool?
+                    if !hasWorkDone {
+                        isFullyDelivered = nil  // no work yet — will clear delivered flag in apply phase
+                    } else if knownHasCommitsAhead {
+                        isFullyDelivered = nil  // commits exist → not delivered; skip redundant check
+                    } else {
+                        isFullyDelivered = await self.git.isFullyDelivered(
+                            worktreePath: thread.worktreePath,
+                            baseBranch: resolvedBase
+                        )
+                    }
+
+                    return ThreadDeliveryResult(
+                        threadId: thread.id,
+                        projectId: thread.projectId,
+                        worktreeKey: thread.worktreeKey,
+                        currentBranch: thread.currentBranch,
+                        detectedBaseBranch: detectedBase,
+                        resolvedBaseBranch: resolvedBase,
+                        newlyHasEverDoneWork: newlyHasEverDoneWork,
+                        knownHasCommitsAhead: knownHasCommitsAhead,
+                        isFullyDelivered: isFullyDelivered
+                    )
                 }
             }
+            for await result in group {
+                if let result { results.append(result) }
+            }
+        }
 
-            // Guard: skip delivery check for threads with no work done yet.
-            guard let j = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
-            guard threads[j].hasEverDoneWork else {
-                if threads[j].isFullyDelivered {
-                    threads[j].isFullyDelivered = false
+        // Apply all results sequentially, mutating thread state and caches.
+        var changed = false
+        var persistedThreadsChanged = false
+        for result in results {
+            // Update cache if base branch was newly detected.
+            if let detected = result.detectedBaseBranch,
+               var projectEntry = cacheByProjectId[result.projectId] {
+                var meta = projectEntry.cache.worktrees[result.worktreeKey] ?? WorktreeMetadata()
+                meta.detectedBaseBranch = detected
+                meta.detectedFor = result.currentBranch
+                projectEntry.cache.worktrees[result.worktreeKey] = meta
+                projectEntry.dirty = true
+                cacheByProjectId[result.projectId] = projectEntry
+            }
+
+            guard let i = threads.firstIndex(where: { $0.id == result.threadId }) else { continue }
+
+            if result.newlyHasEverDoneWork && !threads[i].hasEverDoneWork {
+                threads[i].hasEverDoneWork = true
+                persistedThreadsChanged = true
+                changed = true
+            }
+
+            let hasWorkDone = threads[i].hasEverDoneWork
+            if !hasWorkDone {
+                if threads[i].isFullyDelivered {
+                    threads[i].isFullyDelivered = false
                     changed = true
                 }
                 continue
             }
 
-            // If we just detected commits ahead this cycle, delivery is false by definition —
-            // skip the redundant isFullyDelivered call; next cycle will evaluate properly.
-            if knownHasCommitsAhead {
-                if threads[j].isFullyDelivered {
-                    threads[j].isFullyDelivered = false
+            if result.knownHasCommitsAhead {
+                if threads[i].isFullyDelivered {
+                    threads[i].isFullyDelivered = false
                     changed = true
                 }
                 continue
             }
 
-            let delivered = await git.isFullyDelivered(
-                worktreePath: thread.worktreePath,
-                baseBranch: baseBranch
-            )
-            guard let k = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
-            if threads[k].isFullyDelivered != delivered {
-                threads[k].isFullyDelivered = delivered
+            if let delivered = result.isFullyDelivered,
+               threads[i].isFullyDelivered != delivered {
+                threads[i].isFullyDelivered = delivered
                 changed = true
             }
         }
@@ -224,33 +337,56 @@ extension ThreadManager {
     func refreshBranchStates() async {
         let settings = persistence.loadSettings()
         let snapshot = threads.filter { !$0.isArchived }
+
+        struct BranchResult {
+            let id: UUID
+            let actual: String?
+            let detectedDefault: String?  // only set for main threads without a configured default
+        }
+
+        // Run all getCurrentBranch (and detectDefaultBranch for main threads) concurrently.
+        var results: [BranchResult] = []
+        await withTaskGroup(of: BranchResult?.self) { group in
+            for thread in snapshot {
+                let worktreePath = thread.worktreePath
+                guard FileManager.default.fileExists(atPath: worktreePath) else { continue }
+                let id = thread.id
+                let isMain = thread.isMain
+                let projectDefault = settings.projects
+                    .first(where: { $0.id == thread.projectId })?.defaultBranch
+                group.addTask {
+                    let actual = await self.git.getCurrentBranch(workingDirectory: worktreePath)
+                    var detectedDefault: String? = nil
+                    if isMain && (projectDefault == nil || projectDefault!.isEmpty) {
+                        detectedDefault = await self.git.detectDefaultBranch(repoPath: worktreePath)
+                    }
+                    return BranchResult(id: id, actual: actual, detectedDefault: detectedDefault)
+                }
+            }
+            for await result in group {
+                if let result { results.append(result) }
+            }
+        }
+
         var changed = false
         var persistedChanged = false
-        for thread in snapshot {
-            let worktreePath = thread.worktreePath
-            guard FileManager.default.fileExists(atPath: worktreePath) else { continue }
-
-            let actual = await git.getCurrentBranch(workingDirectory: worktreePath)
+        for result in results {
+            guard let i = threads.firstIndex(where: { $0.id == result.id }) else { continue }
 
             let expected: String?
-            if thread.isMain {
-                if let project = settings.projects.first(where: { $0.id == thread.projectId }),
+            if threads[i].isMain {
+                if let project = settings.projects.first(where: { $0.id == threads[i].projectId }),
                    let defaultBranch = project.defaultBranch, !defaultBranch.isEmpty {
                     expected = defaultBranch
-                } else if let detected = await git.detectDefaultBranch(repoPath: worktreePath) {
-                    expected = detected
                 } else {
-                    expected = nil
+                    expected = result.detectedDefault
                 }
             } else {
-                expected = thread.branchName
+                expected = threads[i].branchName
             }
 
-            // Re-lookup after await — the thread may have been removed
-            guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
             if !threads[i].isMain,
-               let actual,
-               !actual.isEmpty,
+               let actual = result.actual, !actual.isEmpty,
                threads[i].branchName != actual {
                 threads[i].branchName = actual
                 persistedChanged = true
@@ -258,16 +394,16 @@ extension ThreadManager {
 
             let resolvedExpected = threads[i].isMain ? expected : threads[i].branchName
             let mismatch: Bool
-            if threads[i].isMain, let resolvedExpected, let actual {
+            if threads[i].isMain, let resolvedExpected, let actual = result.actual {
                 mismatch = actual != resolvedExpected
             } else {
                 mismatch = false
             }
 
-            if threads[i].actualBranch != actual
+            if threads[i].actualBranch != result.actual
                 || threads[i].expectedBranch != resolvedExpected
                 || threads[i].hasBranchMismatch != mismatch {
-                threads[i].actualBranch = actual
+                threads[i].actualBranch = result.actual
                 threads[i].expectedBranch = resolvedExpected
                 threads[i].hasBranchMismatch = mismatch
                 changed = true

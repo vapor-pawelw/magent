@@ -298,6 +298,12 @@ Each tmux session created by Magent is tagged with `MAGENT_THREAD_ID` (the ownin
 
 **Secondary guard**: after an `@MainActor` method resumes from an `await`, other MainActor work (from a different concurrent task) may have run. Always re-validate index bounds against the live `threads` array after an `await` before accessing `threads[index]`.
 
+**Safe parallel read pattern (withTaskGroup)**: For background work that is read-only per thread (e.g. running `git status` for every thread concurrently), use `withTaskGroup` with two strict phases:
+1. **Input phase** (before the group): snapshot all needed data from `threads` into value-type structs (`MagentThread` is a struct, strings, bools). Child tasks capture only these snapshots — they never access `self.threads`.
+2. **Apply phase** (after `withTaskGroup` returns): collect all results into a local array, then mutate `self.threads` in a sequential loop. Because the group is fully awaited before this phase begins, no concurrent mutation happens.
+
+This pattern lets `refreshDirtyStates`, `refreshBranchStates`, and `refreshDeliveredStates` run O(n) git subprocess calls in O(1) wall-clock time by parallelizing across the cooperative thread pool, while keeping all `threads` mutations safely serialized in the apply phase.
+
 ## Platform Scope
 
 - **macOS**: Full experience — sidebar + terminal + tabs, keyboard-driven
