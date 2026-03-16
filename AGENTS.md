@@ -84,29 +84,10 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 
 ## Releasing
 
-When the user asks to "release", "publish", "cut a release", or "bump version":
-
-1. **Determine the version bump** using [Semantic Versioning](https://semver.org/):
-   - **patch** (1.0.0 → 1.0.1): bug fixes, minor tweaks
-   - **minor** (1.0.0 → 1.1.0): new features, non-breaking changes
-   - **major** (1.0.0 → 2.0.0): breaking changes (rare — confirm with user)
-   - If the bump type is ambiguous, ask the user
-2. **Find the current version**: `git tag --sort=-v:refname | head -1`
-3. **Ensure changelog notes exist** under `CHANGELOG.md` → `## Unreleased`
-4. **Run release helper**:
-   ```bash
-   ./scripts/release-interactive.sh
-   ```
-5. **Manual fallback only if needed**: create an **annotated** tag (`git tag -a v<new_version> -m "<notes>"`) and push it
-6. **Monitor the workflow**: `gh run list --limit 1` then `gh run watch <id> --exit-status`
-7. **Verify**: `gh release view v<new_version> --repo vapor-pawelw/magent-releases` — confirm the release has `Magent.dmg` attached (plus compatibility `Magent.zip`)
-
-The tag push triggers a GitHub Actions workflow (`.github/workflows/release.yml`) that:
-- Builds an unsigned `Magent.app` on `macos-26`
-- Publishes a GitHub Release to `vapor-pawelw/magent-releases` with changelog/tag-annotation notes, `Magent.dmg`, and a compatibility `Magent.zip`
-- Auto-updates the Homebrew cask in `vapor-pawelw/homebrew-magent`
-
-**Do NOT** manually edit `Project.swift` version strings — the workflow injects them from the git tag automatically.
+When the user asks to "release", "publish", "cut a release", or "bump version", read `docs/releasing.md` for the full process. Key constraints:
+- Use `./scripts/release-interactive.sh` — do **NOT** manually edit `Project.swift` version strings (the workflow injects them from the git tag)
+- Ensure `CHANGELOG.md` has notes under `## Unreleased` before releasing
+- Release artifacts publish to `vapor-pawelw/magent-releases` (not the source repo)
 
 ## Important Files
 
