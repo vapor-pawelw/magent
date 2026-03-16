@@ -294,6 +294,18 @@ extension ThreadManager {
             return
         }
 
+        // Notify the terminal detail view to remove the surface view immediately.
+        // This is critical for the IPC path (which never calls removeFromSuperview directly):
+        // without this, the Ghostty surface stays alive after the process dies, causing
+        // ghostty_app_tick to crash on the zombie surface.  The observer runs synchronously
+        // (same MainActor) so the view hierarchy is cleaned up before model state is mutated.
+        let closingThreadId = threads[index].id
+        NotificationCenter.default.post(
+            name: .magentTabWillClose,
+            object: nil,
+            userInfo: ["threadId": closingThreadId, "sessionName": sessionName]
+        )
+
         // Also remove from pinned, agent, unread completion, waiting, and custom tab names if present
         threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
         threads[index].agentTmuxSessions.removeAll { $0 == sessionName }

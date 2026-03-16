@@ -247,6 +247,13 @@ final class ThreadDetailViewController: NSViewController {
             object: nil
         )
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTabWillCloseNotification(_:)),
+            name: .magentTabWillClose,
+            object: nil
+        )
+
         Task {
             await setupTabs()
         }
@@ -619,6 +626,67 @@ final class ThreadDetailViewController: NSViewController {
         let quotedStartCmd = sq(startCmd)
         let tmuxInner = "tmux send-keys -t \(sessionName) -X cancel 2>/dev/null; tmux attach-session -t \(sessionName) 2>/dev/null || { tmux new-session -d -s \(sessionName) -c \(quotedWd) \(quotedStartCmd) && tmux attach-session -t \(sessionName); }"
         return "/bin/sh -c \(sq(tmuxInner))"
+    }
+
+    /// Handles `magentTabWillClose` posted by `removeTabBySessionName` immediately before
+    /// it mutates the model.  Running synchronously on the MainActor ensures the
+    /// Ghostty surface is freed (via removeFromSuperview → viewDidMoveToWindow → destroySurface)
+    /// before ghostty_app_tick can see the zombie surface and crash.
+    ///
+    /// This covers both the IPC path (which never calls removeFromSuperview directly) and acts
+    /// as an early-cleanup fast-path for the GUI path (where closeTab's MainActor.run block
+    /// will subsequently find the index already gone and return via its bounds-guard).
+    @objc private func handleTabWillCloseNotification(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let threadId = userInfo["threadId"] as? UUID,
+              threadId == thread.id,
+              let sessionName = userInfo["sessionName"] as? String else { return }
+
+        // Find the view index in our local (potentially stale) tmuxSessionNames copy.
+        // We look in thread.tmuxSessionNames rather than the model because removeTabBySessionName
+        // posts this notification *before* mutating threads[], so both copies still have the session.
+        guard let tabIndex = thread.tmuxSessionNames.firstIndex(of: sessionName) else { return }
+        guard tabIndex < terminalViews.count else { return }
+
+        GhosttyAppManager.log("handleTabWillClose: threadId=\(threadId) session=\(sessionName) tabIndex=\(tabIndex)")
+
+        // Remove the surface view.  This triggers viewDidMoveToWindow(nil) → destroySurface()
+        // → ghostty_surface_free, preventing the zombie-surface crash.
+        terminalViews[tabIndex].removeFromSuperview()
+        terminalViews.remove(at: tabIndex)
+
+        if tabIndex < tabItems.count {
+            tabItems.remove(at: tabIndex)
+        }
+
+        // Keep pinnedCount / primaryTabIndex in sync.
+        if tabIndex < pinnedCount { pinnedCount -= 1 }
+        if tabIndex == primaryTabIndex {
+            primaryTabIndex = 0
+        } else if primaryTabIndex > tabIndex {
+            primaryTabIndex -= 1
+        }
+
+        // Prune our local thread copy so subsequent index lookups stay correct.
+        thread.tmuxSessionNames.removeAll { $0 == sessionName }
+        thread.pinnedTmuxSessions.removeAll { $0 == sessionName }
+        thread.customTabNames.removeValue(forKey: sessionName)
+        thread.agentTmuxSessions.removeAll { $0 == sessionName }
+        thread.unreadCompletionSessions.remove(sessionName)
+        thread.busySessions.remove(sessionName)
+        thread.waitingForInputSessions.remove(sessionName)
+
+        rebindTabActions()
+        rebuildTabBar()
+
+        if tabItems.isEmpty {
+            showEmptyState()
+        } else {
+            let newIndex = min(tabIndex, tabItems.count - 1)
+            if newIndex != currentTabIndex || tabItems.count == terminalViews.count {
+                selectTab(at: newIndex)
+            }
+        }
     }
 
     @objc private func handleDeadSessionsNotification(_ notification: Notification) {

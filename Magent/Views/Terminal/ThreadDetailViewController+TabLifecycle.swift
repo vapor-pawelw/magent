@@ -32,60 +32,21 @@ extension ThreadDetailViewController {
         GhosttyAppManager.log("closeTab: confirmed, starting Task")
 
         Task {
-            GhosttyAppManager.log("closeTab: Task started, calling removeTab")
             do {
                 try await threadManager.removeTab(from: thread, sessionName: sessionName)
-                GhosttyAppManager.log("closeTab: removeTab returned, entering MainActor.run")
-                await MainActor.run {
-                    GhosttyAppManager.log("closeTab: MainActor.run start, views=\(self.terminalViews.count) tabs=\(self.tabItems.count)")
-                    if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
-                        self.thread = updated
-                    }
-
-                    guard index < self.terminalViews.count, index < self.tabItems.count else {
-                        GhosttyAppManager.log("closeTab: index \(index) out of bounds (views=\(self.terminalViews.count) tabs=\(self.tabItems.count)), returning")
-                        return
-                    }
-                    GhosttyAppManager.log("closeTab: calling removeFromSuperview on view at \(index)")
-                    self.terminalViews[index].removeFromSuperview()
-                    GhosttyAppManager.log("closeTab: removeFromSuperview done")
-                    self.terminalViews.remove(at: index)
-
-                    self.tabItems.remove(at: index)
-
-                    // Adjust pinnedCount and primaryTabIndex
-                    if index < self.pinnedCount {
-                        self.pinnedCount -= 1
-                    }
-                    if index == self.primaryTabIndex {
-                        // Primary tab was closed — assign to first remaining tab
-                        self.primaryTabIndex = 0
-                    } else if self.primaryTabIndex > index {
-                        self.primaryTabIndex -= 1
-                    }
-
-                    self.rebindTabActions()
-                    self.rebuildTabBar()
-
-                    GhosttyAppManager.log("closeTab: selecting next tab, tabItems.count=\(self.tabItems.count)")
-                    if self.tabItems.isEmpty {
-                        self.showEmptyState()
-                    } else {
-                        let newIndex = min(index, self.tabItems.count - 1)
-                        self.selectTab(at: newIndex)
-                    }
-                    GhosttyAppManager.log("closeTab: done")
+                // UI cleanup (removeFromSuperview, tab bar rebuild, tab selection) is handled
+                // synchronously by handleTabWillCloseNotification, which fires inside
+                // removeTabBySessionName before this Task resumes.  Just sync our thread copy.
+                if let updated = threadManager.threads.first(where: { $0.id == thread.id }) {
+                    thread = updated
                 }
             } catch {
-                GhosttyAppManager.log("closeTab: removeTab threw error: \(error)")
-                await MainActor.run {
-                    let alert = NSAlert()
-                    alert.messageText = String(localized: .CommonStrings.commonError)
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
-                    alert.runModal()
-                }
+                let alert = NSAlert()
+                alert.messageText = String(localized: .CommonStrings.commonError)
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
+                alert.runModal()
             }
         }
     }

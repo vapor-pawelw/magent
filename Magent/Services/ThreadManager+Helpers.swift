@@ -1114,6 +1114,12 @@ extension Notification.Name {
     static let magentAgentInjectionStarted = Notification.Name("magentAgentInjectionStarted")
     /// Posted by `injectAfterStart` after all tmux keys (including Enter) are sent.
     static let magentAgentKeysInjected = Notification.Name("magentAgentKeysInjected")
+    /// Posted by `removeTabBySessionName` just before model cleanup begins.
+    /// Carries "threadId" (UUID) and "sessionName" (String) so the terminal
+    /// detail view can remove the surface immediately and prevent a Ghostty
+    /// use-after-free when the tmux session (and its process) was killed via
+    /// the IPC path, which doesn't call removeFromSuperview() directly.
+    static let magentTabWillClose = Notification.Name("magentTabWillClose")
 }
 
 // MARK: - Errors

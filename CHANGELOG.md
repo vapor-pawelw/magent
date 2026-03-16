@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Fixed: clicking a section name to trigger a delayed collapse no longer fires if the user selects a thread before the double-click window expires.
 
 ### Thread
+- Fixed: closing a tab via the IPC path (e.g. magent-cli close-tab) no longer crashes the app. The Ghostty surface was not being freed when the tmux session was killed remotely, causing a use-after-free on the next display tick.
 - Auto-rename AI calls now wait up to 30 seconds per agent (previously 15 s), giving slower models more headroom before timing out.
 - Fixed: stale "Unsubmitted prompt recovered" recovery banners no longer appear after a successful thread or tab creation. A race between the injection notification and the cleanup listener could leave the crash-recovery file in `/tmp` for up to 60 seconds, causing a false-positive banner on the next app launch.
 - Fixed: when a thread is created via the project picker after switching to a different project, the original project's draft is now also cleared on submit, so reopening the sheet for the original project no longer shows the previously submitted text.
