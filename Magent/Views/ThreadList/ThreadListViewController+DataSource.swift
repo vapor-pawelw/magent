@@ -985,14 +985,17 @@ extension ThreadListViewController: ThreadManagerDelegate {
         let isArchived: Bool
         let lastAgentCompletionAt: Date?
 
-        init(_ thread: MagentThread) {
+        /// - Parameter considerCompletionDate: Pass true only when
+        ///   `autoReorderThreadsOnAgentCompletion` is enabled. When false, `lastAgentCompletionAt`
+        ///   does not affect display order, so a change to it is not a structural change.
+        init(_ thread: MagentThread, considerCompletionDate: Bool) {
             id = thread.id
             sectionId = thread.sectionId
             displayOrder = thread.displayOrder
             isPinned = thread.isPinned
             isSidebarHidden = thread.isSidebarHidden
             isArchived = thread.isArchived
-            lastAgentCompletionAt = thread.lastAgentCompletionAt
+            lastAgentCompletionAt = considerCompletionDate ? thread.lastAgentCompletionAt : nil
         }
     }
 
@@ -1010,11 +1013,19 @@ extension ThreadListViewController: ThreadManagerDelegate {
             }
         }
 
+        // Only consider completion date as a structural signal when the sidebar actually
+        // reorders threads on completion — otherwise every agent completion needlessly
+        // triggers a full reload (and the animate-open jitter that comes with it).
+        let considerCompletionDate = currentSettings.autoReorderThreadsOnAgentCompletion
         let sortById: (SidebarThreadStructuralKey, SidebarThreadStructuralKey) -> Bool = {
             $0.id.uuidString < $1.id.uuidString
         }
-        let currentKeys = currentThreads.map { SidebarThreadStructuralKey($0) }.sorted(by: sortById)
-        let newKeys = newThreads.map { SidebarThreadStructuralKey($0) }.sorted(by: sortById)
+        let currentKeys = currentThreads
+            .map { SidebarThreadStructuralKey($0, considerCompletionDate: considerCompletionDate) }
+            .sorted(by: sortById)
+        let newKeys = newThreads
+            .map { SidebarThreadStructuralKey($0, considerCompletionDate: considerCompletionDate) }
+            .sorted(by: sortById)
         return currentKeys != newKeys
     }
 

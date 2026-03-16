@@ -576,8 +576,15 @@ final class ThreadListViewController: NSViewController {
 
         // Expand projects that are not in the collapsed set; section visibility is
         // controlled by per-project section collapse state.
+        // Disable animations: reloadData() creates fresh SidebarProject/SidebarSection
+        // objects that NSOutlineView treats as new (collapsed) items. Without animation
+        // suppression, expandItem() animates every section back open on each reload —
+        // visible as sections repeatedly sliding open during active agent runs.
         allowsProgrammaticOutlineDisclosureChanges = true
         defer { allowsProgrammaticOutlineDisclosureChanges = false }
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = 0
+        defer { NSAnimationContext.endGrouping() }
         for project in sidebarProjects {
             let isCollapsed = collapsedIds.contains(project.projectId.uuidString)
             if isCollapsed {
