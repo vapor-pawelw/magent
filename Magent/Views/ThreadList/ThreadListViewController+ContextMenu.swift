@@ -686,14 +686,14 @@ extension ThreadListViewController {
         alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-        textField.stringValue = thread.name
+        textField.stringValue = thread.branchName
         alert.accessoryView = textField
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
 
         let newName = textField.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !newName.isEmpty, newName != thread.name else { return }
+        guard !newName.isEmpty, newName != thread.branchName else { return }
 
         Task {
             do {

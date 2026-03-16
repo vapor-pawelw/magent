@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Thread
+- Fixed: the "Rename branch" dialog now pre-fills with the current branch name instead of the worktree name.
 - Fixed: multi-line prompts are now captured in full in the Prompt TOC and used in full for auto-rename. Previously only the first line was captured because continuation lines are ANSI-styled by Claude's TUI and blank paragraph separators broke the collection loop.
 - Fixed: "Rename thread from this prompt" (TOC right-click, thread context menu, and CLI `rename-thread`) now works on context-setting prompts that auto-rename would classify as questions (e.g. "You're working on branch X"). Explicit rename actions always generate a name.
 
