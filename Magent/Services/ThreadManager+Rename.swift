@@ -74,6 +74,13 @@ extension ThreadManager {
             appendIfTrackable(active)
         }
 
+        // Claude is a prerequisite for the app and generateSlugViaAgent routes all
+        // non-codex agent types (including .custom) through the claude CLI anyway.
+        // Always append .claude as a final fallback so rename works even when the
+        // project/global default is a custom agent with no built-in agents active.
+        if !ordered.contains(.claude) {
+            ordered.append(.claude)
+        }
         let available = ordered
         return (allTrackable: ordered, available: available)
     }
@@ -352,6 +359,12 @@ extension ThreadManager {
         guard !trimmedPrompt.isEmpty else {
             throw ThreadManagerError.invalidPrompt
         }
+
+        // Show the sidebar pulse animation while the AI call is in flight,
+        // matching the visual feedback given by the auto-rename path.
+        autoRenameInProgress.insert(currentThread.id)
+        defer { autoRenameInProgress.remove(currentThread.id) }
+        await MainActor.run { delegate?.threadManager(self, didUpdateThreads: threads) }
 
         let resolvedPreferred = preferredAgent ?? effectiveAgentType(for: currentThread.projectId)
         let agentOrder = slugGenerationAgentOrder(preferred: resolvedPreferred, projectId: currentThread.projectId)

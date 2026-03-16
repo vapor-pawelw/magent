@@ -25,6 +25,8 @@ All notable changes to this project will be documented in this file.
 
 - Undo (⌘Z) and redo (⌘⇧Z) now work reliably in the initial prompt text field.
 - The Review button (eye icon) is now always visible on non-main threads, including those marked as fully delivered.
+- Fixed: "Rename with AI" from the prompt TOC context menu now shows the sidebar pulse animation while the AI call is in flight, matching the visual feedback from auto-rename on first prompt.
+- Fixed: "Rename with AI" from the prompt TOC and context menu no longer fails when the active agent is a custom agent with no built-in Claude/Codex configured; it now always falls back to Claude (a prerequisite for the app) as a last resort.
 - Fixed: "Rename with AI" from the prompt TOC and context menu no longer fails when the preferred agent is rate-limited; it now falls back to the next available agent automatically.
 - New "Switch to new thread" checkbox in the new-thread sheet (default: on): uncheck it to create a thread in the background without switching focus to it. The preference is remembered across sessions. The CLI gains a matching `--no-select` flag for `create-thread`.
 - The "Remember type selection" and "Switch to new thread" checkboxes in the launch sheet are now placed at the bottom, just above the action buttons, keeping the top of the form focused on content fields.

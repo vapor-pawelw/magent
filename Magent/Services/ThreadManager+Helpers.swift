@@ -1146,7 +1146,7 @@ enum ThreadManagerError: LocalizedError {
         case .cannotRenameMainThread:
             return "Main threads cannot be renamed."
         case .nameGenerationFailed:
-            return "Could not generate a unique thread name. Try again or clean up unused worktrees/branches."
+            return "Could not generate a thread name. Ensure Claude or Codex is configured and reachable, then try again."
         case .worktreePathConflict(let names):
             let list = names.joined(separator: ", ")
             return "Cannot move worktrees — the following directories already exist in the destination: \(list)"
