@@ -580,7 +580,7 @@ extension ThreadListViewController {
             } else {
                 let resolvedBaseBranch = self.threadManager.resolveBaseBranch(for: current)
                 baseBranch = resolvedBaseBranch
-                async let entriesTask = threadManager.refreshDiffStats(for: thread.id)
+                async let entriesTask = GitService.shared.workingTreeDiffStats(worktreePath: current.worktreePath)
                 async let commitsTask = GitService.shared.commitLog(
                     worktreePath: current.worktreePath,
                     baseBranch: resolvedBaseBranch,

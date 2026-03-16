@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Fixed: the active tab and commit selection are now preserved across background refreshes (e.g. agent completion) and sidebar structural reloads; the panel no longer auto-jumps back to "Uncommitted" or the COMMITS tab. Background refresh calls no longer reset commit pagination, so a selected commit that was loaded beyond page 1 is no longer lost. A task generation counter ensures that a slow initial-load task (no-preserve) cannot overwrite the result of a faster background-refresh task (preserve).
 - Fixed: the "from \<hash\> · \<message\>" subtitle no longer lingers on the COMMITS tab after a background refresh resets the selection.
 - COMMITS is now the left-most (default) tab in the bottom panel; it always shows an "Uncommitted" row at the top so you can quickly switch between working-tree changes and any branch commit.
+- Fixed: the "Uncommitted" row in the COMMITS tab now correctly shows only actual working-tree changes (vs HEAD) rather than all changes across the entire branch since the merge base.
 - Selecting "Uncommitted" in the COMMITS tab shows the same working-tree file list as before; selecting a commit switches the CHANGES tab to the files changed in that commit, with a subtitle ("from \<hash\> · \<message\>") below the tab bar.
 - The inline diff viewer now matches the selection: clicking a file while a commit is selected shows that commit's diff; switching back to "Uncommitted" restores the working-tree diff.
 
