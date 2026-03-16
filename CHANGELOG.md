@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Fixed: clicking a section name to trigger a delayed collapse no longer fires if the user selects a thread before the double-click window expires.
 
 ### Thread
+- New tabs now appear in the tab bar immediately when created, with a "Creating tab…" overlay while the session is being set up in the background.
 - Fixed: "Rename with AI" from the TOC and context menus no longer consistently fails with "rename failed". The slug-generation `claude -p` call now skips loading CLAUDE.md/AGENTS.md (`--setting-sources ""`) and disables tools (`--tools ""`), keeping the system prompt minimal. The per-agent timeout is also raised to 60 s (from 30 s) as an extra safety margin.
 - Fixed: stale "Unsubmitted prompt recovered" recovery banners no longer appear after a successful thread or tab creation. A race between the injection notification and the cleanup listener could leave the crash-recovery file in `/tmp` for up to 60 seconds, causing a false-positive banner on the next app launch.
 - Fixed: when a thread is created via the project picker after switching to a different project, the original project's draft is now also cleared on submit, so reopening the sheet for the original project no longer shows the previously submitted text.

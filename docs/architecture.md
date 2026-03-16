@@ -278,6 +278,7 @@ User Action (+ button)
 - Persist the resolved agent type per tmux session (`sessionAgentTypes` plus `MAGENT_AGENT_TYPE`) and use that stored session-level value for recreation/resume logic; do not reinterpret an old tab from the project's current default agent.
 - The loading overlay must follow the actual selected session, not the first tab in the thread. Its secondary detail line is reserved for non-routine recovery actions reported by session recreation; normal agent startup should continue to show only `Starting agent...`.
 - For already-live sessions, loading UI should prefer runtime process detection (`pane_current_command` + child args) over persisted configuration. If the pane is back at a shell, dismiss/skip the startup overlay rather than waiting for agent-ready markers that will never appear.
+- **Two-phase new-tab creation**: `addTab()` immediately adds the tab item to the bar and shows a "Creating tab…" overlay before any async work starts. The `TerminalSurfaceView` is only created and appended to `terminalViews` after the tmux session is fully set up. This means `tabItems.count` can temporarily exceed `terminalViews.count`; code that iterates these arrays concurrently must account for this. Once the session is ready, `selectTab(at:)` takes over and transitions the overlay to "Starting agent…" via the normal `startLoadingOverlayTracking` path.
 
 ## tmux Session Ownership
 

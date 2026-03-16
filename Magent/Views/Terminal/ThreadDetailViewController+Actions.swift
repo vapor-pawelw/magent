@@ -275,6 +275,25 @@ extension ThreadDetailViewController {
         pendingPromptFileURL: URL? = nil,
         tabNameSuffix: String? = nil
     ) {
+        // Phase 1: Immediately add a tab item and show "Creating tab..." overlay so
+        // the tab appears in the bar without waiting for tmux session creation.
+        hideEmptyState()
+        let pendingIndex = tabItems.count
+        createTabItem(title: "New Tab", closable: false)
+        rebindTabActions()
+        rebuildTabBar()
+
+        // Mark the new tab as selected in the tab bar.
+        for (i, item) in tabItems.enumerated() { item.isSelected = (i == pendingIndex) }
+
+        // Show "Creating tab..." overlay immediately.
+        ensureLoadingOverlay()
+        loadingLabel?.stringValue = String(localized: .ThreadStrings.tabCreatingSession)
+        loadingOverlay?.alphaValue = 1
+        loadingOverlay?.isHidden = false
+        loadingDetailLabel?.isHidden = true
+
+        // Phase 2: Run tmux setup in the background; overlay stays visible throughout.
         Task {
             do {
                 let tab = try await threadManager.addTab(
@@ -292,22 +311,37 @@ extension ThreadDetailViewController {
                     thread: latestThread
                 )
                 await MainActor.run {
-                    self.hideEmptyState()
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated
                     }
                     let terminalView = self.makeTerminalView(for: tab.tmuxSessionName)
                     self.terminalViews.append(terminalView)
 
-                    let index = self.tabItems.count
-                    let title = self.thread.displayName(for: tab.tmuxSessionName, at: index)
-                    self.createTabItem(title: title, closable: true)
+                    // Update tab title and make it closable.
+                    let title = self.thread.displayName(for: tab.tmuxSessionName, at: pendingIndex)
+                    if pendingIndex < self.tabItems.count {
+                        self.tabItems[pendingIndex].titleLabel.stringValue = title
+                        self.tabItems[pendingIndex].showCloseButton = true
+                    }
                     self.rebindTabActions()
-                    self.rebuildTabBar()
-                    self.selectTab(at: index)
+
+                    // Hand off to normal selectTab flow, which shows "Starting agent..." overlay.
+                    self.selectTab(at: pendingIndex)
                 }
             } catch {
                 await MainActor.run {
+                    // Remove the pending tab on error.
+                    if pendingIndex < self.tabItems.count {
+                        self.tabItems.remove(at: pendingIndex)
+                    }
+                    self.rebindTabActions()
+                    self.rebuildTabBar()
+                    self.dismissLoadingOverlay()
+                    if self.tabItems.isEmpty {
+                        self.showEmptyState()
+                    } else {
+                        self.selectTab(at: max(0, pendingIndex - 1))
+                    }
                     let alert = NSAlert()
                     alert.messageText = String(localized: .CommonStrings.commonError)
                     alert.informativeText = error.localizedDescription

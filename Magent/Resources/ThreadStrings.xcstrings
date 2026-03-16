@@ -45,6 +45,17 @@
         }
       }
     },
+    "tabCreatingSession": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creating tab..."
+          }
+        }
+      }
+    },
     "tabStartingAgent": {
       "extractionState": "manual",
       "localizations": {
