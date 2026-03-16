@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Sidebar
+- Thread rows now show PR/MR info on its own dedicated line below the branch/worktree line, making it easier to scan at a glance. When there's no task description, the branch name is the primary label and the worktree (if different) appears on the secondary line; when a description is set, branch and worktree move to the secondary line and PR stays on its own third line.
 - The thread label pulses in the app accent color while auto-rename is in progress, making it visible when naming is happening.
 - Fixed: sections no longer expand or collapse unexpectedly during background sidebar updates (busy state, rate limits, agent completions, etc.). The root cause was that NSOutlineView was permitted to expand/collapse items on its own initiative — during reloadItem calls, nil-currentEvent callbacks, and other internal triggers — because shouldExpandItem/shouldCollapseItem returned true for all non-keyboard events. Both methods now gate every change through the programmatic restore loop exclusively.
 - Fixed: collapsing a section no longer jumps focus to the Main thread. Previously, when the selected thread was inside a just-collapsed section, the sidebar lost the selection and the next background refresh picked the Main thread automatically.
