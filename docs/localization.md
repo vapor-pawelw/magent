@@ -35,8 +35,9 @@
 ## Remaining Untranslated Strings Snapshot
 
 - As of 2026-03-09, a strict scan of UI/runtime code found 183 remaining hard-coded user-facing string occurrences (144 unique literal templates).
-- Treat that as an approximate debt snapshot rather than an exact contract; the count still includes a few borderline items such as technical labels, placeholders like `claude`, and short diff/status labels.
-- Largest remaining hotspots at that time:
+- As of 2026-03-16, three `SettingsCategory` titles (`terminal`, `appearance`, `debug`) were moved from hard-coded literals to `CommonStrings.xcstrings` entries.
+- Treat counts as approximate debt snapshots; they include a few borderline items such as technical labels, placeholders like `claude`, and short diff/status labels.
+- Largest remaining hotspots:
   - `Magent/Views/Settings/SettingsProjectsViewController+DetailPane.swift`
   - `Magent/Views/Settings/SettingsGeneralViewController.swift`
   - `Magent/Views/Settings/SettingsProjectsViewController+Actions.swift`

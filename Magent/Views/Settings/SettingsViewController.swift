@@ -118,18 +118,18 @@ enum SettingsCategory: Int, CaseIterable {
     var title: String {
         switch self {
         case .general: return String(localized: .CommonStrings.settingsCategoryGeneral)
-        case .terminal: return "Terminal"
+        case .terminal: return String(localized: .CommonStrings.settingsCategoryTerminal)
         case .threads: return String(localized: .CommonStrings.settingsCategoryThreads)
         case .agents: return String(localized: .CommonStrings.settingsCategoryAgents)
         case .notifications: return String(localized: .CommonStrings.settingsCategoryNotifications)
         case .projects: return String(localized: .CommonStrings.settingsCategoryProjects)
-        case .appearance: return "Appearance"
+        case .appearance: return String(localized: .CommonStrings.settingsCategoryAppearance)
         case .jira:
             return AppFeatures.annotatedTitle(
                 String(localized: .CommonStrings.settingsCategoryJira),
                 for: .jiraIntegration
             )
-        case .debug: return "Debug"
+        case .debug: return String(localized: .CommonStrings.settingsCategoryDebug)
         }
     }
 

@@ -287,6 +287,28 @@
         }
       }
     },
+    "settingsCategoryAppearance": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appearance"
+          }
+        }
+      }
+    },
+    "settingsCategoryDebug": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debug"
+          }
+        }
+      }
+    },
     "settingsCategoryGeneral": {
       "extractionState": "manual",
       "localizations": {
@@ -327,6 +349,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Projects"
+          }
+        }
+      }
+    },
+    "settingsCategoryTerminal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal"
           }
         }
       }
