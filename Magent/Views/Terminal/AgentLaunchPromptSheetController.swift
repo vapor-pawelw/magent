@@ -504,6 +504,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         promptTextView.isAutomaticTextReplacementEnabled = false
         promptTextView.isVerticallyResizable = true
         promptTextView.isHorizontallyResizable = false
+        promptTextView.allowsUndo = true
         promptTextView.textContainerInset = NSSize(width: 8, height: 8)
         promptTextView.textContainer?.widthTracksTextView = true
         promptTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
@@ -883,6 +884,14 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
         if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
             window?.selectPreviousKeyView(nil)
+            return true
+        }
+        if commandSelector == Selector(("undo:")) {
+            promptTextView.undoManager?.undo()
+            return true
+        }
+        if commandSelector == Selector(("redo:")) {
+            promptTextView.undoManager?.redo()
             return true
         }
         return false
