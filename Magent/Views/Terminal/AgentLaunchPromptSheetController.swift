@@ -943,7 +943,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         // Clear draft immediately — the modal is now clean if the user opens it again
         // while the thread/tab is still being created in the background.
+        // Also clear the original scope in case the project picker changed it mid-edit,
+        // so the original project's draft doesn't show stale submitted text.
         AgentLaunchPromptDraftStore.clearAll(for: currentDraftScope)
+        if currentDraftScope.storageKey != config.draftScope.storageKey {
+            AgentLaunchPromptDraftStore.clearAll(for: config.draftScope)
+        }
 
         let selectedProject: Project? = {
             guard let picker = projectPicker else { return nil }

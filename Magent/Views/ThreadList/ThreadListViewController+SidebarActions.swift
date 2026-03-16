@@ -330,22 +330,16 @@ extension ThreadListViewController {
 
         Task {
             do {
-                let thread = try await self.threadManager.createThread(
+                _ = try await self.threadManager.createThread(
                     project: project,
                     requestedAgentType: requestedAgentType,
                     useAgentCommand: useAgentCommand,
                     initialPrompt: initialPrompt,
                     requestedName: requestedBranchName,
-                    requestedBaseBranch: baseBranch
+                    requestedBaseBranch: baseBranch,
+                    pendingPromptFileURL: pendingPromptFileURL
                 )
                 await MainActor.run {
-                    if let pendingPromptFileURL,
-                       let sessionName = thread.tmuxSessionNames.first {
-                        PendingInitialPromptStore.clearAfterInjection(
-                            fileURL: pendingPromptFileURL,
-                            sessionName: sessionName
-                        )
-                    }
                     self.isCreatingThread = false
                     self.reloadData()
                 }

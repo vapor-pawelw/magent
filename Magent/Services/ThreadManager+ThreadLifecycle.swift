@@ -14,7 +14,8 @@ extension ThreadManager {
         useAgentCommand: Bool = true,
         initialPrompt: String? = nil,
         requestedName: String? = nil,
-        requestedBaseBranch: String? = nil
+        requestedBaseBranch: String? = nil,
+        pendingPromptFileURL: URL? = nil
     ) async throws -> MagentThread {
         var name = ""
         var foundUnique = false
@@ -248,6 +249,14 @@ extension ThreadManager {
                         details: missingLocalSyncPaths.joined(separator: "\n"),
                         detailsCollapsedTitle: "Show missing paths",
                         detailsExpandedTitle: "Hide missing paths"
+                    )
+                }
+                // Register cleanup before injectAfterStart fires magentAgentKeysInjected,
+                // preventing the notification from racing past the listener setup.
+                if let pendingPromptFileURL {
+                    PendingInitialPromptStore.clearAfterInjection(
+                        fileURL: pendingPromptFileURL,
+                        sessionName: tmuxSessionName
                     )
                 }
             }

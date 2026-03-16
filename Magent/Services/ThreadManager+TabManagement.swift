@@ -11,7 +11,8 @@ extension ThreadManager {
         requestedAgentType: AgentType? = nil,
         initialPrompt: String? = nil,
         shouldSubmitInitialPrompt: Bool = true,
-        tabNameSuffix: String? = nil
+        tabNameSuffix: String? = nil,
+        pendingPromptFileURL: URL? = nil
     ) async throws -> Tab {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
             throw ThreadManagerError.threadNotFound
@@ -161,6 +162,14 @@ extension ThreadManager {
 
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
+            // Register cleanup before injectAfterStart fires magentAgentKeysInjected,
+            // preventing the notification from racing past the listener setup.
+            if let pendingPromptFileURL {
+                PendingInitialPromptStore.clearAfterInjection(
+                    fileURL: pendingPromptFileURL,
+                    sessionName: tmuxSessionName
+                )
+            }
         }
 
         // Inject terminal command (always) and agent context (only for agent tabs)

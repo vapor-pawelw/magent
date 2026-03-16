@@ -283,7 +283,8 @@ extension ThreadDetailViewController {
                     requestedAgentType: agentType,
                     initialPrompt: initialPrompt,
                     shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
-                    tabNameSuffix: tabNameSuffix
+                    tabNameSuffix: tabNameSuffix,
+                    pendingPromptFileURL: pendingPromptFileURL
                 )
                 let latestThread = self.threadManager.threads.first(where: { $0.id == self.thread.id }) ?? self.thread
                 _ = await self.threadManager.recreateSessionIfNeeded(
@@ -291,12 +292,6 @@ extension ThreadDetailViewController {
                     thread: latestThread
                 )
                 await MainActor.run {
-                    if let pendingPromptFileURL {
-                        PendingInitialPromptStore.clearAfterInjection(
-                            fileURL: pendingPromptFileURL,
-                            sessionName: tab.tmuxSessionName
-                        )
-                    }
                     self.hideEmptyState()
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated

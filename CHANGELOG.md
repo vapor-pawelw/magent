@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - Auto-rename AI calls now wait up to 30 seconds per agent (previously 15 s), giving slower models more headroom before timing out.
+- Fixed: stale "Unsubmitted prompt recovered" recovery banners no longer appear after a successful thread or tab creation. A race between the injection notification and the cleanup listener could leave the crash-recovery file in `/tmp` for up to 60 seconds, causing a false-positive banner on the next app launch.
+- Fixed: when a thread is created via the project picker after switching to a different project, the original project's draft is now also cleared on submit, so reopening the sheet for the original project no longer shows the previously submitted text.
 - Right-clicking the + button next to tabs now shows an agent picker menu (project default, individual agents, terminal) to create a tab immediately without the prompt sheet. Left-click still opens the full sheet.
 
 - Undo (⌘Z) and redo (⌘⇧Z) now work reliably in the initial prompt text field.
