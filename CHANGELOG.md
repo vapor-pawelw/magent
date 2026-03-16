@@ -35,6 +35,7 @@ All notable changes to this project will be documented in this file.
 - Links in the terminal are now clickable: Cmd+click opens URLs in the default browser. Hovering over a link shows an animated URL pill at the bottom of the terminal and changes the cursor to a pointing hand. Link detection combines ghostty-native OSC 8 hyperlinks and tmux pane content.
 
 ### Sidebar
+- Fixed: sections no longer collapse after any sidebar status change (busy state, agent completion, etc.). AppKit fires collapse notifications for expanded projects during structural reloads; these notifications now no-op while a reload is in progress, and the collapse-state snapshot is captured before the reload begins.
 - Fixed: keyboard navigation (arrow keys) across section headers no longer accidentally collapses or expands those sections.
 - Fixed: pressing keys (arrow keys, letter keys) while the sidebar has focus no longer accidentally expands or collapses sections.
 - Fixed: sections no longer flash expand/collapse while dragging a thread — background state updates no longer trigger a full sidebar reload mid-drag; the reload is deferred until the drag ends.

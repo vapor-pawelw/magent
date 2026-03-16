@@ -567,11 +567,15 @@ final class ThreadListViewController: NSViewController {
             sidebarRootItems.append(project)
         }
 
+        // Read collapse state before reloadData() — AppKit can fire outlineViewItemDidCollapse
+        // for previously-expanded items during the reload, which would corrupt UserDefaults
+        // and cause the restore loop below to see those projects as collapsed.
+        let collapsedIds = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
+
         outlineView.reloadData()
 
         // Expand projects that are not in the collapsed set; section visibility is
         // controlled by per-project section collapse state.
-        let collapsedIds = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
         allowsProgrammaticOutlineDisclosureChanges = true
         defer { allowsProgrammaticOutlineDisclosureChanges = false }
         for project in sidebarProjects {
