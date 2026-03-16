@@ -275,6 +275,38 @@ Terminal overlays must respond to appearance changes the same way the surroundin
 - Overlay views that draw their own layers should update those colors from `viewDidChangeEffectiveAppearance()`.
 - This applies to the scroll-controls pill, the floating `Scroll to bottom` pill, and the Prompt TOC panel/header/resize affordance.
 
+## Surface Lifecycle: close_surface_cb Limitation and Tab-Close Contract
+
+**Critical gotcha**: `ghostty_runtime_close_surface_cb` has the signature:
+```c
+typedef void (*ghostty_runtime_close_surface_cb)(void*, bool)
+```
+The `void*` is the **app**'s userdata (i.e. `GhosttyAppManager`) — **there is no surface parameter**. The callback fires when the process inside Ghostty dies, but the host cannot determine which surface triggered it from the callback alone. Magent's `ghosttyCloseSurfaceCallback` just posts an internal `ghosttySurfaceClosed` notification that nobody observes.
+
+**Rule**: Never rely on `close_surface_cb` for surface cleanup. If a Ghostty surface is not freed before `ghostty_app_tick` runs, the tick will crash on the zombie surface (use-after-free).
+
+### The IPC close-tab path
+
+When a tab is closed via the IPC path (`magent-cli close-tab` → `IPCCommandHandler` → `threadManager.removeTab`), the tmux session is killed by the model layer — **`removeFromSuperview()` is never called on the `TerminalSurfaceView`**. Without `removeFromSuperview`, `viewDidMoveToWindow(nil)` never fires, `destroySurface()` is never called, and `ghostty_surface_free` is never called. `CVDisplayLink` continues firing `ghostty_app_tick` against the zombie surface, causing a crash.
+
+### Fix: magentTabWillClose notification
+
+`removeTabBySessionName` (which is `@MainActor`) posts `.magentTabWillClose` **before** mutating the model:
+```swift
+NotificationCenter.default.post(
+    name: .magentTabWillClose,
+    object: nil,
+    userInfo: ["threadId": threadId, "sessionName": sessionName]
+)
+```
+Because `removeTabBySessionName` is `@MainActor`, this notification fires **synchronously** — `ThreadDetailViewController.handleTabWillCloseNotification` runs to completion (calling `removeFromSuperview()` → `destroySurface()` → `ghostty_surface_free`) before model mutation resumes.
+
+This pattern works for both paths:
+- **GUI path** (`closeTab(at:)` → `removeTab`): notification fires synchronously and handles all UI cleanup. The `Task` completion block only syncs the local `thread` copy.
+- **IPC path** (`IPCCommandHandler.closeTab` → `removeTab`): notification fires synchronously and is the only cleanup trigger — no UI code in the IPC call chain.
+
+**Rule**: Any code path that kills a tmux session (and thus kills the process inside a Ghostty surface) must ensure `ghostty_surface_free` is called before the next `ghostty_app_tick`. The correct way is to call `removeFromSuperview()` on the `TerminalSurfaceView` before or immediately after killing the session. The `magentTabWillClose` notification exists precisely for code paths that don't have direct access to the view hierarchy.
+
 ## Link Opening and Hover (GHOSTTY_ACTION_OPEN_URL / GHOSTTY_ACTION_MOUSE_OVER_LINK)
 
 Ghostty fires two actions for link interaction:
