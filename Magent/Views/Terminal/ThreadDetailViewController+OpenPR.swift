@@ -266,7 +266,7 @@ extension ThreadDetailViewController {
     // MARK: - Review Button
 
     func refreshReviewButtonVisibility() {
-        reviewButton.isHidden = thread.isMain || thread.isFullyDelivered
+        reviewButton.isHidden = thread.isMain
     }
 
     func syncTransientState() {
