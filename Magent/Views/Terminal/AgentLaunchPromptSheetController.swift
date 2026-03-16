@@ -470,26 +470,6 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         agentRow.addArrangedSubview(agentPicker)
         stack.addArrangedSubview(agentRow)
 
-        // Remember type selection checkbox
-        rememberCheckbox.target = self
-        rememberCheckbox.action = #selector(rememberCheckboxToggled)
-        rememberCheckbox.state = PersistenceService.shared.loadSettings().rememberLastTypeSelection ? .on : .off
-        rememberCheckbox.font = .systemFont(ofSize: 11)
-        rememberCheckbox.contentTintColor = .controlAccentColor
-        stack.addArrangedSubview(rememberCheckbox)
-        stack.setCustomSpacing(4, after: rememberCheckbox)
-
-        // Switch to new thread checkbox — only relevant when creating a new thread, not a tab
-        if case .newThread = config.draftScope {
-            switchToNewThreadCheckbox.target = self
-            switchToNewThreadCheckbox.action = #selector(switchToNewThreadCheckboxToggled)
-            switchToNewThreadCheckbox.state = PersistenceService.shared.loadSettings().switchToNewlyCreatedThread ? .on : .off
-            switchToNewThreadCheckbox.font = .systemFont(ofSize: 11)
-            switchToNewThreadCheckbox.contentTintColor = .controlAccentColor
-            stack.addArrangedSubview(switchToNewThreadCheckbox)
-            stack.setCustomSpacing(12, after: switchToNewThreadCheckbox)
-        }
-
         // Prompt label
         promptLabel = makeFormLabel(promptLabelText)
         stack.addArrangedSubview(promptLabel)
@@ -548,6 +528,25 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 stack.addArrangedSubview(hintLabel)
                 NSLayoutConstraint.activate([hintLabel.widthAnchor.constraint(equalTo: stack.widthAnchor)])
             }
+        }
+
+        // Remember type selection checkbox
+        rememberCheckbox.target = self
+        rememberCheckbox.action = #selector(rememberCheckboxToggled)
+        rememberCheckbox.state = PersistenceService.shared.loadSettings().rememberLastTypeSelection ? .on : .off
+        rememberCheckbox.font = .systemFont(ofSize: 11)
+        rememberCheckbox.contentTintColor = .controlAccentColor
+        stack.addArrangedSubview(rememberCheckbox)
+        stack.setCustomSpacing(4, after: rememberCheckbox)
+
+        // Switch to new thread checkbox — only relevant when creating a new thread, not a tab
+        if case .newThread = config.draftScope {
+            switchToNewThreadCheckbox.target = self
+            switchToNewThreadCheckbox.action = #selector(switchToNewThreadCheckboxToggled)
+            switchToNewThreadCheckbox.state = PersistenceService.shared.loadSettings().switchToNewlyCreatedThread ? .on : .off
+            switchToNewThreadCheckbox.font = .systemFont(ofSize: 11)
+            switchToNewThreadCheckbox.contentTintColor = .controlAccentColor
+            stack.addArrangedSubview(switchToNewThreadCheckbox)
         }
 
         // Button row
