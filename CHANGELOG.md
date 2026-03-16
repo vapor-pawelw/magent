@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Thread
+- Fixed: "Rename thread from this prompt" (TOC right-click, thread context menu, and CLI `rename-thread`) now works on context-setting prompts that auto-rename would classify as questions (e.g. "You're working on branch X"). Explicit rename actions always generate a name.
+
 ### Performance
 - Git status, branch, and delivery checks now run in parallel across all threads instead of sequentially, significantly reducing background polling time with many threads open.
 - Agent completion no longer triggers a full git-status scan of every thread — only the threads that just completed are refreshed.

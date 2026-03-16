@@ -157,7 +157,7 @@ extension ThreadManager {
         return settings.projects.first(where: { $0.id == projectId })?.repoPath
     }
 
-    private func generateSlugViaAgent(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> SlugGenerationAttemptResult {
+    private func generateSlugViaAgent(from prompt: String, agentType: AgentType?, projectId: UUID?, forceGenerate: Bool = false) async -> SlugGenerationAttemptResult {
         let truncated = String(prompt.prefix(500))
         let settings = persistence.loadSettings()
         let projectSlug = projectId.flatMap { pid in
@@ -167,12 +167,21 @@ extension ThreadManager {
         let customInstruction = (projectSlug?.isEmpty == false ? projectSlug : nil)
             ?? (globalSlug.isEmpty ? nil : globalSlug)
         let instruction = customInstruction ?? AppSettings.defaultSlugPrompt
-        let aiPrompt = """
-            \(instruction) \
-            Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
-            Only output SLUG: EMPTY for questions or actions unrelated to the project in this worktree. \
-            Task: \(truncated)
-            """
+        let aiPrompt: String
+        if forceGenerate {
+            aiPrompt = """
+                \(instruction) \
+                Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
+                Task: \(truncated)
+                """
+        } else {
+            aiPrompt = """
+                \(instruction) \
+                Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
+                Only output SLUG: EMPTY for questions or actions unrelated to the project in this worktree. \
+                Task: \(truncated)
+                """
+        }
 
         let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
         let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
@@ -220,7 +229,8 @@ extension ThreadManager {
     private func generateFirstPromptRenamePayloadViaAgent(
         from prompt: String,
         agentType: AgentType?,
-        projectId: UUID?
+        projectId: UUID?,
+        forceGenerate: Bool = false
     ) async -> FirstPromptRenameAttemptResult {
         let truncated = String(prompt.prefix(500))
         let settings = persistence.loadSettings()
@@ -231,21 +241,36 @@ extension ThreadManager {
         let customInstruction = (projectSlug?.isEmpty == false ? projectSlug : nil)
             ?? (globalSlug.isEmpty ? nil : globalSlug)
         let instruction = customInstruction ?? AppSettings.defaultSlugPrompt
-        let aiPrompt = """
-            \(instruction) \
+        let commonPayloadInstructions = """
             Also generate a short task description (2-8 words) with first letter uppercase. \
             The description should read like a clear branch/sidebar label for the work to do, and should describe the same task as the slug. \
             Prefer concrete phrases such as "Fix ...", "Add ...", "Improve ...", or a specific feature/bug name. Avoid vague abstract wording like "readiness", "handling", "management", or "support" unless that exact concept is the task. \
             Icon types: feature (new functionality), fix (bug/regression), improvement (non-breaking polish/performance/quality), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
             Evaluate all icon types and use other when no icon type is above 70% confidence. \
-            Output exactly three lines and nothing else: \
-            SLUG: <slug or EMPTY> \
-            DESC: <description or EMPTY> \
-            TYPE: <feature|fix|improvement|refactor|test|other> \
-            Use SLUG: EMPTY and DESC: EMPTY for pure knowledge questions with no implied action. \
-            Bug reports, observations about broken behavior, and feature requests are actionable — always generate a slug. \
-            Task: \(truncated)
+            Output exactly three lines and nothing else:
             """
+        let aiPrompt: String
+        if forceGenerate {
+            aiPrompt = """
+                \(instruction) \
+                \(commonPayloadInstructions) \
+                SLUG: <slug> \
+                DESC: <description> \
+                TYPE: <feature|fix|improvement|refactor|test|other> \
+                Task: \(truncated)
+                """
+        } else {
+            aiPrompt = """
+                \(instruction) \
+                \(commonPayloadInstructions) \
+                SLUG: <slug or EMPTY> \
+                DESC: <description or EMPTY> \
+                TYPE: <feature|fix|improvement|refactor|test|other> \
+                Use SLUG: EMPTY and DESC: EMPTY for pure knowledge questions with no implied action. \
+                Bug reports, observations about broken behavior, and feature requests are actionable — always generate a slug. \
+                Task: \(truncated)
+                """
+        }
 
         let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
         let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
@@ -293,16 +318,18 @@ extension ThreadManager {
     func autoRenameCandidates(
         from prompt: String,
         agentType: AgentType?,
-        projectId: UUID? = nil
+        projectId: UUID? = nil,
+        forceGenerate: Bool = false
     ) async -> AutoRenameResult {
         let agentOrder = slugGenerationAgentOrder(preferred: agentType, projectId: projectId)
 
         let normalCandidates = agentOrder.available
         for candidateAgent in normalCandidates {
-            switch await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId) {
+            switch await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId, forceGenerate: forceGenerate) {
             case .slug(let slug):
                 return .candidates(renameCandidates(from: slug))
             case .question:
+                if forceGenerate { continue }
                 // A question classification (SLUG: EMPTY) should short-circuit.
                 // Retry slug generation only on the next submitted user prompt.
                 return .question
@@ -376,22 +403,25 @@ extension ThreadManager {
         let agentOrder = slugGenerationAgentOrder(preferred: resolvedPreferred, projectId: currentThread.projectId)
         let cKey = promptCacheKey(for: trimmedPrompt)
         var payloadResult: FirstPromptRenameAttemptResult = .failed
-        if let cached = promptRenameResultCache[currentThread.id]?[cKey] {
-            // Cache hit — reuse previous AI result without another agent call.
-            payloadResult = cached.slug.map { .generated(slug: $0, taskDescription: cached.taskDescription) } ?? .question
+        // Explicit rename: use cached slug hits, but bypass QUESTION cache results so
+        // context-setting prompts that auto-rename skipped can still be forced to a name.
+        if let cached = promptRenameResultCache[currentThread.id]?[cKey], cached.slug != nil {
+            payloadResult = .generated(slug: cached.slug!, taskDescription: cached.taskDescription)
         } else {
             for candidateAgent in agentOrder.available {
                 let result = await generateFirstPromptRenamePayloadViaAgent(
                     from: trimmedPrompt,
                     agentType: candidateAgent,
-                    projectId: currentThread.projectId
+                    projectId: currentThread.projectId,
+                    forceGenerate: true
                 )
                 cacheRenameResult(result, threadId: currentThread.id, cacheKey: cKey)
                 switch result {
                 case .generated:
                     payloadResult = result
                 case .question:
-                    payloadResult = result
+                    // forceGenerate should prevent QUESTION, but fall through to next agent if it slips past.
+                    continue
                 case .failed:
                     continue
                 }
