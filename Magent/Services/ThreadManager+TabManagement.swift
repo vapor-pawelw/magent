@@ -11,6 +11,7 @@ extension ThreadManager {
         requestedAgentType: AgentType? = nil,
         initialPrompt: String? = nil,
         shouldSubmitInitialPrompt: Bool = true,
+        customTitle: String? = nil,
         tabNameSuffix: String? = nil,
         pendingPromptFileURL: URL? = nil
     ) async throws -> Tab {
@@ -60,10 +61,8 @@ extension ThreadManager {
                 requestedTabBaseName = "Terminal"
             }
 
-            tabDisplayName = uniqueTabDisplayName(
-                baseName: requestedTabBaseName + (tabNameSuffix ?? ""),
-                in: currentThread
-            )
+            tabDisplayName = customTitle.map { uniqueTabDisplayName(baseName: $0, in: currentThread) }
+                ?? uniqueTabDisplayName(baseName: requestedTabBaseName + (tabNameSuffix ?? ""), in: currentThread)
             let tabSlug = Self.sanitizeForTmux(tabDisplayName)
             let baseName = Self.buildSessionName(repoSlug: repoSlug, threadName: nil, tabSlug: tabSlug)
             var candidate = baseName
@@ -99,10 +98,8 @@ extension ThreadManager {
                 requestedTabBaseName = "Terminal"
             }
 
-            tabDisplayName = uniqueTabDisplayName(
-                baseName: requestedTabBaseName + (tabNameSuffix ?? ""),
-                in: currentThread
-            )
+            tabDisplayName = customTitle.map { uniqueTabDisplayName(baseName: $0, in: currentThread) }
+                ?? uniqueTabDisplayName(baseName: requestedTabBaseName + (tabNameSuffix ?? ""), in: currentThread)
             let tabSlug = Self.sanitizeForTmux(tabDisplayName)
             let baseName = Self.buildSessionName(repoSlug: repoSlug, threadName: currentThread.name, tabSlug: tabSlug)
             var candidate = baseName

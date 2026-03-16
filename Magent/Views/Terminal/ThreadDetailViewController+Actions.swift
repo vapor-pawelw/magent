@@ -250,6 +250,7 @@ extension ThreadDetailViewController {
             defaultAgentType: threadManager.effectiveAgentType(for: thread.projectId),
             subtitle: "Thread: \(thread.taskDescription.map { "\($0) (\(thread.branchName))" } ?? thread.branchName)",
             showDescriptionAndBranchFields: false,
+            showTitleField: true,
             autoGenerateHint: nil,
             terminalInjectionPrefill: injection.terminalCommand.isEmpty ? nil : injection.terminalCommand,
             agentContextPrefill: injection.agentContext.isEmpty ? nil : injection.agentContext
@@ -262,6 +263,7 @@ extension ThreadDetailViewController {
                 useAgentCommand: result.useAgentCommand,
                 initialPrompt: result.prompt,
                 shouldSubmitInitialPrompt: true,
+                customTitle: result.tabTitle,
                 pendingPromptFileURL: result.pendingPromptFileURL
             )
         }
@@ -272,6 +274,7 @@ extension ThreadDetailViewController {
         useAgentCommand: Bool,
         initialPrompt: String? = nil,
         shouldSubmitInitialPrompt: Bool = true,
+        customTitle: String? = nil,
         pendingPromptFileURL: URL? = nil,
         tabNameSuffix: String? = nil
     ) {
@@ -283,6 +286,7 @@ extension ThreadDetailViewController {
                     requestedAgentType: agentType,
                     initialPrompt: initialPrompt,
                     shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                    customTitle: customTitle,
                     tabNameSuffix: tabNameSuffix,
                     pendingPromptFileURL: pendingPromptFileURL
                 )

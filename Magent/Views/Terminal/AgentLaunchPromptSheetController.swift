@@ -184,6 +184,8 @@ struct AgentLaunchSheetConfig {
     let availableProjects: [Project]
     /// When true, Description and Branch text fields are shown below the prompt.
     let showDescriptionAndBranchFields: Bool
+    /// When true, a Title text field is shown below the prompt (used for tab title).
+    let showTitleField: Bool
     /// When non-nil, a subtle auto-generate hint is shown near the description/branch fields.
     let autoGenerateHint: String?
     /// When Terminal is selected and the prompt field is empty, prefill with this value.
@@ -202,6 +204,7 @@ struct AgentLaunchSheetConfig {
         subtitle: String?,
         availableProjects: [Project] = [],
         showDescriptionAndBranchFields: Bool,
+        showTitleField: Bool = false,
         autoGenerateHint: String?,
         terminalInjectionPrefill: String?,
         agentContextPrefill: String?,
@@ -215,6 +218,7 @@ struct AgentLaunchSheetConfig {
         self.subtitle = subtitle
         self.availableProjects = availableProjects
         self.showDescriptionAndBranchFields = showDescriptionAndBranchFields
+        self.showTitleField = showTitleField
         self.autoGenerateHint = autoGenerateHint
         self.terminalInjectionPrefill = terminalInjectionPrefill
         self.agentContextPrefill = agentContextPrefill
@@ -228,6 +232,8 @@ struct AgentLaunchSheetResult {
     let prompt: String?
     let description: String?
     let branchName: String?
+    /// Custom tab title entered by the user. Non-nil only when `showTitleField` was true and the user typed a value.
+    let tabTitle: String?
     /// Temp file holding the submitted prompt for crash recovery.
     /// Exists only when `prompt` is non-nil; deleted once injection is confirmed.
     let pendingPromptFileURL: URL?
@@ -255,6 +261,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let promptTextView = NSTextView()
     private let descriptionField = NSTextField()
     private let branchField = NSTextField()
+    private let titleField = NSTextField()
     private let rememberCheckbox = NSButton(checkboxWithTitle: "Remember type selection", target: nil, action: nil)
     private let switchToNewThreadCheckbox = NSButton(checkboxWithTitle: "Switch to new thread", target: nil, action: nil)
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
@@ -502,6 +509,18 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let lineHeight = promptFont.ascender + abs(promptFont.descender) + promptFont.leading
         let promptHeight = max((lineHeight * 7) + 20, 130)
 
+        // Title field (for tab title)
+        var titleRow: NSStackView?
+        if config.showTitleField {
+            stack.setCustomSpacing(12, after: promptScrollView)
+
+            let tr = makeTextFieldRow(label: "Title", field: titleField, placeholder: "Optional")
+            stack.addArrangedSubview(tr)
+            titleRow = tr
+
+            promptTextView.nextKeyView = titleField
+        }
+
         // Description + Branch fields
         var descRow: NSStackView?
         var branchRow: NSStackView?
@@ -592,6 +611,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         ] + (contextChip.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
           + (projectPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
 
+        if let titleRow {
+            NSLayoutConstraint.activate([
+                titleRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            ])
+        }
         if let descRow, let branchRow {
             NSLayoutConstraint.activate([
                 descRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -924,6 +948,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let rawBranch = config.showDescriptionAndBranchFields
             ? branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
+        let rawTitle = config.showTitleField
+            ? titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            : ""
 
         AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
 
@@ -965,6 +992,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: nil,
                 branchName: nil,
+                tabTitle: rawTitle.isEmpty ? nil : rawTitle,
                 pendingPromptFileURL: pendingPromptFileURL,
                 selectedProject: selectedProject
             ))
@@ -975,6 +1003,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: rawDesc.isEmpty ? nil : rawDesc,
                 branchName: rawBranch.isEmpty ? nil : rawBranch,
+                tabTitle: rawTitle.isEmpty ? nil : rawTitle,
                 pendingPromptFileURL: pendingPromptFileURL,
                 selectedProject: selectedProject
             ))
