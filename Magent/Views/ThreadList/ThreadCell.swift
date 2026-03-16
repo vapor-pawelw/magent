@@ -152,14 +152,9 @@ final class ThreadCell: NSTableCellView {
         secondaryRow.spacing = 4
         secondaryRow.translatesAutoresizingMaskIntoConstraints = false
 
-        // PR row: spacer aligns it with the subtitle text (matching dirty-dot offset).
-        let prDotSpacer = NSView()
-        prDotSpacer.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            prDotSpacer.widthAnchor.constraint(equalToConstant: Self.dirtyDotSize),
-            prDotSpacer.heightAnchor.constraint(equalToConstant: Self.dirtyDotSize),
-        ])
-        let prRow = NSStackView(views: [prDotSpacer, prSubtitle])
+        // PR row: no spacer — secondary dot detaches when hidden, so aligning via spacer
+        // would indent PR text relative to the branch/worktree line above it.
+        let prRow = NSStackView(views: [prSubtitle])
         prRow.orientation = .horizontal
         prRow.alignment = .centerY
         prRow.spacing = 4
@@ -453,7 +448,7 @@ final class ThreadCell: NSTableCellView {
         // Secondary line 2 (PR row): always on its own line when present.
         if let prLabel = prDisplayLabel {
             prSubtitleLabel?.stringValue = prLabel
-            prSubtitleLabel?.textColor = .secondaryLabelColor
+            prSubtitleLabel?.textColor = .controlAccentColor
             prSubtitleLabel?.isHidden = false
         } else {
             prSubtitleLabel?.stringValue = ""
