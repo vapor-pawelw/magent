@@ -164,12 +164,7 @@ extension ThreadManager {
             delegate?.threadManager(self, didUpdateThreads: threads)
             // Register cleanup before injectAfterStart fires magentAgentKeysInjected,
             // preventing the notification from racing past the listener setup.
-            if let pendingPromptFileURL {
-                PendingInitialPromptStore.clearAfterInjection(
-                    fileURL: pendingPromptFileURL,
-                    sessionName: tmuxSessionName
-                )
-            }
+            registerPendingPromptCleanup(fileURL: pendingPromptFileURL, sessionName: tmuxSessionName)
         }
 
         // Inject terminal command (always) and agent context (only for agent tabs)

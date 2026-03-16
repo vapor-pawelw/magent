@@ -1,7 +1,7 @@
 import Cocoa
 import MagentCore
 
-enum AgentLaunchPromptDraftScope {
+enum AgentLaunchPromptDraftScope: Equatable {
     case newThread(projectId: UUID)
     case newTab(threadId: UUID)
 
@@ -946,7 +946,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         // Also clear the original scope in case the project picker changed it mid-edit,
         // so the original project's draft doesn't show stale submitted text.
         AgentLaunchPromptDraftStore.clearAll(for: currentDraftScope)
-        if currentDraftScope.storageKey != config.draftScope.storageKey {
+        if currentDraftScope != config.draftScope {
             AgentLaunchPromptDraftStore.clearAll(for: config.draftScope)
         }
 

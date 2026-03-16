@@ -99,6 +99,12 @@ extension ThreadManager {
         return command
     }
 
+    @MainActor
+    func registerPendingPromptCleanup(fileURL: URL?, sessionName: String) {
+        guard let fileURL else { return }
+        PendingInitialPromptStore.clearAfterInjection(fileURL: fileURL, sessionName: sessionName)
+    }
+
     func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil, shouldSubmitInitialPrompt: Bool = true, agentType: AgentType? = nil) {
         let hasPrompt = shouldSubmitInitialPrompt && initialPrompt != nil && !initialPrompt!.isEmpty
         guard !terminalCommand.isEmpty || !agentContext.isEmpty || hasPrompt else { return }
