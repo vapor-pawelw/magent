@@ -194,6 +194,10 @@ struct AgentLaunchSheetConfig {
     let agentContextPrefill: String?
     /// When non-nil, the sheet opens pre-populated with recovered content instead of the saved draft.
     let recoveryPrefill: AgentLaunchSheetPrefill?
+    /// Per-project visible sections — when non-empty, a Section picker is shown for `newThread` scope.
+    let sectionsByProjectId: [UUID: [ThreadSection]]
+    /// Per-project default section ID — used to pre-select the section picker.
+    let defaultSectionIdByProjectId: [UUID: UUID]
 
     init(
         title: String,
@@ -208,7 +212,9 @@ struct AgentLaunchSheetConfig {
         autoGenerateHint: String?,
         terminalInjectionPrefill: String?,
         agentContextPrefill: String?,
-        recoveryPrefill: AgentLaunchSheetPrefill? = nil
+        recoveryPrefill: AgentLaunchSheetPrefill? = nil,
+        sectionsByProjectId: [UUID: [ThreadSection]] = [:],
+        defaultSectionIdByProjectId: [UUID: UUID] = [:]
     ) {
         self.title = title
         self.acceptButtonTitle = acceptButtonTitle
@@ -223,6 +229,8 @@ struct AgentLaunchSheetConfig {
         self.terminalInjectionPrefill = terminalInjectionPrefill
         self.agentContextPrefill = agentContextPrefill
         self.recoveryPrefill = recoveryPrefill
+        self.sectionsByProjectId = sectionsByProjectId
+        self.defaultSectionIdByProjectId = defaultSectionIdByProjectId
     }
 }
 
@@ -239,6 +247,8 @@ struct AgentLaunchSheetResult {
     let pendingPromptFileURL: URL?
     /// The project selected by the user. Non-nil when the project picker was shown.
     let selectedProject: Project?
+    /// The section selected by the user. Non-nil when the section picker was shown.
+    let selectedSectionId: UUID?
 }
 
 /// A rounded chip view that shows accent-tinted background, adapting correctly to light/dark mode.
@@ -281,6 +291,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private var projectPicker: NSPopUpButton?
     /// Draft scope that tracks the currently selected project; starts as config.draftScope.
     private var currentDraftScope: AgentLaunchPromptDraftScope
+
+    // Section picker — present when the current project has sections enabled.
+    private let sectionPicker = NSPopUpButton()
+    private var sectionPickerItems: [ThreadSection] = []
+    private var sectionPickerRow: NSView?
 
     private enum PickerItem {
         case agent(AgentType, isDefault: Bool)
@@ -453,14 +468,14 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             contextChip = chip
         }
 
-        // "All fields optional" prominent notice
-        let optionalNotice = makeNoticeBox(
-            icon: "info.circle.fill",
-            text: "All fields are optional — you can start the session and add them later.",
-            color: .systemBlue
-        )
-        stack.addArrangedSubview(optionalNotice)
-        stack.setCustomSpacing(12, after: optionalNotice)
+        // Section picker — shown for newThread when the project has sections enabled.
+        if case .newThread(let projectId) = config.draftScope {
+            let row = makeSectionPickerRow()
+            stack.addArrangedSubview(row)
+            stack.setCustomSpacing(10, after: row)
+            sectionPickerRow = row
+            populateSectionPicker(for: projectId)
+        }
 
         // Agent picker row
         let agentRow = NSStackView()
@@ -549,6 +564,16 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             }
         }
 
+        // "All fields optional" prominent notice — placed just above the checkboxes.
+        let optionalNotice = makeNoticeBox(
+            icon: "info.circle.fill",
+            text: "All fields are optional — you can start the session and add them later.",
+            color: .systemBlue
+        )
+        stack.setCustomSpacing(12, after: stack.arrangedSubviews.last ?? promptScrollView)
+        stack.addArrangedSubview(optionalNotice)
+        stack.setCustomSpacing(10, after: optionalNotice)
+
         // Remember type selection checkbox
         rememberCheckbox.target = self
         rememberCheckbox.action = #selector(rememberCheckboxToggled)
@@ -609,7 +634,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             optionalNotice.widthAnchor.constraint(equalTo: stack.widthAnchor),
             buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ] + (contextChip.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
-          + (projectPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
+          + (projectPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
+          + (sectionPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
 
         if let titleRow {
             NSLayoutConstraint.activate([
@@ -769,6 +795,41 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         // projects neither persists the current content to the old project nor overwrites
         // the prompt with the new project's saved draft. Whatever is in the field stays.
         currentDraftScope = newScope
+        populateSectionPicker(for: newProject.id)
+        resizeWindowToFitContent()
+    }
+
+    private func makeSectionPickerRow() -> NSStackView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = makeFormLabel("Section")
+        row.addArrangedSubview(label)
+
+        sectionPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        row.addArrangedSubview(sectionPicker)
+
+        return row
+    }
+
+    private func populateSectionPicker(for projectId: UUID) {
+        sectionPicker.removeAllItems()
+        sectionPickerItems = config.sectionsByProjectId[projectId] ?? []
+        sectionPickerRow?.isHidden = sectionPickerItems.isEmpty
+
+        for (i, section) in sectionPickerItems.enumerated() {
+            sectionPicker.addItem(withTitle: section.name)
+            sectionPicker.lastItem?.tag = i
+            sectionPicker.lastItem?.image = colorDotImage(color: section.color, size: 10)
+        }
+
+        let defaultId = config.defaultSectionIdByProjectId[projectId]
+        if let defaultId, let idx = sectionPickerItems.firstIndex(where: { $0.id == defaultId }) {
+            sectionPicker.selectItem(at: idx)
+        }
     }
 
     private func makeNoticeBox(icon symbolName: String, text: String, color: NSColor) -> NSView {
@@ -984,6 +1045,13 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             return projectPickerItems[idx]
         }()
 
+        let selectedSectionId: UUID? = {
+            guard !sectionPickerItems.isEmpty else { return nil }
+            let tag = sectionPicker.selectedItem?.tag ?? 0
+            guard tag >= 0, tag < sectionPickerItems.count else { return nil }
+            return sectionPickerItems[tag].id
+        }()
+
         switch item {
         case .terminal:
             finish(with: AgentLaunchSheetResult(
@@ -994,7 +1062,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 branchName: nil,
                 tabTitle: rawTitle.isEmpty ? nil : rawTitle,
                 pendingPromptFileURL: pendingPromptFileURL,
-                selectedProject: selectedProject
+                selectedProject: selectedProject,
+                selectedSectionId: selectedSectionId
             ))
         case .agent(let type, _):
             finish(with: AgentLaunchSheetResult(
@@ -1005,7 +1074,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 branchName: rawBranch.isEmpty ? nil : rawBranch,
                 tabTitle: rawTitle.isEmpty ? nil : rawTitle,
                 pendingPromptFileURL: pendingPromptFileURL,
-                selectedProject: selectedProject
+                selectedProject: selectedProject,
+                selectedSectionId: selectedSectionId
             ))
         }
     }

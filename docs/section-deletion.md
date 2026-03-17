@@ -32,6 +32,30 @@
 
 ---
 
+## Section Assignment at Thread Creation
+
+### User-Facing Behavior
+
+- The "New Thread" sheet includes a **Section picker** row (same label+popup style as the Project picker), shown whenever the target project has sections enabled and at least one visible section.
+- The picker pre-selects the project's **default section** (resolved via `AppSettings.defaultSection(for:)` — project override → inherited global default → first visible section).
+- Each item shows a **colored dot** (10 pt circle, using `colorDotImage`) to the left of the section name, matching the dot appearance in sidebar section headers.
+- When the **Project picker** changes, the Section picker rebuilds immediately to show the correct sections for the newly selected project, and hides if that project has sections disabled.
+- If sections are disabled for a project (`shouldUseThreadSections` returns false) or the project has no visible sections, the Section picker row is hidden entirely.
+
+### Implementation Notes
+
+- `AgentLaunchSheetConfig` carries `sectionsByProjectId: [UUID: [ThreadSection]]` and `defaultSectionIdByProjectId: [UUID: UUID]`, populated in `presentNewThreadSheet` by iterating `settings.projects`.
+- `AgentLaunchSheetResult` carries `selectedSectionId: UUID?`.
+- `populateSectionPicker(for:)` rebuilds picker items and toggles `sectionPickerRow?.isHidden` based on whether the project has entries in `sectionsByProjectId`.
+- The selected section ID flows through `ThreadListViewController.createThread(requestedSectionId:)` → `ThreadManager.createThread(requestedSectionId:)`, where it overrides `settings.defaultSection(for:)` for both the pending thread (phase 1) and the final thread (phase 2).
+
+### Gotchas
+
+- `section.color` is `@MainActor` on `ThreadSection`. Calling it from AppKit UI setup (which always runs on the main thread) is safe, but care must be taken if this code is ever moved to a background context.
+- The section picker row is created unconditionally during `setupUI` for `newThread` scope, then hidden/shown by `populateSectionPicker`. This means the row exists in the stack even when empty — always check `sectionPickerRow?.isHidden` state rather than whether the view is in the stack.
+
+---
+
 ## Adding & Color
 
 ### User-Facing Behavior

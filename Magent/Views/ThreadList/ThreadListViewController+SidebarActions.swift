@@ -223,6 +223,22 @@ extension ThreadListViewController {
         }()
 
         let injection = threadManager.effectiveInjection(for: project.id)
+
+        // Build per-project section data for the section picker.
+        var sectionsByProjectId: [UUID: [ThreadSection]] = [:]
+        var defaultSectionIdByProjectId: [UUID: UUID] = [:]
+        for p in settings.projects {
+            if settings.shouldUseThreadSections(for: p.id) {
+                let visible = settings.visibleSections(for: p.id)
+                if !visible.isEmpty {
+                    sectionsByProjectId[p.id] = visible
+                }
+            }
+            if let defaultId = settings.defaultSection(for: p.id)?.id {
+                defaultSectionIdByProjectId[p.id] = defaultId
+            }
+        }
+
         let config = AgentLaunchSheetConfig(
             title: "New Thread",
             acceptButtonTitle: "Create Thread",
@@ -234,7 +250,9 @@ extension ThreadListViewController {
             showDescriptionAndBranchFields: true,
             autoGenerateHint: autoGenerateHint,
             terminalInjectionPrefill: injection.terminalCommand.isEmpty ? nil : injection.terminalCommand,
-            agentContextPrefill: injection.agentContext.isEmpty ? nil : injection.agentContext
+            agentContextPrefill: injection.agentContext.isEmpty ? nil : injection.agentContext,
+            sectionsByProjectId: sectionsByProjectId,
+            defaultSectionIdByProjectId: defaultSectionIdByProjectId
         )
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in
@@ -249,7 +267,8 @@ extension ThreadListViewController {
                 shouldSubmitInitialPrompt: true,
                 taskDescription: result.description,
                 requestedBranchName: result.branchName,
-                pendingPromptFileURL: result.pendingPromptFileURL
+                pendingPromptFileURL: result.pendingPromptFileURL,
+                requestedSectionId: result.selectedSectionId
             )
         }
     }
@@ -323,7 +342,8 @@ extension ThreadListViewController {
         shouldSubmitInitialPrompt: Bool = true,
         taskDescription: String? = nil,
         requestedBranchName: String? = nil,
-        pendingPromptFileURL: URL? = nil
+        pendingPromptFileURL: URL? = nil,
+        requestedSectionId: UUID? = nil
     ) {
         isCreatingThread = true
         reloadData()
@@ -337,7 +357,8 @@ extension ThreadListViewController {
                     initialPrompt: initialPrompt,
                     requestedName: requestedBranchName,
                     requestedBaseBranch: baseBranch,
-                    pendingPromptFileURL: pendingPromptFileURL
+                    pendingPromptFileURL: pendingPromptFileURL,
+                    requestedSectionId: requestedSectionId
                 )
                 await MainActor.run {
                     self.isCreatingThread = false

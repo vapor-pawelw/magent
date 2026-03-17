@@ -15,7 +15,8 @@ extension ThreadManager {
         initialPrompt: String? = nil,
         requestedName: String? = nil,
         requestedBaseBranch: String? = nil,
-        pendingPromptFileURL: URL? = nil
+        pendingPromptFileURL: URL? = nil,
+        requestedSectionId: UUID? = nil
     ) async throws -> MagentThread {
         var name = ""
         var foundUnique = false
@@ -88,7 +89,7 @@ extension ThreadManager {
             worktreePath: worktreePath,
             branchName: branchName,
             tmuxSessionNames: [],
-            sectionId: settings.defaultSection(for: project.id)?.id
+            sectionId: requestedSectionId ?? settings.defaultSection(for: project.id)?.id
         )
         pendingThreadIds.insert(threadID)
         threads.append(pendingThread)
@@ -208,7 +209,7 @@ extension ThreadManager {
                 tmuxSessionNames: [tmuxSessionName],
                 agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
                 sessionAgentTypes: selectedAgentType.map { [tmuxSessionName: $0] } ?? [:],
-                sectionId: settings.defaultSection(for: project.id)?.id,
+                sectionId: requestedSectionId ?? settings.defaultSection(for: project.id)?.id,
                 lastSelectedTmuxSessionName: tmuxSessionName,
                 customTabNames: [tmuxSessionName: firstTabDisplayName],
                 baseBranch: baseBranch,
