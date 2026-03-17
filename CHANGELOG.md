@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - CLI docs now explicitly instruct agents to always provide `--description` and `--prompt` when creating threads for specific tasks, so new threads get proper sidebar descriptions and the spawned agent receives its initial instructions.
 
 ### Thread
+- The resync button (↺) now shows a menu to choose sync direction: "Project → Worktree" copies files from the main repo into the worktree; "Worktree → Project" pushes changes back to the main repo. A spinner replaces the button while sync is in progress.
 - Fixed: the New Tab sheet subtitle now shows "Thread: Main" for the main project thread instead of "Thread:" with no label.
 - The "New Thread" sheet now includes a Section picker, pre-selected to the project's default section. The picker shows each section's color dot, matching how sections appear in the sidebar. Different projects can have different section settings. The "All fields are optional" hint has moved below the form fields, just above the checkboxes.
 - Fixed: initial prompt sometimes silently lost when opening a new tab — the text never appeared in the agent input. Root cause was a tmux paste-buffer race where concurrent buffer operations could collide on the global default buffer. Now uses named buffers. Also shows a warning banner with Retry if paste fails, instead of swallowing the error.

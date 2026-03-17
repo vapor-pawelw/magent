@@ -30,17 +30,30 @@ The thread also stores a snapshot of that normalized path list at creation time.
 - Directory entries are materialized as directories during sync-in, including empty folders and trees that only contain empty subdirectories
 - If sync-in fails, thread creation rolls back by removing the newly created worktree
 
-## Manual Resync Into Thread
+## Manual Resync
 
-Non-main threads expose a top-bar `Resync Local Sync Paths` action that copies the thread's eligible local sync paths from the main repo worktree into the thread again. The button is hidden when the project has no Local Sync Paths configured (it re-evaluates whenever settings change, so it appears automatically after paths are added).
+Non-main threads expose a top-bar resync button (↺) that, when clicked, shows a direction menu:
 
-- Uses the thread's snapshotted path list, filtered to paths that are still configured on the project
+- **Project → Worktree**: copies the thread's eligible local sync paths from the main repo worktree into the thread (was the only available direction before)
+- **Worktree → Project**: pushes local sync paths from the thread worktree back to the main repo (same merge logic as archive sync-back, but on demand)
+
+The button is hidden when the project has no Local Sync Paths configured (re-evaluates when settings change, so it appears automatically after paths are added). While sync is running the button is replaced by a spinner; it returns when the operation completes.
+
+### Project → Worktree
+
+- Uses the thread's snapshotted path list, filtered to paths still configured on the project
 - Prompts before overwriting conflicting files/directories already present in the thread worktree
 - Supports `Override`, `Override All`, `Ignore`, and `Cancel`
 - Shows a warning banner with missing repo-relative source paths instead of failing the resync
 - Materializes directory entries in the thread worktree, including empty directories
-- Uses the same `Override` / `Ignore` / `Cancel` conflict prompt style as archive
-- Holding Option changes `Override` to `Override All` and `Ignore` to `Ignore All` for the rest of that resync
+- Holding Option changes `Override` to `Override All` and `Ignore` to `Ignore All` for the rest of that run
+
+### Worktree → Project
+
+- Uses the same snapshotted+filtered path list as the Project → Worktree direction
+- Files unchanged in the thread since the last baseline (set at creation or last Project → Worktree sync) are skipped
+- Prompts before overwriting conflicting files/directories in the main repo (same conflict UX as archive)
+- Additive and non-destructive: intermediate directories created only when a file is actually copied; never deletes destination files absent in the thread
 
 ## Archive Behavior
 

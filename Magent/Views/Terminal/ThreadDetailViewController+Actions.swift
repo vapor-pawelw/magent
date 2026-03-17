@@ -90,6 +90,28 @@ extension ThreadDetailViewController {
 
     @objc func resyncLocalPathsTapped() {
         guard !thread.isMain else { return }
+        guard let event = NSApp.currentEvent else { return }
+
+        let menu = NSMenu()
+        let intoWorktreeItem = NSMenuItem(
+            title: "Project → Worktree",
+            action: #selector(resyncProjectIntoWorktreeTapped),
+            keyEquivalent: ""
+        )
+        intoWorktreeItem.target = self
+        let intoRepoItem = NSMenuItem(
+            title: "Worktree → Project",
+            action: #selector(resyncWorktreeIntoProjectTapped),
+            keyEquivalent: ""
+        )
+        intoRepoItem.target = self
+        menu.addItem(intoWorktreeItem)
+        menu.addItem(intoRepoItem)
+        NSMenu.popUpContextMenu(menu, with: event, for: resyncLocalPathsButton)
+    }
+
+    @objc private func resyncProjectIntoWorktreeTapped() {
+        guard !thread.isMain else { return }
 
         let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
         let settings = PersistenceService.shared.loadSettings()
@@ -104,7 +126,9 @@ extension ThreadDetailViewController {
             return
         }
 
+        startResyncSpinner()
         Task {
+            defer { Task { @MainActor in self.stopResyncSpinner() } }
             do {
                 let missingPaths = try await self.threadManager.syncConfiguredLocalPathsIntoWorktree(
                     project: project,
@@ -142,6 +166,63 @@ extension ThreadDetailViewController {
                 }
             }
         }
+    }
+
+    @objc private func resyncWorktreeIntoProjectTapped() {
+        guard !thread.isMain else { return }
+
+        let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let settings = PersistenceService.shared.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else {
+            BannerManager.shared.show(message: "Could not find the project for this thread.", style: .error)
+            return
+        }
+
+        let syncPaths = threadManager.effectiveLocalSyncPaths(for: currentThread, project: project)
+        guard !syncPaths.isEmpty else {
+            BannerManager.shared.show(message: "No Local Sync Paths are configured for this thread.", style: .warning)
+            return
+        }
+
+        startResyncSpinner()
+        Task {
+            defer { Task { @MainActor in self.stopResyncSpinner() } }
+            do {
+                try await self.threadManager.syncConfiguredLocalPathsFromWorktree(
+                    project: project,
+                    worktreePath: currentThread.worktreePath,
+                    syncPaths: syncPaths,
+                    promptForConflicts: true
+                )
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: "Local Sync Paths pushed back to the main repo.",
+                        style: .info
+                    )
+                }
+            } catch ThreadManagerError.archiveCancelled {
+                return
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: "Failed to sync Local Sync Paths to main repo: \(error.localizedDescription)",
+                        style: .error
+                    )
+                }
+            }
+        }
+    }
+
+    private func startResyncSpinner() {
+        resyncLocalPathsButton.isHidden = true
+        resyncLocalPathsSpinner.isHidden = false
+        resyncLocalPathsSpinner.startAnimation(nil)
+    }
+
+    private func stopResyncSpinner() {
+        resyncLocalPathsSpinner.stopAnimation(nil)
+        resyncLocalPathsSpinner.isHidden = true
+        resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
     }
 
     @objc func addTabTapped() {

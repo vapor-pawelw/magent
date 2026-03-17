@@ -46,6 +46,7 @@ final class ThreadDetailViewController: NSViewController {
     let openInXcodeButton = NSButton()
     let openInFinderButton = NSButton()
     let resyncLocalPathsButton = NSButton()
+    let resyncLocalPathsSpinner = NSProgressIndicator()
     let archiveThreadButton = NSButton()
     let reviewButton = NSButton()
     let exportContextButton = NSButton()
@@ -320,8 +321,15 @@ final class ThreadDetailViewController: NSViewController {
         resyncLocalPathsButton.imageScaling = .scaleProportionallyDown
         resyncLocalPathsButton.target = self
         resyncLocalPathsButton.action = #selector(resyncLocalPathsTapped)
-        resyncLocalPathsButton.toolTip = "Resync Local Sync Paths from the main repo"
+        resyncLocalPathsButton.toolTip = "Resync Local Sync Paths"
         resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
+
+
+        resyncLocalPathsSpinner.style = .spinning
+        resyncLocalPathsSpinner.controlSize = .small
+        resyncLocalPathsSpinner.isDisplayedWhenStopped = false
+        resyncLocalPathsSpinner.translatesAutoresizingMaskIntoConstraints = false
+        resyncLocalPathsSpinner.isHidden = resyncLocalPathsButtonShouldBeHidden()
 
         archiveThreadButton.bezelStyle = .texturedRounded
         archiveThreadButton.image = NSImage(
@@ -371,7 +379,7 @@ final class ThreadDetailViewController: NSViewController {
         topBar.spacing = 8
         topBar.alignment = .centerY
         topBar.translatesAutoresizingMaskIntoConstraints = false
-        for view in [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, resyncLocalPathsButton, separator, archiveThreadButton] {
+        for view in [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, resyncLocalPathsButton, resyncLocalPathsSpinner, separator, archiveThreadButton] {
             topBar.addArrangedSubview(view)
         }
 
@@ -819,7 +827,9 @@ final class ThreadDetailViewController: NSViewController {
             )
             reloadTerminalViewsForUpdatedTerminalPreferences()
         }
-        resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
+        let resyncHidden = resyncLocalPathsButtonShouldBeHidden()
+        resyncLocalPathsButton.isHidden = resyncHidden
+        if resyncHidden { resyncLocalPathsSpinner.isHidden = true }
         refreshOverlayVisibilitySettings()
         updateTerminalScrollControlsState()
     }
@@ -841,7 +851,7 @@ final class ThreadDetailViewController: NSViewController {
         }
     }
 
-    private func resyncLocalPathsButtonShouldBeHidden() -> Bool {
+    func resyncLocalPathsButtonShouldBeHidden() -> Bool {
         guard !thread.isMain else { return true }
         let settings = PersistenceService.shared.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })
