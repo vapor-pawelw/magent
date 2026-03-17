@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Agents
+- CLI docs now explicitly instruct agents to always provide `--description` and `--prompt` when creating threads for specific tasks, so new threads get proper sidebar descriptions and the spawned agent receives its initial instructions.
+
 ### Thread
 - The "New Thread" sheet now includes a Section picker, pre-selected to the project's default section. The picker shows each section's color dot, matching how sections appear in the sidebar. Different projects can have different section settings. The "All fields are optional" hint has moved below the form fields, just above the checkboxes.
 - Fixed: the "Rename branch" dialog now pre-fills with the current branch name instead of the worktree name.
