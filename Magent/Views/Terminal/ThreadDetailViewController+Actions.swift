@@ -224,11 +224,11 @@ extension ThreadDetailViewController {
                     tabNameSuffix: tabNameSuffix,
                     pendingPromptFileURL: pendingPromptFileURL
                 )
-                let latestThread = self.threadManager.threads.first(where: { $0.id == self.thread.id }) ?? self.thread
-                _ = await self.threadManager.recreateSessionIfNeeded(
-                    sessionName: tab.tmuxSessionName,
-                    thread: latestThread
-                )
+                // Skip recreateSessionIfNeeded — the session was just created by addTab().
+                // Calling it here risks a race: the pane path check can fail during shell
+                // startup (before ZDOTDIR cd completes), causing the session to be killed
+                // and recreated without the initial prompt. Bell monitoring is set up
+                // separately by createSession → configureBellMonitoring.
                 await MainActor.run {
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated

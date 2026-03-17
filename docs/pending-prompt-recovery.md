@@ -15,6 +15,14 @@ When the user submits the New Thread or New Tab sheet, their prompt is written t
 
 `registerPendingPromptCleanup` **must** be called inside the `MainActor.run` block that precedes `injectAfterStart`. This guarantees the listener is set up before the background injection task can post `magentAgentKeysInjected`. Registering it after `createThread`/`addTab` returns is too late — injection can complete before the caller resumes on the main thread.
 
+## Injection Failure Handling
+
+If `sendText` fails (e.g., tmux session died between readiness check and paste), `injectAfterStart` does **not** post `magentAgentKeysInjected`. This means the recovery file is intentionally preserved (same pattern as interactive shell blockers). A persistent warning banner with a **Retry** button is shown so the user can re-attempt injection after resolving the issue.
+
+### Named tmux buffers
+
+`TmuxService.sendText` uses a unique named tmux buffer (`-b magent-<uuid>`) for each paste operation rather than the global default buffer. This prevents a race condition where concurrent `load-buffer`/`paste-buffer` calls (e.g., two tabs injecting simultaneously) could collide and silently drop one paste.
+
 ## Recovery on Launch
 
 `ThreadListViewController.checkForPendingPromptRecovery()` runs once in `viewDidLoad`. It scans `/tmp` for leftover `magent-pending-prompt-*.json` files and shows a dismissible warning banner for each, offering "Reopen" (re-opens the sheet pre-filled) or "Discard" (deletes the file).

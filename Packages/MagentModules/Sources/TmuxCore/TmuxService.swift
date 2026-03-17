@@ -494,15 +494,19 @@ public final class TmuxService: Sendable {
     }
 
     /// Sends text without pressing Enter — use `sendEnter` separately to submit.
+    /// Uses a named tmux buffer to avoid races with concurrent load-buffer/paste-buffer
+    /// calls that would otherwise collide on the global default buffer.
     public func sendText(sessionName: String, text: String) async throws {
+        let bufferId = UUID().uuidString
         let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("magent-tmux-buffer-\(UUID().uuidString).txt")
+            .appendingPathComponent("magent-tmux-buffer-\(bufferId).txt")
         try text.write(to: tempURL, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tempURL) }
+        let bufferName = "magent-\(bufferId)"
 
         _ = try await ShellExecutor.run(
-            "tmux load-buffer \(shellQuote(tempURL.path)); " +
-            "tmux paste-buffer -d -t \(shellQuote(sessionName))"
+            "tmux load-buffer -b \(shellQuote(bufferName)) \(shellQuote(tempURL.path)); " +
+            "tmux paste-buffer -d -b \(shellQuote(bufferName)) -t \(shellQuote(sessionName))"
         )
     }
 

@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - The "New Thread" sheet now includes a Section picker, pre-selected to the project's default section. The picker shows each section's color dot, matching how sections appear in the sidebar. Different projects can have different section settings. The "All fields are optional" hint has moved below the form fields, just above the checkboxes.
+- Fixed: initial prompt sometimes silently lost when opening a new tab — the text never appeared in the agent input. Root cause was a tmux paste-buffer race where concurrent buffer operations could collide on the global default buffer. Now uses named buffers. Also shows a warning banner with Retry if paste fails, instead of swallowing the error.
 - Fixed: the "Rename branch" dialog now pre-fills with the current branch name instead of the worktree name.
 - Fixed: multi-line prompts are now captured in full in the Prompt TOC and used in full for auto-rename. Previously only the first line was captured because continuation lines are ANSI-styled by Claude's TUI and blank paragraph separators broke the collection loop.
 - Fixed: "Rename thread from this prompt" (TOC right-click, thread context menu, and CLI `rename-thread`) now works on context-setting prompts that auto-rename would classify as questions (e.g. "You're working on branch X"). Explicit rename actions always generate a name.

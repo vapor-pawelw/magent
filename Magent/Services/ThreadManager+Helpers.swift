@@ -108,6 +108,7 @@ extension ThreadManager {
     func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil, shouldSubmitInitialPrompt: Bool = true, agentType: AgentType? = nil) {
         let hasPrompt = shouldSubmitInitialPrompt && initialPrompt != nil && !initialPrompt!.isEmpty
         guard !terminalCommand.isEmpty || !agentContext.isEmpty || hasPrompt else { return }
+        NSLog("[injectAfterStart] session=\(sessionName) hasPrompt=\(hasPrompt) hasTermCmd=\(!terminalCommand.isEmpty) agentType=\(agentType?.rawValue ?? "nil")")
         Task {
             // Wait for tmux session to start
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -161,8 +162,35 @@ extension ThreadManager {
                 // Poll until the pasted text is visible in the pane instead of using a
                 // fixed sleep, so Enter only arrives after the TUI event loop has fully
                 // consumed the paste. Falls back gracefully on timeout.
-                try? await tmux.sendText(sessionName: sessionName, text: initialPrompt!)
-                _ = await waitForPromptToAppear(sessionName: sessionName, prompt: initialPrompt!)
+                do {
+                    try await tmux.sendText(sessionName: sessionName, text: initialPrompt!)
+                } catch {
+                    NSLog("[injectAfterStart] sendText failed for session \(sessionName): \(error)")
+                    let prompt = initialPrompt!
+                    await MainActor.run {
+                        BannerManager.shared.show(
+                            message: "Initial prompt not sent — failed to paste into terminal.",
+                            style: .warning,
+                            duration: nil,
+                            isDismissible: true,
+                            actions: [BannerAction(title: "Retry") { [weak self] in
+                                self?.injectAfterStart(
+                                    sessionName: sessionName,
+                                    terminalCommand: "",
+                                    agentContext: agentContext,
+                                    initialPrompt: prompt,
+                                    shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                                    agentType: agentType
+                                )
+                            }]
+                        )
+                    }
+                    return
+                }
+                let appeared = await waitForPromptToAppear(sessionName: sessionName, prompt: initialPrompt!)
+                if !appeared {
+                    NSLog("[injectAfterStart] prompt fingerprint not found in pane for session \(sessionName) — sending Enter anyway")
+                }
                 try? await tmux.sendEnter(sessionName: sessionName)
                 NotificationCenter.default.post(
                     name: .magentAgentKeysInjected,
