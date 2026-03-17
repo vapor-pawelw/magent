@@ -5,7 +5,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v21"
+    private static let cliVersion = "magent-cli-v23"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -181,13 +181,7 @@ actor IPCSocketServer {
             have_cmd jq || die "jq is required for this command."
         }
 
-        can_use_fzf() {
-            have_cmd fzf || return 1
-            [ "${MAGENT_USE_PLAIN_MENU:-0}" != "1" ] || return 1
-            [ "${TERM:-}" != "dumb" ] || return 1
-            [ -z "${SSH_CONNECTION:-}" ] || [ "${MAGENT_USE_FZF_OVER_SSH:-0}" = "1" ] || return 1
-            return 0
-        }
+
 
         can_use_color() {
             [ "${MAGENT_USE_COLOR:-1}" != "0" ] || return 1
@@ -233,6 +227,19 @@ actor IPCSocketServer {
                 printf '%s%s%s' "$paint_color" "$*" "$ANSI_RESET"
             else
                 printf '%s' "$*"
+            fi
+        }
+
+        paint_hex() {
+            ph_hex=$(printf '%s' "$1" | sed 's/^#//')
+            ph_text="$2"
+            if [ -n "$ANSI_RESET" ] && [ "${#ph_hex}" -ge 6 ]; then
+                ph_r=$(printf '%d' "0x$(printf '%.2s' "$ph_hex")")
+                ph_g=$(printf '%d' "0x$(printf '%.2s' "${ph_hex#??}")")
+                ph_b=$(printf '%d' "0x$(printf '%.2s' "${ph_hex#????}")")
+                printf '\033[38;2;%d;%d;%dm%s%s' "$ph_r" "$ph_g" "$ph_b" "$ph_text" "$ANSI_RESET"
+            else
+                printf '%s' "$ph_text"
             fi
         }
 
@@ -357,40 +364,32 @@ actor IPCSocketServer {
             fi
 
             picker_choice=""
-            if can_use_fzf; then
-                picker_fzf_color=""
-                if can_use_color; then
-                    picker_fzf_color="--ansi --color=fg:#ffffff,fg+:#ffffff,bg+:-1,hl:#7ee787,hl+:#7ee787,info:#7aa2f7,prompt:#7ee787,pointer:#7ee787,marker:#7ee787,spinner:#7ee787,border:#5c6370,separator:#5c6370"
-                fi
-                picker_selected=$(awk -F '\037' '{
-                    label = $2
-                    if (NF >= 3 && $3 != "") {
-                        label = label "  |  " $3
+            awk -F '\037' '
+                BEGIN { n = 0 }
+                {
+                    if ($1 ~ /^__section__/) {
+                        printf "\n  %s\n", $2
+                    } else {
+                        n++
+                        printf "%3d) %s\n", n, $2
+                        if (NF >= 3 && $3 != "") {
+                            printf "     %s\n", $3
+                        }
+                        printf "\n"
                     }
-                    printf "%s\t%s\n", label, $1
-                }' "$picker_tmp" \
-                    | env -u FZF_DEFAULT_OPTS -u FZF_DEFAULT_COMMAND fzf $picker_fzf_color --delimiter="$(printf '\t')" --with-nth=1 --prompt="$picker_prompt> " --height=40% --layout=reverse --border)
-                picker_status=$?
-                if [ "$picker_status" -eq 0 ]; then
-                    picker_choice=$(printf '%s' "$picker_selected" | awk -F '\t' '{print $NF}')
-                fi
-            fi
-
-            if [ -z "$picker_choice" ] && ! can_use_fzf; then
-                awk -F '\037' '{
-                    printf "%3d) %s\n", NR, $2
-                    if (NF >= 3 && $3 != "") {
-                        printf "     %s\n", $3
-                    }
-                    printf "\n"
-                }' "$picker_tmp" >/dev/tty
-                printf '%s> ' "$picker_prompt" >/dev/tty
-                IFS= read -r picker_idx </dev/tty || picker_idx=""
-                case "$picker_idx" in
-                    ''|*[!0-9]*) picker_choice="" ;;
-                    *) picker_choice=$(awk -F '\037' -v n="$picker_idx" 'NR == n { print $1 }' "$picker_tmp") ;;
-                esac
-            fi
+                }
+            ' "$picker_tmp" >/dev/tty
+            printf '%s> ' "$picker_prompt" >/dev/tty
+            IFS= read -r picker_idx </dev/tty || picker_idx=""
+            case "$picker_idx" in
+                ''|*[!0-9]*) picker_choice="" ;;
+                *) picker_choice=$(awk -F '\037' -v n="$picker_idx" '
+                    BEGIN { idx = 0 }
+                    $1 ~ /^__section__/ { next }
+                    { idx++ }
+                    idx == n { print $1; exit }
+                ' "$picker_tmp") ;;
+            esac
 
             rm -f "$picker_tmp"
             [ -n "$picker_choice" ] || return 1
@@ -419,41 +418,55 @@ actor IPCSocketServer {
 
         pick_thread_or_create() {
             project_name="$1"
-            thread_req="{$(json_kv command list-threads),$(json_kv project "$project_name")}"
+            thread_req="{$(json_kv command list-sections),$(json_kv project "$project_name")}"
             thread_resp=$(send_checked_request "$thread_req")
-            thread_lines=$(printf '%s' "$thread_resp" | jq -r '
-                .threads
-                | sort_by((if .isMain then 0 else 1 end), .name)
-                | .[]
-                | [
-                    .id,
-                    (if .isMain then "true" else "false" end),
-                    (if .isMain then "main" else (if (.taskDescription // "") != "" then .taskDescription else .name end) end),
-                    .name,
-                    (.status.branchName // "-"),
-                    (.worktreePath | split("/") | last),
-                    (.agentType // "terminal"),
-                    (if (.status.isBusy // false) then "true" else "false" end),
-                    (if (.status.isWaitingForInput // false) then "true" else "false" end),
-                    (if (.status.hasUnreadCompletion // false) then "true" else "false" end),
-                    (if (.status.isDirty // false) then "true" else "false" end),
-                    (if (.status.isBlockedByRateLimit // false) then "true" else "false" end),
-                    (if (.status.isFullyDelivered // false) then "true" else "false" end),
-                    (if (.status.isPinned // false) then "true" else "false" end),
-                    (if (.status.isSidebarHidden // false) then "true" else "false" end),
-                    (if (.status.hasBranchMismatch // false) then "true" else "false" end),
-                    (if (.status.jiraUnassigned // false) then "true" else "false" end)
-                ]
-                | @tsv
+            # Build a flat list: "S<TAB>SectionName" for headers, "T<TAB>id<TAB>..." for threads
+            thread_raw=$(printf '%s' "$thread_resp" | jq -r '
+                .sections[]
+                | . as $sec
+                | (.threads // []) as $threads
+                | if ($threads | length) == 0 then empty
+                  else
+                    (["S", $sec.name, ($sec.colorHex // "")] | @tsv),
+                    ($threads[] | [
+                        "T",
+                        .id,
+                        (if .isMain then "true" else "false" end),
+                        (if .isMain then "main" else (if (.taskDescription // "") != "" then .taskDescription else .name end) end),
+                        .name,
+                        (.status.branchName // "-"),
+                        (.worktreePath | split("/") | last),
+                        (.agentType // "terminal"),
+                        (if (.status.isBusy // false) then "true" else "false" end),
+                        (if (.status.isWaitingForInput // false) then "true" else "false" end),
+                        (if (.status.hasUnreadCompletion // false) then "true" else "false" end),
+                        (if (.status.isDirty // false) then "true" else "false" end),
+                        (if (.status.isBlockedByRateLimit // false) then "true" else "false" end),
+                        (if (.status.isFullyDelivered // false) then "true" else "false" end),
+                        (if (.status.isPinned // false) then "true" else "false" end),
+                        (if (.status.isSidebarHidden // false) then "true" else "false" end),
+                        (if (.status.hasBranchMismatch // false) then "true" else "false" end),
+                        (if (.status.jiraUnassigned // false) then "true" else "false" end)
+                    ] | @tsv)
+                  end
             ')
-            if [ -n "$thread_lines" ]; then
+            thread_lines=""
+            if [ -n "$thread_raw" ]; then
                 thread_tmp=$(mktemp 2>/dev/null || mktemp -t magent-thread-picker)
-                printf '%s\n' "$thread_lines" >"$thread_tmp"
-                thread_lines=$(while IFS="$(printf '\t')" read -r thread_id thread_is_main thread_title thread_name thread_branch thread_worktree thread_agent thread_busy thread_input thread_done thread_dirty thread_limited thread_delivered thread_pinned thread_hidden thread_mismatch thread_jira; do
-                    thread_badges=$(format_thread_badges "$thread_busy" "$thread_input" "$thread_done" "$thread_dirty" "$thread_limited" "$thread_delivered" "$thread_pinned" "$thread_hidden" "$thread_mismatch" "$thread_jira")
-                    thread_label=$(format_picker_title "$thread_is_main" "$thread_title")
-                    thread_detail=$(format_picker_detail "$thread_title" "$thread_name" "$thread_branch" "$thread_worktree" "$thread_agent" "$thread_badges")
-                    printf '%s%s%s%s%s\n' "$thread_id" "$SEP" "$thread_label" "$SEP" "$thread_detail"
+                printf '%s\n' "$thread_raw" >"$thread_tmp"
+                thread_lines=$(while IFS="$(printf '\t')" read -r row_type thread_id thread_is_main thread_title thread_name thread_branch thread_worktree thread_agent thread_busy thread_input thread_done thread_dirty thread_limited thread_delivered thread_pinned thread_hidden thread_mismatch thread_jira; do
+                    if [ "$row_type" = "S" ]; then
+                        section_color="$thread_is_main"
+                        section_bullet=$(paint_hex "$section_color" "●")
+                        section_name=$(printf '%s%s%s' "$ANSI_BOLD" "$(paint_hex "$section_color" "$thread_id")" "$ANSI_RESET")
+                        section_label="$section_bullet $section_name"
+                        printf '__section__%s%s%s%s\n' "$thread_id" "$SEP" "$section_label" "$SEP"
+                    else
+                        thread_badges=$(format_thread_badges "$thread_busy" "$thread_input" "$thread_done" "$thread_dirty" "$thread_limited" "$thread_delivered" "$thread_pinned" "$thread_hidden" "$thread_mismatch" "$thread_jira")
+                        thread_label=$(format_picker_title "$thread_is_main" "$thread_title")
+                        thread_detail=$(format_picker_detail "$thread_title" "$thread_name" "$thread_branch" "$thread_worktree" "$thread_agent" "$thread_badges")
+                        printf '%s%s%s%s%s\n' "$thread_id" "$SEP" "$thread_label" "$SEP" "$thread_detail"
+                    fi
                 done <"$thread_tmp")
                 rm -f "$thread_tmp"
             fi
@@ -477,6 +490,11 @@ actor IPCSocketServer {
             tab_resp=$(send_checked_request "$tab_req")
             tab_count=$(printf '%s' "$tab_resp" | jq -r '.tabs | length')
             [ "$tab_count" -gt 0 ] || die "Thread has no tabs."
+
+            if [ "$tab_count" -eq 1 ]; then
+                printf '%s' "$tab_resp" | jq -r '.tabs[0].sessionName'
+                return 0
+            fi
 
             tab_lines=$(printf '%s' "$tab_resp" | jq -r '.tabs | sort_by(.index)[] | "\(.sessionName)\u001fTab #\(.index)\u001f\((if .isAgent then (.agentType // "agent") else "terminal" end)) · \(.sessionName)"')
             {
@@ -530,6 +548,8 @@ actor IPCSocketServer {
                 fi
 
                 interactive_pick=$(pick_thread_or_create "$interactive_project") || exit 1
+
+                case "$interactive_pick" in __section__*) continue ;; esac
 
                 if [ "$interactive_pick" = "__back__" ]; then
                     if [ "$interactive_fixed_project" -eq 1 ]; then

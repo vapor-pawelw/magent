@@ -153,6 +153,8 @@ All notable changes to this project will be documented in this file.
 - Unselected tab borders in dark mode are now slightly more visible.
 
 ### CLI
+- The interactive thread picker now groups threads by section with styled section headers (matching the app's sidebar order), instead of a flat alphabetically-sorted list.
+- Selecting a thread that has only one tab now attaches directly without showing the tab picker.
 - Fixed `magent-cli create-thread` silently producing no output and not creating the thread: the IPC socket timeout was too short (5s) for operations that involve git worktree creation on large repos or AI-based name generation from `--description`. Timeouts are now 120s for `create-thread`, 60s for `create-tab` and `auto-rename-thread`, and 10s for all other commands.
 
 ### Agents
