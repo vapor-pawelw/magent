@@ -625,7 +625,7 @@ final class IPCCommandHandler {
         return settings.defaultSection(for: thread.projectId)?.name
     }
 
-    private func makeThreadStatus(for thread: MagentThread) -> IPCThreadStatus {
+    func makeThreadStatus(for thread: MagentThread) -> IPCThreadStatus {
         IPCThreadStatus(
             isBusy: thread.hasAgentBusy,
             isWaitingForInput: thread.hasWaitingForInput,

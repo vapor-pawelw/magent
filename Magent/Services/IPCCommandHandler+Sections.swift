@@ -103,7 +103,9 @@ extension IPCCommandHandler {
 
             let threadInfos: [IPCThreadInfo]? = projectId != nil ? matchingThreads.map { thread in
                 let projName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
-                return IPCThreadInfo(thread: thread, projectName: projName)
+                var info = IPCThreadInfo(thread: thread, projectName: projName)
+                info.status = makeThreadStatus(for: thread)
+                return info
             } : nil
 
             return IPCSectionInfo(section: section, isProjectOverride: isOverride, threads: threadInfos)
