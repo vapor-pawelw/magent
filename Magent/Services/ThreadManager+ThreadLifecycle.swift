@@ -388,6 +388,21 @@ extension ThreadManager {
 
     // MARK: - Archive Thread
 
+    /// Marks the thread as archiving and notifies the delegate so the sidebar cell updates.
+    func markThreadArchiving(id: UUID) {
+        guard let i = threads.firstIndex(where: { $0.id == id }) else { return }
+        threads[i].isArchiving = true
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    /// Clears the archiving flag on a thread that is still in the active list (called on failure).
+    func clearThreadArchivingState(id: UUID) {
+        guard let i = threads.firstIndex(where: { $0.id == id }) else { return }
+        guard threads[i].isArchiving else { return }
+        threads[i].isArchiving = false
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
     func archiveThread(
         _ thread: MagentThread,
         promptForLocalSyncConflicts: Bool = false,
@@ -396,6 +411,14 @@ extension ThreadManager {
     ) async throws -> String? {
         guard !thread.isMain else {
             throw ThreadManagerError.cannotDeleteMainThread
+        }
+
+        // If the archive fails before the thread is removed from the list, clear the archiving flag.
+        var archiveCompleted = false
+        defer {
+            if !archiveCompleted {
+                clearThreadArchivingState(id: thread.id)
+            }
         }
 
         var archiveWarning: String?
@@ -446,20 +469,29 @@ extension ThreadManager {
 
         promptRenameResultCache.removeValue(forKey: thread.id)
 
-        // Cleanup after UI has switched away from this thread.
-        for sessionName in thread.tmuxSessionNames {
-            try? await tmux.killSession(name: sessionName)
-        }
-
-        if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
-            try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
-            pruneWorktreeCache(for: project)
-        }
-
-        cleanupAllBrokenSymlinks()
-        await cleanupStaleMagentSessions()
+        // Show the banner immediately — the archive is logically complete from the user's perspective.
         showArchivedThreadBanner(for: thread, warning: archiveWarning)
 
+        // Run the slow cleanup (tmux kills, worktree removal, symlink/stale-session sweeps) in the
+        // background so archiveThread returns promptly and the UI stays responsive.
+        let capturedProject = settings.projects.first(where: { $0.id == thread.projectId })
+        Task { [weak self, thread] in
+            guard let self else { return }
+            // Kill sessions concurrently instead of one-by-one.
+            await withTaskGroup(of: Void.self) { group in
+                for sessionName in thread.tmuxSessionNames {
+                    group.addTask { try? await self.tmux.killSession(name: sessionName) }
+                }
+            }
+            if let project = capturedProject {
+                try? await self.git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
+                self.pruneWorktreeCache(for: project)
+            }
+            self.cleanupAllBrokenSymlinks()
+            await self.cleanupStaleMagentSessions()
+        }
+
+        archiveCompleted = true
         return archiveWarning
     }
 

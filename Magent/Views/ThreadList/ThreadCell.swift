@@ -1,6 +1,17 @@
 import Cocoa
 import MagentCore
 
+/// Translucent overlay shown on a thread cell while an archive is in progress.
+private final class ArchivingOverlayView: NSView {
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.82).cgColor
+        }
+    }
+}
+
 final class ThreadCell: NSTableCellView {
 
     private static let leadingIconSize: CGFloat = 16
@@ -33,6 +44,7 @@ final class ThreadCell: NSTableCellView {
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
     private var showsRenamePulse = false
+    private var archivingOverlay: ArchivingOverlayView?
 
     private static let renamePulseAnimationKey = "rename-label-pulse"
 
@@ -564,6 +576,12 @@ final class ThreadCell: NSTableCellView {
         syncRowVisibility()
         showsRenamePulse = isAutoRenaming
         applyRenamePulse(isAutoRenaming)
+
+        if thread.isArchiving {
+            showArchivingOverlay()
+        } else {
+            hideArchivingOverlay()
+        }
     }
 
     func configureAsMain(
@@ -705,6 +723,54 @@ final class ThreadCell: NSTableCellView {
         }
 
         syncRowVisibility()
+    }
+
+    // MARK: - Archiving Overlay
+
+    private func showArchivingOverlay() {
+        guard archivingOverlay == nil else { return }
+
+        let overlay = ArchivingOverlayView()
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+        overlay.wantsLayer = true
+
+        let spinner = NSProgressIndicator()
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isIndeterminate = true
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.startAnimation(nil)
+
+        let label = NSTextField(labelWithString: "Archiving…")
+        label.font = .systemFont(ofSize: 11)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView(views: [spinner, label])
+        stack.orientation = .horizontal
+        stack.spacing = 5
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        overlay.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+        ])
+
+        addSubview(overlay)
+        NSLayoutConstraint.activate([
+            overlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            overlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            overlay.topAnchor.constraint(equalTo: topAnchor),
+            overlay.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        archivingOverlay = overlay
+    }
+
+    private func hideArchivingOverlay() {
+        archivingOverlay?.removeFromSuperview()
+        archivingOverlay = nil
     }
 
     private func syncRowVisibility() {

@@ -71,103 +71,18 @@ extension ThreadDetailViewController {
     @objc func archiveThreadTapped() {
         guard !thread.isMain else { return }
         let threadToArchive = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        guard !threadToArchive.isArchiving else { return }
 
-        let baseBranch = threadManager.resolveBaseBranch(for: threadToArchive)
-
+        threadManager.markThreadArchiving(id: threadToArchive.id)
         Task {
-            let git = GitService.shared
-            let clean = await git.isClean(worktreePath: threadToArchive.worktreePath)
-            let merged = await git.isMergedInto(worktreePath: threadToArchive.worktreePath, baseBranch: baseBranch)
-
-            await MainActor.run {
-                let agentBusy = threadToArchive.hasAgentBusy
-
-                if agentBusy {
-                    let alert = NSAlert()
-                    alert.messageText = String(localized: .ThreadStrings.threadArchiveTitle)
-                    alert.informativeText = String(
-                        localized: .ThreadStrings.threadArchiveBusyMessage(
-                            threadToArchive.name,
-                            threadToArchive.branchName
-                        )
+            do {
+                _ = try await threadManager.archiveThread(threadToArchive, force: true)
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
+                        style: .error
                     )
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: String(localized: .CommonStrings.commonArchiveAnyway))
-                    alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
-
-                    let response = alert.runModal()
-                    guard response == .alertFirstButtonReturn else { return }
-                } else if !clean || !merged {
-                    let alert = NSAlert()
-                    alert.messageText = String(localized: .ThreadStrings.threadArchiveTitle)
-                    var reasons: [String] = []
-                    if !clean { reasons.append(String(localized: .ThreadStrings.threadArchiveReasonUncommittedChanges)) }
-                    if !merged { reasons.append(String(localized: .ThreadStrings.threadArchiveReasonCommitsNotIn(baseBranch))) }
-                    alert.informativeText = String(
-                        localized: .ThreadStrings.threadArchiveReasonsMessage(
-                            threadToArchive.name,
-                            reasons.joined(separator: String(localized: .CommonStrings.commonJoinAnd)),
-                            threadToArchive.branchName
-                        )
-                    )
-                    alert.alertStyle = .informational
-                    alert.addButton(withTitle: String(localized: .CommonStrings.commonArchive))
-                    alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
-
-                    let response = alert.runModal()
-                    guard response == .alertFirstButtonReturn else { return }
-                }
-
-                // Archive directly without a spinner sheet. The delegate-driven
-                // reloadData()/showEmptyState() swaps the main content controller,
-                // which has been unsafe while a sheet is presented on the same window.
-                Task {
-                    do {
-                        _ = try await self.threadManager.archiveThread(
-                            threadToArchive,
-                            promptForLocalSyncConflicts: true
-                        )
-                    } catch ThreadManagerError.archiveCancelled {
-                        return
-                    } catch ThreadManagerError.localFileSyncFailed(let message) {
-                        await MainActor.run {
-                            let alert = NSAlert()
-                            alert.messageText = String(localized: .ThreadStrings.threadArchiveLocalSyncFailedTitle)
-                            alert.informativeText = String(localized: .ThreadStrings.threadArchiveLocalSyncFailedMessage(message))
-                            alert.alertStyle = .warning
-                            alert.addButton(withTitle: String(localized: .CommonStrings.commonForceArchive))
-                            alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
-
-                            let response = alert.runModal()
-                            guard response == .alertFirstButtonReturn else { return }
-
-                            Task {
-                                do {
-                                    _ = try await self.threadManager.archiveThread(
-                                        threadToArchive,
-                                        promptForLocalSyncConflicts: false,
-                                        force: true
-                                    )
-                                } catch ThreadManagerError.archiveCancelled {
-                                    return
-                                } catch {
-                                    await MainActor.run {
-                                        BannerManager.shared.show(
-                                            message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
-                                            style: .error
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    } catch {
-                        await MainActor.run {
-                            BannerManager.shared.show(
-                                message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
-                                style: .error
-                            )
-                        }
-                    }
                 }
             }
         }

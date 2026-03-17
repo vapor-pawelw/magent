@@ -11,6 +11,8 @@ All notable changes to this project will be documented in this file.
 - Fixed: "Rename thread from this prompt" (TOC right-click, thread context menu, and CLI `rename-thread`) now works on context-setting prompts that auto-rename would classify as questions (e.g. "You're working on branch X"). Explicit rename actions always generate a name.
 
 ### Performance
+- Archiving a thread is now instant and non-blocking: clicking Archive immediately shows an "Archiving…" overlay on the thread row and returns to normal UI, with all cleanup running in the background. The thread disappears when done, or the overlay clears on failure.
+- Multiple tmux sessions are now killed in parallel during archive instead of one at a time.
 - Git status, branch, and delivery checks now run in parallel across all threads instead of sequentially, significantly reducing background polling time with many threads open.
 - Agent completion no longer triggers a full git-status scan of every thread — only the threads that just completed are refreshed.
 - Sidebar no longer rebuilds immediately on every settings-changed notification; rapid successive saves are coalesced into one reload.

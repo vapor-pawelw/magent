@@ -835,98 +835,19 @@ extension ThreadListViewController {
 
     func triggerArchive(for thread: MagentThread) {
         let threadManager = self.threadManager
-        let baseBranch = threadManager.resolveBaseBranch(for: thread)
+        let liveThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        guard !liveThread.isArchiving else { return }
 
+        threadManager.markThreadArchiving(id: liveThread.id)
         Task {
-            let git = GitService.shared
-            let clean = await git.isClean(worktreePath: thread.worktreePath)
-            let merged = await git.isMergedInto(worktreePath: thread.worktreePath, baseBranch: baseBranch)
-
-            await MainActor.run {
-                let liveThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
-                let agentBusy = liveThread.hasAgentBusy
-
-                if agentBusy {
-                    let alert = NSAlert()
-                    alert.messageText = String(localized: .ThreadStrings.threadArchiveTitle)
-                    alert.informativeText = String(localized: .ThreadStrings.threadArchiveBusyMessage(thread.name, thread.branchName))
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: String(localized: .CommonStrings.commonArchiveAnyway))
-                    alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
-
-                    let response = alert.runModal()
-                    guard response == .alertFirstButtonReturn else { return }
-                } else if !clean || !merged {
-                    let alert = NSAlert()
-                    alert.messageText = String(localized: .ThreadStrings.threadArchiveTitle)
-                    var reasons: [String] = []
-                    if !clean { reasons.append(String(localized: .ThreadStrings.threadArchiveReasonUncommittedChanges)) }
-                    if !merged { reasons.append(String(localized: .ThreadStrings.threadArchiveReasonCommitsNotIn(baseBranch))) }
-                    alert.informativeText = String(
-                        localized: .ThreadStrings.threadArchiveReasonsMessage(
-                            thread.name,
-                            reasons.joined(separator: String(localized: .CommonStrings.commonJoinAnd)),
-                            thread.branchName
-                        )
+            do {
+                _ = try await threadManager.archiveThread(liveThread, force: true)
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
+                        style: .error
                     )
-                    alert.alertStyle = .informational
-                    alert.addButton(withTitle: String(localized: .CommonStrings.commonArchive))
-                    alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
-
-                    let response = alert.runModal()
-                    guard response == .alertFirstButtonReturn else { return }
-                }
-
-                // Archive directly without a spinner sheet. The delegate-driven
-                // reloadData()/showEmptyState() modifies split view items, which
-                // crashes if a sheet is being presented on the same window.
-                Task {
-                    do {
-                        _ = try await threadManager.archiveThread(
-                            thread,
-                            promptForLocalSyncConflicts: true
-                        )
-                    } catch ThreadManagerError.archiveCancelled {
-                        return
-                    } catch ThreadManagerError.localFileSyncFailed(let message) {
-                        await MainActor.run {
-                            let alert = NSAlert()
-                            alert.messageText = String(localized: .ThreadStrings.threadArchiveLocalSyncFailedTitle)
-                            alert.informativeText = String(localized: .ThreadStrings.threadArchiveLocalSyncFailedMessage(message))
-                            alert.alertStyle = .warning
-                            alert.addButton(withTitle: String(localized: .CommonStrings.commonForceArchive))
-                            alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
-
-                            let response = alert.runModal()
-                            guard response == .alertFirstButtonReturn else { return }
-
-                            Task {
-                                do {
-                                    _ = try await threadManager.archiveThread(
-                                        thread,
-                                        promptForLocalSyncConflicts: false,
-                                        force: true
-                                    )
-                                } catch ThreadManagerError.archiveCancelled {
-                                    return
-                                } catch {
-                                    await MainActor.run {
-                                        BannerManager.shared.show(
-                                            message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
-                                            style: .error
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    } catch {
-                        await MainActor.run {
-                            BannerManager.shared.show(
-                                message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
-                                style: .error
-                            )
-                        }
-                    }
                 }
             }
         }

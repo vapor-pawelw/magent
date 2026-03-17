@@ -48,6 +48,15 @@
 - Banner rendering now owns text/icon contrast for fixed-color banners, which avoids unreadable archive/restore banner text after an appearance switch.
 - Archive/restore banner text now stays leading-aligned after click/hover interaction instead of snapping to centered layout.
 
+## What changed in the combusken thread (non-blocking archive)
+
+- Archive is now fully non-blocking from the user's perspective. Clicking Archive immediately shows an "Archiving…" overlay on the thread's sidebar row and returns focus to the app; the thread disappears when the operation completes.
+- Removed all pre-archive confirmation dialogs (agent busy warning, uncommitted-changes/unmerged-commits warning, local-sync-failure force-archive dialog). These previously stalled the UI for a git-status check before anything happened.
+- `threadArchiveThread` now uses `force: true` from both UI call sites so local file sync failures become a warning in the archive banner rather than a blocking dialog.
+- `MagentThread` has a new transient field `isArchiving: Bool` (not persisted). `ThreadManager` exposes `markThreadArchiving(id:)` and `clearThreadArchivingState(id:)`. The latter is called via a `defer` block in `archiveThread` so the overlay is always removed on failure.
+- `ThreadCell` renders an `ArchivingOverlayView` (draw-based, appearance-safe via `updateLayer`) with a spinner and "Archiving…" label when `thread.isArchiving` is true.
+- `ThreadManager.archiveThread` shows the archive banner immediately after the UI state is updated, then fires remaining cleanup (tmux kills, worktree removal, symlink sweep, stale-session sweep) in a background `Task`. Tmux sessions are killed concurrently via `withTaskGroup`.
+
 ## Gotchas
 
 - **Use `saveActiveThreads` for active-only saves.** `ThreadManager` keeps only non-archived threads in its in-memory `threads` array. Calling `PersistenceService.saveThreads(threads)` with that list overwrites `threads.json` with active-only data and silently wipes all archived threads from disk. Always call `PersistenceService.saveActiveThreads(_:)` instead — it merges the incoming active list with the existing archived threads on disk before writing. Archive/restore flows that already build a complete `allThreads` array should continue to call `saveThreads(allThreads)` directly.

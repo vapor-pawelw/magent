@@ -171,6 +171,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var rateLimitedSessions: [String: AgentRateLimitInfo] = [:]
     // Transient (not persisted) — detected open PR/MR for this branch.
     public var pullRequestInfo: PullRequestInfo? = nil
+    // Transient (not persisted) — set while an archive operation is in progress.
+    public var isArchiving: Bool = false
 
     /// Resolves the effective section ID for this thread given a set of known section IDs.
     /// If the thread's sectionId is recognized, returns it; otherwise returns the fallback.
