@@ -179,7 +179,7 @@ extension ThreadManager {
         await ensureBellPipes()
         await syncBusySessionsFromProcessState()
         _ = await cleanupStaleMagentSessions()
-        try? persistence.saveActiveThreads(threads)
+        persistence.debouncedSaveActiveThreads(threads)
 
         isRestartingTmuxForRecovery = false
 

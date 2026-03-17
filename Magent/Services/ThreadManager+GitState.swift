@@ -63,7 +63,7 @@ extension ThreadManager {
             }
         }
         if persistedChanged {
-            try? persistence.saveActiveThreads(threads)
+            persistence.debouncedSaveActiveThreads(threads)
         }
         if changed {
             await MainActor.run {
@@ -87,7 +87,7 @@ extension ThreadManager {
         }
         if dirty && !threads[i].isMain && !threads[i].hasEverDoneWork {
             threads[i].hasEverDoneWork = true
-            try? persistence.saveActiveThreads(threads)
+            persistence.debouncedSaveActiveThreads(threads)
             changed = true
         }
         return changed
@@ -286,7 +286,7 @@ extension ThreadManager {
             persistence.saveWorktreeCache(entry.cache, worktreesBasePath: entry.basePath)
         }
         if persistedThreadsChanged {
-            try? persistence.saveActiveThreads(threads)
+            persistence.debouncedSaveActiveThreads(threads)
         }
         if changed {
             await MainActor.run {
@@ -410,7 +410,7 @@ extension ThreadManager {
             }
         }
         if persistedChanged {
-            try? persistence.saveActiveThreads(threads)
+            persistence.debouncedSaveActiveThreads(threads)
         }
         if changed {
             await MainActor.run {

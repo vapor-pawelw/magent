@@ -14,6 +14,21 @@ private final class ArchivingOverlayView: NSView {
 
 final class ThreadCell: NSTableCellView {
 
+    // MARK: - SF Symbol Cache
+
+    /// Caches SF Symbol NSImages to avoid repeated allocation during cell reconfiguration.
+    /// Keyed by symbol name. Thread-safe via main-thread-only access (NSTableCellView).
+    private static var symbolImageCache: [String: NSImage] = [:]
+
+    static func cachedSymbolImage(_ name: String) -> NSImage? {
+        if let cached = symbolImageCache[name] { return cached }
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
+        symbolImageCache[name] = image
+        return image
+    }
+
+    // MARK: - Constants
+
     private static let leadingIconSize: CGFloat = 16
     private static let dirtyDotSize: CGFloat = 7
     private static let jiraMarkerWidth: CGFloat = 10
@@ -314,7 +329,7 @@ final class ThreadCell: NSTableCellView {
         archiveBtn.translatesAutoresizingMaskIntoConstraints = false
         archiveBtn.setContentHuggingPriority(.required, for: .horizontal)
         archiveBtn.isBordered = false
-        archiveBtn.image = NSImage(systemSymbolName: "archivebox.fill", accessibilityDescription: "Ready to archive")
+        archiveBtn.image = Self.cachedSymbolImage("archivebox.fill")
         archiveBtn.contentTintColor = .tertiaryLabelColor
         archiveBtn.toolTip = "Work delivered — ready to archive"
         archiveBtn.target = self
@@ -473,10 +488,8 @@ final class ThreadCell: NSTableCellView {
         primaryDirtyDot?.toolTip = detailedTooltip
         secondaryDirtyDot?.toolTip = detailedTooltip
 
-        imageView?.image = NSImage(
-            systemSymbolName: thread.threadIcon.symbolName,
-            accessibilityDescription: thread.threadIcon.accessibilityDescription
-        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)
+        imageView?.image = Self.cachedSymbolImage(thread.threadIcon.symbolName)
+            ?? Self.cachedSymbolImage("terminal")
         imageView?.contentTintColor = thread.hasUnreadAgentCompletion
             ? NSColor.controlAccentColor
             : (sectionColor ?? NSColor(resource: .primaryBrand))
@@ -486,7 +499,7 @@ final class ThreadCell: NSTableCellView {
         prLabel?.isHidden = true
 
         if AppFeatures.jiraIntegrationEnabled, thread.jiraTicketKey != nil {
-            jiraImageView?.image = NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira ticket")
+            jiraImageView?.image = Self.cachedSymbolImage("ticket")
             jiraImageView?.contentTintColor = .tertiaryLabelColor
             jiraImageView?.toolTip = thread.jiraTicketKey
             jiraImageView?.isHidden = false
@@ -497,7 +510,7 @@ final class ThreadCell: NSTableCellView {
         }
 
         if thread.isPinned {
-            pinImageView?.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
+            pinImageView?.image = Self.cachedSymbolImage("pin.fill")
             pinImageView?.contentTintColor = .controlAccentColor
             pinImageView?.isHidden = false
         } else {
@@ -511,7 +524,7 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
-            rateLimitImageView?.image = NSImage(systemSymbolName: "arrow.clockwise.circle.fill", accessibilityDescription: "Rate limit lifted")
+            rateLimitImageView?.image = Self.cachedSymbolImage("arrow.clockwise.circle.fill")
             rateLimitImageView?.contentTintColor = .systemGreen
             rateLimitImageView?.toolTip = "Rate limit lifted — ready to resume"
             rateLimitImageView?.isHidden = false
@@ -522,7 +535,7 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
-            rateLimitImageView?.image = NSImage(systemSymbolName: "hourglass.circle.fill", accessibilityDescription: "Agent rate limited")
+            rateLimitImageView?.image = Self.cachedSymbolImage("hourglass.circle.fill")
             rateLimitImageView?.contentTintColor = .systemRed
             rateLimitImageView?.toolTip = rateLimitTooltip(for: thread)
             rateLimitImageView?.isHidden = false
@@ -536,7 +549,7 @@ final class ThreadCell: NSTableCellView {
             rateLimitImageView?.image = nil
             rateLimitImageView?.toolTip = nil
             rateLimitImageView?.isHidden = true
-            completionImageView?.image = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: "Agent needs input")
+            completionImageView?.image = Self.cachedSymbolImage("exclamationmark.circle.fill")
             completionImageView?.contentTintColor = .systemYellow
             completionImageView?.toolTip = "Agent needs input"
             completionImageView?.isHidden = false
@@ -557,7 +570,7 @@ final class ThreadCell: NSTableCellView {
             rateLimitImageView?.image = nil
             rateLimitImageView?.toolTip = nil
             rateLimitImageView?.isHidden = true
-            completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent finished")
+            completionImageView?.image = Self.cachedSymbolImage("circle.fill")
             completionImageView?.contentTintColor = .systemGreen
             completionImageView?.toolTip = "Agent finished"
             completionImageView?.isHidden = false
@@ -660,7 +673,7 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
-            rateLimitImageView?.image = NSImage(systemSymbolName: "arrow.clockwise.circle.fill", accessibilityDescription: "Rate limit lifted")
+            rateLimitImageView?.image = Self.cachedSymbolImage("arrow.clockwise.circle.fill")
             rateLimitImageView?.contentTintColor = .systemGreen
             rateLimitImageView?.toolTip = "Rate limit lifted — ready to resume"
             rateLimitImageView?.isHidden = false
@@ -671,7 +684,7 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
-            rateLimitImageView?.image = NSImage(systemSymbolName: "hourglass.circle.fill", accessibilityDescription: "Agent rate limited")
+            rateLimitImageView?.image = Self.cachedSymbolImage("hourglass.circle.fill")
             rateLimitImageView?.contentTintColor = .systemRed
             rateLimitImageView?.toolTip = rateLimitTooltip ?? "Rate limit reached"
             rateLimitImageView?.isHidden = false
@@ -685,7 +698,7 @@ final class ThreadCell: NSTableCellView {
             rateLimitImageView?.image = nil
             rateLimitImageView?.toolTip = nil
             rateLimitImageView?.isHidden = true
-            completionImageView?.image = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: "Agent needs input")
+            completionImageView?.image = Self.cachedSymbolImage("exclamationmark.circle.fill")
             completionImageView?.contentTintColor = .systemYellow
             completionImageView?.toolTip = "Agent needs input"
             completionImageView?.isHidden = false
@@ -706,7 +719,7 @@ final class ThreadCell: NSTableCellView {
             rateLimitImageView?.image = nil
             rateLimitImageView?.toolTip = nil
             rateLimitImageView?.isHidden = true
-            completionImageView?.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Agent finished")
+            completionImageView?.image = Self.cachedSymbolImage("circle.fill")
             completionImageView?.contentTintColor = .systemGreen
             completionImageView?.toolTip = "Agent finished"
             completionImageView?.isHidden = false
@@ -785,7 +798,7 @@ final class ThreadCell: NSTableCellView {
     private func setDirtyDot(_ dot: NSImageView?, visible: Bool) {
         guard let dot else { return }
         if visible {
-            dot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Uncommitted changes")
+            dot.image = Self.cachedSymbolImage("circle.fill")
             dot.contentTintColor = NSColor.systemOrange.withAlphaComponent(0.7)
             dot.isHidden = false
         } else {

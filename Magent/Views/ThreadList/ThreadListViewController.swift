@@ -124,10 +124,20 @@ final class ThreadListViewController: NSViewController {
     var diffPanelCommitLimitByThreadId: [UUID: Int] = [:]
     let diffPanelCommitPageSize = 10
     private var pendingSettingsReloadWorkItem: DispatchWorkItem?
+    /// Coalesces multiple `didUpdateThreads` delegate calls into a single sidebar
+    /// refresh per run-loop cycle. The session monitor can fire several updates within
+    /// one tick (busy sync, rate-limit, completions); without coalescing each would
+    /// trigger a separate reloadItem pass.
+    var pendingThreadUpdateWorkItem: DispatchWorkItem?
+    /// Snapshot of the latest threads array passed to the coalesced update.
+    var pendingThreadUpdateSnapshot: [MagentThread]?
     /// Monotonically-increasing generation per thread. Incremented each time refreshDiffPanel is called.
     /// The active Task captures its generation at spawn time and bails if a newer call has since arrived,
     /// preventing stale no-preserve tasks from overwriting later preserve tasks.
     var diffPanelRefreshGeneration: [UUID: Int] = [:]
+    /// Generation counter for the git remote check Task spawned by reloadData().
+    /// Prevents stale Tasks from running when reloadData() is called rapidly.
+    private var remoteCheckGeneration: Int = 0
     private(set) var selectedThreadID: UUID?
 
     private struct SidebarScrollSnapshot {
@@ -642,18 +652,24 @@ final class ThreadListViewController: NSViewController {
             self?.restoreSidebarScrollSnapshot(scrollSnapshot)
         }
 
-        // Refresh cached remote availability per project (async, non-blocking)
+        // Refresh cached remote availability per project (async, non-blocking).
+        // Generation-gated: rapid reloadData() calls only run the latest Task.
+        remoteCheckGeneration += 1
+        let gen = remoteCheckGeneration
         let projectIds = sidebarProjects.map(\.projectId)
         let currentSettings = settings
         Task { [weak self] in
+            guard self?.remoteCheckGeneration == gen else { return }
             var validIds: Set<UUID> = []
             for project in currentSettings.projects where projectIds.contains(project.id) {
+                guard self?.remoteCheckGeneration == gen else { return }
                 let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
                 if remotes.contains(where: { $0.provider != .unknown }) {
                     validIds.insert(project.id)
                 }
             }
             await MainActor.run {
+                guard self?.remoteCheckGeneration == gen else { return }
                 self?.projectsWithValidRemotes = validIds
             }
         }

@@ -43,6 +43,8 @@ public final class PersistenceService {
 
     // MARK: - Threads
 
+    private var _pendingThreadSaveWorkItem: DispatchWorkItem?
+
     public func loadThreads() -> [MagentThread] {
         guard let data = try? Data(contentsOf: threadsURL) else { return [] }
         return (try? decoder.decode([MagentThread].self, from: data)) ?? []
@@ -61,10 +63,34 @@ public final class PersistenceService {
         try saveThreads(activeThreads + existingArchived)
     }
 
+    /// Debounced variant of `saveActiveThreads`. Coalesces rapid saves (e.g. multiple
+    /// state changes within a single session-monitor tick) into one disk write after a
+    /// short delay. The latest snapshot always wins — earlier snapshots are discarded.
+    /// Use the throwing `saveActiveThreads(_:)` when you need synchronous confirmation.
+    public func debouncedSaveActiveThreads(_ activeThreads: [MagentThread]) {
+        _pendingThreadSaveWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            try? self?.saveActiveThreads(activeThreads)
+        }
+        _pendingThreadSaveWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+    }
+
     // MARK: - Settings
 
+    /// In-memory cache of the last loaded/saved settings. Avoids repeated disk reads
+    /// + JSON decodes — `loadSettings()` is called dozens of times per session-monitor
+    /// tick and inside per-cell rendering. The cache is invalidated on every `saveSettings`
+    /// call so consumers always see the latest values.
+    private var _cachedSettings: AppSettings?
+
     public func loadSettings() -> AppSettings {
-        guard let data = try? Data(contentsOf: settingsURL) else { return AppSettings() }
+        if let cached = _cachedSettings { return cached }
+        guard let data = try? Data(contentsOf: settingsURL) else {
+            let defaults = AppSettings()
+            _cachedSettings = defaults
+            return defaults
+        }
         let settings = (try? decoder.decode(AppSettings.self, from: data)) ?? AppSettings()
 
         // Ensure default threadSections are persisted so their UUIDs are stable.
@@ -75,12 +101,20 @@ public final class PersistenceService {
             try? saveSettings(settings)
         }
 
+        _cachedSettings = settings
         return settings
     }
 
     public func saveSettings(_ settings: AppSettings) throws {
         let data = try encoder.encode(settings)
         try data.write(to: settingsURL, options: .atomic)
+        _cachedSettings = settings
+    }
+
+    /// Drops the in-memory settings cache so the next `loadSettings()` re-reads from disk.
+    /// Call this if settings.json may have been modified externally (e.g. by another process).
+    public func invalidateSettingsCache() {
+        _cachedSettings = nil
     }
 
     // MARK: - Agent Launch Prompt Drafts

@@ -684,8 +684,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 addButton.objectValue = project.projectId.uuidString
                 addButton.toolTip = "Add thread to \(project.name). Right-click for agent options. Option-click to use project default."
                 addButton.isEnabled = !isCreatingThread
-                let settings = persistence.loadSettings()
-                if let fullProject = settings.projects.first(where: { $0.id == project.projectId }) {
+                if let fullProject = currentSettings.projects.first(where: { $0.id == project.projectId }) {
                     addButton.menu = buildAgentSubmenu(for: fullProject)
                 }
             }
@@ -1018,6 +1017,24 @@ extension ThreadListViewController: ThreadManagerDelegate {
     }
 
     func threadManager(_ manager: ThreadManager, didUpdateThreads threads: [MagentThread]) {
+        // Coalesce: the session monitor can fire several didUpdateThreads calls within
+        // a single tick (busy sync, rate-limit, completions). Rather than refreshing the
+        // sidebar for each, store the latest snapshot and schedule a single refresh on the
+        // next run-loop cycle. If another call arrives before the scheduled work fires,
+        // the snapshot is updated and the previous work item is cancelled — so only one
+        // sidebar refresh happens per burst.
+        pendingThreadUpdateSnapshot = threads
+        pendingThreadUpdateWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let threads = self.pendingThreadUpdateSnapshot else { return }
+            self.pendingThreadUpdateSnapshot = nil
+            self.applyThreadUpdate(threads)
+        }
+        pendingThreadUpdateWorkItem = work
+        DispatchQueue.main.async(execute: work)
+    }
+
+    private func applyThreadUpdate(_ threads: [MagentThread]) {
         // Only do a full reloadData() when the sidebar structure actually changed (threads
         // added/removed/reordered/re-sectioned). For metadata-only updates (busy state,
         // rate limits, dirty flag, PR info, etc.), update cells in-place — this avoids

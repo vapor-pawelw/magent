@@ -101,7 +101,7 @@ extension ThreadManager {
         }
 
         guard changed else { return }
-        try? persistence.saveActiveThreads(threads)
+        persistence.debouncedSaveActiveThreads(threads)
 
         // Refresh dirty and delivered states only for threads that just completed,
         // not the full scan — avoids running git-status on every thread on each bell.
@@ -502,7 +502,7 @@ extension ThreadManager {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[index].hasUnreadAgentCompletion else { return }
         threads[index].unreadCompletionSessions.removeAll()
-        try? persistence.saveActiveThreads(threads)
+        persistence.debouncedSaveActiveThreads(threads)
         updateDockBadge()
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
@@ -512,7 +512,7 @@ extension ThreadManager {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[index].unreadCompletionSessions.contains(sessionName) else { return }
         threads[index].unreadCompletionSessions.remove(sessionName)
-        try? persistence.saveActiveThreads(threads)
+        persistence.debouncedSaveActiveThreads(threads)
         updateDockBadge()
         delegate?.threadManager(self, didUpdateThreads: threads)
     }

@@ -60,7 +60,7 @@ Module boundary rules:
 - `ShellInfra` holds shell execution primitives that other package targets can depend on without pulling in higher-level services.
 - `GitCore`, `TmuxCore`, and `JiraCore` isolate subsystem-specific services behind narrower dependency edges.
 - `IPCCore` isolates CLI/IPC-facing request-response models and agent guidance text from the rest of the shared domain layer.
-- `PersistenceCore` owns JSON/file-backed persistence for threads, settings, and caches.
+- `PersistenceCore` owns JSON/file-backed persistence for threads, settings, and caches. `loadSettings()` uses an in-memory cache (invalidated on every `saveSettings()` call) to avoid repeated disk reads — it is called dozens of times per polling cycle. `debouncedSaveActiveThreads(_:)` coalesces rapid thread-state saves within a 300 ms window for non-critical state changes (dirty flags, completion markers); critical saves (archive, rename, thread creation) still use the synchronous `saveActiveThreads(_:)`.
 - `UtilityCore` holds remaining cross-cutting non-UI helpers that do not justify their own subsystem target yet.
 - `GhosttyBridge` wraps `GhosttyKit.xcframework` and is consumed as a local package product.
 - The app target keeps AppKit controllers/views plus resource-backed code that depends on generated asset and string-catalog symbols.

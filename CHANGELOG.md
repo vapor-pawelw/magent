@@ -12,10 +12,15 @@ All notable changes to this project will be documented in this file.
 
 ### Performance
 - Archiving a thread is now instant and non-blocking: clicking Archive immediately shows an "Archiving…" overlay on the thread row and returns to normal UI, with all cleanup running in the background. The thread disappears when done, or the overlay clears on failure.
+- Multiple background state changes (busy, rate-limit, completions) within the same polling cycle are now coalesced into a single sidebar refresh instead of triggering one per change.
+- Settings are now cached in memory — eliminates repeated disk reads and JSON decoding that previously happened dozens of times per polling cycle and during every cell render.
+- Thread state persistence (dirty flags, completion markers, branch state) is now debounced so rapid changes within a polling tick produce one disk write instead of many.
 - Multiple tmux sessions are now killed in parallel during archive instead of one at a time.
 - Git status, branch, and delivery checks now run in parallel across all threads instead of sequentially, significantly reducing background polling time with many threads open.
 - Agent completion no longer triggers a full git-status scan of every thread — only the threads that just completed are refreshed.
 - Sidebar no longer rebuilds immediately on every settings-changed notification; rapid successive saves are coalesced into one reload.
+- SF Symbol images in sidebar thread cells are now cached, reducing per-cell allocation overhead during redraws.
+- Git remote availability checks are now deduplicated — rapid sidebar reloads no longer spawn redundant `git remote` subprocesses.
 
 ### Settings
 - Thread Settings › Sidebar now has a "Move completed threads to top" checkbox, letting you disable auto-reorder on agent completion without leaving the Threads tab.
