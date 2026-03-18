@@ -279,11 +279,19 @@ final class ThreadListViewController: NSViewController {
 
     private func updateSyncStatusLabel() {
         guard let lastSync = threadManager.lastStatusSyncAt else {
-            syncStatusContainer.isHidden = true
+            // Startup sync is in flight — show "Syncing…" if we have threads loaded.
+            if !threadManager.threads.isEmpty {
+                syncStatusLabel.stringValue = "Syncing…"
+                syncRefreshButton.isHidden = true
+                syncStatusContainer.isHidden = false
+            } else {
+                syncStatusContainer.isHidden = true
+            }
             recalculateSidebarHeaderInset()
             return
         }
         syncStatusLabel.stringValue = "Synced \(Self.relativeTimeString(from: lastSync))"
+        syncRefreshButton.isHidden = false
         syncStatusContainer.isHidden = false
         recalculateSidebarHeaderInset()
     }
