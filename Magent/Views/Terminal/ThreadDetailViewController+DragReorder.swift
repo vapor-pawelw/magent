@@ -45,10 +45,15 @@ extension ThreadDetailViewController {
             }
 
         case .ended, .cancelled:
+            let displacement = abs(gesture.translation(in: tabBarStack).x)
             draggedView.isDragging = false
             draggedView.alphaValue = 1.0
             draggedView.layer?.zPosition = 0
             draggedView.layer?.transform = CATransform3DIdentity
+            // If the drag was negligible (click with slight jitter), treat as tap-to-select
+            if displacement < 3 {
+                selectTab(at: dragIndex)
+            }
             persistTabOrder()
             rebindAllTabActions()
 

@@ -48,6 +48,9 @@ extension ThreadDetailViewController {
     func attachDragGesture(to item: TabItemView) {
         let pan = NSPanGestureRecognizer(target: self, action: #selector(handleTabDrag(_:)))
         pan.delegate = self
+        // Allow mouseDown to fire immediately so tab selection isn't
+        // swallowed when the gesture recognizer is deciding if this is a drag.
+        pan.delaysPrimaryMouseButtonEvents = false
         item.addGestureRecognizer(pan)
     }
 

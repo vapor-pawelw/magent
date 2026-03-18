@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - `--section` now places the thread in the correct section during creation instead of moving it after, eliminating a visible "jump" in the sidebar.
 
 ### Thread
+- Fixed: clicking a tab sometimes failed to select it when the drag-to-reorder gesture intercepted the click.
 - Fixed: the GUI launch sheet's description field was silently ignored — descriptions entered in the sheet now appear on the thread immediately.
 
 ### Jira
