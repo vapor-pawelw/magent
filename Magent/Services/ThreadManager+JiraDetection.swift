@@ -163,6 +163,52 @@ extension ThreadManager {
         }
     }
 
+    // MARK: - Single-Ticket Refresh on Selection
+
+    /// Refreshes a single Jira ticket in the background when a thread is selected.
+    /// Unlike `verifyDetectedJiraTickets`, this always runs (no batch guard) but
+    /// skips if the cached entry was verified less than 60 seconds ago.
+    func refreshJiraTicketForSelectedThread(_ thread: MagentThread) {
+        guard persistence.loadSettings().jiraTicketDetectionEnabled else { return }
+        guard let ticketKey = thread.effectiveJiraTicketKey else { return }
+
+        loadJiraTicketCacheIfNeeded()
+        if let cached = jiraTicketCache[ticketKey],
+           Date().timeIntervalSince(cached.verifiedAt) < 60 {
+            return
+        }
+
+        Task {
+            await refreshSingleTicketKey(ticketKey)
+        }
+    }
+
+    private func refreshSingleTicketKey(_ key: String) async {
+        guard await JiraService.shared.isAcliInstalled() else { return }
+
+        do {
+            let tickets = try await JiraService.shared.searchTickets(jql: "key = \(key)")
+            guard let ticket = tickets.first else { return }
+
+            let entry = JiraTicketCacheEntry(
+                key: ticket.key,
+                summary: ticket.summary,
+                status: ticket.status,
+                verifiedAt: Date()
+            )
+
+            let oldEntry = jiraTicketCache[key]
+            jiraTicketCache[key] = entry
+            persistence.saveJiraTicketCache(jiraTicketCache)
+
+            if oldEntry?.summary != entry.summary || oldEntry?.status != entry.status {
+                populateVerifiedTicketsFromCache()
+            }
+        } catch {
+            // Silently skip — cached data remains
+        }
+    }
+
     // MARK: - Cache Pruning
 
     /// Removes cache entries not referenced by any active thread's `effectiveJiraTicketKey`.

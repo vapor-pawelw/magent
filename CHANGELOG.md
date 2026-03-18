@@ -15,7 +15,7 @@ All notable changes to this project will be documented in this file.
 - New context menu option "Set description from Jira ticket" auto-fills the thread description with the Jira ticket title. Only shown when a Jira ticket is detected for the thread.
 - Fixed: the toolbar Jira ticket button now updates immediately when a branch change is detected, instead of staying stale until settings changed or the view was recreated.
 - Jira ticket keys (e.g. IP-1234) are now automatically detected from branch names (case-insensitive) and shown in the toolbar, sidebar, and context menu with a link to open the ticket in Jira.
-- Detected tickets are verified against Jira via acli and cached persistently so they survive app restarts and acli disconnection. Verification runs on startup, branch rename, branch change detection, and acli auth success.
+- Detected tickets are verified against Jira via acli and cached persistently so they survive app restarts and acli disconnection. Verification runs on startup, branch rename, branch change detection, acli auth success, and when selecting a thread (throttled to once per minute per ticket).
 - The Jira settings tab (acli auth + site URL) is now always visible in Settings, not gated behind the debug feature flag. A "Detect Jira tickets from branch names" checkbox (enabled by default, grayed out when acli is disconnected) controls detection.
 - The toolbar Jira button shows the ticket key next to the Jira icon (matching the PR button pattern). Tooltip shows the verified ticket summary when available.
 - Ticket numbers appear on the same sidebar line as PR info, separated by a dot when both are present.
