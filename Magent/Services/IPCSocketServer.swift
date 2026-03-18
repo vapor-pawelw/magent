@@ -5,7 +5,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v23"
+    private static let cliVersion = "magent-cli-v24"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -636,7 +636,7 @@ actor IPCSocketServer {
 
         case "$cmd" in
         create-thread)
-            project=""; agent=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""; no_select=""
+            project=""; agent=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""; no_select=""; no_submit=""
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --project)     project="$2"; shift 2 ;;
@@ -648,10 +648,11 @@ actor IPCSocketServer {
                     --base-thread) base_thread="$2"; shift 2 ;;
                     --base-branch) base_branch="$2"; shift 2 ;;
                     --no-select)   no_select=1; shift ;;
+                    --no-submit)   no_submit=1; shift ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--no-select]"
+            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--no-select] [--no-submit]"
             [ -z "$base_thread" ] || [ -z "$base_branch" ] || die "Use either --base-thread or --base-branch, not both"
             json="{$(json_kv command create-thread),$(json_kv project "$project")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
@@ -662,8 +663,32 @@ actor IPCSocketServer {
             [ -n "$base_thread" ] && json="$json,$(json_kv baseThreadName "$base_thread")"
             [ -n "$base_branch" ] && json="$json,$(json_kv baseBranch "$base_branch")"
             [ "$no_select" = "1" ] && json="$json,\"noSelect\":true"
+            [ "$no_submit" = "1" ] && json="$json,\"noSubmit\":true"
             json="$json}"
             send_request "$json" 120
+            ;;
+        batch-create)
+            require_jq
+            project=""; no_submit=""; bc_file=""
+            specs="[]"
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --project)     project="$2"; shift 2 ;;
+                    --no-submit)   no_submit=1; shift ;;
+                    --file)        bc_file="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$project" ] || die "Usage: magent-cli batch-create --project <name> --file <specs.json> [--no-submit]"
+            [ -n "$bc_file" ] || die "Missing --file <specs.json>. File must contain a JSON array of thread specs."
+            [ -f "$bc_file" ] || die "File not found: $bc_file"
+            specs=$(cat "$bc_file") || die "Failed to read: $bc_file"
+            # Validate it is a JSON array
+            printf '%s' "$specs" | jq -e 'type == "array"' >/dev/null 2>&1 || die "File must contain a JSON array of thread specs"
+            json="{$(json_kv command batch-create),$(json_kv project "$project"),\"threads\":$specs"
+            [ "$no_submit" = "1" ] && json="$json,\"noSubmit\":true"
+            json="$json}"
+            send_request "$json" 300
             ;;
         list-projects)
             send_request "{$(json_kv command list-projects)}"
@@ -1080,7 +1105,8 @@ actor IPCSocketServer {
             echo "  magent-cli docs                      (full IPC command reference + usage guidance)"
             echo ""
             echo "Thread commands:"
-            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--no-select]"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--no-select] [--no-submit]"
+            echo "  batch-create         --project <name> --file <specs.json> [--no-submit]  (parallel thread creation)"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
             echo "  send-prompt          --thread <name> --prompt <text>"

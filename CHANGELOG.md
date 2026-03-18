@@ -7,6 +7,15 @@ All notable changes to this project will be documented in this file.
 ### Agents
 - CLI docs now explicitly instruct agents to always provide `--description` and `--prompt` when creating threads for specific tasks, so new threads get proper sidebar descriptions and the spawned agent receives its initial instructions.
 
+### CLI
+- New `batch-create` command creates multiple threads in parallel from a JSON specs file, with minimal UI blocking. Recommended with `--no-submit` for spawning many threads without concurrent agent CPU load.
+- New `--no-submit` flag on `create-thread` and `batch-create` injects the prompt text into the agent input without pressing Enter, letting users review and submit manually.
+- `--description` now sets the thread's task description immediately (previously the description text was consumed for slug generation but never persisted on the thread).
+- `--section` now places the thread in the correct section during creation instead of moving it after, eliminating a visible "jump" in the sidebar.
+
+### Thread
+- Fixed: the GUI launch sheet's description field was silently ignored — descriptions entered in the sheet now appear on the thread immediately.
+
 ### Jira
 - Jira ticket keys (e.g. IP-1234) are now automatically detected from branch names (case-insensitive) and shown in the toolbar, sidebar, and context menu with a link to open the ticket in Jira.
 - Detected tickets are verified against Jira via acli and cached persistently so they survive app restarts and acli disconnection. Verification runs on startup, branch rename, branch change detection, and acli auth success.
@@ -31,6 +40,7 @@ All notable changes to this project will be documented in this file.
 - Fixed: "Rename thread from this prompt" (TOC right-click, thread context menu, and CLI `rename-thread`) now works on context-setting prompts that auto-rename would classify as questions (e.g. "You're working on branch X"). Explicit rename actions always generate a name.
 
 ### Performance
+- Thread creation sets tmux environment variables in parallel instead of sequentially, reducing per-thread setup time.
 - Archiving a thread is now instant and non-blocking: clicking Archive immediately shows an "Archiving…" overlay on the thread row and returns to normal UI, with all cleanup running in the background. The thread disappears when done, or the overlay clears on failure.
 - Multiple background state changes (busy, rate-limit, completions) within the same polling cycle are now coalesced into a single sidebar refresh instead of triggering one per change.
 - Settings are now cached in memory — eliminates repeated disk reads and JSON decoding that previously happened dozens of times per polling cycle and during every cell render.
