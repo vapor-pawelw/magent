@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - CLI docs now explicitly instruct agents to always provide `--description` and `--prompt` when creating threads for specific tasks, so new threads get proper sidebar descriptions and the spawned agent receives its initial instructions.
 
 ### Jira
+- Fixed: the toolbar Jira ticket button now updates immediately when a branch change is detected, instead of staying stale until settings changed or the view was recreated.
 - Jira ticket keys (e.g. IP-1234) are now automatically detected from branch names (case-insensitive) and shown in the toolbar, sidebar, and context menu with a link to open the ticket in Jira.
 - Detected tickets are verified against Jira via acli and cached persistently so they survive app restarts and acli disconnection. Verification runs on startup, branch rename, branch change detection, and acli auth success.
 - The Jira settings tab (acli auth + site URL) is now always visible in Settings, not gated behind the debug feature flag. A "Detect Jira tickets from branch names" checkbox (enabled by default, grayed out when acli is disconnected) controls detection.

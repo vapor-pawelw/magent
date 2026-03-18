@@ -139,6 +139,7 @@ extension ThreadManager {
         if changed {
             Task { @MainActor in
                 delegate?.threadManager(self, didUpdateThreads: threads)
+                NotificationCenter.default.post(name: .magentJiraTicketInfoChanged, object: nil)
             }
         }
     }
@@ -157,6 +158,7 @@ extension ThreadManager {
         if changed {
             Task { @MainActor in
                 delegate?.threadManager(self, didUpdateThreads: threads)
+                NotificationCenter.default.post(name: .magentJiraTicketInfoChanged, object: nil)
             }
         }
     }

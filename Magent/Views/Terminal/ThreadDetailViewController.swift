@@ -208,6 +208,12 @@ final class ThreadDetailViewController: NSViewController {
         )
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(handleJiraTicketInfoChanged),
+            name: .magentJiraTicketInfoChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(handlePromptTOCVisibilityChanged),
             name: .magentPromptTOCVisibilityChanged,
             object: nil
@@ -802,6 +808,13 @@ final class ThreadDetailViewController: NSViewController {
 
     @objc private func handlePullRequestInfoChanged() {
         syncTransientState()
+    }
+
+    @objc private func handleJiraTicketInfoChanged() {
+        guard let latest = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
+        thread.actualBranch = latest.actualBranch
+        thread.verifiedJiraTicket = latest.verifiedJiraTicket
+        refreshJiraButton()
     }
 
     @objc private func handleShowDiffViewerNotification(_ notification: Notification) {

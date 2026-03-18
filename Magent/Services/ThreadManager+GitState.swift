@@ -423,6 +423,9 @@ extension ThreadManager {
             }
         }
         if !branchChangedThreadIds.isEmpty {
+            await MainActor.run {
+                NotificationCenter.default.post(name: .magentJiraTicketInfoChanged, object: nil)
+            }
             await verifyDetectedJiraTickets(forThreadIds: branchChangedThreadIds)
         }
     }
