@@ -128,12 +128,12 @@ extension ThreadManager {
         let detectionEnabled = persistence.loadSettings().jiraTicketDetectionEnabled
         var changed = false
         for i in threads.indices where !threads[i].isArchived {
-            let previous = threads[i].verifiedJiraTicket?.key
+            let previous = threads[i].verifiedJiraTicket
             if detectionEnabled,
                let ticketKey = threads[i].effectiveJiraTicketKey,
                let cached = jiraTicketCache[ticketKey] {
                 threads[i].verifiedJiraTicket = cached
-                if previous != ticketKey { changed = true }
+                if previous != cached { changed = true }
             } else if previous != nil {
                 threads[i].verifiedJiraTicket = nil
                 changed = true
@@ -205,7 +205,7 @@ extension ThreadManager {
             jiraTicketCache[key] = entry
             persistence.saveJiraTicketCache(jiraTicketCache)
 
-            if oldEntry?.summary != entry.summary || oldEntry?.status != entry.status {
+            if oldEntry != entry {
                 populateVerifiedTicketsFromCache()
             }
         } catch {

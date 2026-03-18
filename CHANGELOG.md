@@ -37,6 +37,8 @@ All notable changes to this project will be documented in this file.
 - Mouse wheel now scrolls 6 lines per tick instead of 1, for faster scrolling without jumping a full page.
 - Fixed: clicking on the terminal surface no longer shows a "returned 127" error after a reboot. The mouse-click URL capture script in `/tmp` had its shebang on the wrong line, causing the OS to fail to find the interpreter.
 ### Sidebar
+- Selecting a thread now also refreshes Jira and PR statuses for the previously selected thread, so its sidebar row updates while you view another thread.
+- Jira ticket status changes (summary, status, category) are now detected correctly when refreshing — previously only ticket key changes triggered a sidebar update.
 - PR and Jira ticket status badges now appear as small colored pills inline with the ticket/PR labels in the sidebar. PR badges show review state (Approved, Changes Requested) in addition to lifecycle state (Open, Draft, Merged, Closed) with distinct colors for each. Jira badge colors are sourced from the Jira API status category. Both can be toggled independently in Settings > Threads > Sidebar.
 - A "Synced Xm ago" label at the top of the sidebar shows when PR and Jira statuses were last refreshed. A refresh button triggers an immediate re-sync. The label now shows "Syncing…" on launch while the initial sync is in flight, instead of staying blank.
 - PR and Jira statuses now refresh every 5 minutes in the background (previously ~30s for PR and ~100s for Jira). The longer interval reduces system load; selecting a thread still triggers an immediate refresh for that thread.

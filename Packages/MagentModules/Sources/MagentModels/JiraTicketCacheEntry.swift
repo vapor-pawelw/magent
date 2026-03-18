@@ -1,6 +1,6 @@
 import Foundation
 
-public struct JiraTicketCacheEntry: Codable, Sendable {
+public struct JiraTicketCacheEntry: Codable, Sendable, Equatable {
     public let key: String
     public let summary: String
     public let status: String
@@ -14,5 +14,13 @@ public struct JiraTicketCacheEntry: Codable, Sendable {
         self.status = status
         self.statusCategoryKey = statusCategoryKey
         self.verifiedAt = verifiedAt
+    }
+
+    /// Compares only display-relevant fields; `verifiedAt` is a cache bookkeeping timestamp.
+    public static func == (lhs: JiraTicketCacheEntry, rhs: JiraTicketCacheEntry) -> Bool {
+        lhs.key == rhs.key
+            && lhs.summary == rhs.summary
+            && lhs.status == rhs.status
+            && lhs.statusCategoryKey == rhs.statusCategoryKey
     }
 }
