@@ -370,6 +370,7 @@ extension ThreadManager {
 
         var changed = false
         var persistedChanged = false
+        var branchChangedThreadIds: Set<UUID> = []
         for result in results {
             guard let i = threads.firstIndex(where: { $0.id == result.id }) else { continue }
 
@@ -403,10 +404,14 @@ extension ThreadManager {
             if threads[i].actualBranch != result.actual
                 || threads[i].expectedBranch != resolvedExpected
                 || threads[i].hasBranchMismatch != mismatch {
+                let branchActuallyChanged = threads[i].actualBranch != result.actual
                 threads[i].actualBranch = result.actual
                 threads[i].expectedBranch = resolvedExpected
                 threads[i].hasBranchMismatch = mismatch
                 changed = true
+                if branchActuallyChanged {
+                    branchChangedThreadIds.insert(result.id)
+                }
             }
         }
         if persistedChanged {
@@ -416,6 +421,9 @@ extension ThreadManager {
             await MainActor.run {
                 delegate?.threadManager(self, didUpdateThreads: threads)
             }
+        }
+        if !branchChangedThreadIds.isEmpty {
+            await verifyDetectedJiraTickets(forThreadIds: branchChangedThreadIds)
         }
     }
 

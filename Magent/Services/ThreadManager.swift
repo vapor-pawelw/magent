@@ -66,6 +66,11 @@ var dirtyCheckTickCounter: Int = 0
     var lastRateLimitScanBySession: [String: Date] = [:]
     var _cachedRemoteByProjectId: [UUID: GitRemote] = [:]
     var _mismatchBannerShownProjectIds: Set<UUID> = []
+    var jiraTicketCache: [String: JiraTicketCacheEntry] = [:]
+    var jiraTicketCacheLoaded = false
+    var isJiraVerificationRunning = false
+    var prCache: [String: PullRequestCacheEntry] = [:]
+    var prCacheLoaded = false
 
     // MARK: - Lifecycle
 
@@ -153,6 +158,8 @@ var dirtyCheckTickCounter: Int = 0
         await refreshDirtyStates()
         await refreshDeliveredStates()
         await refreshBranchStates()
+        await verifyDetectedJiraTickets()
+        populatePRInfoFromCache()
         await runPRSyncTick()
 
         await MainActor.run {

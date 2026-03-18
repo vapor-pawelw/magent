@@ -103,7 +103,7 @@ enum SettingsCategory: Int, CaseIterable {
     var isVisible: Bool {
         switch self {
         case .jira:
-            AppFeatures.jiraIntegrationEnabled
+            true
         case .debug:
 #if DEBUG
             true
@@ -125,10 +125,7 @@ enum SettingsCategory: Int, CaseIterable {
         case .projects: return String(localized: .CommonStrings.settingsCategoryProjects)
         case .appearance: return String(localized: .CommonStrings.settingsCategoryAppearance)
         case .jira:
-            return AppFeatures.annotatedTitle(
-                String(localized: .CommonStrings.settingsCategoryJira),
-                for: .jiraIntegration
-            )
+            return String(localized: .CommonStrings.settingsCategoryJira)
         case .debug: return String(localized: .CommonStrings.settingsCategoryDebug)
         }
     }
@@ -203,10 +200,7 @@ final class SettingsSplitViewController: NSSplitViewController {
         detailContainerVC.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
         let container = detailContainerVC.view
 
-        var allVCs: [NSViewController] = [generalVC, terminalVC, threadsVC, agentsVC, notificationsVC, projectsVC, appearanceVC]
-        if AppFeatures.jiraIntegrationEnabled {
-            allVCs.append(jiraVC)
-        }
+        var allVCs: [NSViewController] = [generalVC, terminalVC, threadsVC, agentsVC, notificationsVC, projectsVC, appearanceVC, jiraVC]
 #if DEBUG
         allVCs.append(debugVC)
 #endif
@@ -231,9 +225,7 @@ final class SettingsSplitViewController: NSSplitViewController {
         notificationsVC.view.isHidden = category != .notifications
         projectsVC.view.isHidden = category != .projects
         appearanceVC.view.isHidden = category != .appearance
-        if AppFeatures.jiraIntegrationEnabled {
-            jiraVC.view.isHidden = category != .jira
-        }
+        jiraVC.view.isHidden = category != .jira
 #if DEBUG
         debugVC.view.isHidden = category != .debug
 #endif

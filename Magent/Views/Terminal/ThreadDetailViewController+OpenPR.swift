@@ -60,6 +60,7 @@ extension ThreadDetailViewController {
             let settings = PersistenceService.shared.loadSettings()
             guard let project = settings.projects.first(where: { $0.id == self.thread.projectId }) else {
                 self.openPRButton.isHidden = true
+                self.refreshPRJiraSeparator()
                 return
             }
 
@@ -68,24 +69,31 @@ extension ThreadDetailViewController {
             if remotes.isEmpty || provider == .unknown {
                 self.openPRButton.isHidden = true
             } else {
-                self.openPRButton.isHidden = false
                 self.openPRButton.image = self.openPRButtonImage(for: provider)
                 self.applyPRButtonTitle()
             }
+            self.refreshPRJiraSeparator()
         }
     }
 
     private func applyPRButtonTitle() {
         if let pr = thread.pullRequestInfo {
+            openPRButton.isHidden = false
             openPRButton.title = pr.shortLabel
             openPRButton.imagePosition = .imageLeading
             openPRButton.toolTip = "\(pr.displayLabel) — Click to open"
-        } else {
+        } else if thread.isMain {
+            // Main worktree: always show PR button (opens PR list)
+            openPRButton.isHidden = false
             openPRButton.title = ""
             openPRButton.imagePosition = .imageOnly
             let provider = threadManager._cachedRemoteByProjectId[thread.projectId]?.provider ?? .unknown
             openPRButton.toolTip = openPRTooltip(for: provider)
+        } else {
+            // Non-main: hide when no PR detected
+            openPRButton.isHidden = true
         }
+        refreshPRJiraSeparator()
     }
 
     private func preferredHostingProvider(from remotes: [GitRemote]) -> GitHostingProvider {
@@ -267,6 +275,13 @@ extension ThreadDetailViewController {
 
     func refreshReviewButtonVisibility() {
         reviewButton.isHidden = thread.isMain
+    }
+
+    /// Shows the separator between PR/Jira buttons and utility buttons only when at least one of PR or Jira is visible.
+    func refreshPRJiraSeparator() {
+        let prVisible = !openPRButton.isHidden
+        let jiraVisible = !openInJiraButton.isHidden
+        prJiraSeparator.isHidden = !(prVisible || jiraVisible)
     }
 
     func syncTransientState() {

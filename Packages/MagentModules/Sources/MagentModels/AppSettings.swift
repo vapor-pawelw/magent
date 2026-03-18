@@ -68,6 +68,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var ipcPromptInjectionEnabled: Bool
     public var reviewPrompt: String
     public var jiraSiteURL: String
+    public var jiraTicketDetectionEnabled: Bool
     public var enableRateLimitDetection: Bool
     public var playSoundOnRateLimitDetected: Bool
     public var rateLimitDetectedSoundName: String
@@ -112,6 +113,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         ipcPromptInjectionEnabled: Bool = true,
         reviewPrompt: String = AppSettings.defaultReviewPrompt,
         jiraSiteURL: String = "",
+        jiraTicketDetectionEnabled: Bool = true,
         enableRateLimitDetection: Bool = true,
         playSoundOnRateLimitDetected: Bool = true,
         rateLimitDetectedSoundName: String = "Sosumi",
@@ -155,6 +157,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.ipcPromptInjectionEnabled = ipcPromptInjectionEnabled
         self.reviewPrompt = reviewPrompt
         self.jiraSiteURL = jiraSiteURL
+        self.jiraTicketDetectionEnabled = jiraTicketDetectionEnabled
         self.enableRateLimitDetection = enableRateLimitDetection
         self.playSoundOnRateLimitDetected = playSoundOnRateLimitDetected
         self.rateLimitDetectedSoundName = rateLimitDetectedSoundName
@@ -204,6 +207,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         ipcPromptInjectionEnabled = try container.decodeIfPresent(Bool.self, forKey: .ipcPromptInjectionEnabled) ?? true
         reviewPrompt = try container.decodeIfPresent(String.self, forKey: .reviewPrompt) ?? Self.defaultReviewPrompt
         jiraSiteURL = try container.decodeIfPresent(String.self, forKey: .jiraSiteURL) ?? ""
+        jiraTicketDetectionEnabled = try container.decodeIfPresent(Bool.self, forKey: .jiraTicketDetectionEnabled) ?? true
         enableRateLimitDetection = try container.decodeIfPresent(Bool.self, forKey: .enableRateLimitDetection) ?? true
         playSoundOnRateLimitDetected = try container.decodeIfPresent(Bool.self, forKey: .playSoundOnRateLimitDetected) ?? true
         rateLimitDetectedSoundName = try container.decodeIfPresent(String.self, forKey: .rateLimitDetectedSoundName) ?? "Sosumi"
@@ -252,6 +256,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(ipcPromptInjectionEnabled, forKey: .ipcPromptInjectionEnabled)
         try container.encode(reviewPrompt, forKey: .reviewPrompt)
         try container.encode(jiraSiteURL, forKey: .jiraSiteURL)
+        try container.encode(jiraTicketDetectionEnabled, forKey: .jiraTicketDetectionEnabled)
         try container.encode(enableRateLimitDetection, forKey: .enableRateLimitDetection)
         try container.encode(playSoundOnRateLimitDetected, forKey: .playSoundOnRateLimitDetected)
         try container.encode(rateLimitDetectedSoundName, forKey: .rateLimitDetectedSoundName)
@@ -394,6 +399,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case ipcPromptInjectionEnabled
         case reviewPrompt
         case jiraSiteURL
+        case jiraTicketDetectionEnabled
         case enableRateLimitDetection
         case playSoundOnRateLimitDetected
         case rateLimitDetectedSoundName

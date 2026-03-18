@@ -24,6 +24,7 @@ extension ThreadManager {
         }
 
         threads[index].pullRequestInfo = info
+        savePRInfoToCache(info: info, thread: threads[index])
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
             NotificationCenter.default.post(name: .magentPullRequestInfoChanged, object: nil)
@@ -83,6 +84,7 @@ extension ThreadManager {
             guard let i = threads.firstIndex(where: { $0.id == thread.id }) else { continue }
             if threads[i].pullRequestInfo != info {
                 threads[i].pullRequestInfo = info
+                savePRInfoToCache(info: info, thread: threads[i])
                 changed = true
             }
         }
@@ -92,6 +94,63 @@ extension ThreadManager {
                 delegate?.threadManager(self, didUpdateThreads: threads)
                 NotificationCenter.default.post(name: .magentPullRequestInfoChanged, object: nil)
             }
+        }
+
+        prunePRCache()
+    }
+
+    // MARK: - PR Cache
+
+    func loadPRCacheIfNeeded() {
+        guard !prCacheLoaded else { return }
+        prCache = persistence.loadPRCache()
+        prCacheLoaded = true
+    }
+
+    /// Populates `pullRequestInfo` on all active threads from the file cache.
+    /// Called at startup before the first live PR sync tick, so PR indicators appear immediately.
+    func populatePRInfoFromCache() {
+        loadPRCacheIfNeeded()
+        guard !prCache.isEmpty else { return }
+
+        var changed = false
+        for i in threads.indices where !threads[i].isArchived && threads[i].pullRequestInfo == nil {
+            let branch = threads[i].actualBranch ?? threads[i].branchName
+            if let cached = prCache[branch] {
+                threads[i].pullRequestInfo = cached.toPullRequestInfo()
+                changed = true
+            }
+        }
+        if changed {
+            Task { @MainActor in
+                delegate?.threadManager(self, didUpdateThreads: threads)
+                NotificationCenter.default.post(name: .magentPullRequestInfoChanged, object: nil)
+            }
+        }
+    }
+
+    private func savePRInfoToCache(info: PullRequestInfo?, thread: MagentThread) {
+        loadPRCacheIfNeeded()
+        let branch = thread.actualBranch ?? thread.branchName
+        if let info {
+            prCache[branch] = PullRequestCacheEntry(from: info)
+        } else {
+            prCache.removeValue(forKey: branch)
+        }
+        persistence.savePRCache(prCache)
+    }
+
+    private func prunePRCache() {
+        loadPRCacheIfNeeded()
+        let activeBranches = Set(
+            threads
+                .filter { !$0.isArchived }
+                .map { $0.actualBranch ?? $0.branchName }
+        )
+        let before = prCache.count
+        prCache = prCache.filter { activeBranches.contains($0.key) }
+        if prCache.count != before {
+            persistence.savePRCache(prCache)
         }
     }
 }

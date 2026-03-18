@@ -207,6 +207,39 @@ public final class PersistenceService {
         try? data.write(to: rateLimitCacheURL, options: .atomic)
     }
 
+    // MARK: - Jira Ticket Cache
+
+    private var jiraTicketCacheURL: URL {
+        appSupportURL.appendingPathComponent("jira-ticket-cache.json")
+    }
+
+    public func loadJiraTicketCache() -> [String: JiraTicketCacheEntry] {
+        guard let data = try? Data(contentsOf: jiraTicketCacheURL) else { return [:] }
+        return (try? decoder.decode([String: JiraTicketCacheEntry].self, from: data)) ?? [:]
+    }
+
+    public func saveJiraTicketCache(_ cache: [String: JiraTicketCacheEntry]) {
+        guard let data = try? encoder.encode(cache) else { return }
+        try? data.write(to: jiraTicketCacheURL, options: .atomic)
+    }
+
+    // MARK: - Pull Request Cache
+
+    private var prCacheURL: URL {
+        appSupportURL.appendingPathComponent("pr-cache.json")
+    }
+
+    /// Loads cached PR info keyed by branch name.
+    public func loadPRCache() -> [String: PullRequestCacheEntry] {
+        guard let data = try? Data(contentsOf: prCacheURL) else { return [:] }
+        return (try? decoder.decode([String: PullRequestCacheEntry].self, from: data)) ?? [:]
+    }
+
+    public func savePRCache(_ cache: [String: PullRequestCacheEntry]) {
+        guard let data = try? encoder.encode(cache) else { return }
+        try? data.write(to: prCacheURL, options: .atomic)
+    }
+
     public func loadIgnoredRateLimitFingerprints() -> [AgentType: Set<String>] {
         let url = ignoredRateLimitFingerprintsURL
         guard let data = try? Data(contentsOf: url) else { return [:] }

@@ -793,7 +793,7 @@ extension ThreadManager {
            !baseBranch.isEmpty {
             lines.append("Base: \(baseBranch)")
         }
-        if AppFeatures.jiraIntegrationEnabled,
+        if AppFeatures.jiraSyncEnabled,
            let ticketKey = thread.jiraTicketKey?.trimmingCharacters(in: .whitespacesAndNewlines),
            !ticketKey.isEmpty {
             lines.append("Jira: \(ticketKey)")

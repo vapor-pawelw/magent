@@ -1,7 +1,7 @@
 import Foundation
 import MagentCore
 
-#if FEATURE_JIRA
+#if FEATURE_JIRA_SYNC
 extension ThreadManager {
 
     // MARK: - Section Sync

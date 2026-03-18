@@ -67,7 +67,7 @@ let project = Project(
                     .debug(
                         name: "Debug",
                         settings: [
-                            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "$(inherited) FEATURE_JIRA",
+                            "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "$(inherited) FEATURE_JIRA_SYNC",
                         ]
                     ),
                     .release(

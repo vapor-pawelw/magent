@@ -46,7 +46,6 @@ final class ThreadDetailViewController: NSViewController {
     let openInXcodeButton = NSButton()
     let openInFinderButton = NSButton()
     let resyncLocalPathsButton = NSButton()
-    let resyncLocalPathsSpinner = NSProgressIndicator()
     let archiveThreadButton = NSButton()
     let reviewButton = NSButton()
     let exportContextButton = NSButton()
@@ -118,6 +117,7 @@ final class ThreadDetailViewController: NSViewController {
     static let diffDefaultRatio: CGFloat = 0.7
     static let diffHeightKey = "InlineDiffViewController.height"
 
+    let prJiraSeparator = VerticalSeparatorView()
     let pinSeparator: NSView = {
         let v = NSView()
         v.wantsLayer = true
@@ -325,12 +325,6 @@ final class ThreadDetailViewController: NSViewController {
         resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
 
 
-        resyncLocalPathsSpinner.style = .spinning
-        resyncLocalPathsSpinner.controlSize = .small
-        resyncLocalPathsSpinner.isDisplayedWhenStopped = false
-        resyncLocalPathsSpinner.translatesAutoresizingMaskIntoConstraints = false
-        resyncLocalPathsSpinner.isHidden = resyncLocalPathsButtonShouldBeHidden()
-
         archiveThreadButton.bezelStyle = .texturedRounded
         archiveThreadButton.image = NSImage(
             systemSymbolName: "archivebox",
@@ -367,19 +361,28 @@ final class ThreadDetailViewController: NSViewController {
         addTabButton.menu = addTabContextMenu
         updatePromptTOCToggleButtonState(canShow: false)
 
-        let separator = VerticalSeparatorView()
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        separator.isHidden = thread.isMain
-        separator.setContentHuggingPriority(.required, for: .horizontal)
-        separator.setContentCompressionResistancePriority(.required, for: .horizontal)
-        separator.setContentHuggingPriority(.required, for: .vertical)
-        separator.setContentCompressionResistancePriority(.required, for: .vertical)
+        prJiraSeparator.translatesAutoresizingMaskIntoConstraints = false
+        prJiraSeparator.isHidden = true
+        prJiraSeparator.setContentHuggingPriority(.required, for: .horizontal)
+        prJiraSeparator.setContentCompressionResistancePriority(.required, for: .horizontal)
+        prJiraSeparator.setContentHuggingPriority(.required, for: .vertical)
+        prJiraSeparator.setContentCompressionResistancePriority(.required, for: .vertical)
+
+        let archiveSeparator = VerticalSeparatorView()
+        archiveSeparator.translatesAutoresizingMaskIntoConstraints = false
+        archiveSeparator.isHidden = thread.isMain
+        archiveSeparator.setContentHuggingPriority(.required, for: .horizontal)
+        archiveSeparator.setContentCompressionResistancePriority(.required, for: .horizontal)
+        archiveSeparator.setContentHuggingPriority(.required, for: .vertical)
+        archiveSeparator.setContentCompressionResistancePriority(.required, for: .vertical)
 
         topBar.orientation = .horizontal
         topBar.spacing = 8
         topBar.alignment = .centerY
+        topBar.detachesHiddenViews = true
         topBar.translatesAutoresizingMaskIntoConstraints = false
-        for view in [addTabButton, tabBarStack, openInXcodeButton, openInFinderButton, openPRButton, openInJiraButton, reviewButton, exportContextButton, resyncLocalPathsButton, resyncLocalPathsSpinner, separator, archiveThreadButton] {
+        // PR and Jira buttons leftmost, then separator, then utility buttons, then archive separator + archive
+        for view in [addTabButton, tabBarStack, openPRButton, openInJiraButton, prJiraSeparator, openInXcodeButton, openInFinderButton, reviewButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, archiveThreadButton] as [NSView] {
             topBar.addArrangedSubview(view)
         }
 
@@ -827,9 +830,8 @@ final class ThreadDetailViewController: NSViewController {
             )
             reloadTerminalViewsForUpdatedTerminalPreferences()
         }
-        let resyncHidden = resyncLocalPathsButtonShouldBeHidden()
-        resyncLocalPathsButton.isHidden = resyncHidden
-        if resyncHidden { resyncLocalPathsSpinner.isHidden = true }
+        resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
+        refreshJiraButton()
         refreshOverlayVisibilitySettings()
         updateTerminalScrollControlsState()
     }
@@ -936,7 +938,7 @@ final class ThreadDetailViewController: NSViewController {
 
 }
 
-private final class VerticalSeparatorView: NSView {
+final class VerticalSeparatorView: NSView {
     override var intrinsicContentSize: NSSize { NSSize(width: 1, height: 18) }
     override func draw(_ dirtyRect: NSRect) {
         NSColor.tertiaryLabelColor.setFill()

@@ -82,7 +82,7 @@ It always attempts `--ff-only` first and automatically falls back to a non-ff me
 ## Local Feature Flags
 
 - Release-gated local features use dedicated `FEATURE_*` active compilation conditions in `Project.swift`.
-- Add the flag only to the configurations that should expose the feature. The current example is `FEATURE_JIRA`, which is enabled for `Debug` and omitted from `Release`.
+- Add the flag only to the configurations that should expose the feature. The current example is `FEATURE_JIRA_SYNC`, which is enabled for `Debug` and omitted from `Release`.
 - Gate feature-specific app behavior behind that flag instead of deleting the code. Release builds should hide the related UI and skip the related automation/background work.
 - If a feature still appears anywhere in Settings while it is debug-only, annotate the title or nearby copy with `Debug builds only` so developers can see immediately that the feature is not shipping yet.
 

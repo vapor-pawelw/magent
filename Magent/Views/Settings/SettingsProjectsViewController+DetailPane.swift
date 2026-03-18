@@ -218,10 +218,10 @@ extension SettingsProjectsViewController {
         var syncDesc: NSTextField?
         var autoSyncDesc: NSTextField?
 
-        if AppFeatures.jiraIntegrationEnabled {
+        if AppFeatures.jiraSyncEnabled {
             let jiraSection = createSectionCard(
-                title: AppFeatures.annotatedTitle("Jira Integration", for: .jiraIntegration),
-                description: "Project-specific Jira settings for ticket sync and section mapping. Release builds hide this section."
+                title: AppFeatures.annotatedTitle("Jira Sync", for: .jiraSync),
+                description: "Project-specific Jira sync settings: ticket-to-thread sync and section mapping."
             )
             jiraCard = jiraSection.container
             jiraStack = jiraSection.content

@@ -27,6 +27,22 @@ final class ThreadCell: NSTableCellView {
         return image
     }
 
+    /// Returns the Jira brand icon if available in the asset catalog, otherwise the "ticket" SF Symbol.
+    static func jiraMarkerImage() -> NSImage? {
+        if let cached = symbolImageCache["_jiraMarker"] { return cached }
+        let image: NSImage?
+        if let jiraIcon = NSImage(named: NSImage.Name("JiraIcon")) {
+            let sized = (jiraIcon.copy() as? NSImage) ?? jiraIcon
+            sized.size = NSSize(width: jiraMarkerWidth, height: jiraMarkerWidth)
+            sized.isTemplate = false
+            image = sized
+        } else {
+            image = cachedSymbolImage("ticket")
+        }
+        if let image { symbolImageCache["_jiraMarker"] = image }
+        return image
+    }
+
     // MARK: - Constants
 
     private static let leadingIconSize: CGFloat = 16
@@ -431,7 +447,7 @@ final class ThreadCell: NSTableCellView {
                 ? Self.descriptionFont()
                 : .preferredFont(forTextStyle: .body)
         }
-        let showsJiraState = AppFeatures.jiraIntegrationEnabled
+        let showsJiraState = AppFeatures.jiraSyncEnabled
         textField?.textColor = showsJiraState && thread.jiraUnassigned ? .tertiaryLabelColor : .labelColor
         textField?.lineBreakMode = .byTruncatingTail
 
@@ -463,9 +479,15 @@ final class ThreadCell: NSTableCellView {
             setDirtyDot(secondaryDirtyDot, visible: false)
         }
 
-        // Secondary line 2 (PR row): always on its own line when present.
-        if let prLabel = prDisplayLabel {
-            prSubtitleLabel?.stringValue = prLabel
+        // Secondary line 2 (PR/ticket row): ticket key and PR label on the same line.
+        let jiraDetectionEnabled = PersistenceService.shared.loadSettings().jiraTicketDetectionEnabled
+        let ticketKey = jiraDetectionEnabled ? thread.effectiveJiraTicketKey : nil
+        var prTicketParts: [String] = []
+        if let ticketKey { prTicketParts.append(ticketKey) }
+        if let prLabel = prDisplayLabel { prTicketParts.append(prLabel) }
+
+        if !prTicketParts.isEmpty {
+            prSubtitleLabel?.stringValue = prTicketParts.joined(separator: "  ·  ")
             prSubtitleLabel?.textColor = .controlAccentColor
             prSubtitleLabel?.isHidden = false
         } else {
@@ -498,16 +520,9 @@ final class ThreadCell: NSTableCellView {
         prLabel?.toolTip = nil
         prLabel?.isHidden = true
 
-        if AppFeatures.jiraIntegrationEnabled, thread.jiraTicketKey != nil {
-            jiraImageView?.image = Self.cachedSymbolImage("ticket")
-            jiraImageView?.contentTintColor = .tertiaryLabelColor
-            jiraImageView?.toolTip = thread.jiraTicketKey
-            jiraImageView?.isHidden = false
-        } else {
-            jiraImageView?.image = nil
-            jiraImageView?.toolTip = nil
-            jiraImageView?.isHidden = true
-        }
+        jiraImageView?.image = nil
+        jiraImageView?.toolTip = nil
+        jiraImageView?.isHidden = true
 
         if thread.isPinned {
             pinImageView?.image = Self.cachedSymbolImage("pin.fill")

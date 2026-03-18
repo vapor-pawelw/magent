@@ -1,12 +1,12 @@
 import Foundation
 
 enum AppFeature {
-    case jiraIntegration
+    case jiraSync
 
     var isEnabled: Bool {
         switch self {
-        case .jiraIntegration:
-#if FEATURE_JIRA
+        case .jiraSync:
+#if FEATURE_JIRA_SYNC
             true
 #else
             false
@@ -18,14 +18,14 @@ enum AppFeature {
         guard isEnabled else { return nil }
 
         switch self {
-        case .jiraIntegration:
+        case .jiraSync:
             return "Debug builds only"
         }
     }
 }
 
 enum AppFeatures {
-    static let jiraIntegrationEnabled = AppFeature.jiraIntegration.isEnabled
+    static let jiraSyncEnabled = AppFeature.jiraSync.isEnabled
 
     static func annotatedTitle(_ title: String, for feature: AppFeature) -> String {
         guard let annotation = feature.developerAnnotation else { return title }

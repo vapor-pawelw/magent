@@ -602,6 +602,8 @@ extension ThreadManager {
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
         }
+
+        await verifyDetectedJiraTickets(forThreadIds: [thread.id])
     }
 
     /// Returns true when first-prompt handling already covered task-description generation

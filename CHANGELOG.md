@@ -7,10 +7,21 @@ All notable changes to this project will be documented in this file.
 ### Agents
 - CLI docs now explicitly instruct agents to always provide `--description` and `--prompt` when creating threads for specific tasks, so new threads get proper sidebar descriptions and the spawned agent receives its initial instructions.
 
+### Jira
+- Jira ticket keys (e.g. IP-1234) are now automatically detected from branch names (case-insensitive) and shown in the toolbar, sidebar, and context menu with a link to open the ticket in Jira.
+- Detected tickets are verified against Jira via acli and cached persistently so they survive app restarts and acli disconnection. Verification runs on startup, branch rename, branch change detection, and acli auth success.
+- The Jira settings tab (acli auth + site URL) is now always visible in Settings, not gated behind the debug feature flag. A "Detect Jira tickets from branch names" checkbox (enabled by default, grayed out when acli is disconnected) controls detection.
+- The toolbar Jira button shows the ticket key next to the Jira icon (matching the PR button pattern). Tooltip shows the verified ticket summary when available.
+- Ticket numbers appear on the same sidebar line as PR info, separated by a dot when both are present.
+- Jira sync features (board config, section sync, auto-thread creation) remain debug-only behind the renamed `FEATURE_JIRA_SYNC` flag.
+
 ### Terminal
 - Fixed: clicking on the terminal surface no longer shows a "returned 127" error after a reboot. The mouse-click URL capture script in `/tmp` had its shebang on the wrong line, causing the OS to fail to find the interpreter.
-
 ### Thread
+- PR and Jira buttons are now the leftmost action buttons in the toolbar, separated from utility buttons by a divider.
+- The PR button is now hidden on non-main threads when no PR has been detected. Main worktree always shows it.
+- PR info is now cached persistently so PR indicators appear immediately on app launch instead of waiting for the first background sync.
+- The resync spinner has been replaced by an inline icon swap on the resync button itself, removing a separate view from the toolbar.
 - The resync button (↺) now shows a menu to choose sync direction: "Project → Worktree" copies files from the main repo into the worktree; "Worktree → Project" pushes changes back to the main repo. A spinner replaces the button while sync is in progress.
 - Fixed: the New Tab sheet subtitle now shows "Thread: Main" for the main project thread instead of "Thread:" with no label.
 - The "New Thread" sheet now includes a Section picker, pre-selected to the project's default section. The picker shows each section's color dot, matching how sections appear in the sidebar. Different projects can have different section settings. The "All fields are optional" hint has moved below the form fields, just above the checkboxes.

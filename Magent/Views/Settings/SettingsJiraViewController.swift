@@ -13,6 +13,7 @@ final class SettingsJiraViewController: NSViewController {
     private var loginButton: NSButton!
     private var refreshButton: NSButton!
     private var siteURLField: NSTextField!
+    private var ticketDetectionCheckbox: NSButton!
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
@@ -39,17 +40,15 @@ final class SettingsJiraViewController: NSViewController {
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
-        if let annotation = AppFeature.jiraIntegration.developerAnnotation {
-            let availabilityLabel = NSTextField(
-                wrappingLabelWithString: "Available in \(annotation.lowercased()). Release builds hide Jira settings and Jira-driven automation."
-            )
-            availabilityLabel.font = .systemFont(ofSize: 12, weight: .medium)
-            availabilityLabel.textColor = .systemOrange
-            stack.addArrangedSubview(availabilityLabel)
-            NSLayoutConstraint.activate([
-                availabilityLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            ])
-        }
+        let infoLabel = NSTextField(
+            wrappingLabelWithString: "Configure acli authentication and Jira site URL. Ticket keys detected in branch names link directly to Jira."
+        )
+        infoLabel.font = .systemFont(ofSize: 12)
+        infoLabel.textColor = NSColor(resource: .textSecondary)
+        stack.addArrangedSubview(infoLabel)
+        NSLayoutConstraint.activate([
+            infoLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
 
         let (statusCard, statusStack) = createSectionCard(
             title: "Connection & Authentication",
@@ -112,6 +111,20 @@ final class SettingsJiraViewController: NSViewController {
         siteURLField.action = #selector(siteURLChanged)
         siteStack.addArrangedSubview(siteURLField)
 
+        let (detectionCard, detectionStack) = createSectionCard(
+            title: "Ticket Detection",
+            description: "Automatically detect Jira ticket keys in branch names and show links to open them in Jira."
+        )
+        stack.addArrangedSubview(detectionCard)
+
+        ticketDetectionCheckbox = NSButton(
+            checkboxWithTitle: "Detect Jira tickets from branch names",
+            target: self,
+            action: #selector(ticketDetectionToggled)
+        )
+        ticketDetectionCheckbox.state = settings.jiraTicketDetectionEnabled ? .on : .off
+        detectionStack.addArrangedSubview(ticketDetectionCheckbox)
+
         // Document view
         let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
@@ -134,6 +147,7 @@ final class SettingsJiraViewController: NSViewController {
             documentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
             statusCard.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
             siteCard.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
+            detectionCard.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
             siteURLField.widthAnchor.constraint(equalTo: siteStack.widthAnchor),
             authDetailLabel.widthAnchor.constraint(equalTo: statusStack.widthAnchor),
         ])
@@ -191,11 +205,13 @@ final class SettingsJiraViewController: NSViewController {
                 authStatusLabel.stringValue = "acli not installed"
                 authStatusLabel.textColor = .systemRed
                 loginButton.isEnabled = false
+                ticketDetectionCheckbox.isEnabled = false
                 return
             }
 
             let status = await jira.checkAuthStatus()
             if status.isAuthenticated {
+                ticketDetectionCheckbox.isEnabled = true
                 authStatusLabel.stringValue = "Authenticated" + (status.email.map { " as \($0)" } ?? "")
                 authStatusLabel.textColor = .systemGreen
                 if let site = status.siteURL {
@@ -208,11 +224,14 @@ final class SettingsJiraViewController: NSViewController {
                         try? persistence.saveSettings(settings)
                     }
                 }
+                // Populate from cache immediately, then verify in background
+                ThreadManager.shared.enableAndRefreshJiraDetection()
             } else {
                 authStatusLabel.stringValue = "Not authenticated"
                 authStatusLabel.textColor = .systemOrange
                 authDetailLabel.stringValue = status.errorMessage ?? ""
                 authDetailLabel.isHidden = (status.errorMessage ?? "").isEmpty
+                ticketDetectionCheckbox.isEnabled = false
             }
         }
     }
@@ -233,6 +252,19 @@ final class SettingsJiraViewController: NSViewController {
 
     @objc private func refreshTapped() {
         refreshStatus()
+    }
+
+    @objc private func ticketDetectionToggled() {
+        let enabled = ticketDetectionCheckbox.state == .on
+        settings.jiraTicketDetectionEnabled = enabled
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+
+        if enabled {
+            ThreadManager.shared.enableAndRefreshJiraDetection()
+        } else {
+            ThreadManager.shared.clearAllJiraDetectionState()
+        }
     }
 
     @objc private func siteURLChanged() {

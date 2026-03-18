@@ -173,6 +173,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var pullRequestInfo: PullRequestInfo? = nil
     // Transient (not persisted) — set while an archive operation is in progress.
     public var isArchiving: Bool = false
+    // Transient (not persisted) — cached verification of the detected Jira ticket key.
+    public var verifiedJiraTicket: JiraTicketCacheEntry? = nil
 
     /// Resolves the effective section ID for this thread given a set of known section IDs.
     /// If the thread's sectionId is recognized, returns it; otherwise returns the fallback.
@@ -185,6 +187,23 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     public var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
+    }
+
+    /// Detects a Jira ticket key (e.g. "IP-1234") from the current branch name using
+    /// case-insensitive matching. Returns the key uppercased for Jira URL compatibility.
+    public var detectedBranchTicketKey: String? {
+        let branch = currentBranch
+        guard let match = branch.range(
+            of: #"[A-Za-z]+-\d+"#,
+            options: .regularExpression
+        ) else { return nil }
+        return String(branch[match]).uppercased()
+    }
+
+    /// Returns the explicitly-set Jira ticket key (from sync), or falls back to
+    /// detecting one from the branch name.
+    public var effectiveJiraTicketKey: String? {
+        jiraTicketKey ?? detectedBranchTicketKey
     }
 
     public var sidebarListState: ThreadSidebarListState {

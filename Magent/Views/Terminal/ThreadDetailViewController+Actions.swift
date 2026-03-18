@@ -214,14 +214,19 @@ extension ThreadDetailViewController {
     }
 
     private func startResyncSpinner() {
-        resyncLocalPathsButton.isHidden = true
-        resyncLocalPathsSpinner.isHidden = false
-        resyncLocalPathsSpinner.startAnimation(nil)
+        resyncLocalPathsButton.isEnabled = false
+        resyncLocalPathsButton.image = NSImage(
+            systemSymbolName: "progress.indicator",
+            accessibilityDescription: "Syncing"
+        )
     }
 
     private func stopResyncSpinner() {
-        resyncLocalPathsSpinner.stopAnimation(nil)
-        resyncLocalPathsSpinner.isHidden = true
+        resyncLocalPathsButton.isEnabled = true
+        resyncLocalPathsButton.image = NSImage(
+            systemSymbolName: "arrow.triangle.2.circlepath",
+            accessibilityDescription: "Resync Local Paths"
+        )
         resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
     }
 

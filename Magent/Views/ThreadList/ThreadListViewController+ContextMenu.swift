@@ -291,36 +291,47 @@ extension ThreadListViewController {
     // MARK: - Jira Context Menu
 
     private func buildJiraMenuItem(for thread: MagentThread, settings: AppSettings) -> NSMenuItem? {
-#if FEATURE_JIRA
-        guard let project = settings.projects.first(where: { $0.id == thread.projectId }),
-              let projectKey = project.jiraProjectKey, !projectKey.isEmpty else {
-            return nil
-        }
-
-        let siteURL = project.jiraSiteURL ?? settings.jiraSiteURL
+        let project = settings.projects.first(where: { $0.id == thread.projectId })
+        let siteURL = project?.jiraSiteURL ?? settings.jiraSiteURL
         guard !siteURL.isEmpty else { return nil }
 
         let title: String
-        if thread.jiraTicketKey != nil {
-            title = String(localized: .ThreadStrings.threadOpenTicketInJira)
-        } else if thread.isMain {
-            title = String(localized: .ThreadStrings.threadOpenJiraBoard)
+
+#if FEATURE_JIRA_SYNC
+        if let projectKey = project?.jiraProjectKey, !projectKey.isEmpty {
+            if thread.jiraTicketKey != nil {
+                title = String(localized: .ThreadStrings.threadOpenTicketInJira)
+            } else if thread.isMain {
+                title = String(localized: .ThreadStrings.threadOpenJiraBoard)
+            } else {
+                title = String(localized: .ThreadStrings.threadOpenInJira)
+            }
+        } else if settings.jiraTicketDetectionEnabled, let ticketKey = thread.effectiveJiraTicketKey {
+            title = jiraMenuTitle(ticketKey: ticketKey, thread: thread)
         } else {
-            title = String(localized: .ThreadStrings.threadOpenInJira)
+            return nil
         }
+#else
+        guard settings.jiraTicketDetectionEnabled,
+              let ticketKey = thread.effectiveJiraTicketKey else { return nil }
+        title = jiraMenuTitle(ticketKey: ticketKey, thread: thread)
+#endif
 
         let item = NSMenuItem(title: title, action: #selector(openThreadInJira(_:)), keyEquivalent: "")
         item.target = self
         item.image = jiraMenuIcon()
         item.representedObject = thread
         return item
-#else
-        nil
-#endif
+    }
+
+    private func jiraMenuTitle(ticketKey: String, thread: MagentThread) -> String {
+        if let summary = thread.verifiedJiraTicket?.summary, !summary.isEmpty {
+            return "\(ticketKey): \(summary) — Open in Jira"
+        }
+        return "\(ticketKey) — Open in Jira"
     }
 
     private func jiraMenuIcon() -> NSImage? {
-#if FEATURE_JIRA
         if let image = NSImage(named: NSImage.Name("JiraIcon")) {
             let sized = (image.copy() as? NSImage) ?? image
             sized.size = NSSize(width: 16, height: 16)
@@ -328,9 +339,6 @@ extension ThreadListViewController {
             return sized
         }
         return NSImage(systemSymbolName: "ticket", accessibilityDescription: "Jira")
-#else
-        nil
-#endif
     }
 
     private func pullRequestMenuIcon(for thread: MagentThread) -> NSImage {
@@ -339,30 +347,35 @@ extension ThreadListViewController {
     }
 
     @objc private func openThreadInJira(_ sender: NSMenuItem) {
-#if FEATURE_JIRA
         guard let thread = sender.representedObject as? MagentThread else { return }
 
         let settings = persistence.loadSettings()
-        guard let project = settings.projects.first(where: { $0.id == thread.projectId }),
-              let projectKey = project.jiraProjectKey else { return }
-
-        let siteURL = project.jiraSiteURL ?? settings.jiraSiteURL
+        let project = settings.projects.first(where: { $0.id == thread.projectId })
+        let siteURL = project?.jiraSiteURL ?? settings.jiraSiteURL
         guard !siteURL.isEmpty else { return }
         let jira = JiraService.shared
 
-        let url: URL?
+        var url: URL?
+
+#if FEATURE_JIRA_SYNC
         if let ticketKey = thread.jiraTicketKey {
             url = jira.ticketURL(siteURL: siteURL, ticketKey: ticketKey)
-        } else if thread.isMain, let boardId = project.jiraBoardId {
+        } else if thread.isMain,
+                  let projectKey = project?.jiraProjectKey,
+                  let boardId = project?.jiraBoardId {
             url = jira.boardURL(siteURL: siteURL, projectKey: projectKey, boardId: boardId)
-        } else {
+        } else if let projectKey = project?.jiraProjectKey {
             url = jira.projectURL(siteURL: siteURL, projectKey: projectKey)
+        }
+#endif
+
+        if url == nil, let ticketKey = thread.effectiveJiraTicketKey {
+            url = jira.ticketURL(siteURL: siteURL, ticketKey: ticketKey)
         }
 
         if let url {
             NSWorkspace.shared.open(url)
         }
-#endif
     }
 
     private func buildProjectContextMenu(for project: SidebarProject) -> NSMenu {
