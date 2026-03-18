@@ -3,7 +3,7 @@
 ## User-facing behavior
 
 - The terminal exposes two floating scroll affordances above the Ghostty surface:
-  - a bottom-right draggable pill with page-up, page-down, and jump-to-bottom controls
+  - a bottom-right draggable pill with scroll-up (10 lines), scroll-down (10 lines), and jump-to-bottom controls
   - a bottom-left `Scroll to bottom` pill that appears only after the user scrolls meaningfully away from live output
 - The draggable bottom-right controls keep the shared semi-transparent idle treatment and become more opaque on hover.
 - The standalone bottom-left `Scroll to bottom` pill stays fully opaque at rest, has no hover fade, and keeps an 8 pt gap between the arrow icon and label.

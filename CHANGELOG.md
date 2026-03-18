@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - Jira sync features (board config, section sync, auto-thread creation) remain debug-only behind the renamed `FEATURE_JIRA_SYNC` flag.
 
 ### Terminal
+- Scroll overlay arrows now scroll 10 lines per click instead of a full page, making it easier to browse terminal output incrementally.
 - Fixed: clicking on the terminal surface no longer shows a "returned 127" error after a reboot. The mouse-click URL capture script in `/tmp` had its shebang on the wrong line, causing the OS to fail to find the interpreter.
 ### Sidebar
 - The diff panel's CHANGES tab is now ALL CHANGES and always shows the full branch diff (all committed + uncommitted changes since the merge base), instead of switching between uncommitted and per-commit views on selection.

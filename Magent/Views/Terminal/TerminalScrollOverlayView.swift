@@ -67,8 +67,8 @@ final class TerminalScrollOverlayView: NSView {
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
 
         for (btn, symbol, tip, action) in [
-            (upButton,       "chevron.up",        "Scroll up one page",  #selector(upTapped)),
-            (downButton,     "chevron.down",      "Scroll down one page", #selector(downTapped)),
+            (upButton,       "chevron.up",        "Scroll up",  #selector(upTapped)),
+            (downButton,     "chevron.down",      "Scroll down", #selector(downTapped)),
             (toBottomButton, "arrow.down.to.line","Jump to bottom",      #selector(toBottomTapped)),
         ] as [(NSButton, String, String, Selector)] {
             btn.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)?

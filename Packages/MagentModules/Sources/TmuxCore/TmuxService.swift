@@ -694,14 +694,16 @@ public final class TmuxService: Sendable {
     }
 
     public func scrollPageUp(sessionName: String) async throws {
+        let sn = shellQuote(sessionName)
         _ = try await ShellExecutor.run(
-            "tmux copy-mode -e -t \(shellQuote(sessionName)); tmux send-keys -t \(shellQuote(sessionName)) -X page-up"
+            "tmux copy-mode -e -t \(sn); tmux send-keys -t \(sn) -X -N 10 scroll-up"
         )
     }
 
     public func scrollPageDown(sessionName: String) async throws {
+        let sn = shellQuote(sessionName)
         _ = try await ShellExecutor.run(
-            "tmux copy-mode -e -t \(shellQuote(sessionName)); tmux send-keys -t \(shellQuote(sessionName)) -X page-down-and-cancel"
+            "tmux copy-mode -e -t \(sn); tmux send-keys -t \(sn) -X -N 10 scroll-down"
         )
     }
 
