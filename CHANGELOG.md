@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - CLI docs now explicitly instruct agents to always provide `--description` and `--prompt` when creating threads for specific tasks, so new threads get proper sidebar descriptions and the spawned agent receives its initial instructions.
 
 ### Jira
+- New context menu option "Set description from Jira ticket" auto-fills the thread description with the Jira ticket title. Only shown when a Jira ticket is detected for the thread.
 - Fixed: the toolbar Jira ticket button now updates immediately when a branch change is detected, instead of staying stale until settings changed or the view was recreated.
 - Jira ticket keys (e.g. IP-1234) are now automatically detected from branch names (case-insensitive) and shown in the toolbar, sidebar, and context menu with a link to open the ticket in Jira.
 - Detected tickets are verified against Jira via acli and cached persistently so they survive app restarts and acli disconnection. Verification runs on startup, branch rename, branch change detection, and acli auth success.
@@ -23,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - The "Uncommitted" row in the COMMITS tab is now hidden when the working tree is clean.
 
 ### Thread
+- Thread descriptions set manually or from Jira are no longer truncated to 8 words. The word limit now only applies to auto-generated descriptions.
 - Auto-rename now triggers for non-visible threads: when a thread completes its first agent turn in the background (not selected in the sidebar), the bell-based completion handler extracts the first prompt from pane content and triggers auto-rename immediately, instead of waiting until the thread is selected.
 - PR and Jira buttons are now the leftmost action buttons in the toolbar, separated from utility buttons by a divider.
 - The PR button is now hidden on non-main threads when no PR has been detected. Main worktree always shows it.

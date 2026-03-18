@@ -502,8 +502,6 @@ final class IPCCommandHandler {
 
         do {
             try threadManager.setTaskDescription(threadId: thread.id, description: request.description)
-        } catch ThreadManagerError.invalidDescription {
-            return .failure("Invalid description. Use 2-8 words.", id: request.id)
         } catch {
             return .failure("Failed to set description: \(error.localizedDescription)", id: request.id)
         }
