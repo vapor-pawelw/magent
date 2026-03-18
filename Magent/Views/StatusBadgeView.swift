@@ -1,4 +1,5 @@
 import Cocoa
+import MagentModels
 
 /// A tiny rounded-rect pill displaying a status label with a colored background.
 /// Used inline in sidebar rows and top-bar buttons to show PR/Jira status.
@@ -12,6 +13,9 @@ final class StatusBadgeView: NSView {
         static let open = Style(backgroundColor: NSColor(red: 0.15, green: 0.55, blue: 0.20, alpha: 1), textColor: .white)
         static let draft = Style(backgroundColor: NSColor(red: 0.40, green: 0.40, blue: 0.42, alpha: 1), textColor: .white)
         static let merged = Style(backgroundColor: NSColor(red: 0.50, green: 0.22, blue: 0.70, alpha: 1), textColor: .white)
+        static let approved = Style(backgroundColor: NSColor(red: 0.12, green: 0.50, blue: 0.15, alpha: 1), textColor: .white)
+        static let changesRequested = Style(backgroundColor: NSColor(red: 0.80, green: 0.50, blue: 0.10, alpha: 1), textColor: .white)
+        static let closed = Style(backgroundColor: NSColor(red: 0.70, green: 0.20, blue: 0.20, alpha: 1), textColor: .white)
 
         // Jira status category colors (from Jira's own category system)
         static let jiraTodo = Style(backgroundColor: NSColor(red: 0.35, green: 0.38, blue: 0.42, alpha: 1), textColor: .white)
@@ -79,10 +83,15 @@ final class StatusBadgeView: NSView {
 
     // MARK: - PR Status
 
-    static func prStyle(isMerged: Bool, isDraft: Bool) -> Style {
-        if isMerged { return .merged }
-        if isDraft { return .draft }
-        return .open
+    static func prStyle(for pr: PullRequestInfo) -> Style {
+        if pr.isMerged { return .merged }
+        if pr.isClosed { return .closed }
+        if pr.isDraft { return .draft }
+        switch pr.reviewDecision {
+        case .approved: return .approved
+        case .changesRequested: return .changesRequested
+        case .reviewRequired, nil: return .open
+        }
     }
 
     // MARK: - Jira Status

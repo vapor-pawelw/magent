@@ -264,8 +264,11 @@ public final class GitService: Sendable {
         let quotedRepo = ShellExecutor.shellQuote(repo)
         let quotedBranch = ShellExecutor.shellQuote(branch)
 
-        for (state, isMerged) in [("open", false), ("merged", true)] {
-            let cmd = "gh pr list --repo \(quotedRepo) --head \(quotedBranch) --json number,url,isDraft --state \(state) --limit 1"
+        let fields = "number,url,isDraft,state,reviewDecision"
+
+        // Prefer open PRs; fall back to all states (merged/closed) if none found.
+        for state in ["open", "all"] {
+            let cmd = "gh pr list --repo \(quotedRepo) --head \(quotedBranch) --json \(fields) --state \(state) --limit 1"
             let result = await ShellExecutor.execute(cmd)
             guard result.exitCode == 0 else { continue }
 
@@ -276,8 +279,18 @@ public final class GitService: Sendable {
                   let urlString = first["url"] as? String,
                   let url = URL(string: urlString) else { continue }
 
+            let prState = first["state"] as? String ?? "OPEN"
             let isDraft = first["isDraft"] as? Bool ?? false
-            return PullRequestInfo(number: number, url: url, provider: remote.provider, isMerged: isMerged, isDraft: isDraft)
+            let reviewDecision = (first["reviewDecision"] as? String).flatMap { ReviewDecision(rawValue: $0) }
+            return PullRequestInfo(
+                number: number,
+                url: url,
+                provider: remote.provider,
+                isMerged: prState == "MERGED",
+                isDraft: isDraft,
+                reviewDecision: reviewDecision,
+                isClosed: prState == "CLOSED"
+            )
         }
         return nil
     }
@@ -293,8 +306,10 @@ public final class GitService: Sendable {
         let quotedRepo = ShellExecutor.shellQuote(repo)
         let quotedBranch = ShellExecutor.shellQuote(branch)
 
-        for (state, isMerged) in [("opened", false), ("merged", true)] {
-            let cmd = "glab mr list --repo \(quotedRepo) --source-branch \(quotedBranch) --state \(state) --output json --per-page 1"
+        // Prefer open MRs; fall back to all states if none found.
+        for mrState in ["opened", "all"] {
+            let flag = mrState == "all" ? "--all" : "--state \(mrState)"
+            let cmd = "glab mr list --repo \(quotedRepo) --source-branch \(quotedBranch) \(flag) --output json --per-page 1"
             let result = await ShellExecutor.execute(cmd)
             guard result.exitCode == 0 else { continue }
 
@@ -305,7 +320,23 @@ public final class GitService: Sendable {
 
             let url = remote.directPullRequestURL(number: number)
                 ?? URL(string: "https://\(remote.host)/\(remote.repoPath)/-/merge_requests/\(number)")!
-            return PullRequestInfo(number: number, url: url, provider: remote.provider, isMerged: isMerged)
+
+            let state = first["state"] as? String ?? "opened"
+            let isDraft = first["draft"] as? Bool ?? false
+
+            // GitLab exposes approved_by as an array of approvers
+            let approvedBy = first["approved_by"] as? [[String: Any]]
+            let reviewDecision: ReviewDecision? = if let approvedBy, !approvedBy.isEmpty { .approved } else { nil }
+
+            return PullRequestInfo(
+                number: number,
+                url: url,
+                provider: remote.provider,
+                isMerged: state == "merged",
+                isDraft: isDraft,
+                reviewDecision: reviewDecision,
+                isClosed: state == "closed"
+            )
         }
         return nil
     }

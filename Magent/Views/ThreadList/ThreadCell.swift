@@ -560,7 +560,7 @@ final class ThreadCell: NSTableCellView {
             if showPRBadges {
                 prStatusBadge?.configure(
                     text: pr.statusText,
-                    style: StatusBadgeView.prStyle(isMerged: pr.isMerged, isDraft: pr.isDraft),
+                    style: StatusBadgeView.prStyle(for: pr),
                     fontSize: badgeFontSize
                 )
                 prStatusBadge?.isHidden = false

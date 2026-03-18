@@ -102,19 +102,40 @@ public nonisolated struct PersistedWebTab: Codable, Sendable, Equatable {
     }
 }
 
+/// Review state of a pull request / merge request.
+/// Raw values match the GitHub GraphQL `reviewDecision` field.
+public enum ReviewDecision: String, Codable, Sendable, Equatable {
+    case approved = "APPROVED"
+    case changesRequested = "CHANGES_REQUESTED"
+    case reviewRequired = "REVIEW_REQUIRED"
+}
+
 public nonisolated struct PullRequestInfo: Sendable, Equatable {
     public let number: Int
     public let url: URL
     public let provider: GitHostingProvider
     public let isMerged: Bool
     public let isDraft: Bool
+    public let reviewDecision: ReviewDecision?
+    /// Closed without merge (GitHub "CLOSED", GitLab "closed").
+    public let isClosed: Bool
 
-    public init(number: Int, url: URL, provider: GitHostingProvider, isMerged: Bool = false, isDraft: Bool = false) {
+    public init(
+        number: Int,
+        url: URL,
+        provider: GitHostingProvider,
+        isMerged: Bool = false,
+        isDraft: Bool = false,
+        reviewDecision: ReviewDecision? = nil,
+        isClosed: Bool = false
+    ) {
         self.number = number
         self.url = url
         self.provider = provider
         self.isMerged = isMerged
         self.isDraft = isDraft
+        self.reviewDecision = reviewDecision
+        self.isClosed = isClosed
     }
 
     public var numberLabel: String {
@@ -132,8 +153,13 @@ public nonisolated struct PullRequestInfo: Sendable, Equatable {
 
     public var statusText: String {
         if isMerged { return "Merged" }
+        if isClosed { return "Closed" }
         if isDraft { return "Draft" }
-        return "Open"
+        switch reviewDecision {
+        case .approved: return "\u{2713} Approved"
+        case .changesRequested: return "Changes Requested"
+        case .reviewRequired, nil: return "Open"
+        }
     }
 }
 
