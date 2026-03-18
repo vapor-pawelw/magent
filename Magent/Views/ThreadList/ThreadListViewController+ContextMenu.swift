@@ -47,6 +47,14 @@ extension ThreadListViewController {
         descriptionItem.representedObject = thread
         menu.addItem(descriptionItem)
 
+        if let jiraSummary = thread.verifiedJiraTicket?.summary, !jiraSummary.isEmpty {
+            let jiraDescItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetDescriptionFromJira), action: #selector(setThreadDescriptionFromJira(_:)), keyEquivalent: "")
+            jiraDescItem.target = self
+            jiraDescItem.image = jiraMenuIcon()
+            jiraDescItem.representedObject = thread
+            menu.addItem(jiraDescItem)
+        }
+
         let settings = persistence.loadSettings()
 
         // Rename branch
@@ -747,17 +755,14 @@ extension ThreadListViewController {
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
 
-        let requestedDescription = textField.stringValue
-        do {
-            try threadManager.setTaskDescription(threadId: thread.id, description: requestedDescription)
-        } catch {
-            let errorAlert = NSAlert()
-            errorAlert.messageText = String(localized: .ThreadStrings.threadCouldNotSaveDescription)
-            errorAlert.informativeText = error.localizedDescription
-            errorAlert.alertStyle = .warning
-            errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
-            errorAlert.runModal()
-        }
+        try? threadManager.setTaskDescription(threadId: thread.id, description: textField.stringValue)
+    }
+
+    @objc private func setThreadDescriptionFromJira(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread,
+              let jiraSummary = thread.verifiedJiraTicket?.summary, !jiraSummary.isEmpty else { return }
+
+        try? threadManager.setTaskDescription(threadId: thread.id, description: jiraSummary)
     }
 
     @objc private func openThreadInFinder(_ sender: NSMenuItem) {

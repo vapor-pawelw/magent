@@ -944,22 +944,15 @@ extension ThreadManager {
             throw ThreadManagerError.threadNotFound
         }
 
-        let normalizedDescription: String?
+        let finalDescription: String?
         if let description {
             let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                normalizedDescription = nil
-            } else {
-                guard let normalized = normalizeTaskDescription(trimmed) else {
-                    throw ThreadManagerError.invalidDescription
-                }
-                normalizedDescription = normalized
-            }
+            finalDescription = trimmed.isEmpty ? nil : trimmed
         } else {
-            normalizedDescription = nil
+            finalDescription = nil
         }
 
-        threads[index].taskDescription = normalizedDescription
+        threads[index].taskDescription = finalDescription
         try persistence.saveActiveThreads(threads)
 
         delegate?.threadManager(self, didUpdateThreads: threads)

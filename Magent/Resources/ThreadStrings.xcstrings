@@ -782,13 +782,24 @@
         }
       }
     },
+    "threadSetDescriptionFromJira": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set description from Jira ticket"
+          }
+        }
+      }
+    },
     "threadSetDescriptionMessage": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enter a short description (max 8 words). Leave empty to clear."
+            "value": "Enter a short description. Leave empty to clear."
           }
         }
       }
