@@ -19,7 +19,7 @@ This repo now uses a local SwiftPM package at `Packages/MagentModules` for share
 - `IPCCore`
   - IPC request/response contracts and agent guidance text
 - `PersistenceCore`
-  - JSON/file-backed persistence
+  - JSON/file-backed persistence with schema versioning, startup validation, and write-blocking for corrupted files
 - `UtilityCore`
   - remaining shared non-UI helpers
 - `GhosttyBridge`
