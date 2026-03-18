@@ -13,10 +13,12 @@ extension ThreadManager {
         requestedAgentType: AgentType? = nil,
         useAgentCommand: Bool = true,
         initialPrompt: String? = nil,
+        shouldSubmitInitialPrompt: Bool = true,
         requestedName: String? = nil,
         requestedBaseBranch: String? = nil,
         pendingPromptFileURL: URL? = nil,
-        requestedSectionId: UUID? = nil
+        requestedSectionId: UUID? = nil,
+        skipAutoSelect: Bool = false
     ) async throws -> MagentThread {
         var name = ""
         var foundUnique = false
@@ -95,6 +97,9 @@ extension ThreadManager {
         threads.append(pendingThread)
         if let lastIndex = threads.indices.last {
             placeThreadAtBottomOfSidebarGroup(threadId: threads[lastIndex].id)
+        }
+        if skipAutoSelect {
+            skipNextAutoSelect = true
         }
         await MainActor.run {
             delegate?.threadManager(self, didCreateThread: pendingThread)
@@ -189,15 +194,22 @@ extension ThreadManager {
                 command: startCmd
             )
 
-            // Also set on the tmux session so new panes/windows inherit them
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_PATH", value: worktreePath)
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: name)
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_THREAD_ID", value: threadID.uuidString)
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
-            if let selectedAgentType {
-                try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
+            // Also set on the tmux session so new panes/windows inherit them.
+            // Fire all setEnvironment calls concurrently — they are independent.
+            await withTaskGroup(of: Void.self) { group in
+                let envVars: [(String, String)] = [
+                    ("MAGENT_WORKTREE_PATH", worktreePath),
+                    ("MAGENT_PROJECT_PATH", project.repoPath),
+                    ("MAGENT_WORKTREE_NAME", name),
+                    ("MAGENT_PROJECT_NAME", project.name),
+                    ("MAGENT_THREAD_ID", threadID.uuidString),
+                    ("MAGENT_SOCKET", IPCSocketServer.socketPath),
+                ] + (selectedAgentType.map { [("MAGENT_AGENT_TYPE", $0.rawValue)] } ?? [])
+                for (key, value) in envVars {
+                    group.addTask { [tmux] in
+                        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: key, value: value)
+                    }
+                }
             }
 
             let thread = MagentThread(
@@ -259,7 +271,7 @@ extension ThreadManager {
 
             // Inject terminal command and agent context
             let injection = effectiveInjection(for: project.id)
-            injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext, initialPrompt: initialPrompt, agentType: selectedAgentType)
+            injectAfterStart(sessionName: tmuxSessionName, terminalCommand: injection.terminalCommand, agentContext: injection.agentContext, initialPrompt: initialPrompt, shouldSubmitInitialPrompt: shouldSubmitInitialPrompt, agentType: selectedAgentType)
             if initialPrompt?.isEmpty == false, useAgentCommand {
                 scheduleAgentConversationIDRefresh(threadId: thread.id, sessionName: tmuxSessionName)
             }
@@ -340,13 +352,19 @@ extension ThreadManager {
         )
         // Main thread is always an agent session.
 
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_PATH", value: project.repoPath)
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_PROJECT_NAME", value: project.name)
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_THREAD_ID", value: threadID.uuidString)
-        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
-        if let selectedAgentType {
-            try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: "MAGENT_AGENT_TYPE", value: selectedAgentType.rawValue)
+        await withTaskGroup(of: Void.self) { group in
+            let envVars: [(String, String)] = [
+                ("MAGENT_PROJECT_PATH", project.repoPath),
+                ("MAGENT_WORKTREE_NAME", "main"),
+                ("MAGENT_PROJECT_NAME", project.name),
+                ("MAGENT_THREAD_ID", threadID.uuidString),
+                ("MAGENT_SOCKET", IPCSocketServer.socketPath),
+            ] + (selectedAgentType.map { [("MAGENT_AGENT_TYPE", $0.rawValue)] } ?? [])
+            for (key, value) in envVars {
+                group.addTask { [tmux] in
+                    try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: key, value: value)
+                }
+            }
         }
 
         let thread = MagentThread(

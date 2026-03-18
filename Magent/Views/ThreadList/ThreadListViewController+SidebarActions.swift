@@ -350,7 +350,7 @@ extension ThreadListViewController {
 
         Task {
             do {
-                _ = try await self.threadManager.createThread(
+                let created = try await self.threadManager.createThread(
                     project: project,
                     requestedAgentType: requestedAgentType,
                     useAgentCommand: useAgentCommand,
@@ -360,6 +360,10 @@ extension ThreadListViewController {
                     pendingPromptFileURL: pendingPromptFileURL,
                     requestedSectionId: requestedSectionId
                 )
+                if let desc = taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !desc.isEmpty {
+                    try? self.threadManager.setTaskDescription(threadId: created.id, description: desc)
+                }
                 await MainActor.run {
                     self.isCreatingThread = false
                     self.reloadData()

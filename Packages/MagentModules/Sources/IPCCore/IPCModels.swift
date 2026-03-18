@@ -24,6 +24,20 @@ public nonisolated struct IPCRequest: Codable, Sendable {
     public var force: Bool?
     public var skipLocalSync: Bool?
     public var noSelect: Bool?
+    public var noSubmit: Bool?
+    public var threads: [IPCBatchThreadSpec]?
+}
+
+/// Spec for a single thread inside a `batch-create` request.
+public nonisolated struct IPCBatchThreadSpec: Codable, Sendable {
+    public var agentType: String?
+    public var prompt: String?
+    public var newName: String?
+    public var description: String?
+    public var sectionName: String?
+    public var baseThreadName: String?
+    public var baseBranch: String?
+    public var noSubmit: Bool?
 }
 
 // MARK: - Response

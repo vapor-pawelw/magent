@@ -44,11 +44,52 @@ magent-cli create-thread --project <name> [options]
 | `--base-thread <name>` | Use an existing thread's branch as the base for the new thread. |
 | `--base-branch <name>` | Use an explicit branch as the base for the new thread. |
 | `--no-select` | Create the thread without switching to it in the sidebar. |
+| `--no-submit` | Inject the prompt text into the agent input but don't press Enter. The user can review and submit manually. Recommended when spawning many threads to avoid concurrent agent CPU load. |
 
 If neither `--name` nor `--description` is given, a random name is generated.
 `--base-thread` and `--base-branch` are mutually exclusive.
 
 **Timeout note**: `create-thread` allows up to 120 seconds for the server to respond, since it involves git worktree creation (can be slow on large repos) and optionally an AI agent call to generate a slug from `--description`. Prefer `--name` over `--description` when you want the exact name and faster response.
+
+### batch-create
+
+Create multiple threads in parallel. Threads are created concurrently for maximum throughput with minimal UI blocking. Recommended with `--no-submit` when spawning many threads to avoid CPU spikes from concurrent agents.
+
+```bash
+magent-cli batch-create --project <name> --file <specs.json> [--no-submit]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--project <name>` | **Required.** Project to create all threads in. |
+| `--file <specs.json>` | **Required.** Path to a JSON file containing an array of thread specs. |
+| `--no-submit` | Apply `--no-submit` to all threads (can also be set per-thread in the spec). |
+
+Each element in the specs array is an object with optional keys:
+
+| Key | Description |
+|-----|-------------|
+| `prompt` | Initial prompt for the agent. |
+| `description` | Natural-language description (AI generates slug). |
+| `name` | Exact thread name. |
+| `agentType` | `claude`, `codex`, `custom`, or `terminal`. |
+| `sectionName` | Place thread in this section. |
+| `baseThreadName` | Branch from an existing thread. |
+| `baseBranch` | Branch from an explicit branch. |
+| `noSubmit` | Per-thread override for `--no-submit`. |
+
+Example `specs.json`:
+```json
+[
+  {"description": "fix login timeout", "prompt": "The login form times out after 30s..."},
+  {"description": "add dark mode support", "prompt": "Add dark mode toggle to settings..."},
+  {"name": "refactor-api", "prompt": "Refactor the REST API client to use async/await"}
+]
+```
+
+The response contains a `threads` array with info for each successfully created thread, and a `warning` field if any failed.
+
+**Timeout note**: `batch-create` allows up to 300 seconds since it may involve multiple AI slug generation calls plus parallel git/tmux setup.
 
 ### list-projects
 

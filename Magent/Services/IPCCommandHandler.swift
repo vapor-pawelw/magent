@@ -13,6 +13,8 @@ final class IPCCommandHandler {
         switch request.command {
         case "create-thread":
             return await createThread(request)
+        case "batch-create":
+            return await batchCreateThreads(request)
         case "list-projects":
             return listProjects(request)
         case "list-threads":
@@ -207,9 +209,6 @@ final class IPCCommandHandler {
             requestedSectionId = nil
         }
 
-        if request.noSelect == true {
-            threadManager.skipNextAutoSelect = true
-        }
         let thread: MagentThread
         do {
             thread = try await threadManager.createThread(
@@ -217,17 +216,21 @@ final class IPCCommandHandler {
                 requestedAgentType: requestedAgent,
                 useAgentCommand: useAgentCommand,
                 initialPrompt: request.prompt,
+                shouldSubmitInitialPrompt: request.noSubmit != true,
                 requestedName: requestedName,
-                requestedBaseBranch: requestedBaseBranch
+                requestedBaseBranch: requestedBaseBranch,
+                requestedSectionId: requestedSectionId,
+                skipAutoSelect: request.noSelect == true
             )
         } catch {
-            threadManager.skipNextAutoSelect = false
             return .failure("Failed to create thread: \(error.localizedDescription)", id: request.id)
         }
 
-        // Move to requested section after creation (if specified)
-        if let sectionId = requestedSectionId {
-            threadManager.moveThread(thread, toSection: sectionId)
+        // Set task description from --description (slug generation consumed it for the name,
+        // but the thread itself still needs the description persisted).
+        if let description = request.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !description.isEmpty {
+            try? threadManager.setTaskDescription(threadId: thread.id, description: description)
         }
 
         let projectNameResolved = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? projectName
@@ -237,6 +240,184 @@ final class IPCCommandHandler {
         }
         let info = IPCThreadInfo(thread: updatedThread, projectName: projectNameResolved)
         return IPCResponse(ok: true, id: request.id, thread: info)
+    }
+
+    // MARK: - Batch Create
+
+    private func batchCreateThreads(_ request: IPCRequest) async -> IPCResponse {
+        guard let projectName = request.project else {
+            return .failure("Missing required field: project", id: request.id)
+        }
+        guard let specs = request.threads, !specs.isEmpty else {
+            return .failure("Missing required field: threads (array of thread specs)", id: request.id)
+        }
+
+        let settings = persistence.loadSettings()
+        guard let project = settings.projects.first(where: {
+            $0.name.caseInsensitiveCompare(projectName) == .orderedSame
+        }) else {
+            return .failure("Project not found: \(projectName)", id: request.id)
+        }
+
+        // Phase 1: Resolve all names upfront (may involve AI slug generation).
+        // This is sequential but lets us validate everything before creating anything.
+        struct ResolvedSpec {
+            let agentType: AgentType?
+            let useAgentCommand: Bool
+            let prompt: String?
+            let noSubmit: Bool
+            let requestedName: String?
+            let description: String?
+            let requestedBaseBranch: String?
+            let requestedSectionId: UUID?
+        }
+
+        var resolved: [ResolvedSpec] = []
+        for (i, spec) in specs.enumerated() {
+            let agentType: AgentType?
+            let useAgentCommand: Bool
+            if let agentStr = spec.agentType {
+                if agentStr == "terminal" {
+                    agentType = nil
+                    useAgentCommand = false
+                } else {
+                    guard let at = AgentType(rawValue: agentStr) else {
+                        return .failure("Thread \(i): unknown agent type: \(agentStr)", id: request.id)
+                    }
+                    agentType = at
+                    useAgentCommand = true
+                }
+            } else {
+                agentType = nil
+                useAgentCommand = true
+            }
+
+            // Resolve name from --name or --description
+            let requestedName: String?
+            if let exactName = spec.newName?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !exactName.isEmpty {
+                requestedName = exactName
+            } else if let description = spec.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !description.isEmpty {
+                let resolvedAgent = agentType ?? threadManager.resolveAgentType(
+                    for: project.id, requestedAgentType: nil, settings: settings
+                )
+                let renameResult = await threadManager.autoRenameCandidates(
+                    from: description, agentType: resolvedAgent, projectId: project.id
+                )
+                if case .candidates(let slugs) = renameResult {
+                    requestedName = slugs.first
+                } else {
+                    requestedName = nil
+                }
+            } else {
+                requestedName = nil
+            }
+
+            // Resolve base branch
+            let baseBranch: String?
+            if let bb = spec.baseBranch?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !bb.isEmpty {
+                baseBranch = bb
+            } else if let bt = spec.baseThreadName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !bt.isEmpty {
+                guard let baseThread = threadManager.threads.first(where: {
+                    $0.name.caseInsensitiveCompare(bt) == .orderedSame
+                }) else {
+                    return .failure("Thread \(i): base thread not found: \(bt)", id: request.id)
+                }
+                baseBranch = baseThread.actualBranch ?? baseThread.branchName
+            } else {
+                baseBranch = nil
+            }
+
+            // Resolve section
+            let sectionId: UUID?
+            if let sectionName = spec.sectionName?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !sectionName.isEmpty {
+                let sections = settings.sections(for: project.id)
+                guard let section = findSection(named: sectionName, in: sections) else {
+                    return .failure("Thread \(i): section not found: \(sectionName)", id: request.id)
+                }
+                sectionId = section.id
+            } else {
+                sectionId = nil
+            }
+
+            resolved.append(ResolvedSpec(
+                agentType: agentType,
+                useAgentCommand: useAgentCommand,
+                prompt: spec.prompt,
+                noSubmit: spec.noSubmit == true || request.noSubmit == true,
+                requestedName: requestedName,
+                description: spec.description,
+                requestedBaseBranch: baseBranch,
+                requestedSectionId: sectionId
+            ))
+        }
+
+        // Phase 2: Create threads concurrently. All specs passed validation,
+        // so failures here are infrastructure-level (git/tmux).
+        // Each thread passes skipAutoSelect: true so batch create doesn't jump focus.
+        let results = await withTaskGroup(of: (Int, Result<MagentThread, Error>).self) { group in
+            for (i, spec) in resolved.enumerated() {
+                group.addTask { [threadManager] in
+                    do {
+                        let thread = try await threadManager.createThread(
+                            project: project,
+                            requestedAgentType: spec.agentType,
+                            useAgentCommand: spec.useAgentCommand,
+                            initialPrompt: spec.prompt,
+                            shouldSubmitInitialPrompt: !spec.noSubmit,
+                            requestedName: spec.requestedName,
+                            requestedBaseBranch: spec.requestedBaseBranch,
+                            requestedSectionId: spec.requestedSectionId,
+                            skipAutoSelect: true
+                        )
+                        return (i, .success(thread))
+                    } catch {
+                        return (i, .failure(error))
+                    }
+                }
+            }
+            var collected: [(Int, Result<MagentThread, Error>)] = []
+            for await result in group {
+                collected.append(result)
+            }
+            return collected.sorted(by: { $0.0 < $1.0 })
+        }
+
+        // Set task descriptions after creation (outside task group for main-actor safety).
+        for (i, result) in results {
+            if case .success(let thread) = result,
+               let desc = resolved[i].description?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !desc.isEmpty {
+                try? threadManager.setTaskDescription(threadId: thread.id, description: desc)
+            }
+        }
+
+        // Build response with all created threads
+        var threadInfos: [IPCThreadInfo] = []
+        var errors: [String] = []
+        for (i, result) in results {
+            switch result {
+            case .success(let thread):
+                let updated = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+                threadInfos.append(IPCThreadInfo(thread: updated, projectName: projectName))
+            case .failure(let error):
+                errors.append("Thread \(i): \(error.localizedDescription)")
+            }
+        }
+
+        if !errors.isEmpty, threadInfos.isEmpty {
+            return .failure("All threads failed: \(errors.joined(separator: "; "))", id: request.id)
+        }
+
+        var response = IPCResponse(ok: true, id: request.id, threads: threadInfos)
+        if !errors.isEmpty {
+            response.warning = "Some threads failed: \(errors.joined(separator: "; "))"
+        }
+        return response
     }
 
     private func listProjects(_ request: IPCRequest) -> IPCResponse {

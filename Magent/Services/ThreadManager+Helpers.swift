@@ -106,9 +106,10 @@ extension ThreadManager {
     }
 
     func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil, shouldSubmitInitialPrompt: Bool = true, agentType: AgentType? = nil) {
-        let hasPrompt = shouldSubmitInitialPrompt && initialPrompt != nil && !initialPrompt!.isEmpty
-        guard !terminalCommand.isEmpty || !agentContext.isEmpty || hasPrompt else { return }
-        NSLog("[injectAfterStart] session=\(sessionName) hasPrompt=\(hasPrompt) hasTermCmd=\(!terminalCommand.isEmpty) agentType=\(agentType?.rawValue ?? "nil")")
+        let prompt = initialPrompt.flatMap { $0.isEmpty ? nil : $0 }
+        let hasPrompt = shouldSubmitInitialPrompt && prompt != nil
+        guard !terminalCommand.isEmpty || !agentContext.isEmpty || prompt != nil else { return }
+        NSLog("[injectAfterStart] session=\(sessionName) hasPrompt=\(hasPrompt) injectOnly=\(prompt != nil && !shouldSubmitInitialPrompt) hasTermCmd=\(!terminalCommand.isEmpty) agentType=\(agentType?.rawValue ?? "nil")")
         Task {
             // Wait for tmux session to start
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -120,7 +121,44 @@ extension ThreadManager {
                     userInfo: ["sessionName": sessionName]
                 )
             }
-            if hasPrompt {
+            if let prompt, !shouldSubmitInitialPrompt {
+                // Inject-only mode: paste the prompt text but don't press Enter.
+                // Wait for agent readiness so the text lands in the right input area.
+                NotificationCenter.default.post(name: .magentAgentInjectionStarted, object: nil, userInfo: ["sessionName": sessionName])
+                let agentReady = await waitForAgentReady(sessionName: sessionName, agentType: agentType)
+                if !agentReady {
+                    // Check for interactive shell blockers (trust dialogs, update prompts, etc.)
+                    // that could cause the pasted text to accidentally answer a prompt.
+                    let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? ""
+                    if detectsInteractiveShellBlocker(paneContent) {
+                        await MainActor.run {
+                            BannerManager.shared.show(
+                                message: "Prompt text not injected — shell is waiting for user input. Answer the prompt in the terminal, then retry.",
+                                style: .warning,
+                                duration: nil,
+                                isDismissible: true,
+                                actions: [BannerAction(title: "Retry") { [weak self] in
+                                    self?.injectAfterStart(
+                                        sessionName: sessionName,
+                                        terminalCommand: "",
+                                        agentContext: agentContext,
+                                        initialPrompt: prompt,
+                                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                                        agentType: agentType
+                                    )
+                                }]
+                            )
+                        }
+                        return
+                    }
+                }
+                try? await tmux.sendText(sessionName: sessionName, text: prompt)
+                NotificationCenter.default.post(
+                    name: .magentAgentKeysInjected,
+                    object: nil,
+                    userInfo: ["sessionName": sessionName]
+                )
+            } else if let prompt, shouldSubmitInitialPrompt {
                 // When an initial prompt is provided, skip the agent context injection
                 // and send only the prompt. The agent context would race with the prompt —
                 // submitting as a first prompt that blocks the real one.
@@ -134,7 +172,6 @@ extension ThreadManager {
                     // prompt text into the wrong context.
                     let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? ""
                     if detectsInteractiveShellBlocker(paneContent) {
-                        let prompt = initialPrompt!
                         await MainActor.run {
                             BannerManager.shared.show(
                                 message: "Initial prompt not sent — shell is waiting for user input. Answer the prompt in the terminal, then retry.",
@@ -163,10 +200,9 @@ extension ThreadManager {
                 // fixed sleep, so Enter only arrives after the TUI event loop has fully
                 // consumed the paste. Falls back gracefully on timeout.
                 do {
-                    try await tmux.sendText(sessionName: sessionName, text: initialPrompt!)
+                    try await tmux.sendText(sessionName: sessionName, text: prompt)
                 } catch {
                     NSLog("[injectAfterStart] sendText failed for session \(sessionName): \(error)")
-                    let prompt = initialPrompt!
                     await MainActor.run {
                         BannerManager.shared.show(
                             message: "Initial prompt not sent — failed to paste into terminal.",
@@ -187,7 +223,7 @@ extension ThreadManager {
                     }
                     return
                 }
-                let appeared = await waitForPromptToAppear(sessionName: sessionName, prompt: initialPrompt!)
+                let appeared = await waitForPromptToAppear(sessionName: sessionName, prompt: prompt)
                 if !appeared {
                     NSLog("[injectAfterStart] prompt fingerprint not found in pane for session \(sessionName) — sending Enter anyway")
                 }

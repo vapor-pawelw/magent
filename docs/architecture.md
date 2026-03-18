@@ -125,6 +125,10 @@ Generated descriptions should stay semantically aligned with the slug and read l
 
 **Early auto-rename from launch sheet:** `createThread` fires `autoRenameThreadAfterFirstPromptIfNeeded` in an unstructured `Task` immediately after the tmux session is created, using the prompt captured from the launch sheet. This means the thread typically gets a meaningful name before the agent has finished loading. `didAutoRenameFromFirstPrompt` is the deduplication guard — when the early trigger runs first and sets this flag, the TOC-based trigger skips the same prompt later. If the early trigger loses the `autoRenameInProgress` race (another rename is already in flight), it exits gracefully; the TOC path will pick it up instead.
 
+**Inject-only mode (`--no-submit` / `shouldSubmitInitialPrompt: false`):** `injectAfterStart` supports injecting prompt text into the agent input without pressing Enter. When `shouldSubmitInitialPrompt` is false but an `initialPrompt` is provided, the method waits for agent readiness, pastes the text via `sendText`, but skips `sendEnter`. This is used by `batch-create --no-submit` to pre-fill many threads' agent inputs without triggering concurrent agent runs.
+
+**Batch thread creation (`batch-create`):** `IPCCommandHandler.batchCreateThreads` resolves all names/sections/validation upfront (Phase 1, sequential), then creates all threads concurrently via `withTaskGroup` (Phase 2). Each thread passes `skipAutoSelect: true` so the sidebar focus doesn't jump during batch creation. Task descriptions are set after the task group completes to avoid main-actor isolation issues inside child tasks.
+
 ### 4.3 Prompt TOC Source of Truth
 
 Prompt TOC content is confirmation-driven, not raw-keystroke-driven. Persist per-session TOC-confirmed prompt history only after pane evidence shows the prompt is no longer just active bottom composer text.
