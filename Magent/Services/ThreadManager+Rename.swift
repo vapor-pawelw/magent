@@ -976,6 +976,16 @@ extension ThreadManager {
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
+    func setThreadSignEmoji(threadId: UUID, signEmoji: String?) throws {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+        guard threads[index].signEmoji != signEmoji else { return }
+        threads[index].signEmoji = signEmoji
+        try persistence.saveActiveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
     // MARK: - Rename Tab
 
     func renameTab(threadId: UUID, sessionName: String, newDisplayName: String) async throws {

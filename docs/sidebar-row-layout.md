@@ -31,6 +31,7 @@ This thread refined the left-rail and spacing rules for project headers, section
 - `ThreadCell` owns the main-row accent bar and toggles it only for `configureAsMain(...)`.
 - The trailing marker stack is flat: `[prTF, jiraIV, archiveBtn, spinner, rateLimitIV, completionIV, pinIV]`. There is no `statusSlot` container. All items are direct children of the stack, and `detachesHiddenViews = true` handles spacing automatically. Spinner, rateLimitIV, and completionIV remain mutually exclusive (only one active-state icon at a time); archiveBtn is managed independently and can appear alongside any of them. `jiraIV` is wired but currently always hidden (reserved for `FEATURE_JIRA_SYNC` debug use); ticket detection shows the key on line 3 instead.
 - The main-thread leading stack uses `detachesHiddenViews = true` so hiding the row icon does not leave phantom horizontal spacing.
+- `signEmojiLabel` is a 9pt `NSTextField` positioned just to the left of the thread icon via auto-layout (`trailingAnchor` to `imageView.leadingAnchor + 1`). It is **not** part of the horizontal stack, so it does not affect indentation or spacing. Hidden for main-thread rows and when `signEmoji` is `nil`.
 
 ## Gotchas
 

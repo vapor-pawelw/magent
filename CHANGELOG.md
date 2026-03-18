@@ -26,6 +26,7 @@ All notable changes to this project will be documented in this file.
 - Mouse wheel now scrolls 6 lines per tick instead of 1, for faster scrolling without jumping a full page.
 - Fixed: clicking on the terminal surface no longer shows a "returned 127" error after a reboot. The mouse-click URL capture script in `/tmp` had its shebang on the wrong line, causing the OS to fail to find the interpreter.
 ### Sidebar
+- Threads can now be marked with a sign emoji (🛑, ✅, ⏸️, ⚠️, 🔥) via the right-click context menu. The emoji appears to the left of the thread icon, persists across restarts, and can be cleared from the same menu.
 - The diff panel's CHANGES tab is now ALL CHANGES and always shows the full branch diff (all committed + uncommitted changes since the merge base), instead of switching between uncommitted and per-commit views on selection.
 - The "Uncommitted" row in the COMMITS tab is now hidden when the working tree is clean.
 

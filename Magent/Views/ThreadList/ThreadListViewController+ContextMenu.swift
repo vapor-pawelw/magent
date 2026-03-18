@@ -72,6 +72,11 @@ extension ThreadListViewController {
         iconItem.submenu = buildThreadIconSubmenu(for: thread)
         menu.addItem(iconItem)
 
+        let signItem = NSMenuItem(title: "Sign", action: nil, keyEquivalent: "")
+        signItem.image = NSImage(systemSymbolName: "flag.fill", accessibilityDescription: "Sign emoji")
+        signItem.submenu = buildSignEmojiSubmenu(for: thread)
+        menu.addItem(signItem)
+
         menu.addItem(NSMenuItem.separator())
 
         // Move to... submenu
@@ -165,6 +170,39 @@ extension ThreadListViewController {
             ] as [String: Any]
             submenu.addItem(item)
         }
+        return submenu
+    }
+
+    private static let signEmojiOptions: [(emoji: String, label: String)] = [
+        ("🛑", "Stop"),
+        ("✅", "Done"),
+        ("⏸️", "Paused"),
+        ("⚠️", "Attention"),
+        ("🔥", "Urgent"),
+    ]
+
+    private func buildSignEmojiSubmenu(for thread: MagentThread) -> NSMenu {
+        let submenu = NSMenu()
+        for option in Self.signEmojiOptions {
+            let item = NSMenuItem(title: "\(option.emoji)  \(option.label)", action: #selector(setThreadSignEmoji(_:)), keyEquivalent: "")
+            item.target = self
+            item.state = thread.signEmoji == option.emoji ? .on : .off
+            item.representedObject = [
+                "threadId": thread.id,
+                "emoji": option.emoji
+            ] as [String: Any]
+            submenu.addItem(item)
+        }
+        submenu.addItem(NSMenuItem.separator())
+        let clearItem = NSMenuItem(title: "Clear", action: #selector(setThreadSignEmoji(_:)), keyEquivalent: "")
+        clearItem.target = self
+        clearItem.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Clear sign")
+        clearItem.representedObject = [
+            "threadId": thread.id,
+            "emoji": ""
+        ] as [String: Any]
+        clearItem.isEnabled = thread.signEmoji != nil
+        submenu.addItem(clearItem)
         return submenu
     }
 
@@ -651,6 +689,23 @@ extension ThreadListViewController {
         } catch {
             let errorAlert = NSAlert()
             errorAlert.messageText = String(localized: .ThreadStrings.threadCouldNotSaveIcon)
+            errorAlert.informativeText = error.localizedDescription
+            errorAlert.alertStyle = .warning
+            errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
+            errorAlert.runModal()
+        }
+    }
+
+    @objc private func setThreadSignEmoji(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let threadId = info["threadId"] as? UUID,
+              let emojiRaw = info["emoji"] as? String else { return }
+        let emoji: String? = emojiRaw.isEmpty ? nil : emojiRaw
+        do {
+            try threadManager.setThreadSignEmoji(threadId: threadId, signEmoji: emoji)
+        } catch {
+            let errorAlert = NSAlert()
+            errorAlert.messageText = "Could not save sign emoji"
             errorAlert.informativeText = error.localizedDescription
             errorAlert.alertStyle = .warning
             errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))

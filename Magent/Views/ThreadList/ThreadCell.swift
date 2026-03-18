@@ -72,6 +72,7 @@ final class ThreadCell: NSTableCellView {
     private weak var prRowStack: NSStackView?
     private var leadingStackConstraint: NSLayoutConstraint?
     private var mainAccentBar: NSView?
+    private var signEmojiLabel: NSTextField?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
     private var showsRenamePulse = false
@@ -223,6 +224,18 @@ final class ThreadCell: NSTableCellView {
         stack.detachesHiddenViews = true
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
+
+        let emojiLabel = NSTextField(labelWithString: "")
+        emojiLabel.translatesAutoresizingMaskIntoConstraints = false
+        emojiLabel.font = .systemFont(ofSize: 9)
+        emojiLabel.alignment = .center
+        emojiLabel.isHidden = true
+        addSubview(emojiLabel)
+        signEmojiLabel = emojiLabel
+        NSLayoutConstraint.activate([
+            emojiLabel.trailingAnchor.constraint(equalTo: iv.leadingAnchor, constant: 1),
+            emojiLabel.centerYAnchor.constraint(equalTo: iv.centerYAnchor),
+        ])
 
         let leadingConstraint = stack.leadingAnchor.constraint(
             equalTo: leadingAnchor,
@@ -516,6 +529,14 @@ final class ThreadCell: NSTableCellView {
             ? NSColor.controlAccentColor
             : (sectionColor ?? NSColor(resource: .primaryBrand))
 
+        if let emoji = thread.signEmoji {
+            signEmojiLabel?.stringValue = emoji
+            signEmojiLabel?.isHidden = false
+        } else {
+            signEmojiLabel?.stringValue = ""
+            signEmojiLabel?.isHidden = true
+        }
+
         prLabel?.stringValue = ""
         prLabel?.toolTip = nil
         prLabel?.isHidden = true
@@ -655,6 +676,8 @@ final class ThreadCell: NSTableCellView {
 
         imageView?.image = nil
         imageView?.isHidden = true
+
+        signEmojiLabel?.isHidden = true
 
         setDirtyDot(primaryDirtyDot, visible: false)
         setDirtyDot(secondaryDirtyDot, visible: isDirty)

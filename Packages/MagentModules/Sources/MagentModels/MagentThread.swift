@@ -173,6 +173,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var hasEverDoneWork: Bool
     /// Persisted web tabs (Jira, PR, etc.) — loaded lazily when the user selects them.
     public var persistedWebTabs: [PersistedWebTab]
+    /// Optional sign emoji displayed to the left of the thread icon (e.g. 🛑, ✅).
+    public var signEmoji: String?
 
     // MARK: - Computed
 
@@ -324,6 +326,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case localFileSyncPathsSnapshot
         case hasEverDoneWork
         case persistedWebTabs
+        case signEmoji
     }
 
     public init(
@@ -359,7 +362,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         submittedPromptsBySession: [String: [String]] = [:],
         localFileSyncPathsSnapshot: [String]? = nil,
         hasEverDoneWork: Bool = false,
-        persistedWebTabs: [PersistedWebTab] = []
+        persistedWebTabs: [PersistedWebTab] = [],
+        signEmoji: String? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -394,6 +398,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.localFileSyncPathsSnapshot = localFileSyncPathsSnapshot
         self.hasEverDoneWork = hasEverDoneWork
         self.persistedWebTabs = persistedWebTabs
+        self.signEmoji = signEmoji
     }
 
     public init(from decoder: Decoder) throws {
@@ -431,6 +436,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         localFileSyncPathsSnapshot = try container.decodeIfPresent([String].self, forKey: .localFileSyncPathsSnapshot)
         hasEverDoneWork = try container.decodeIfPresent(Bool.self, forKey: .hasEverDoneWork) ?? false
         persistedWebTabs = try container.decodeIfPresent([PersistedWebTab].self, forKey: .persistedWebTabs) ?? []
+        signEmoji = try container.decodeIfPresent(String.self, forKey: .signEmoji)
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -488,6 +494,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         if !persistedWebTabs.isEmpty {
             try container.encode(persistedWebTabs, forKey: .persistedWebTabs)
         }
+        try container.encodeIfPresent(signEmoji, forKey: .signEmoji)
     }
 }
 
