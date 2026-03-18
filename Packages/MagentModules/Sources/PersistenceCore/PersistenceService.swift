@@ -1,5 +1,8 @@
 import Foundation
 import MagentModels
+import os
+
+private let logger = Logger(subsystem: "com.magent.persistence", category: "PersistenceService")
 
 public final class PersistenceService {
 
@@ -17,6 +20,54 @@ public final class PersistenceService {
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }()
+
+    // MARK: - Write Protection
+
+    /// Files blocked from being overwritten due to load failures.
+    /// Populated at startup when critical files fail to decode; cleared when the
+    /// user explicitly chooses "Continue with Reset" in the recovery alert.
+    private var writeBlockedFiles: Set<String> = []
+
+    /// Block all writes to the named file until explicitly unblocked.
+    public func blockWrites(for fileName: String) {
+        writeBlockedFiles.insert(fileName)
+    }
+
+    /// Allow writes to the named file again (after user chose to reset).
+    public func unblockWrites(for fileName: String) {
+        writeBlockedFiles.remove(fileName)
+    }
+
+    /// True if any critical file is currently write-blocked.
+    public var hasBlockedWrites: Bool {
+        !writeBlockedFiles.isEmpty
+    }
+
+    // MARK: - File Backup
+
+    /// Creates a timestamped backup of a file (e.g. "settings.corrupted.2026-03-18-143022.json").
+    /// Returns the backup URL on success, nil on failure.
+    @discardableResult
+    public func backupFile(at url: URL) -> URL? {
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
+        let timestamp = formatter.string(from: Date())
+        let stem = url.deletingPathExtension().lastPathComponent
+        let ext = url.pathExtension
+        let backupName = "\(stem).corrupted.\(timestamp).\(ext)"
+        let backupURL = url.deletingLastPathComponent().appendingPathComponent(backupName)
+        do {
+            try fileManager.copyItem(at: url, to: backupURL)
+            logger.info("Backed up corrupted file to \(backupURL.path)")
+            return backupURL
+        } catch {
+            logger.error("Failed to backup \(url.path): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    // MARK: - File URLs
 
     private var appSupportURL: URL {
         let url = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -41,17 +92,129 @@ public final class PersistenceService {
         appSupportURL.appendingPathComponent("agent-last-selections.json")
     }
 
+    // MARK: - Schema Migrations
+    //
+    // Register migration closures here when bumping SchemaVersion constants.
+    // Each closure transforms the JSON payload from version N to N+1.
+    // See PersistenceValidation.swift for the full versioning contract.
+
+    /// Migrations for threads.json payload. Currently empty (v1 is the initial version).
+    private let threadsMigrations: SchemaMigrations = [:]
+
+    /// Migrations for settings.json payload. Currently empty (v1 is the initial version).
+    private let settingsMigrations: SchemaMigrations = [:]
+
+    // MARK: - Versioned Decode
+
+    /// Core decode method: handles versioned envelope detection, version checking,
+    /// migration, and legacy (v0, no envelope) fallback.
+    private func decodeVersioned<T: Codable>(
+        _ type: T.Type,
+        from url: URL,
+        currentVersion: Int,
+        migrations: SchemaMigrations = [:]
+    ) -> LoadOutcome<T> {
+        guard let data = try? Data(contentsOf: url) else { return .fileNotFound }
+        let fileName = url.lastPathComponent
+
+        // Check for versioned envelope (top-level dictionary with "schemaVersion" key)
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let version = json["schemaVersion"] as? Int {
+
+            // Newer than this app supports — cannot safely decode
+            if version > currentVersion {
+                return .decodeFailed(PersistenceLoadFailure(
+                    fileName: fileName,
+                    filePath: url,
+                    reason: .incompatibleVersion(fileVersion: version, appVersion: currentVersion)
+                ))
+            }
+
+            do {
+                if version < currentVersion, let payloadJSON = json["data"] {
+                    // Apply sequential migrations from file version to current
+                    var migrated = payloadJSON
+                    for v in version..<currentVersion {
+                        if let migration = migrations[v] {
+                            migrated = try migration(migrated)
+                        }
+                    }
+                    let migratedData = try JSONSerialization.data(withJSONObject: migrated)
+                    return .loaded(try decoder.decode(T.self, from: migratedData))
+                } else {
+                    // Current version — decode envelope directly
+                    let envelope = try decoder.decode(VersionedEnvelope<T>.self, from: data)
+                    return .loaded(envelope.data)
+                }
+            } catch {
+                return .decodeFailed(PersistenceLoadFailure(
+                    fileName: fileName,
+                    filePath: url,
+                    reason: .decodeFailed(error.localizedDescription)
+                ))
+            }
+        }
+
+        // No versioned envelope — try legacy (v0) direct decode
+        do {
+            let value = try decoder.decode(T.self, from: data)
+            return .loaded(value)
+        } catch {
+            return .decodeFailed(PersistenceLoadFailure(
+                fileName: fileName,
+                filePath: url,
+                reason: .decodeFailed(error.localizedDescription)
+            ))
+        }
+    }
+
+    /// Returns true if the file on disk is in legacy (pre-envelope) format.
+    private func isLegacyFormat(_ url: URL) -> Bool {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["schemaVersion"] is Int else {
+            return true
+        }
+        return false
+    }
+
     // MARK: - Threads
 
     private var _pendingThreadSaveWorkItem: DispatchWorkItem?
 
+    /// Validates and loads threads.json, returning a detailed outcome.
+    /// Use this at startup for pre-flight validation before the UI appears.
+    public func tryLoadThreads() -> LoadOutcome<[MagentThread]> {
+        decodeVersioned(
+            [MagentThread].self,
+            from: threadsURL,
+            currentVersion: SchemaVersion.threads,
+            migrations: threadsMigrations
+        )
+    }
+
     public func loadThreads() -> [MagentThread] {
-        guard let data = try? Data(contentsOf: threadsURL) else { return [] }
-        return (try? decoder.decode([MagentThread].self, from: data)) ?? []
+        switch tryLoadThreads() {
+        case .loaded(let threads):
+            // Upgrade legacy (v0) files to versioned envelope on first load
+            if isLegacyFormat(threadsURL) {
+                try? saveThreads(threads)
+            }
+            return threads
+        case .fileNotFound:
+            return []
+        case .decodeFailed(let failure):
+            logger.error("Failed to load threads: \(failure.localizedDescription)")
+            return []
+        }
     }
 
     public func saveThreads(_ threads: [MagentThread]) throws {
-        let data = try encoder.encode(threads)
+        guard !writeBlockedFiles.contains(threadsURL.lastPathComponent) else {
+            throw PersistenceWriteBlockedError(fileName: threadsURL.lastPathComponent)
+        }
+        let envelope = VersionedEnvelope(schemaVersion: SchemaVersion.threads, data: threads)
+        let data = try encoder.encode(envelope)
         try data.write(to: threadsURL, options: .atomic)
     }
 
@@ -84,29 +247,48 @@ public final class PersistenceService {
     /// call so consumers always see the latest values.
     private var _cachedSettings: AppSettings?
 
+    /// Validates and loads settings.json, returning a detailed outcome.
+    /// Use this at startup for pre-flight validation before the UI appears.
+    public func tryLoadSettings() -> LoadOutcome<AppSettings> {
+        decodeVersioned(
+            AppSettings.self,
+            from: settingsURL,
+            currentVersion: SchemaVersion.settings,
+            migrations: settingsMigrations
+        )
+    }
+
     public func loadSettings() -> AppSettings {
         if let cached = _cachedSettings { return cached }
-        guard let data = try? Data(contentsOf: settingsURL) else {
-            let defaults = AppSettings()
-            _cachedSettings = defaults
-            return defaults
-        }
-        let settings = (try? decoder.decode(AppSettings.self, from: data)) ?? AppSettings()
 
-        // Ensure default threadSections are persisted so their UUIDs are stable.
-        // If the JSON doesn't contain "threadSections", the decoder generated fresh
-        // defaults — save them so subsequent loads return the same UUIDs.
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           json["threadSections"] == nil {
-            try? saveSettings(settings)
+        let settings: AppSettings
+        switch tryLoadSettings() {
+        case .loaded(let s):
+            settings = s
+            _cachedSettings = settings
+            // Upgrade legacy (v0) files to versioned envelope.
+            // This also persists default threadSections UUIDs for stability.
+            if isLegacyFormat(settingsURL) {
+                try? saveSettings(settings)
+            }
+        case .fileNotFound:
+            settings = AppSettings()
+            _cachedSettings = settings
+        case .decodeFailed(let failure):
+            logger.error("Failed to load settings: \(failure.localizedDescription)")
+            settings = AppSettings()
+            _cachedSettings = settings
         }
 
-        _cachedSettings = settings
         return settings
     }
 
     public func saveSettings(_ settings: AppSettings) throws {
-        let data = try encoder.encode(settings)
+        guard !writeBlockedFiles.contains(settingsURL.lastPathComponent) else {
+            throw PersistenceWriteBlockedError(fileName: settingsURL.lastPathComponent)
+        }
+        let envelope = VersionedEnvelope(schemaVersion: SchemaVersion.settings, data: settings)
+        let data = try encoder.encode(envelope)
         try data.write(to: settingsURL, options: .atomic)
         _cachedSettings = settings
     }
@@ -179,7 +361,7 @@ public final class PersistenceService {
         appSupportURL.appendingPathComponent("ignored-rate-limit-fingerprints.json")
     }
 
-    /// Loads persisted rate limit fingerprints (fingerprint → concrete resetAt).
+    /// Loads persisted rate limit fingerprints (fingerprint -> concrete resetAt).
     /// Automatically prunes expired entries on load.
     public func loadRateLimitCache() -> [String: Date] {
         let url = rateLimitCacheURL

@@ -11,6 +11,40 @@ final class AppCoordinator {
     private var pendingOffScreenRecovery: DispatchWorkItem?
 
     func start() {
+        // Validate critical persistence files before showing the UI.
+        // If any file is corrupted or incompatible, block writes and let the
+        // user decide: quit (to fix manually) or continue with defaults.
+        var failures: [PersistenceLoadFailure] = []
+
+        switch persistence.tryLoadSettings() {
+        case .loaded: break
+        case .fileNotFound: break
+        case .decodeFailed(let failure):
+            persistence.blockWrites(for: failure.fileName)
+            failures.append(failure)
+        }
+
+        switch persistence.tryLoadThreads() {
+        case .loaded: break
+        case .fileNotFound: break
+        case .decodeFailed(let failure):
+            persistence.blockWrites(for: failure.fileName)
+            failures.append(failure)
+        }
+
+        if !failures.isEmpty {
+            let shouldContinue = presentPersistenceFailureAlert(failures)
+            if !shouldContinue {
+                NSApp.terminate(nil)
+                return
+            }
+            // User chose to continue with reset — backup broken files, then unblock writes
+            for failure in failures {
+                persistence.backupFile(at: failure.filePath)
+                persistence.unblockWrites(for: failure.fileName)
+            }
+        }
+
         let settings = persistence.loadSettings()
 
         let splitVC = SplitViewController()
@@ -99,6 +133,38 @@ final class AppCoordinator {
             }
         }
         viewController.presentAsSheet(configVC)
+    }
+
+    /// Shows a modal alert for persistence load failures. Returns true if the user chose
+    /// to continue with defaults, false if they chose to quit.
+    private func presentPersistenceFailureAlert(_ failures: [PersistenceLoadFailure]) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Failed to load application data"
+
+        let fileList = failures.map { "  \u{2022} \($0.localizedDescription)" }.joined(separator: "\n")
+        let appSupportPath = failures.first?.filePath.deletingLastPathComponent().path
+            ?? "~/Library/Application Support/Magent"
+
+        alert.informativeText = """
+        The following files could not be read:
+
+        \(fileList)
+
+        You can quit now and restore the files manually (from a backup, by upgrading \
+        the app, etc.). The files will not be modified until you choose to reset them.
+
+        Alternatively, continue with default values. The broken files will be backed up \
+        with a .corrupted suffix and then overwritten when the app saves.
+
+        File location: \(appSupportPath)
+        """
+
+        alert.addButton(withTitle: "Continue with Reset")
+        alert.addButton(withTitle: "Quit Magent")
+
+        let response = alert.runModal()
+        return response == .alertFirstButtonReturn
     }
 
     private func ensureWindowIsVisibleOnCurrentScreens(_ window: NSWindow) {

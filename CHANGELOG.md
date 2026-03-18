@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Settings
+- Critical persistence files (threads.json, settings.json) are now validated on launch. If a file is corrupted or was written by a newer app version, a recovery alert explains the problem and offers two choices: quit to fix manually (file is never overwritten), or continue with defaults (broken file is backed up with a `.corrupted` suffix first). Previously, corrupted files were silently replaced with defaults, making recovery impossible.
+
 ### Agents
 - CLI docs now explicitly instruct agents to always provide `--description` and `--prompt` when creating threads for specific tasks, so new threads get proper sidebar descriptions and the spawned agent receives its initial instructions.
 

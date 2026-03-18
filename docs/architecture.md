@@ -222,31 +222,44 @@ Shell startup uses a managed `ZDOTDIR` wrapper so Magent can source the user's s
 
 ### 5. Persistence Model
 
-Thread state persisted as JSON in app's Application Support directory:
+Thread state and settings are persisted as JSON in `~/Library/Application Support/Magent/`.
+
+#### Schema versioning
+
+Critical files (`threads.json`, `settings.json`) are wrapped in a **versioned envelope**:
 
 ```json
 {
-  "threads": [
-    {
-      "id": "uuid",
-      "projectId": "uuid",
-      "worktreePath": "/path/to/worktree",
-      "branchName": "feature/my-feature",
-      "tmuxSessions": ["magent-proj-abc123", "magent-proj-abc123-tab-2"],
-      "createdAt": "2026-02-25T12:00:00Z",
-      "archived": false
-    }
-  ],
-  "projects": [
-    {
-      "id": "uuid",
-      "name": "ios-apps",
-      "repoPath": "/Users/pawelw/xcode/ios-apps",
-      "worktreesPath": "/Users/pawelw/xcode/ios-apps-worktrees"
-    }
-  ]
+  "schemaVersion": 1,
+  "data": [ /* array of MagentThread objects */ ]
 }
 ```
+
+Legacy files (no envelope, written by older builds) are decoded directly and upgraded to the envelope format on the next save. See `PersistenceValidation.swift` for the full versioning contract, including when to bump versions and how to register migrations.
+
+#### Startup validation & recovery
+
+On launch, `AppCoordinator.start()` calls `tryLoadSettings()` / `tryLoadThreads()` before showing the UI. If either file fails to decode (corruption, incompatible schema from a newer build, etc.):
+
+1. Writes to the affected file are **blocked** so no save can overwrite it.
+2. A modal alert explains which files failed and why.
+3. The user can **Quit** (file stays untouched for manual recovery) or **Continue with Reset** (file is backed up as `<name>.corrupted.<timestamp>.json`, writes unblocked, app proceeds with defaults).
+
+Non-critical caches (Jira, PR, rate-limit, etc.) keep silent fallback to empty — they are regenerated from APIs.
+
+#### File layout
+
+| File | Contents |
+|------|----------|
+| `threads.json` | Versioned envelope containing `[MagentThread]` (active + archived) |
+| `settings.json` | Versioned envelope containing `AppSettings` (projects, sections, preferences) |
+| `agent-launch-prompt-drafts.json` | Draft prompts for agent launch sheets |
+| `agent-last-selections.json` | Last-used agent type per scope |
+| `rate-limit-cache.json` | Fingerprint → resetAt cache (auto-pruned on load) |
+| `ignored-rate-limit-fingerprints.json` | User-ignored rate-limit patterns per agent |
+| `jira-ticket-cache.json` | Verified Jira ticket details |
+| `pr-cache.json` | Cached PR/MR info by branch name |
+| `<worktrees-base>/.magent-cache.json` | Per-project worktree metadata |
 
 ## Component Interactions
 
