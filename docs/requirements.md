@@ -62,7 +62,7 @@ Before the app is usable, the user must complete a configuration step:
 1. User taps **"+"** button
 2. If **1 project** is configured → immediately create thread for that project
 3. If **multiple projects** → show a project selection menu first
-4. The new-thread sheet offers optional fields: **Description**, **Branch**, **Base branch** (combo box with type-ahead — lists local branches sorted most-recently-modified first, pre-populated with the project's default branch), **Prompt**, agent type picker, project picker (multi-project setups), and section picker. A "Switch to new thread" checkbox (default: on, persisted) controls whether focus switches to the new thread.
+4. The new-thread sheet offers optional fields: **Description**, **Branch**, **Base branch** (combo box with type-ahead — lists local branches sorted most-recently-modified first, with default branch shown as placeholder; field left empty defaults to the project's default branch, falling back to "main"; validates branch existence on accept), **Prompt**, agent type picker, project picker (multi-project setups), and section picker. A "Switch to new thread" checkbox (default: on, persisted) controls whether focus switches to the new thread.
 5. The thread appears in the sidebar immediately and is auto-selected by default; a "Creating thread..." overlay is shown in the detail area while background setup runs.
 6. A new git worktree is created for the selected project (background), branching from the chosen base branch
 7. If the project has local sync paths configured, those repo-relative files/directories are copied from the repo root into the new worktree and snapshotted onto the thread (background)

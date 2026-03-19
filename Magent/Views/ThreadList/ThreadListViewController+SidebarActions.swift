@@ -239,8 +239,10 @@ extension ThreadListViewController {
             }
         }
 
+        let defaultBranchName = project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Only prefill the base branch field when explicitly creating from another thread's branch.
+        // When nil, the field stays empty and uses the default branch placeholder.
         let resolvedBaseBranchPrefill: String? = baseBranch
-            ?? project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let config = AgentLaunchSheetConfig(
             title: "New Thread",
@@ -257,7 +259,8 @@ extension ThreadListViewController {
             sectionsByProjectId: sectionsByProjectId,
             defaultSectionIdByProjectId: defaultSectionIdByProjectId,
             baseBranchPrefill: resolvedBaseBranchPrefill,
-            baseBranchRepoPath: project.repoPath
+            baseBranchRepoPath: project.repoPath,
+            defaultBranchName: defaultBranchName
         )
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in

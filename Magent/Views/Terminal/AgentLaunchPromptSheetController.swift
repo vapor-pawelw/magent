@@ -202,6 +202,8 @@ struct AgentLaunchSheetConfig {
     let baseBranchPrefill: String?
     /// Repo path used to populate the base branch combo box with existing branches.
     let baseBranchRepoPath: String?
+    /// The project's default branch name (e.g. "main"). Used as placeholder and for validation fallback.
+    let defaultBranchName: String?
 
     init(
         title: String,
@@ -220,7 +222,8 @@ struct AgentLaunchSheetConfig {
         sectionsByProjectId: [UUID: [ThreadSection]] = [:],
         defaultSectionIdByProjectId: [UUID: UUID] = [:],
         baseBranchPrefill: String? = nil,
-        baseBranchRepoPath: String? = nil
+        baseBranchRepoPath: String? = nil,
+        defaultBranchName: String? = nil
     ) {
         self.title = title
         self.acceptButtonTitle = acceptButtonTitle
@@ -239,6 +242,7 @@ struct AgentLaunchSheetConfig {
         self.defaultSectionIdByProjectId = defaultSectionIdByProjectId
         self.baseBranchPrefill = baseBranchPrefill
         self.baseBranchRepoPath = baseBranchRepoPath
+        self.defaultBranchName = defaultBranchName
     }
 }
 
@@ -273,8 +277,10 @@ private final class ContextChipView: NSView {
     }
 }
 
-final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelegate, NSTextViewDelegate {
+final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelegate, NSTextViewDelegate, NSComboBoxDelegate {
     private static var activeControllers: [ObjectIdentifier: AgentLaunchPromptSheetController] = [:]
+    private static let formLabelWidth: CGFloat = 80
+    private static let formLabelColumnWidth: CGFloat = formLabelWidth + 8 // label + row spacing
 
     private let config: AgentLaunchSheetConfig
     private let agentPicker = NSPopUpButton()
@@ -282,6 +288,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let descriptionField = NSTextField()
     private let branchField = NSTextField()
     private let baseBranchField = NSComboBox()
+    private let baseBranchErrorLabel = NSTextField(labelWithString: "")
     private let titleField = NSTextField()
     private let rememberCheckbox = NSButton(checkboxWithTitle: "Remember type selection", target: nil, action: nil)
     private let switchToNewThreadCheckbox = NSButton(checkboxWithTitle: "Switch to new thread", target: nil, action: nil)
@@ -562,9 +569,48 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             stack.addArrangedSubview(br)
             branchRow = br
 
-            let bbr = makeComboBoxRow(label: "Base branch", comboBox: baseBranchField, placeholder: "Optional")
+            let defaultBranchPlaceholder = resolvedDefaultBranchName()
+            let bbr = makeComboBoxRow(
+                label: "Base branch",
+                comboBox: baseBranchField,
+                placeholder: defaultBranchPlaceholder
+            )
             stack.addArrangedSubview(bbr)
             baseBranchRow = bbr
+            baseBranchField.delegate = self
+
+            // Hint label
+            let baseBranchHint = NSTextField(labelWithString: "Uses default branch (\(defaultBranchPlaceholder)) if empty.")
+            baseBranchHint.font = .systemFont(ofSize: 11)
+            baseBranchHint.textColor = NSColor(resource: .textSecondary)
+            baseBranchHint.translatesAutoresizingMaskIntoConstraints = false
+            let hintRow = NSStackView()
+            hintRow.orientation = .horizontal
+            hintRow.spacing = 0
+            hintRow.translatesAutoresizingMaskIntoConstraints = false
+            let hintSpacer = NSView()
+            hintSpacer.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([hintSpacer.widthAnchor.constraint(equalToConstant: Self.formLabelColumnWidth)])
+            hintRow.addArrangedSubview(hintSpacer)
+            hintRow.addArrangedSubview(baseBranchHint)
+            stack.addArrangedSubview(hintRow)
+
+            // Error label (hidden by default)
+            baseBranchErrorLabel.font = .systemFont(ofSize: 11, weight: .medium)
+            baseBranchErrorLabel.textColor = .systemRed
+            baseBranchErrorLabel.isHidden = true
+            baseBranchErrorLabel.translatesAutoresizingMaskIntoConstraints = false
+            let errorRow = NSStackView()
+            errorRow.orientation = .horizontal
+            errorRow.spacing = 0
+            errorRow.translatesAutoresizingMaskIntoConstraints = false
+            let errorSpacer = NSView()
+            errorSpacer.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([errorSpacer.widthAnchor.constraint(equalToConstant: Self.formLabelColumnWidth)])
+            errorRow.addArrangedSubview(errorSpacer)
+            errorRow.addArrangedSubview(baseBranchErrorLabel)
+            stack.addArrangedSubview(errorRow)
+
             if let prefill = config.baseBranchPrefill, !prefill.isEmpty {
                 baseBranchField.stringValue = prefill
             }
@@ -698,7 +744,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         let label = makeFormLabel(labelText)
         label.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([label.widthAnchor.constraint(equalToConstant: 80)])
+        NSLayoutConstraint.activate([label.widthAnchor.constraint(equalToConstant: Self.formLabelWidth)])
         row.addArrangedSubview(label)
 
         comboBox.placeholderString = placeholder
@@ -713,6 +759,20 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         return row
     }
 
+    /// Returns the effective default branch name for the current project context, falling back to "main".
+    private func resolvedDefaultBranchName() -> String {
+        // If a project picker is visible and a project is selected, use that project's default branch.
+        if let picker = projectPicker {
+            let idx = picker.indexOfSelectedItem
+            if idx >= 0, idx < projectPickerItems.count {
+                let branch = projectPickerItems[idx].defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return branch.isEmpty ? "main" : branch
+            }
+        }
+        let branch = config.defaultBranchName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return branch.isEmpty ? "main" : branch
+    }
+
     private func loadBaseBranchItems() {
         guard let repoPath = config.baseBranchRepoPath else { return }
         populateBaseBranchComboBox(repoPath: repoPath)
@@ -720,8 +780,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     private func reloadBaseBranches(for project: Project) {
         guard config.showDescriptionAndBranchFields else { return }
-        let defaultBranch = project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        baseBranchField.stringValue = defaultBranch
+        baseBranchField.stringValue = ""
+        baseBranchField.placeholderString = resolvedDefaultBranchName()
+        clearBaseBranchError()
         populateBaseBranchComboBox(repoPath: project.repoPath)
     }
 
@@ -730,7 +791,15 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             let branches = await GitService.shared.listBranchesByDate(repoPath: repoPath)
             await MainActor.run {
                 baseBranchField.removeAllItems()
-                baseBranchField.addItems(withObjectValues: branches)
+                let defaultBranch = resolvedDefaultBranchName()
+                var items: [String] = []
+                if !defaultBranch.isEmpty {
+                    items.append(defaultBranch)
+                }
+                for branch in branches where branch != defaultBranch {
+                    items.append(branch)
+                }
+                baseBranchField.addItems(withObjectValues: items)
             }
         }
     }
@@ -744,7 +813,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         let label = makeFormLabel(labelText)
         label.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([label.widthAnchor.constraint(equalToConstant: 80)])
+        NSLayoutConstraint.activate([label.widthAnchor.constraint(equalToConstant: Self.formLabelWidth)])
         row.addArrangedSubview(label)
 
         field.placeholderString = placeholder
@@ -981,6 +1050,25 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         persistDraft()
     }
 
+    // MARK: - NSComboBoxDelegate
+
+    func comboBoxSelectionDidChange(_ notification: Notification) {
+        clearBaseBranchError()
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        if (notification.object as? NSComboBox) === baseBranchField {
+            clearBaseBranchError()
+        }
+    }
+
+    private func clearBaseBranchError() {
+        guard !baseBranchErrorLabel.isHidden else { return }
+        baseBranchErrorLabel.isHidden = true
+        baseBranchErrorLabel.stringValue = ""
+        resizeWindowToFitContent()
+    }
+
     // MARK: - Agent picker
 
     @objc private func agentPickerChanged() {
@@ -1086,6 +1174,44 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             ? titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
 
+        // Validate base branch exists before proceeding
+        if config.showDescriptionAndBranchFields, let repoPath = resolvedRepoPath() {
+            let branchToValidate = rawBaseBranch.isEmpty ? resolvedDefaultBranchName() : rawBaseBranch
+            acceptButton.isEnabled = false
+            cancelButton.isEnabled = false
+            Task { [weak self] in
+                let exists = await GitService.shared.branchExists(repoPath: repoPath, branchName: branchToValidate)
+                await MainActor.run {
+                    guard let self else { return }
+                    self.acceptButton.isEnabled = true
+                    self.cancelButton.isEnabled = true
+                    if exists {
+                        self.performAccept(item: item, rawPrompt: rawPrompt, rawDesc: rawDesc, rawBranch: rawBranch, rawBaseBranch: rawBaseBranch, rawTitle: rawTitle)
+                    } else {
+                        self.baseBranchErrorLabel.stringValue = "Branch \"\(branchToValidate)\" does not exist."
+                        self.baseBranchErrorLabel.isHidden = false
+                        self.resizeWindowToFitContent()
+                    }
+                }
+            }
+            return
+        }
+
+        performAccept(item: item, rawPrompt: rawPrompt, rawDesc: rawDesc, rawBranch: rawBranch, rawBaseBranch: rawBaseBranch, rawTitle: rawTitle)
+    }
+
+    /// Returns the repo path for the currently selected project context.
+    private func resolvedRepoPath() -> String? {
+        if let picker = projectPicker {
+            let idx = picker.indexOfSelectedItem
+            if idx >= 0, idx < projectPickerItems.count {
+                return projectPickerItems[idx].repoPath
+            }
+        }
+        return config.baseBranchRepoPath
+    }
+
+    private func performAccept(item: PickerItem, rawPrompt: String, rawDesc: String, rawBranch: String, rawBaseBranch: String, rawTitle: String) {
         AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
 
         // Write crash-recovery temp file before clearing the draft, so the submitted
