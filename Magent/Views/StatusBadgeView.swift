@@ -96,6 +96,16 @@ final class StatusBadgeView: NSView {
 
     // MARK: - Jira Status
 
+    /// Returns the Jira category background color, or nil for unknown categories.
+    static func jiraCategoryColor(forKey categoryKey: String?) -> NSColor? {
+        switch categoryKey {
+        case "new": return Style.jiraTodo.backgroundColor
+        case "indeterminate": return Style.jiraInProgress.backgroundColor
+        case "done": return Style.jiraDone.backgroundColor
+        default: return nil
+        }
+    }
+
     /// Maps the Jira `statusCategory.key` to a badge style.
     /// Falls back to keyword matching on the status name when category is unavailable.
     static func jiraStyle(forCategoryKey categoryKey: String?) -> Style {

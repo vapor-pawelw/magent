@@ -37,6 +37,8 @@ All notable changes to this project will be documented in this file.
 - The Jira settings tab (acli auth + site URL) is now always visible in Settings, not gated behind the debug feature flag. A "Detect Jira tickets from branch names" checkbox (enabled by default, grayed out when acli is disconnected) controls detection.
 - The toolbar Jira button shows the ticket key next to the Jira icon (matching the PR button pattern). Tooltip shows the verified ticket summary when available.
 - Ticket numbers appear on the same sidebar line as PR info, separated by a dot when both are present.
+- Jira project statuses (used for the "Change Status" context menu) are now cached to disk, so the status list appears instantly on subsequent launches without re-fetching from Jira.
+- Fixed: context menu status dots used system colors (blue/yellow/green) instead of matching the Jira badge colors used elsewhere in the sidebar.
 - Jira sync features (board config, section sync, auto-thread creation) remain debug-only behind the renamed `FEATURE_JIRA_SYNC` flag.
 
 ### Terminal

@@ -27,7 +27,7 @@ public nonisolated struct JiraTicket: Codable, Sendable {
 }
 
 /// A Jira project status with its category metadata.
-public nonisolated struct JiraProjectStatus: Sendable, Equatable, Hashable {
+public nonisolated struct JiraProjectStatus: Sendable, Equatable, Hashable, Codable {
     public let name: String
     /// "new", "indeterminate", or "done"
     public let categoryKey: String?

@@ -105,6 +105,7 @@ extension ThreadManager {
         do {
             let tickets = try await JiraService.shared.searchTickets(jql: jql)
             let now = Date()
+            loadProjectStatusesCacheIfNeeded()
             var projectKeysToFetchStatuses = Set<String>()
             for ticket in tickets {
                 let entry = JiraTicketCacheEntry(
@@ -249,8 +250,10 @@ extension ThreadManager {
         guard let ticketKey = thread.effectiveJiraTicketKey else { return }
         loadJiraTicketCacheIfNeeded()
         // Also invalidate project statuses so they're re-fetched on next menu open
+        loadProjectStatusesCacheIfNeeded()
         if let projectKey = ticketKey.split(separator: "-").first.map(String.init) {
             _jiraProjectStatusesCache.removeValue(forKey: projectKey)
+            saveProjectStatusesCache()
         }
         Task {
             await refreshSingleTicketKey(ticketKey)
@@ -259,19 +262,44 @@ extension ThreadManager {
 
     // MARK: - Project Statuses Cache
 
-    /// Returns cached project statuses, or nil if not yet fetched.
-    func cachedProjectStatuses(for projectKey: String) -> [JiraProjectStatus]? {
-        _jiraProjectStatusesCache[projectKey]
+    private static var jiraProjectStatusesCacheURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("Magent", isDirectory: true)
+            .appendingPathComponent("jira-project-statuses-cache.json")
     }
 
-    /// Fetches project statuses from Jira and caches them.
+    /// Loads cached project statuses from disk if not already loaded.
+    private func loadProjectStatusesCacheIfNeeded() {
+        guard !_jiraProjectStatusesCacheLoaded else { return }
+        _jiraProjectStatusesCacheLoaded = true
+        let url = Self.jiraProjectStatusesCacheURL
+        guard let data = try? Data(contentsOf: url) else { return }
+        _jiraProjectStatusesCache = (try? JSONDecoder().decode([String: [JiraProjectStatus]].self, from: data)) ?? [:]
+    }
+
+    /// Persists project statuses cache to disk.
+    private func saveProjectStatusesCache() {
+        let url = Self.jiraProjectStatusesCacheURL
+        guard let data = try? JSONEncoder().encode(_jiraProjectStatusesCache) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    /// Returns cached project statuses, or nil if not yet fetched.
+    func cachedProjectStatuses(for projectKey: String) -> [JiraProjectStatus]? {
+        loadProjectStatusesCacheIfNeeded()
+        return _jiraProjectStatusesCache[projectKey]
+    }
+
+    /// Fetches project statuses from Jira and caches them (in memory + disk).
     func fetchAndCacheProjectStatuses(projectKey: String) async -> [JiraProjectStatus] {
+        loadProjectStatusesCacheIfNeeded()
         if let cached = _jiraProjectStatusesCache[projectKey] {
             return cached
         }
         do {
             let statuses = try await JiraService.shared.discoverProjectStatuses(projectKey: projectKey)
             _jiraProjectStatusesCache[projectKey] = statuses
+            saveProjectStatusesCache()
             return statuses
         } catch {
             return []

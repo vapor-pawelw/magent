@@ -205,7 +205,7 @@ Some features need to stay in the codebase before they are ready to ship. Those 
 - If a feature is visible in debug-only Settings surfaces, annotate it with `Debug builds only` so developers can see immediately that it is not part of release builds.
 - `FEATURE_JIRA_SYNC` is the current example: Debug builds expose Jira sync settings/actions (board config, section sync, auto-thread creation), while Release builds hide them. Basic Jira ticket detection from branch names and "Open in Jira" actions work in all builds without the flag.
 - All Jira features (detection, status badges, toolbar button, context menu) are gated at runtime by `AppSettings.jiraIntegrationEnabled`, a master toggle in Jira settings. The toggle is auto-disabled when acli is not installed or authenticated.
-- The Jira context menu submenu includes a "Change Status" flyout listing all project statuses (discovered via `JiraService.discoverProjectStatuses` and cached per-project in `ThreadManager._jiraProjectStatusesCache`). Status transitions use `acli jira workitem transition`. The cache is pre-populated during ticket verification and invalidated on force-refresh.
+- The Jira context menu submenu includes a "Change Status" flyout listing all project statuses (discovered via `JiraService.discoverProjectStatuses` and cached per-project in `ThreadManager._jiraProjectStatusesCache`, persisted to `jira-project-statuses-cache.json`). Status transitions use `acli jira workitem transition`. The cache is pre-populated during ticket verification, persisted to disk so status lists survive restarts, and invalidated on force-refresh.
 
 ### 4.8 Shell Startup and Reattach CWD Contract
 
@@ -264,6 +264,7 @@ Non-critical caches (Jira, PR, rate-limit, etc.) keep silent fallback to empty â
 | `rate-limit-cache.json` | Fingerprint â†’ resetAt cache (auto-pruned on load) |
 | `ignored-rate-limit-fingerprints.json` | User-ignored rate-limit patterns per agent |
 | `jira-ticket-cache.json` | Verified Jira ticket details |
+| `jira-project-statuses-cache.json` | Cached Jira project status lists for "Change Status" menu |
 | `pr-cache.json` | Cached PR/MR info by branch name |
 | `<worktrees-base>/.magent-cache.json` | Per-project worktree metadata |
 
