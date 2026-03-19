@@ -490,6 +490,7 @@ final class IPCCommandHandler {
         }
 
         do {
+            Task { @MainActor in threadManager.markThreadArchiving(id: thread.id) }
             let syncOverride: Bool? = request.skipLocalSync == true ? false : nil
             let warning = try await threadManager.archiveThread(
                 thread,
