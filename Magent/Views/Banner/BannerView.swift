@@ -57,6 +57,7 @@ struct BannerConfig {
     let style: BannerStyle
     let duration: TimeInterval?
     let isDismissible: Bool
+    let showsSpinner: Bool
     let actions: [BannerAction]
     let details: String?
     let detailsCollapsedTitle: String?
@@ -72,6 +73,7 @@ struct BannerConfig {
         style: BannerStyle,
         duration: TimeInterval?,
         isDismissible: Bool,
+        showsSpinner: Bool = false,
         actions: [BannerAction],
         details: String? = nil,
         detailsCollapsedTitle: String? = nil,
@@ -82,6 +84,7 @@ struct BannerConfig {
         self.style = style
         self.duration = duration
         self.isDismissible = isDismissible
+        self.showsSpinner = showsSpinner
         self.actions = actions
         self.details = details
         self.detailsCollapsedTitle = detailsCollapsedTitle
@@ -114,6 +117,7 @@ final class BannerView: NSView {
     var onUserInteraction: (() -> Void)?
 
     private let iconView = NSImageView()
+    private let spinnerView = NSProgressIndicator()
     private let messageLabel = NSTextField(wrappingLabelWithString: "")
     private let closeButton = NSButton()
     private let leadingAccessoryView = NSView()
@@ -165,7 +169,18 @@ final class BannerView: NSView {
         iconView.image = config.style.icon
         iconView.contentTintColor = config.style.foregroundColor
         iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.isHidden = config.showsSpinner
+
+        spinnerView.style = .spinning
+        spinnerView.controlSize = .small
+        spinnerView.isIndeterminate = true
+        spinnerView.translatesAutoresizingMaskIntoConstraints = false
+        spinnerView.appearance = NSAppearance(named: .darkAqua)
+        spinnerView.isHidden = !config.showsSpinner
+        if config.showsSpinner { spinnerView.startAnimation(nil) }
+
         leadingAccessoryView.addSubview(iconView)
+        leadingAccessoryView.addSubview(spinnerView)
 
         if let attributed = config.attributedMessage {
             messageLabel.attributedStringValue = normalizedAttributedMessage(attributed)
@@ -209,6 +224,9 @@ final class BannerView: NSView {
             iconView.centerXAnchor.constraint(equalTo: leadingAccessoryView.centerXAnchor),
             iconView.widthAnchor.constraint(equalToConstant: 18),
             iconView.heightAnchor.constraint(equalToConstant: 18),
+
+            spinnerView.topAnchor.constraint(equalTo: leadingAccessoryView.topAnchor),
+            spinnerView.centerXAnchor.constraint(equalTo: leadingAccessoryView.centerXAnchor),
 
             closeButton.topAnchor.constraint(equalTo: trailingAccessoryView.topAnchor),
             closeButton.centerXAnchor.constraint(equalTo: trailingAccessoryView.centerXAnchor),

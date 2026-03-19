@@ -18,3 +18,4 @@
 - Update installation in `UpdateService.installUpdate(...)`
 - Worktree recreation progress in `SplitViewController.handleMissingWorktreeSelection(...)`
 - tmux restart/recovery progress in `ThreadManager.restartTmuxAndRecoverSessions()`
+- Jira status transition progress in `ThreadListViewController.showJiraTransitionProgressBanner()`

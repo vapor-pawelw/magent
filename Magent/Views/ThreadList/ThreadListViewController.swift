@@ -128,6 +128,10 @@ final class ThreadListViewController: NSViewController {
     /// Set to true when reloadData() was skipped due to an active drag; reloadData() will
     /// be called once the drag session ends.
     var pendingReloadAfterDrag = false
+    /// Tracks in-flight Jira status transitions (ticketKey → target status).
+    var inFlightJiraTransitions: [String: String] = [:]
+    /// Debounces progress banner restoration after a Jira transition error.
+    var jiraProgressRestorationTask: Task<Void, Never>?
     var diffPanelCommitLimitByThreadId: [UUID: Int] = [:]
     let diffPanelCommitPageSize = 10
     private var pendingSettingsReloadWorkItem: DispatchWorkItem?

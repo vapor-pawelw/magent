@@ -538,6 +538,9 @@ extension ThreadListViewController {
         // Don't transition if already in this status
         if thread.verifiedJiraTicket?.status == status { return }
 
+        inFlightJiraTransitions[ticketKey] = status
+        showJiraTransitionProgressBanner()
+
         Task {
             do {
                 try await threadManager.transitionJiraTicket(
@@ -545,20 +548,48 @@ extension ThreadListViewController {
                     toStatus: status
                 )
                 await MainActor.run {
-                    BannerManager.shared.show(
-                        message: "\(ticketKey) → \(status)",
-                        style: .info
-                    )
+                    inFlightJiraTransitions.removeValue(forKey: ticketKey)
+                    if inFlightJiraTransitions.isEmpty {
+                        BannerManager.shared.show(
+                            message: "\(ticketKey) → \(status)",
+                            style: .info
+                        )
+                    } else {
+                        showJiraTransitionProgressBanner()
+                    }
                 }
             } catch {
                 await MainActor.run {
+                    inFlightJiraTransitions.removeValue(forKey: ticketKey)
                     BannerManager.shared.show(
                         message: "Failed to transition \(ticketKey): \(error.localizedDescription)",
                         style: .error
                     )
+                    if !inFlightJiraTransitions.isEmpty {
+                        jiraProgressRestorationTask?.cancel()
+                        jiraProgressRestorationTask = Task { [weak self] in
+                            try? await Task.sleep(for: .seconds(2))
+                            guard !Task.isCancelled, let self, !inFlightJiraTransitions.isEmpty else { return }
+                            showJiraTransitionProgressBanner()
+                        }
+                    }
                 }
             }
         }
+    }
+
+    private func showJiraTransitionProgressBanner() {
+        let items = inFlightJiraTransitions
+            .sorted(by: { $0.key < $1.key })
+            .map { "\($0.key) → \($0.value)" }
+            .joined(separator: ", ")
+        BannerManager.shared.show(
+            message: "Transitioning \(items)…",
+            style: .info,
+            duration: nil,
+            isDismissible: false,
+            showsSpinner: true
+        )
     }
 
     @objc private func refreshJiraTicket(_ sender: NSMenuItem) {

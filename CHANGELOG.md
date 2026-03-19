@@ -35,6 +35,7 @@ All notable changes to this project will be documented in this file.
 - New "Jira Integration" master toggle in Jira settings — controls all Jira features (ticket detection, status badges, toolbar button, context menu). Enabled by default, auto-disabled when acli is not installed or authenticated with an explanation.
 - Thread right-click Jira option is now a submenu named after the ticket (e.g. "IP-1234: Fix login bug") with "Open in Jira" and "Set description to ticket title" as sub-options.
 - Jira submenu now appears at the top of the thread context menu (above pin/hide) and includes a "Change Status" flyout with all project statuses shown with category-colored dots. Selecting a status transitions the ticket via acli, with banner feedback on success or failure.
+- Jira status transitions now show a non-dismissible progress banner with a spinner while in-flight. Multiple concurrent transitions are tracked and displayed together; errors flash briefly before restoring the progress view.
 - Jira submenu now includes a "Refresh" option that force-refreshes the ticket's status and title from Jira.
 - Middle-click on the Jira toolbar button opens the ticket in an in-app web tab instead of the external browser. The tab shows a Jira icon and ticket number, supports back/forward/refresh navigation, and deduplicates (re-clicking focuses the existing tab).
 - Fixed: the toolbar Jira ticket button now updates immediately when a branch change is detected, instead of staying stale until settings changed or the view was recreated.
