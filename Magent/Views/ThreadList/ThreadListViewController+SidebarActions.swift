@@ -209,7 +209,7 @@ extension ThreadListViewController {
         return projects.first
     }
 
-    private func presentNewThreadSheet(for project: Project, anchorView: NSView, baseBranch: String? = nil) {
+    func presentNewThreadSheet(for project: Project, anchorView: NSView, baseBranch: String? = nil) {
         guard let window = view.window else { return }
         let settings = persistence.loadSettings()
 
@@ -239,6 +239,9 @@ extension ThreadListViewController {
             }
         }
 
+        let resolvedBaseBranchPrefill: String? = baseBranch
+            ?? project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
+
         let config = AgentLaunchSheetConfig(
             title: "New Thread",
             acceptButtonTitle: "Create Thread",
@@ -252,7 +255,9 @@ extension ThreadListViewController {
             terminalInjectionPrefill: injection.terminalCommand.isEmpty ? nil : injection.terminalCommand,
             agentContextPrefill: injection.agentContext.isEmpty ? nil : injection.agentContext,
             sectionsByProjectId: sectionsByProjectId,
-            defaultSectionIdByProjectId: defaultSectionIdByProjectId
+            defaultSectionIdByProjectId: defaultSectionIdByProjectId,
+            baseBranchPrefill: resolvedBaseBranchPrefill,
+            baseBranchRepoPath: project.repoPath
         )
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in
@@ -262,7 +267,7 @@ extension ThreadListViewController {
                 for: targetProject,
                 requestedAgentType: result.agentType,
                 useAgentCommand: result.useAgentCommand,
-                baseBranch: baseBranch,
+                baseBranch: result.baseBranch,
                 initialPrompt: result.prompt,
                 shouldSubmitInitialPrompt: true,
                 taskDescription: result.description,

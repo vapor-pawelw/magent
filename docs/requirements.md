@@ -62,12 +62,13 @@ Before the app is usable, the user must complete a configuration step:
 1. User taps **"+"** button
 2. If **1 project** is configured → immediately create thread for that project
 3. If **multiple projects** → show a project selection menu first
-4. The thread appears in the sidebar immediately and is auto-selected by default; a "Creating thread..." overlay is shown in the detail area while background setup runs. A "Switch to new thread" checkbox in the new-thread sheet (default: on, persisted) controls whether focus switches to the new thread; when off, it is added to the sidebar without changing the active selection.
-5. A new git worktree is created for the selected project (background)
-6. If the project has local sync paths configured, those repo-relative files/directories are copied from the repo root into the new worktree and snapshotted onto the thread (background)
-7. A tmux session is started in the worktree directory (background)
-8. The configured agent is launched inside tmux (background)
-9. The creation overlay is dismissed and the terminal is displayed; normal "Starting agent..." overlay takes over until the agent is ready
+4. The new-thread sheet offers optional fields: **Description**, **Branch**, **Base branch** (combo box with type-ahead — lists local branches sorted most-recently-modified first, pre-populated with the project's default branch), **Prompt**, agent type picker, project picker (multi-project setups), and section picker. A "Switch to new thread" checkbox (default: on, persisted) controls whether focus switches to the new thread.
+5. The thread appears in the sidebar immediately and is auto-selected by default; a "Creating thread..." overlay is shown in the detail area while background setup runs.
+6. A new git worktree is created for the selected project (background), branching from the chosen base branch
+7. If the project has local sync paths configured, those repo-relative files/directories are copied from the repo root into the new worktree and snapshotted onto the thread (background)
+8. A tmux session is started in the worktree directory (background)
+9. The configured agent is launched inside tmux (background)
+10. The creation overlay is dismissed and the terminal is displayed; normal "Starting agent..." overlay takes over until the agent is ready
 
 ### Archiving a Thread
 

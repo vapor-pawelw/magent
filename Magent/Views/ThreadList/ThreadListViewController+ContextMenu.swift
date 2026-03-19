@@ -261,10 +261,18 @@ extension ThreadListViewController {
             return nil
         }
 
-        let item = NSMenuItem(title: String(localized: .ThreadStrings.threadCreateFromThisBranch), action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: String(localized: .ThreadStrings.threadCreateFromThisBranch), action: #selector(createThreadFromBranch(_:)), keyEquivalent: "")
+        item.target = self
         item.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)
-        item.submenu = buildAgentSubmenu(for: project, extraData: ["baseBranch": baseBranch])
+        item.representedObject = ["project": project, "baseBranch": baseBranch] as [String: Any]
         return item
+    }
+
+    @objc private func createThreadFromBranch(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let project = info["project"] as? Project,
+              let baseBranch = info["baseBranch"] as? String else { return }
+        presentNewThreadSheet(for: project, anchorView: outlineView, baseBranch: baseBranch)
     }
 
     private func baseBranchForNewThread(from thread: MagentThread, project: Project) -> String? {

@@ -198,6 +198,10 @@ struct AgentLaunchSheetConfig {
     let sectionsByProjectId: [UUID: [ThreadSection]]
     /// Per-project default section ID — used to pre-select the section picker.
     let defaultSectionIdByProjectId: [UUID: UUID]
+    /// When non-nil, a "Base branch" combo box is shown below Branch and pre-populated with this value.
+    let baseBranchPrefill: String?
+    /// Repo path used to populate the base branch combo box with existing branches.
+    let baseBranchRepoPath: String?
 
     init(
         title: String,
@@ -214,7 +218,9 @@ struct AgentLaunchSheetConfig {
         agentContextPrefill: String?,
         recoveryPrefill: AgentLaunchSheetPrefill? = nil,
         sectionsByProjectId: [UUID: [ThreadSection]] = [:],
-        defaultSectionIdByProjectId: [UUID: UUID] = [:]
+        defaultSectionIdByProjectId: [UUID: UUID] = [:],
+        baseBranchPrefill: String? = nil,
+        baseBranchRepoPath: String? = nil
     ) {
         self.title = title
         self.acceptButtonTitle = acceptButtonTitle
@@ -231,6 +237,8 @@ struct AgentLaunchSheetConfig {
         self.recoveryPrefill = recoveryPrefill
         self.sectionsByProjectId = sectionsByProjectId
         self.defaultSectionIdByProjectId = defaultSectionIdByProjectId
+        self.baseBranchPrefill = baseBranchPrefill
+        self.baseBranchRepoPath = baseBranchRepoPath
     }
 }
 
@@ -240,6 +248,8 @@ struct AgentLaunchSheetResult {
     let prompt: String?
     let description: String?
     let branchName: String?
+    /// Base branch for the new worktree. Non-nil when the user entered/kept a value in the Base branch field.
+    let baseBranch: String?
     /// Custom tab title entered by the user. Non-nil only when `showTitleField` was true and the user typed a value.
     let tabTitle: String?
     /// Temp file holding the submitted prompt for crash recovery.
@@ -271,6 +281,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let promptTextView = NSTextView()
     private let descriptionField = NSTextField()
     private let branchField = NSTextField()
+    private let baseBranchField = NSComboBox()
     private let titleField = NSTextField()
     private let rememberCheckbox = NSButton(checkboxWithTitle: "Remember type selection", target: nil, action: nil)
     private let switchToNewThreadCheckbox = NSButton(checkboxWithTitle: "Switch to new thread", target: nil, action: nil)
@@ -539,6 +550,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         // Description + Branch fields
         var descRow: NSStackView?
         var branchRow: NSStackView?
+        var baseBranchRow: NSStackView?
         if config.showDescriptionAndBranchFields {
             stack.setCustomSpacing(12, after: promptScrollView)
 
@@ -550,9 +562,18 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             stack.addArrangedSubview(br)
             branchRow = br
 
-            // Tab order: prompt → description → branch → (wraps back via window key loop)
+            let bbr = makeComboBoxRow(label: "Base branch", comboBox: baseBranchField, placeholder: "Optional")
+            stack.addArrangedSubview(bbr)
+            baseBranchRow = bbr
+            if let prefill = config.baseBranchPrefill, !prefill.isEmpty {
+                baseBranchField.stringValue = prefill
+            }
+            loadBaseBranchItems()
+
+            // Tab order: prompt → description → branch → base branch → (wraps back via window key loop)
             promptTextView.nextKeyView = descriptionField
             descriptionField.nextKeyView = branchField
+            branchField.nextKeyView = baseBranchField
 
             // Auto-generate hint
             if let hint = config.autoGenerateHint {
@@ -642,10 +663,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 titleRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             ])
         }
-        if let descRow, let branchRow {
+        if let descRow, let branchRow, let baseBranchRow {
             NSLayoutConstraint.activate([
                 descRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
                 branchRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+                baseBranchRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             ])
         }
     }
@@ -665,6 +687,52 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         label.font = .systemFont(ofSize: 12, weight: .medium)
         label.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         return label
+    }
+
+    private func makeComboBoxRow(label labelText: String, comboBox: NSComboBox, placeholder: String) -> NSStackView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = makeFormLabel(labelText)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([label.widthAnchor.constraint(equalToConstant: 80)])
+        row.addArrangedSubview(label)
+
+        comboBox.placeholderString = placeholder
+        comboBox.font = .systemFont(ofSize: 13)
+        comboBox.completes = true
+        comboBox.numberOfVisibleItems = 12
+        comboBox.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        comboBox.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        comboBox.translatesAutoresizingMaskIntoConstraints = false
+        row.addArrangedSubview(comboBox)
+
+        return row
+    }
+
+    private func loadBaseBranchItems() {
+        guard let repoPath = config.baseBranchRepoPath else { return }
+        populateBaseBranchComboBox(repoPath: repoPath)
+    }
+
+    private func reloadBaseBranches(for project: Project) {
+        guard config.showDescriptionAndBranchFields else { return }
+        let defaultBranch = project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        baseBranchField.stringValue = defaultBranch
+        populateBaseBranchComboBox(repoPath: project.repoPath)
+    }
+
+    private func populateBaseBranchComboBox(repoPath: String) {
+        Task {
+            let branches = await GitService.shared.listBranchesByDate(repoPath: repoPath)
+            await MainActor.run {
+                baseBranchField.removeAllItems()
+                baseBranchField.addItems(withObjectValues: branches)
+            }
+        }
     }
 
     private func makeTextFieldRow(label labelText: String, field: NSTextField, placeholder: String) -> NSStackView {
@@ -796,6 +864,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         // the prompt with the new project's saved draft. Whatever is in the field stays.
         currentDraftScope = newScope
         populateSectionPicker(for: newProject.id)
+        reloadBaseBranches(for: newProject)
         resizeWindowToFitContent()
     }
 
@@ -948,6 +1017,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         if config.showDescriptionAndBranchFields {
             descriptionField.isEnabled = !isTerminal
             branchField.isEnabled = !isTerminal
+            baseBranchField.isEnabled = !isTerminal
         }
     }
 
@@ -1009,6 +1079,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let rawBranch = config.showDescriptionAndBranchFields
             ? branchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
+        let rawBaseBranch = config.showDescriptionAndBranchFields
+            ? baseBranchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            : ""
         let rawTitle = config.showTitleField
             ? titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
@@ -1060,6 +1133,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: nil,
                 branchName: nil,
+                baseBranch: rawBaseBranch.isEmpty ? nil : rawBaseBranch,
                 tabTitle: rawTitle.isEmpty ? nil : rawTitle,
                 pendingPromptFileURL: pendingPromptFileURL,
                 selectedProject: selectedProject,
@@ -1072,6 +1146,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 prompt: rawPrompt.isEmpty ? nil : rawPrompt,
                 description: rawDesc.isEmpty ? nil : rawDesc,
                 branchName: rawBranch.isEmpty ? nil : rawBranch,
+                baseBranch: rawBaseBranch.isEmpty ? nil : rawBaseBranch,
                 tabTitle: rawTitle.isEmpty ? nil : rawTitle,
                 pendingPromptFileURL: pendingPromptFileURL,
                 selectedProject: selectedProject,

@@ -405,6 +405,19 @@ public final class GitService: Sendable {
         return nil
     }
 
+    /// Returns local branch names sorted by most-recent committer date (descending).
+    public func listBranchesByDate(repoPath: String) async -> [String] {
+        let result = await ShellExecutor.execute(
+            "git for-each-ref --sort=-committerdate --format='%(refname:short)' refs/heads/",
+            workingDirectory: repoPath
+        )
+        guard result.exitCode == 0 else { return [] }
+        return result.stdout
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
     /// Returns `true` when all commits on HEAD are present in `baseBranch` (via merge,
     /// fast-forward, or cherry-pick). Callers must guard against fresh/empty branches using
     /// `MagentThread.hasEverDoneWork` before calling this — an empty `baseBranch..HEAD` log
