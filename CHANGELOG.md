@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- _No notable changes yet._
+
+## 1.3.0 - 2026-03-19
+
+
 ### Settings
 - Critical persistence files (threads.json, settings.json) are now validated on launch. If a file is corrupted or was written by a newer app version, a recovery alert explains the problem and offers two choices: quit to fix manually (file is never overwritten), or continue with defaults (broken file is backed up with a `.corrupted` suffix first). Previously, corrupted files were silently replaced with defaults, making recovery impossible.
 
@@ -205,6 +210,7 @@ All notable changes to this project will be documented in this file.
 
 ### Table of Contents
 - Fixed TOC staying hidden after updating from a version where it had been manually dismissed; the stale "hidden" flag is now cleared on launch.
+
 
 ## 1.2.2 - 2026-03-13
 
