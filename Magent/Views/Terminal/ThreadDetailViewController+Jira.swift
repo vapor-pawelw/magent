@@ -20,6 +20,13 @@ extension ThreadDetailViewController {
 
     func refreshJiraButton() {
         let settings = PersistenceService.shared.loadSettings()
+
+        guard settings.jiraIntegrationEnabled else {
+            openInJiraButton.isHidden = true
+            refreshPRJiraSeparator()
+            return
+        }
+
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let siteURL = project?.jiraSiteURL ?? settings.jiraSiteURL
 

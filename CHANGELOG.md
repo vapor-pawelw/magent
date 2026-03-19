@@ -23,8 +23,9 @@ All notable changes to this project will be documented in this file.
 - Fixed: the GUI launch sheet's description field was silently ignored — descriptions entered in the sheet now appear on the thread immediately.
 
 ### Jira
+- New "Jira Integration" master toggle in Jira settings — controls all Jira features (ticket detection, status badges, toolbar button, context menu). Enabled by default, auto-disabled when acli is not installed or authenticated with an explanation.
+- Thread right-click Jira option is now a submenu named after the ticket (e.g. "IP-1234: Fix login bug") with "Open in Jira" and "Set description to ticket title" as sub-options.
 - Middle-click on the Jira toolbar button opens the ticket in an in-app web tab instead of the external browser. The tab shows a Jira icon and ticket number, supports back/forward/refresh navigation, and deduplicates (re-clicking focuses the existing tab).
-- New context menu option "Set description from Jira ticket" auto-fills the thread description with the Jira ticket title. Only shown when a Jira ticket is detected for the thread.
 - Fixed: the toolbar Jira ticket button now updates immediately when a branch change is detected, instead of staying stale until settings changed or the view was recreated.
 - Jira ticket keys (e.g. IP-1234) are now automatically detected from branch names (case-insensitive) and shown in the toolbar, sidebar, and context menu with a link to open the ticket in Jira.
 - Detected tickets are verified against Jira via acli and cached persistently so they survive app restarts and acli disconnection. Verification runs on startup, branch rename, branch change detection, acli auth success, and when selecting a thread (throttled to once per minute per ticket).

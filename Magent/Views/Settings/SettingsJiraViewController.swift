@@ -7,6 +7,8 @@ final class SettingsJiraViewController: NSViewController {
     private let jira = JiraService.shared
     private var settings: AppSettings!
 
+    private var integrationCheckbox: NSButton!
+    private var integrationDisabledLabel: NSTextField!
     private var acliStatusLabel: NSTextField!
     private var authStatusLabel: NSTextField!
     private var authDetailLabel: NSTextField!
@@ -14,6 +16,10 @@ final class SettingsJiraViewController: NSViewController {
     private var refreshButton: NSButton!
     private var siteURLField: NSTextField!
     private var ticketDetectionCheckbox: NSButton!
+
+    // Views that should be hidden when integration is off
+    private var integrationDependentViews: [NSView] = []
+    private var isAcliConnected = false
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 640))
@@ -49,6 +55,29 @@ final class SettingsJiraViewController: NSViewController {
         NSLayoutConstraint.activate([
             infoLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
+
+        // MARK: - Jira Integration Toggle
+        let (integrationCard, integrationStack) = createSectionCard(
+            title: "Jira Integration",
+            description: "Master switch for all Jira features — ticket detection, status badges, and Jira links."
+        )
+        stack.addArrangedSubview(integrationCard)
+
+        integrationCheckbox = NSButton(
+            checkboxWithTitle: "Enable Jira integration",
+            target: self,
+            action: #selector(integrationToggled)
+        )
+        integrationCheckbox.state = settings.jiraIntegrationEnabled ? .on : .off
+        integrationStack.addArrangedSubview(integrationCheckbox)
+
+        integrationDisabledLabel = NSTextField(
+            wrappingLabelWithString: "Jira integration requires acli to be installed and authenticated. Install with: brew install acli"
+        )
+        integrationDisabledLabel.font = .systemFont(ofSize: 11)
+        integrationDisabledLabel.textColor = .systemOrange
+        integrationDisabledLabel.isHidden = true
+        integrationStack.addArrangedSubview(integrationDisabledLabel)
 
         let (statusCard, statusStack) = createSectionCard(
             title: "Connection & Authentication",
@@ -125,6 +154,9 @@ final class SettingsJiraViewController: NSViewController {
         ticketDetectionCheckbox.state = settings.jiraTicketDetectionEnabled ? .on : .off
         detectionStack.addArrangedSubview(ticketDetectionCheckbox)
 
+        // Track views that depend on integration being enabled
+        integrationDependentViews = [statusCard, siteCard, detectionCard]
+
         // Document view
         let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
@@ -145,6 +177,8 @@ final class SettingsJiraViewController: NSViewController {
             stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
 
             documentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
+            integrationCard.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
+            integrationDisabledLabel.widthAnchor.constraint(equalTo: integrationStack.widthAnchor),
             statusCard.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
             siteCard.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
             detectionCard.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
@@ -195,6 +229,8 @@ final class SettingsJiraViewController: NSViewController {
             guard let self else { return }
 
             let installed = await jira.isAcliInstalled()
+            var authenticated = false
+
             if installed {
                 acliStatusLabel.stringValue = "acli installed at /opt/homebrew/bin/acli"
                 acliStatusLabel.textColor = .systemGreen
@@ -205,35 +241,61 @@ final class SettingsJiraViewController: NSViewController {
                 authStatusLabel.stringValue = "acli not installed"
                 authStatusLabel.textColor = .systemRed
                 loginButton.isEnabled = false
-                ticketDetectionCheckbox.isEnabled = false
-                return
             }
 
-            let status = await jira.checkAuthStatus()
-            if status.isAuthenticated {
-                ticketDetectionCheckbox.isEnabled = true
-                authStatusLabel.stringValue = "Authenticated" + (status.email.map { " as \($0)" } ?? "")
-                authStatusLabel.textColor = .systemGreen
-                if let site = status.siteURL {
-                    authDetailLabel.stringValue = "Site: \(site)"
-                    authDetailLabel.isHidden = false
-                    // Auto-populate site URL if empty
-                    if settings.jiraSiteURL.isEmpty {
-                        settings.jiraSiteURL = site
-                        siteURLField.stringValue = site
-                        try? persistence.saveSettings(settings)
+            if installed {
+                let status = await jira.checkAuthStatus()
+                if status.isAuthenticated {
+                    authenticated = true
+                    authStatusLabel.stringValue = "Authenticated" + (status.email.map { " as \($0)" } ?? "")
+                    authStatusLabel.textColor = .systemGreen
+                    if let site = status.siteURL {
+                        authDetailLabel.stringValue = "Site: \(site)"
+                        authDetailLabel.isHidden = false
+                        // Auto-populate site URL if empty
+                        if settings.jiraSiteURL.isEmpty {
+                            settings.jiraSiteURL = site
+                            siteURLField.stringValue = site
+                            try? persistence.saveSettings(settings)
+                        }
                     }
+                } else {
+                    authStatusLabel.stringValue = "Not authenticated"
+                    authStatusLabel.textColor = .systemOrange
+                    authDetailLabel.stringValue = status.errorMessage ?? ""
+                    authDetailLabel.isHidden = (status.errorMessage ?? "").isEmpty
                 }
-                // Populate from cache immediately, then verify in background
+            }
+
+            isAcliConnected = installed && authenticated
+            updateIntegrationState()
+
+            if settings.jiraIntegrationEnabled && isAcliConnected {
                 ThreadManager.shared.enableAndRefreshJiraDetection()
-            } else {
-                authStatusLabel.stringValue = "Not authenticated"
-                authStatusLabel.textColor = .systemOrange
-                authDetailLabel.stringValue = status.errorMessage ?? ""
-                authDetailLabel.isHidden = (status.errorMessage ?? "").isEmpty
-                ticketDetectionCheckbox.isEnabled = false
             }
         }
+    }
+
+    private func updateIntegrationState() {
+        let canEnable = isAcliConnected
+
+        // Disable checkbox if acli is not connected
+        integrationCheckbox.isEnabled = canEnable
+        if !canEnable {
+            integrationCheckbox.state = .off
+            integrationDisabledLabel.isHidden = false
+        } else {
+            integrationCheckbox.state = settings.jiraIntegrationEnabled ? .on : .off
+            integrationDisabledLabel.isHidden = true
+        }
+
+        let integrationOn = canEnable && settings.jiraIntegrationEnabled
+        for v in integrationDependentViews {
+            v.isHidden = !integrationOn
+        }
+
+        ticketDetectionCheckbox.isEnabled = integrationOn
+        ticketDetectionCheckbox.state = (integrationOn && settings.jiraTicketDetectionEnabled) ? .on : .off
     }
 
     // MARK: - Actions
@@ -252,6 +314,20 @@ final class SettingsJiraViewController: NSViewController {
 
     @objc private func refreshTapped() {
         refreshStatus()
+    }
+
+    @objc private func integrationToggled() {
+        let enabled = integrationCheckbox.state == .on
+        settings.jiraIntegrationEnabled = enabled
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+        updateIntegrationState()
+
+        if enabled {
+            ThreadManager.shared.enableAndRefreshJiraDetection()
+        } else {
+            ThreadManager.shared.clearAllJiraDetectionState()
+        }
     }
 
     @objc private func ticketDetectionToggled() {

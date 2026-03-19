@@ -24,7 +24,7 @@ extension ThreadManager {
     /// Only one verification pass runs at a time — concurrent calls are skipped.
     func verifyDetectedJiraTickets(forThreadIds: Set<UUID>? = nil) async {
         let settings = persistence.loadSettings()
-        guard settings.jiraTicketDetectionEnabled else { return }
+        guard settings.jiraIntegrationEnabled, settings.jiraTicketDetectionEnabled else { return }
         guard !isJiraVerificationRunning else { return }
         isJiraVerificationRunning = true
         defer { isJiraVerificationRunning = false }
@@ -125,7 +125,8 @@ extension ThreadManager {
 
     /// Populates the transient `verifiedJiraTicket` field on all active threads from the cache.
     private func populateVerifiedTicketsFromCache() {
-        let detectionEnabled = persistence.loadSettings().jiraTicketDetectionEnabled
+        let s = persistence.loadSettings()
+        let detectionEnabled = s.jiraIntegrationEnabled && s.jiraTicketDetectionEnabled
         var changed = false
         for i in threads.indices where !threads[i].isArchived {
             let previous = threads[i].verifiedJiraTicket
@@ -172,7 +173,8 @@ extension ThreadManager {
     /// Unlike `verifyDetectedJiraTickets`, this always runs (no batch guard) but
     /// skips if the cached entry was verified less than 60 seconds ago.
     func refreshJiraTicketForSelectedThread(_ thread: MagentThread) {
-        guard persistence.loadSettings().jiraTicketDetectionEnabled else { return }
+        let refreshSettings = persistence.loadSettings()
+        guard refreshSettings.jiraIntegrationEnabled, refreshSettings.jiraTicketDetectionEnabled else { return }
         guard let ticketKey = thread.effectiveJiraTicketKey else { return }
 
         loadJiraTicketCacheIfNeeded()

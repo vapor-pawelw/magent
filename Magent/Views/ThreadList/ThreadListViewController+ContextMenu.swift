@@ -47,14 +47,6 @@ extension ThreadListViewController {
         descriptionItem.representedObject = thread
         menu.addItem(descriptionItem)
 
-        if let jiraSummary = thread.verifiedJiraTicket?.summary, !jiraSummary.isEmpty {
-            let jiraDescItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetDescriptionFromJira), action: #selector(setThreadDescriptionFromJira(_:)), keyEquivalent: "")
-            jiraDescItem.target = self
-            jiraDescItem.image = jiraMenuIcon()
-            jiraDescItem.representedObject = thread
-            menu.addItem(jiraDescItem)
-        }
-
         let settings = persistence.loadSettings()
 
         // Rename branch
@@ -345,44 +337,68 @@ extension ThreadListViewController {
     // MARK: - Jira Context Menu
 
     private func buildJiraMenuItem(for thread: MagentThread, settings: AppSettings) -> NSMenuItem? {
+        guard settings.jiraIntegrationEnabled else { return nil }
+
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let siteURL = project?.jiraSiteURL ?? settings.jiraSiteURL
         guard !siteURL.isEmpty else { return nil }
 
-        let title: String
+        let menuTitle: String
 
 #if FEATURE_JIRA_SYNC
         if let projectKey = project?.jiraProjectKey, !projectKey.isEmpty {
-            if thread.jiraTicketKey != nil {
-                title = String(localized: .ThreadStrings.threadOpenTicketInJira)
+            if let ticketKey = thread.jiraTicketKey {
+                menuTitle = jiraMenuTitle(ticketKey: ticketKey, thread: thread)
             } else if thread.isMain {
-                title = String(localized: .ThreadStrings.threadOpenJiraBoard)
+                menuTitle = String(localized: .ThreadStrings.threadOpenJiraBoard)
             } else {
-                title = String(localized: .ThreadStrings.threadOpenInJira)
+                menuTitle = String(localized: .ThreadStrings.threadOpenInJira)
             }
         } else if settings.jiraTicketDetectionEnabled, let ticketKey = thread.effectiveJiraTicketKey {
-            title = jiraMenuTitle(ticketKey: ticketKey, thread: thread)
+            menuTitle = jiraMenuTitle(ticketKey: ticketKey, thread: thread)
         } else {
             return nil
         }
 #else
         guard settings.jiraTicketDetectionEnabled,
               let ticketKey = thread.effectiveJiraTicketKey else { return nil }
-        title = jiraMenuTitle(ticketKey: ticketKey, thread: thread)
+        menuTitle = jiraMenuTitle(ticketKey: ticketKey, thread: thread)
 #endif
 
-        let item = NSMenuItem(title: title, action: #selector(openThreadInJira(_:)), keyEquivalent: "")
-        item.target = self
+        let item = NSMenuItem(title: menuTitle, action: nil, keyEquivalent: "")
         item.image = jiraMenuIcon()
-        item.representedObject = thread
+
+        let submenu = NSMenu()
+
+        let openItem = NSMenuItem(
+            title: String(localized: .ThreadStrings.threadOpenInJira),
+            action: #selector(openThreadInJira(_:)),
+            keyEquivalent: ""
+        )
+        openItem.target = self
+        openItem.representedObject = thread
+        submenu.addItem(openItem)
+
+        if let jiraSummary = thread.verifiedJiraTicket?.summary, !jiraSummary.isEmpty {
+            let descItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.threadSetDescriptionFromJira),
+                action: #selector(setThreadDescriptionFromJira(_:)),
+                keyEquivalent: ""
+            )
+            descItem.target = self
+            descItem.representedObject = thread
+            submenu.addItem(descItem)
+        }
+
+        item.submenu = submenu
         return item
     }
 
     private func jiraMenuTitle(ticketKey: String, thread: MagentThread) -> String {
         if let summary = thread.verifiedJiraTicket?.summary, !summary.isEmpty {
-            return "\(ticketKey): \(summary) — Open in Jira"
+            return "\(ticketKey): \(summary)"
         }
-        return "\(ticketKey) — Open in Jira"
+        return ticketKey
     }
 
     private func jiraMenuIcon() -> NSImage? {

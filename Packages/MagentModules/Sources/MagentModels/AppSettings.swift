@@ -69,6 +69,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var agentSkipPermissions: Bool
     public var ipcPromptInjectionEnabled: Bool
     public var reviewPrompt: String
+    public var jiraIntegrationEnabled: Bool
     public var jiraSiteURL: String
     public var jiraTicketDetectionEnabled: Bool
     public var enableRateLimitDetection: Bool
@@ -116,6 +117,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         agentSkipPermissions: Bool = true,
         ipcPromptInjectionEnabled: Bool = true,
         reviewPrompt: String = AppSettings.defaultReviewPrompt,
+        jiraIntegrationEnabled: Bool = true,
         jiraSiteURL: String = "",
         jiraTicketDetectionEnabled: Bool = true,
         enableRateLimitDetection: Bool = true,
@@ -162,6 +164,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.agentSkipPermissions = agentSkipPermissions
         self.ipcPromptInjectionEnabled = ipcPromptInjectionEnabled
         self.reviewPrompt = reviewPrompt
+        self.jiraIntegrationEnabled = jiraIntegrationEnabled
         self.jiraSiteURL = jiraSiteURL
         self.jiraTicketDetectionEnabled = jiraTicketDetectionEnabled
         self.enableRateLimitDetection = enableRateLimitDetection
@@ -214,6 +217,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         agentSkipPermissions = try container.decodeIfPresent(Bool.self, forKey: .agentSkipPermissions) ?? true
         ipcPromptInjectionEnabled = try container.decodeIfPresent(Bool.self, forKey: .ipcPromptInjectionEnabled) ?? true
         reviewPrompt = try container.decodeIfPresent(String.self, forKey: .reviewPrompt) ?? Self.defaultReviewPrompt
+        jiraIntegrationEnabled = try container.decodeIfPresent(Bool.self, forKey: .jiraIntegrationEnabled) ?? true
         jiraSiteURL = try container.decodeIfPresent(String.self, forKey: .jiraSiteURL) ?? ""
         jiraTicketDetectionEnabled = try container.decodeIfPresent(Bool.self, forKey: .jiraTicketDetectionEnabled) ?? true
         enableRateLimitDetection = try container.decodeIfPresent(Bool.self, forKey: .enableRateLimitDetection) ?? true
@@ -265,6 +269,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(agentSkipPermissions, forKey: .agentSkipPermissions)
         try container.encode(ipcPromptInjectionEnabled, forKey: .ipcPromptInjectionEnabled)
         try container.encode(reviewPrompt, forKey: .reviewPrompt)
+        try container.encode(jiraIntegrationEnabled, forKey: .jiraIntegrationEnabled)
         try container.encode(jiraSiteURL, forKey: .jiraSiteURL)
         try container.encode(jiraTicketDetectionEnabled, forKey: .jiraTicketDetectionEnabled)
         try container.encode(enableRateLimitDetection, forKey: .enableRateLimitDetection)
@@ -410,6 +415,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case agentSkipPermissions
         case ipcPromptInjectionEnabled
         case reviewPrompt
+        case jiraIntegrationEnabled
         case jiraSiteURL
         case jiraTicketDetectionEnabled
         case enableRateLimitDetection
