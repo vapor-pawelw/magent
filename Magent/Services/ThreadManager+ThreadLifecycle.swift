@@ -490,23 +490,41 @@ extension ThreadManager {
         // Show the banner immediately — the archive is logically complete from the user's perspective.
         showArchivedThreadBanner(for: thread, warning: archiveWarning)
 
-        // Run the slow cleanup (tmux kills, worktree removal, symlink/stale-session sweeps) in the
-        // background so archiveThread returns promptly and the UI stays responsive.
+        // Run the slow cleanup (tmux kills, worktree removal, symlink/stale-session sweeps) in a
+        // detached task so it does NOT inherit @MainActor isolation from ThreadManager.
+        // Without Task.detached, all synchronous code between awaits (file-system walks,
+        // persistence I/O, task-group coordination) runs on the main thread and blocks the UI.
+        // Capture everything needed so the detached task never hops back to the main actor.
         let capturedProject = settings.projects.first(where: { $0.id == thread.projectId })
-        Task { [weak self, thread] in
-            guard let self else { return }
+        let capturedTmux = tmux
+        let capturedGit = git
+        let capturedPersistence = persistence
+        let capturedSettings = settings
+        // Snapshot thread/session state before the detached task. These can go stale if new
+        // threads are created between capture and execution, but the window is sub-millisecond
+        // and the previous non-detached version had the same race (threads could change between
+        // awaits). Acceptable trade-off to keep cleanup fully off the main thread.
+        let capturedActiveWorktreeNames = worktreeActiveNames(for: thread.projectId)
+        let capturedReferencedSessions = referencedMagentSessionNames()
+        Task.detached {
             // Kill sessions concurrently instead of one-by-one.
             await withTaskGroup(of: Void.self) { group in
                 for sessionName in thread.tmuxSessionNames {
-                    group.addTask { try? await self.tmux.killSession(name: sessionName) }
+                    group.addTask { try? await capturedTmux.killSession(name: sessionName) }
                 }
             }
             if let project = capturedProject {
-                try? await self.git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
-                self.pruneWorktreeCache(for: project)
+                try? await capturedGit.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
+                capturedPersistence.pruneWorktreeCache(
+                    worktreesBasePath: project.resolvedWorktreesBasePath(),
+                    activeNames: capturedActiveWorktreeNames
+                )
             }
-            self.cleanupAllBrokenSymlinks()
-            await self.cleanupStaleMagentSessions()
+            SymlinkManager.cleanupAll(settings: capturedSettings)
+            await Self.cleanupStaleSessions(
+                tmux: capturedTmux,
+                referencedSessions: capturedReferencedSessions
+            )
         }
 
         archiveCompleted = true
@@ -646,22 +664,39 @@ extension ThreadManager {
 
         promptRenameResultCache.removeValue(forKey: thread.id)
 
-        // Cleanup after UI has switched away from this thread.
-        for sessionName in thread.tmuxSessionNames {
-            try? await tmux.killSession(name: sessionName)
-        }
-
-        let settings = persistence.loadSettings()
-        if let project = settings.projects.first(where: { $0.id == thread.projectId }) {
-            try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
-            if !thread.branchName.isEmpty {
-                try? await git.deleteBranch(repoPath: project.repoPath, branchName: thread.branchName)
+        // Run slow cleanup in a detached task to avoid blocking the main thread.
+        // Capture everything needed so the detached task never hops back to the main actor.
+        let capturedTmux = tmux
+        let capturedGit = git
+        let capturedPersistence = persistence
+        let capturedSettings = persistence.loadSettings()
+        let capturedProject = capturedSettings.projects.first(where: { $0.id == thread.projectId })
+        // Snapshot — may go slightly stale before the detached task runs, but the window is
+        // negligible and avoids hopping back to the main actor mid-cleanup. See archive path.
+        let capturedActiveWorktreeNames = worktreeActiveNames(for: thread.projectId)
+        let capturedReferencedSessions = referencedMagentSessionNames()
+        Task.detached {
+            for sessionName in thread.tmuxSessionNames {
+                try? await capturedTmux.killSession(name: sessionName)
             }
-            pruneWorktreeCache(for: project)
-        }
 
-        cleanupAllBrokenSymlinks()
-        await cleanupStaleMagentSessions()
+            if let project = capturedProject {
+                try? await capturedGit.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
+                if !thread.branchName.isEmpty {
+                    try? await capturedGit.deleteBranch(repoPath: project.repoPath, branchName: thread.branchName)
+                }
+                capturedPersistence.pruneWorktreeCache(
+                    worktreesBasePath: project.resolvedWorktreesBasePath(),
+                    activeNames: capturedActiveWorktreeNames
+                )
+            }
+
+            SymlinkManager.cleanupAll(settings: capturedSettings)
+            await Self.cleanupStaleSessions(
+                tmux: capturedTmux,
+                referencedSessions: capturedReferencedSessions
+            )
+        }
     }
 
     // MARK: - Worktree Recovery

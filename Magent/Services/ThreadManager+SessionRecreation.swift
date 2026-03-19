@@ -71,7 +71,29 @@ extension ThreadManager {
         return sessionsToKill
     }
 
-    private func referencedMagentSessionNames() -> Set<String> {
+    /// Lightweight stale-session cleanup that runs entirely off the main thread.
+    /// Takes pre-captured referenced sessions and a tmux service reference so no main-actor
+    /// hop is needed. Skips `staleMagentSessionsFirstSeenAt` tracking (only relevant for the
+    /// 5-minute poller cadence, not post-archive one-shot cleanup).
+    nonisolated static func cleanupStaleSessions(
+        tmux: TmuxService,
+        referencedSessions: Set<String>
+    ) async {
+        let liveSessions: [String]
+        do {
+            liveSessions = try await tmux.listSessions()
+        } catch {
+            return
+        }
+        let staleSessions = liveSessions.filter { sessionName in
+            sessionName.hasPrefix("ma-") && !referencedSessions.contains(sessionName)
+        }
+        for sessionName in staleSessions {
+            try? await tmux.killSession(name: sessionName)
+        }
+    }
+
+    func referencedMagentSessionNames() -> Set<String> {
         var names = Set<String>()
 
         // Include both in-memory and persisted threads so cleanup is safe during transitional states.
