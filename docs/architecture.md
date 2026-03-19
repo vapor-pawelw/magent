@@ -341,6 +341,8 @@ Each tmux session created by Magent is tagged with `MAGENT_THREAD_ID` (the ownin
 
 This pattern lets `refreshDirtyStates`, `refreshBranchStates`, and `refreshDeliveredStates` run O(n) git subprocess calls in O(1) wall-clock time by parallelizing across the cooperative thread pool, while keeping all `threads` mutations safely serialized in the apply phase.
 
+**Detached cleanup pattern (archive/delete)**: Post-archive and post-delete cleanup (tmux session kills, worktree removal, symlink sweeps, stale-session pruning) runs in `Task.detached` blocks. A plain `Task { }` inside `@MainActor`-isolated code inherits MainActor, so all synchronous code between `await` points (file-system walks, JSON I/O) would block the UI. The detached task pre-captures everything it needs (services, active worktree names, referenced session names) so it never hops back to the main actor. The snapshots can go stale if threads are created between capture and execution, but the window is negligible and the cleanup operations are idempotent (killing a non-existent session is a no-op, pruning an already-pruned cache is harmless).
+
 ## Platform Scope
 
 - **macOS**: Full experience — sidebar + terminal + tabs, keyboard-driven

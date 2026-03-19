@@ -4,7 +4,10 @@ import os
 
 private let logger = Logger(subsystem: "com.magent.persistence", category: "PersistenceService")
 
-public final class PersistenceService {
+// @unchecked Sendable rationale: mutable state (writeBlockedFiles) is only accessed from the
+// main thread (startup/recovery flows). Methods called from background threads (pruneWorktreeCache,
+// load/save) use only immutable encoder/decoder and atomic file writes via FileManager.
+public final class PersistenceService: @unchecked Sendable {
 
     public static let shared = PersistenceService()
 

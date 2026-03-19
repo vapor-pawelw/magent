@@ -320,12 +320,18 @@ extension ThreadManager {
     }
 
     /// Removes stale entries from the worktree metadata cache for a project.
-    func pruneWorktreeCache(for project: Project) {
-        let activeNames = Set(
+    /// Returns the set of active (non-archived, non-main) worktree keys for a project.
+    /// Can be captured before a detached task to avoid a main-actor hop for pruning.
+    func worktreeActiveNames(for projectId: UUID) -> Set<String> {
+        Set(
             threads
-                .filter { $0.projectId == project.id && !$0.isArchived && !$0.isMain }
+                .filter { $0.projectId == projectId && !$0.isArchived && !$0.isMain }
                 .map { $0.worktreeKey }
         )
+    }
+
+    func pruneWorktreeCache(for project: Project) {
+        let activeNames = worktreeActiveNames(for: project.id)
         persistence.pruneWorktreeCache(
             worktreesBasePath: project.resolvedWorktreesBasePath(),
             activeNames: activeNames
