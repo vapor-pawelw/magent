@@ -177,25 +177,16 @@ extension ThreadListViewController {
     private func buildSignEmojiSubmenu(for thread: MagentThread) -> NSMenu {
         let submenu = NSMenu()
         for option in Self.signEmojiOptions {
+            let isSelected = thread.signEmoji == option.emoji
             let item = NSMenuItem(title: "\(option.emoji)  \(option.label)", action: #selector(setThreadSignEmoji(_:)), keyEquivalent: "")
             item.target = self
-            item.state = thread.signEmoji == option.emoji ? .on : .off
+            item.state = isSelected ? .on : .off
             item.representedObject = [
                 "threadId": thread.id,
-                "emoji": option.emoji
+                "emoji": isSelected ? "" : option.emoji
             ] as [String: Any]
             submenu.addItem(item)
         }
-        submenu.addItem(NSMenuItem.separator())
-        let clearItem = NSMenuItem(title: "Clear", action: #selector(setThreadSignEmoji(_:)), keyEquivalent: "")
-        clearItem.target = self
-        clearItem.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Clear sign")
-        clearItem.representedObject = [
-            "threadId": thread.id,
-            "emoji": ""
-        ] as [String: Any]
-        clearItem.isEnabled = thread.signEmoji != nil
-        submenu.addItem(clearItem)
         return submenu
     }
 
