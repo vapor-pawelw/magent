@@ -54,7 +54,8 @@
 - Removed all pre-archive confirmation dialogs (agent busy warning, uncommitted-changes/unmerged-commits warning, local-sync-failure force-archive dialog). These previously stalled the UI for a git-status check before anything happened.
 - `threadArchiveThread` now uses `force: true` from both UI call sites so local file sync failures become a warning in the archive banner rather than a blocking dialog.
 - `MagentThread` has a new transient field `isArchiving: Bool` (not persisted). `ThreadManager` exposes `markThreadArchiving(id:)` and `clearThreadArchivingState(id:)`. The latter is called via a `defer` block in `archiveThread` so the overlay is always removed on failure.
-- `ThreadCell` renders an `ArchivingOverlayView` (draw-based, appearance-safe via `updateLayer`) with a spinner and "Archiving…" label when `thread.isArchiving` is true.
+- The non-interactive local-sync merge-back phase now runs in a detached worker before archive completion, so large Local Sync Paths no longer freeze the app while the row stays in its archiving state.
+- The archiving overlay now belongs to `AlwaysEmphasizedRowView`, not `ThreadCell`, so the tint/spinner covers the full selected row bounds instead of only the cell content area.
 - `ThreadManager.archiveThread` shows the archive banner immediately after the UI state is updated, then fires remaining cleanup (tmux kills, worktree removal, symlink sweep, stale-session sweep) in a background `Task`. Tmux sessions are killed concurrently via `withTaskGroup`.
 
 ## Gotchas

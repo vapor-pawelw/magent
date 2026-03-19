@@ -1,6 +1,27 @@
 import Foundation
 import MagentCore
 
+enum BackgroundWorktreeCachePruner {
+    nonisolated static func prune(worktreesBasePath: String, activeNames: Set<String>) {
+        let url = URL(fileURLWithPath: worktreesBasePath).appendingPathComponent(".magent-cache.json")
+        guard let data = try? Data(contentsOf: url) else { return }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard var cache = try? decoder.decode(WorktreeMetadataCache.self, from: data) else { return }
+
+        let before = cache.worktrees.count
+        cache.worktrees = cache.worktrees.filter { activeNames.contains($0.key) }
+        guard cache.worktrees.count != before else { return }
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        guard let encoded = try? encoder.encode(cache) else { return }
+        try? encoded.write(to: url, options: .atomic)
+    }
+}
+
 extension ThreadManager {
 
     // MARK: - Base Branch

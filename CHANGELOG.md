@@ -4,7 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Performance
+- Archiving a thread no longer freezes the app while Local Sync Paths merge back into the main worktree. The non-interactive archive sync now runs off the UI path before background cleanup continues.
+
+### Sidebar
+- The "Archiving…" tint and spinner now cover the full selected thread row instead of only the row's content area.
 
 ## 1.3.0 - 2026-03-19
 

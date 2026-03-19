@@ -66,6 +66,7 @@ Before removing a thread worktree, Magent can merge configured paths for that th
 
 - Missing source path in thread worktree: skipped
 - Files unchanged in the thread since creation are skipped (no copy-back)
+- Non-interactive archive merge-back runs off the UI path, so large sync sets do not freeze the app while the thread row is marked as archiving
 - Merge-back is additive and non-destructive:
   - directory entries are processed recursively
   - intermediate directories are created only when at least one child file is being copied

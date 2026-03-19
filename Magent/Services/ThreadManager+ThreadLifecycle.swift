@@ -444,12 +444,25 @@ extension ThreadManager {
         let shouldSyncLocalPathsBackToRepo = syncLocalPathsBackToRepo ?? settings.syncLocalPathsOnArchive
         if shouldSyncLocalPathsBackToRepo, let project = settings.projects.first(where: { $0.id == thread.projectId }) {
             do {
-                try await syncConfiguredLocalPathsFromWorktree(
-                    project: project,
-                    worktreePath: thread.worktreePath,
-                    syncPaths: effectiveLocalSyncPaths(for: thread, project: project),
-                    promptForConflicts: promptForLocalSyncConflicts
-                )
+                let syncPaths = effectiveLocalSyncPaths(for: thread, project: project)
+                if promptForLocalSyncConflicts {
+                    try await syncConfiguredLocalPathsFromWorktree(
+                        project: project,
+                        worktreePath: thread.worktreePath,
+                        syncPaths: syncPaths,
+                        promptForConflicts: true
+                    )
+                } else {
+                    let projectRepoPath = project.repoPath
+                    let worktreePath = thread.worktreePath
+                    try await Task.detached(priority: .userInitiated) {
+                        try await BackgroundLocalSyncWorker.syncConfiguredLocalPathsFromWorktree(
+                            projectRepoPath: projectRepoPath,
+                            worktreePath: worktreePath,
+                            syncPaths: syncPaths
+                        )
+                    }.value
+                }
             } catch ThreadManagerError.archiveCancelled {
                 throw ThreadManagerError.archiveCancelled
             } catch ThreadManagerError.localFileSyncFailed(let message) {
@@ -491,14 +504,14 @@ extension ThreadManager {
         showArchivedThreadBanner(for: thread, warning: archiveWarning)
 
         // Run the slow cleanup (tmux kills, worktree removal, symlink/stale-session sweeps) in a
-        // detached task so it does NOT inherit @MainActor isolation from ThreadManager.
-        // Without Task.detached, all synchronous code between awaits (file-system walks,
-        // persistence I/O, task-group coordination) runs on the main thread and blocks the UI.
+        // detached task so it does NOT inherit the caller's UI actor/executor context.
+        // Without Task.detached, a Task started from AppKit-driven archive flows can keep
+        // synchronous code between awaits (file-system walks, persistence I/O, task-group
+        // coordination) on the UI path and make the app feel hung.
         // Capture everything needed so the detached task never hops back to the main actor.
         let capturedProject = settings.projects.first(where: { $0.id == thread.projectId })
         let capturedTmux = tmux
         let capturedGit = git
-        let capturedPersistence = persistence
         let capturedSettings = settings
         // Snapshot thread/session state before the detached task. These can go stale if new
         // threads are created between capture and execution, but the window is sub-millisecond
@@ -515,7 +528,7 @@ extension ThreadManager {
             }
             if let project = capturedProject {
                 try? await capturedGit.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
-                capturedPersistence.pruneWorktreeCache(
+                BackgroundWorktreeCachePruner.prune(
                     worktreesBasePath: project.resolvedWorktreesBasePath(),
                     activeNames: capturedActiveWorktreeNames
                 )
@@ -664,11 +677,10 @@ extension ThreadManager {
 
         promptRenameResultCache.removeValue(forKey: thread.id)
 
-        // Run slow cleanup in a detached task to avoid blocking the main thread.
+        // Run slow cleanup in a detached task so it does not inherit the caller's UI context.
         // Capture everything needed so the detached task never hops back to the main actor.
         let capturedTmux = tmux
         let capturedGit = git
-        let capturedPersistence = persistence
         let capturedSettings = persistence.loadSettings()
         let capturedProject = capturedSettings.projects.first(where: { $0.id == thread.projectId })
         // Snapshot — may go slightly stale before the detached task runs, but the window is
@@ -685,7 +697,7 @@ extension ThreadManager {
                 if !thread.branchName.isEmpty {
                     try? await capturedGit.deleteBranch(repoPath: project.repoPath, branchName: thread.branchName)
                 }
-                capturedPersistence.pruneWorktreeCache(
+                BackgroundWorktreeCachePruner.prune(
                     worktreesBasePath: project.resolvedWorktreesBasePath(),
                     activeNames: capturedActiveWorktreeNames
                 )

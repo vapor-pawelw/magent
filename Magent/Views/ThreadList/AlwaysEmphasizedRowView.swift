@@ -1,12 +1,23 @@
 import Cocoa
 import MagentCore
 
+private final class ArchivingRowOverlayView: NSView {
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.82).cgColor
+        }
+    }
+}
+
 final class AlwaysEmphasizedRowView: NSTableRowView {
     private static let busyOpacitySweepAnimationKey = "busy-row-opacity-sweep"
     private static let busyMaskOverscanLeft: CGFloat = 96
     private static let busyMaskOverscanRight: CGFloat = 48
     private var busyOpacityMaskLayer: CAGradientLayer?
     private weak var maskedContentView: NSView?
+    private var archivingOverlay: ArchivingRowOverlayView?
 
     var showsCompletionHighlight = false {
         didSet { needsDisplay = true }
@@ -16,6 +27,9 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     }
     var showsBusyShimmer = false {
         didSet { updateBusyShimmerAnimation() }
+    }
+    var showsArchivingOverlay = false {
+        didSet { updateArchivingOverlay() }
     }
 
     override init(frame frameRect: NSRect) {
@@ -36,6 +50,10 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         updateBusyShimmerAnimation()
+        if window != nil, let spinner = archivingOverlay?.subviews.compactMap({ $0 as? NSStackView }).first?
+            .views.first(where: { $0 is NSProgressIndicator }) as? NSProgressIndicator {
+            spinner.startAnimation(nil)
+        }
     }
 
     override func layout() {
@@ -149,6 +167,57 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             width: contentBounds.width + Self.busyMaskOverscanLeft + Self.busyMaskOverscanRight,
             height: contentBounds.height
         )
+    }
+
+    private func updateArchivingOverlay() {
+        if showsArchivingOverlay {
+            ensureArchivingOverlay()
+        } else {
+            archivingOverlay?.removeFromSuperview()
+            archivingOverlay = nil
+        }
+    }
+
+    private func ensureArchivingOverlay() {
+        guard archivingOverlay == nil else { return }
+
+        let overlay = ArchivingRowOverlayView()
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+        overlay.wantsLayer = true
+
+        let spinner = NSProgressIndicator()
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isIndeterminate = true
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.startAnimation(nil)
+
+        let label = NSTextField(labelWithString: "Archiving…")
+        label.font = .systemFont(ofSize: 11)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView(views: [spinner, label])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 5
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        overlay.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+        ])
+
+        addSubview(overlay)
+        NSLayoutConstraint.activate([
+            overlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            overlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            overlay.topAnchor.constraint(equalTo: topAnchor),
+            overlay.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        archivingOverlay = overlay
     }
 }
 

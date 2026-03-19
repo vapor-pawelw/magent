@@ -379,10 +379,12 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion
             rowView.showsSubtleBottomSeparator = false
             rowView.showsBusyShimmer = thread.hasAgentBusy
+            rowView.showsArchivingOverlay = thread.isArchiving
         } else {
             rowView.showsCompletionHighlight = false
             rowView.showsSubtleBottomSeparator = false
             rowView.showsBusyShimmer = false
+            rowView.showsArchivingOverlay = false
         }
         return rowView
     }
