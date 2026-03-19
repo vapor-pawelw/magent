@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - `--section` now places the thread in the correct section during creation instead of moving it after, eliminating a visible "jump" in the sidebar.
 
 ### Sidebar
+- Jira context menu now includes a "Copy Link" option below "Open in Jira" to copy the ticket URL to the clipboard.
 - Thread sign emoji submenu now toggles: selecting the already-active sign clears it, removing the need for a separate "Clear" option.
 - The base branch label in the changes panel is now clickable — opens a menu of ancestor branches to quickly change the base branch for diff comparison. The menu stops at the project's default branch (no deep ancestors beyond it) and lists closest ancestors at the bottom to match the upward pop direction.
 - When a PR/MR target branch differs from the app's base branch, a mismatch banner offers a one-click "Use PR target" action to align them.

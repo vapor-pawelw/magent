@@ -372,6 +372,16 @@ extension ThreadListViewController {
         openItem.representedObject = thread
         submenu.addItem(openItem)
 
+        let copyLinkItem = NSMenuItem(
+            title: String(localized: .ThreadStrings.threadCopyJiraLink),
+            action: #selector(copyJiraLink(_:)),
+            keyEquivalent: ""
+        )
+        copyLinkItem.target = self
+        copyLinkItem.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
+        copyLinkItem.representedObject = thread
+        submenu.addItem(copyLinkItem)
+
         if let jiraSummary = thread.verifiedJiraTicket?.summary, !jiraSummary.isEmpty {
             let descItem = NSMenuItem(
                 title: String(localized: .ThreadStrings.threadSetDescriptionFromJira),
@@ -497,13 +507,11 @@ extension ThreadListViewController {
         return OpenActionIcons.pullRequestIcon(for: provider, size: 16)
     }
 
-    @objc private func openThreadInJira(_ sender: NSMenuItem) {
-        guard let thread = sender.representedObject as? MagentThread else { return }
-
+    private func resolveJiraURL(for thread: MagentThread) -> URL? {
         let settings = persistence.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let siteURL = project?.jiraSiteURL ?? settings.jiraSiteURL
-        guard !siteURL.isEmpty else { return }
+        guard !siteURL.isEmpty else { return nil }
         let jira = JiraService.shared
 
         var url: URL?
@@ -524,9 +532,20 @@ extension ThreadListViewController {
             url = jira.ticketURL(siteURL: siteURL, ticketKey: ticketKey)
         }
 
-        if let url {
-            NSWorkspace.shared.open(url)
-        }
+        return url
+    }
+
+    @objc private func openThreadInJira(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread,
+              let url = resolveJiraURL(for: thread) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func copyJiraLink(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread,
+              let url = resolveJiraURL(for: thread) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
     }
 
     @objc private func changeJiraStatus(_ sender: NSMenuItem) {

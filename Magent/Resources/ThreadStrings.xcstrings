@@ -584,6 +584,17 @@
         }
       }
     },
+    "threadCopyJiraLink": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Link"
+          }
+        }
+      }
+    },
     "threadOpenInJira": {
       "extractionState": "manual",
       "localizations": {
