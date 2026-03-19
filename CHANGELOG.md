@@ -25,6 +25,9 @@ All notable changes to this project will be documented in this file.
 - When a PR/MR target branch differs from the app's base branch, a mismatch banner offers a one-click "Use PR target" action to align them.
 - The changes panel now always shows the "branch ← base" info label when viewing a non-main thread, even when there are no uncommitted changes. Previously the label was hidden unless the working tree was dirty.
 
+### Web Tabs
+- CMD+R refreshes the current web tab page; CMD+SHIFT+R hard-refreshes (bypasses cache).
+
 ### Thread
 - New thread sheet now includes a "Base branch" combo box that lets you type a branch name or pick from existing local branches (sorted most-recently-modified first, default branch listed first). The field uses the project's default branch as placeholder rather than prefilling it, with a hint label explaining the default. Validates the chosen (or implied default) branch exists before accepting — shows an inline error if not found.
 - Fixed: base branch hint label not updating when switching projects via the project picker in the new-thread sheet.

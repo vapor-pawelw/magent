@@ -41,6 +41,7 @@ Tabs can also display in-app web content (WKWebView) alongside terminal tabs:
 
 - **Middle-click** on the Jira or PR toolbar button opens the page in a web tab instead of the external browser
 - Web tabs show a permanent type icon (Jira/PR) in the tab bar, with back/forward/refresh navigation controls
+- **CMD+R** refreshes the active web tab; **CMD+SHIFT+R** hard-refreshes (bypasses cache via `reloadFromOrigin`)
 - Deduplication: opening the same URL again focuses the existing tab instead of creating a new one
 - Web tabs are persisted across app restarts but load lazily — the WKWebView is only created when the tab is first selected
 - Web tabs participate in the same tab bar as terminal tabs: they can be pinned, renamed, drag-reordered, and freely mixed with terminal tabs in both the pinned and unpinned sections

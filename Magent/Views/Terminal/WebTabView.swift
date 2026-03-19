@@ -92,6 +92,24 @@ final class WebTabView: NSView, WKNavigationDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    // MARK: - Key Equivalents
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.command]
+                || event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.command, .shift],
+              event.charactersIgnoringModifiers == "r"
+        else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        if event.modifierFlags.contains(.shift) {
+            hardRefresh()
+        } else {
+            webView.reload()
+        }
+        return true
+    }
+
     // MARK: - Navigation Actions
 
     @objc private func goBack() {
