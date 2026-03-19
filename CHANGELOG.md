@@ -43,6 +43,7 @@ All notable changes to this project will be documented in this file.
 - The toolbar Jira button shows the ticket key next to the Jira icon (matching the PR button pattern). Tooltip shows the verified ticket summary when available.
 - Ticket numbers appear on the same sidebar line as PR info, separated by a dot when both are present.
 - Jira project statuses (used for the "Change Status" context menu) are now cached to disk, so the status list appears instantly on subsequent launches without re-fetching from Jira.
+- "Change Status" menu now sorts statuses by workflow phase (To Do → In Progress → Done), then alphabetically within each phase, instead of displaying them in arbitrary discovery order.
 - Fixed: context menu status dots used system colors (blue/yellow/green) instead of matching the Jira badge colors used elsewhere in the sidebar.
 - Jira sync features (board config, section sync, auto-thread creation) remain debug-only behind the renamed `FEATURE_JIRA_SYNC` flag.
 

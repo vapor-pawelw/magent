@@ -418,8 +418,15 @@ extension ThreadListViewController {
         changeStatusItem.image = NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: nil)
 
         if let statuses, !statuses.isEmpty {
+            let sortedStatuses = statuses.sorted { a, b in
+                let categoryOrder = ["new": 0, "indeterminate": 1, "done": 2]
+                let orderA = categoryOrder[a.categoryKey ?? "indeterminate"] ?? 1
+                let orderB = categoryOrder[b.categoryKey ?? "indeterminate"] ?? 1
+                if orderA != orderB { return orderA < orderB }
+                return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+            }
             let statusSubmenu = NSMenu()
-            for status in statuses {
+            for status in sortedStatuses {
                 let statusItem = NSMenuItem(
                     title: status.name,
                     action: #selector(changeJiraStatus(_:)),
