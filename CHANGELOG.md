@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - New `--no-submit` flag on `create-thread` and `batch-create` injects the prompt text into the agent input without pressing Enter, letting users review and submit manually.
 - `--description` now sets the thread's task description immediately (previously the description text was consumed for slug generation but never persisted on the thread).
 - `--section` now places the thread in the correct section during creation instead of moving it after, eliminating a visible "jump" in the sidebar.
+- Archiving a thread via the CLI now shows the sidebar archiving overlay (spinner + "Archiving…") just like the UI-triggered archive.
 
 ### Sidebar
 - Jira context menu now includes a "Copy Link" option below "Open in Jira" to copy the ticket URL to the clipboard.
