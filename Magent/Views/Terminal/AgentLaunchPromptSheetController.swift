@@ -288,6 +288,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let descriptionField = NSTextField()
     private let branchField = NSTextField()
     private let baseBranchField = NSComboBox()
+    private let baseBranchHintLabel = NSTextField(labelWithString: "")
     private let baseBranchErrorLabel = NSTextField(labelWithString: "")
     private let titleField = NSTextField()
     private let rememberCheckbox = NSButton(checkboxWithTitle: "Remember type selection", target: nil, action: nil)
@@ -580,10 +581,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             baseBranchField.delegate = self
 
             // Hint label
-            let baseBranchHint = NSTextField(labelWithString: "Uses default branch (\(defaultBranchPlaceholder)) if empty.")
-            baseBranchHint.font = .systemFont(ofSize: 11)
-            baseBranchHint.textColor = NSColor(resource: .textSecondary)
-            baseBranchHint.translatesAutoresizingMaskIntoConstraints = false
+            baseBranchHintLabel.stringValue = "Uses default branch (\(defaultBranchPlaceholder)) if empty."
+            baseBranchHintLabel.font = .systemFont(ofSize: 11)
+            baseBranchHintLabel.textColor = NSColor(resource: .textSecondary)
+            baseBranchHintLabel.translatesAutoresizingMaskIntoConstraints = false
             let hintRow = NSStackView()
             hintRow.orientation = .horizontal
             hintRow.spacing = 0
@@ -592,7 +593,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             hintSpacer.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activate([hintSpacer.widthAnchor.constraint(equalToConstant: Self.formLabelColumnWidth)])
             hintRow.addArrangedSubview(hintSpacer)
-            hintRow.addArrangedSubview(baseBranchHint)
+            hintRow.addArrangedSubview(baseBranchHintLabel)
             stack.addArrangedSubview(hintRow)
 
             // Error label (hidden by default)
@@ -781,7 +782,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private func reloadBaseBranches(for project: Project) {
         guard config.showDescriptionAndBranchFields else { return }
         baseBranchField.stringValue = ""
-        baseBranchField.placeholderString = resolvedDefaultBranchName()
+        let defaultBranch = resolvedDefaultBranchName()
+        baseBranchField.placeholderString = defaultBranch
+        baseBranchHintLabel.stringValue = "Uses default branch (\(defaultBranch)) if empty."
         clearBaseBranchError()
         populateBaseBranchComboBox(repoPath: project.repoPath)
     }
