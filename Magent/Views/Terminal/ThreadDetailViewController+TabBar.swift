@@ -71,6 +71,10 @@ extension ThreadDetailViewController {
         guard preparedSessions.contains(sessionName) else {
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                // Hide current terminal/web content so the old tab doesn't show through.
+                for termView in self.terminalViews { termView.isHidden = true }
+                self.hideActiveWebTab()
+
                 let sessionAgentType = await self.threadManager.loadingOverlayAgentType(
                     for: self.thread,
                     sessionName: sessionName
@@ -81,8 +85,15 @@ extension ThreadDetailViewController {
                           sessionName == self.loadingOverlaySessionName else { return }
                     self.updateLoadingOverlayDetail(action?.loadingOverlayDetail)
                 }
-                // Re-resolve display index (may have shifted)
-                guard let currentDisplayIndex = self.displayIndex(forSession: sessionName) else { return }
+                // Re-resolve display index (may have shifted — tab may have been closed).
+                guard let currentDisplayIndex = self.displayIndex(forSession: sessionName) else {
+                    self.dismissLoadingOverlay()
+                    // Tab was removed while preparing; fall back to the nearest valid tab.
+                    if !self.tabSlots.isEmpty {
+                        self.selectTab(at: max(0, (self.currentTabIndex ?? 1) - 1))
+                    }
+                    return
+                }
                 self.selectPreparedTab(at: currentDisplayIndex)
             }
             return

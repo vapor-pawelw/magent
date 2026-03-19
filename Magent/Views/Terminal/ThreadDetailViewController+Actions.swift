@@ -285,6 +285,10 @@ extension ThreadDetailViewController {
         // Mark the new tab as selected in the tab bar.
         for (i, item) in tabItems.enumerated() { item.isSelected = (i == pendingIndex) }
 
+        // Hide current terminal/web content so the old tab doesn't show through.
+        for termView in terminalViews { termView.isHidden = true }
+        hideActiveWebTab()
+
         // Show "Creating tab..." overlay immediately.
         ensureLoadingOverlay()
         loadingLabel?.stringValue = String(localized: .ThreadStrings.tabCreatingSession)

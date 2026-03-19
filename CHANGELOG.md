@@ -28,6 +28,7 @@ All notable changes to this project will be documented in this file.
 - "Create from this branch" context menu action now opens the full new-thread sheet (pre-filled with base branch) instead of a submenu that skipped the sheet.
 - Fixed: after pinning/unpinning or dragging tabs to reorder, the terminal surface could show the wrong tab's content despite the tab bar highlighting the correct tab.
 - Fixed: clicking a tab sometimes failed to select it when the drag-to-reorder gesture intercepted the click.
+- Fixed: previous tab's terminal content briefly visible behind the loading overlay when creating a new tab or switching to an unprepared tab.
 - Fixed: the GUI launch sheet's description field was silently ignored — descriptions entered in the sheet now appear on the thread immediately.
 
 ### Jira
