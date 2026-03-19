@@ -469,17 +469,7 @@ extension ThreadListViewController {
 
     /// Returns a colored dot image based on Jira status category.
     private func jiraStatusDotImage(categoryKey: String?) -> NSImage {
-        let color: NSColor
-        switch categoryKey {
-        case "new":
-            color = .systemBlue
-        case "indeterminate":
-            color = .systemYellow
-        case "done":
-            color = .systemGreen
-        default:
-            color = .tertiaryLabelColor
-        }
+        let color = StatusBadgeView.jiraCategoryColor(forKey: categoryKey) ?? .tertiaryLabelColor
         return colorDotImage(color: color, size: 8)
     }
 

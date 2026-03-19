@@ -73,6 +73,7 @@ var dirtyCheckTickCounter: Int = 0
     var jiraTicketCacheLoaded = false
     var isJiraVerificationRunning = false
     var _jiraProjectStatusesCache: [String: [JiraProjectStatus]] = [:]
+    var _jiraProjectStatusesCacheLoaded = false
     var prCache: [String: PullRequestCacheEntry] = [:]
     var prCacheLoaded = false
 
