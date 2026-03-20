@@ -10,6 +10,9 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 - The "Archiving…" tint and spinner now cover the full selected thread row instead of only the row's content area.
 
+### Settings
+- In-app updates now clear macOS launch-blocking app attributes before relaunch, preventing some installs from requiring a manual `xattr -cr /Applications/Magent.app` fix after update.
+
 ## 1.3.0 - 2026-03-19
 
 

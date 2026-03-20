@@ -435,6 +435,17 @@ final class UpdateService {
         try FileManager.default.moveItem(at: tempURL, to: destinationURL)
     }
 
+    /// Clears launch-blocking extended attributes that can survive archive extraction
+    /// and prevent Finder/LaunchServices from opening the updated app bundle.
+    private func clearLaunchBlockingExtendedAttributes(at appURL: URL) async {
+        let q = ShellExecutor.shellQuote
+        for attribute in ["com.apple.quarantine", "com.apple.provenance"] {
+            _ = await ShellExecutor.execute(
+                "/usr/bin/xattr -dr \(q(attribute)) \(q(appURL.path)) >/dev/null 2>&1 || true"
+            )
+        }
+    }
+
     // Mounts/unpacks the downloaded archive and returns the path to the extracted Magent.app.
     private func extractApp(from archiveURL: URL, kind: ReleaseAssetKind, in tempDir: URL) async throws -> URL {
         let q = ShellExecutor.shellQuote
@@ -467,6 +478,7 @@ final class UpdateService {
             guard copyResult.exitCode == 0 else {
                 throw UpdateError.extractionFailed("Failed to copy app from DMG (exit \(copyResult.exitCode))")
             }
+            await clearLaunchBlockingExtendedAttributes(at: destApp)
             return destApp
 
         case .zip:
@@ -487,7 +499,9 @@ final class UpdateService {
             guard !appPath.isEmpty else {
                 throw UpdateError.extractionFailed("Magent.app not found in archive")
             }
-            return URL(fileURLWithPath: appPath)
+            let appURL = URL(fileURLWithPath: appPath)
+            await clearLaunchBlockingExtendedAttributes(at: appURL)
+            return appURL
         }
     }
 
@@ -534,6 +548,9 @@ final class UpdateService {
           /bin/mv "$backup_app" "$target_app" || true
           exit 31
         fi
+
+        /usr/bin/xattr -dr com.apple.quarantine "$target_app" >/dev/null 2>&1 || true
+        /usr/bin/xattr -dr com.apple.provenance "$target_app" >/dev/null 2>&1 || true
 
         /bin/rm -rf "$backup_app"
         /usr/bin/open "$target_app"
@@ -588,6 +605,11 @@ final class UpdateService {
         if ! brew upgrade --cask magent; then
           echo "[magent-updater] brew upgrade failed, trying reinstall"
           brew reinstall --cask magent
+        fi
+
+        if [[ -d "/Applications/Magent.app" ]]; then
+          /usr/bin/xattr -dr com.apple.quarantine "/Applications/Magent.app" >/dev/null 2>&1 || true
+          /usr/bin/xattr -dr com.apple.provenance "/Applications/Magent.app" >/dev/null 2>&1 || true
         fi
 
         /usr/bin/open -a Magent
