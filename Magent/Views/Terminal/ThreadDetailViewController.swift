@@ -791,7 +791,7 @@ final class ThreadDetailViewController: NSViewController {
     private func buildTmuxCommand(for sessionName: String) -> String {
         let settings = PersistenceService.shared.loadSettings()
         let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
-        let selectedAgentType = threadManager.effectiveAgentType(for: thread.projectId)
+        let selectedAgentType = threadManager.agentType(for: thread, sessionName: sessionName)
 
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let projectName = project?.name ?? "project"

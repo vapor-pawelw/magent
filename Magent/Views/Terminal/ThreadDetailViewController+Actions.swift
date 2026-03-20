@@ -579,7 +579,7 @@ extension ThreadDetailViewController {
 
     func continueTabInAgent(at index: Int, targetAgent: AgentType) {
         guard index < tabSlots.count, case .terminal(let sessionName) = tabSlots[index] else { return }
-        let sourceAgent = threadManager.effectiveAgentType(for: thread.projectId)
+        let sourceAgent = threadManager.agentType(for: thread, sessionName: sessionName)
         let settings = PersistenceService.shared.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let projectName = project?.name ?? "project"
@@ -627,7 +627,7 @@ extension ThreadDetailViewController {
 
     func exportTabContext(at index: Int) {
         guard index < tabSlots.count, case .terminal(let sessionName) = tabSlots[index] else { return }
-        let sourceAgent = threadManager.effectiveAgentType(for: thread.projectId)
+        let sourceAgent = threadManager.agentType(for: thread, sessionName: sessionName)
         let settings = PersistenceService.shared.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         let projectName = project?.name ?? "project"

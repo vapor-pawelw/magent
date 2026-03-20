@@ -373,6 +373,19 @@ extension ThreadManager {
             return false
         }
 
+        if isAgentSession,
+           let expectedAgentType = agentType(for: thread, sessionName: sessionName) {
+            if let envAgentType = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_AGENT_TYPE")?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(),
+               !envAgentType.isEmpty {
+                guard AgentType(rawValue: envAgentType) == expectedAgentType else { return false }
+            } else if let runningAgentType = await detectedAgentTypeInSession(sessionName),
+                      runningAgentType != expectedAgentType {
+                return false
+            }
+        }
+
         if thread.isMain {
             if let envProject = await tmux.environmentValue(sessionName: sessionName, key: "MAGENT_PROJECT_PATH"),
                !envProject.isEmpty {
