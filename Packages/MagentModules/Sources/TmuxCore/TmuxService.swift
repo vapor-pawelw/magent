@@ -737,6 +737,17 @@ public final class TmuxService: Sendable {
         return output
     }
 
+    /// Like `capturePane`, but preserves ANSI escape sequences (`-e` flag).
+    /// Useful for distinguishing styled text (e.g. dim placeholder vs normal user input).
+    public func capturePaneWithEscapes(sessionName: String, lastLines: Int = 15) async -> String? {
+        guard let output = try? await ShellExecutor.run(
+            "tmux capture-pane -p -e -t \(shellQuote(sessionName)) -S -\(lastLines)"
+        ) else {
+            return nil
+        }
+        return output
+    }
+
     /// Like `capturePane`, but results are cached for up to 5 seconds per session.
     /// Concurrent calls for the same session coalesce into a single subprocess.
     /// Use this from periodic polling paths; use `capturePane` when you need fresh output.

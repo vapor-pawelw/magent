@@ -74,21 +74,33 @@ extension ThreadManager {
 
     /// Polls tmux pane content for the actual agent input prompt marker.
     /// Returns `true` only when the user prompt is visible, or `false` on timeout.
+    /// For agents that show placeholder text on the prompt line (e.g. Codex),
+    /// uses ANSI-aware capture to distinguish placeholder from user-typed text
+    /// and only considers the prompt ready when it's empty or showing placeholder.
     func waitForAgentPrompt(
         sessionName: String,
         agentType: AgentType?,
         timeout: TimeInterval = 10,
         interval: TimeInterval = 0.3
     ) async -> Bool {
+        let needsAnsi = agentType == .codex
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if let content = await tmux.capturePane(sessionName: sessionName, lastLines: 30) {
-                if isAgentPromptReady(content, agentType: agentType) {
-                    return true
-                }
+            let content: String?
+            if needsAnsi {
+                content = await tmux.capturePaneWithEscapes(sessionName: sessionName, lastLines: 30)
+            } else {
+                content = await tmux.capturePane(sessionName: sessionName, lastLines: 30)
+            }
+            if let content, isAgentPromptReady(content, agentType: agentType) {
+                return true
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
+        // Log final pane state on timeout for diagnostics
+        let finalContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? "<nil>"
+        let finalLines = finalContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).suffix(5).map { $0.trimmingCharacters(in: .whitespaces) }
+        NSLog("[waitForAgentPrompt] TIMEOUT session=\(sessionName) agentType=\(agentType?.rawValue ?? "nil") finalLines=\(finalLines)")
         return false
     }
 
@@ -158,13 +170,75 @@ extension ThreadManager {
     ) -> Bool {
         let recentLines = latestScopedPaneLines(from: paneContent, agentType: agentType)
             .suffix(12)
+        let trimmedLines = recentLines
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        guard !recentLines.isEmpty else { return false }
+        guard !trimmedLines.isEmpty else { return false }
         let bareMarker = String(marker)
-        return recentLines.contains { line in
-            line.filter { !$0.isWhitespace } == bareMarker
+        return trimmedLines.contains { line in
+            // Strip ANSI escapes for the structural check
+            let plain = Self.stripAnsiEscapes(line)
+            let filtered = plain.filter { !$0.isWhitespace }
+            if filtered == bareMarker { return true }
+            // Line starts with the marker (e.g. Codex "› placeholder text").
+            // Only treat as ready if the text after the marker is placeholder
+            // (rendered dim via SGR 2) or absent — not user-typed input.
+            guard plain.hasPrefix(bareMarker) else { return false }
+            return Self.isPromptLineEmpty(line, marker: bareMarker)
         }
+    }
+
+    /// Returns `true` when the text after the prompt marker is either absent or
+    /// rendered as placeholder (SGR 2 / dim). When the line contains ANSI
+    /// escapes, any non-whitespace text after the marker that is NOT preceded
+    /// by a dim escape (`\e[2m`) is considered user-typed input.
+    /// If the line has no ANSI escapes at all (plain capture), falls back to
+    /// treating any text after the marker as placeholder (safe for injection).
+    private static func isPromptLineEmpty(_ line: String, marker: String) -> Bool {
+        let hasAnsi = line.contains("\u{1b}[")
+        guard hasAnsi else {
+            // Plain capture (no ANSI) — can't distinguish placeholder from input.
+            // Treat as ready (backwards-compatible).
+            return true
+        }
+        // Find the marker in the plain text and check what follows in the raw line.
+        // After the marker + reset escape, placeholder text starts with \e[2m (dim).
+        // User-typed text does NOT have the dim escape.
+        guard let markerRange = line.range(of: marker) else { return true }
+        let afterMarker = line[markerRange.upperBound...]
+        // Strip leading ANSI escapes and whitespace to find the first content
+        let stripped = Self.stripLeadingAnsiAndWhitespace(String(afterMarker))
+        if stripped.isEmpty { return true }
+        // Check if the text content is preceded by a dim (SGR 2) escape
+        // in the original after-marker substring
+        return afterMarker.contains("\u{1b}[2m")
+    }
+
+    static func stripAnsiEscapes(_ string: String) -> String {
+        string.replacingOccurrences(
+            of: #"\x1b\[[0-9;]*[a-zA-Z]"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+
+    private static func stripLeadingAnsiAndWhitespace(_ string: String) -> String {
+        var s = string[...]
+        while !s.isEmpty {
+            if s.first?.isWhitespace == true {
+                s = s.dropFirst()
+            } else if s.hasPrefix("\u{1b}[") {
+                // Skip the full escape sequence
+                if let end = s.firstIndex(where: { $0.isLetter && $0 != "[" }) {
+                    s = s[s.index(after: end)...]
+                } else {
+                    break
+                }
+            } else {
+                break
+            }
+        }
+        return String(s)
     }
 
     private func latestScopedPaneLines(from paneContent: String, agentType: AgentType?) -> [String] {
