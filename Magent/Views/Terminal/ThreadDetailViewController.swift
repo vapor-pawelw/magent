@@ -508,7 +508,7 @@ final class ThreadDetailViewController: NSViewController {
         archiveSeparator.setContentCompressionResistancePriority(.required, for: .vertical)
 
         topBar.orientation = .horizontal
-        topBar.spacing = 8
+        topBar.spacing = 4
         topBar.alignment = .centerY
         topBar.detachesHiddenViews = true
         topBar.translatesAutoresizingMaskIntoConstraints = false
