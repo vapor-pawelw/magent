@@ -543,6 +543,34 @@ extension ThreadListViewController {
         refreshDiffPanelContext(for: thread)
     }
 
+    func manuallyRefreshSelectedThreadGitState() {
+        guard let thread = selectedThreadFromState(),
+              !isDiffPanelManualRefreshInFlight else { return }
+
+        let threadId = thread.id
+        isDiffPanelManualRefreshInFlight = true
+        diffPanelView.setRefreshInProgress(true)
+
+        Task { [weak self] in
+            guard let self else { return }
+
+            await self.threadManager.refreshBranchStates()
+            await self.threadManager.refreshDirtyStates()
+            await self.threadManager.refreshDeliveredStates()
+
+            await MainActor.run {
+                defer {
+                    self.isDiffPanelManualRefreshInFlight = false
+                    self.diffPanelView.setRefreshInProgress(false)
+                }
+
+                guard let selected = self.selectedThreadFromState(),
+                      selected.id == threadId else { return }
+                self.refreshDiffPanel(for: selected, resetPagination: false, preserveSelection: true)
+            }
+        }
+    }
+
     func loadMoreCommitsForSelectedThread() {
         guard let thread = selectedThreadFromState() else { return }
         let nextLimit = diffPanelCommitLimitByThreadId[thread.id, default: diffPanelCommitPageSize] + diffPanelCommitPageSize

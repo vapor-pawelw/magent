@@ -114,6 +114,8 @@ final class DiffPanelView: NSView {
     private let tabBarStack = NSStackView()
     private let commitsTabButton = NSButton()
     private let changesTabButton = NSButton()
+    private let topRightButtonStack = NSStackView()
+    private let refreshButton = NSButton()
     private let infoButton = NSButton()
     private let commitContextLabel = NSTextField(labelWithString: "")
     private let scrollView = NSScrollView()
@@ -163,6 +165,8 @@ final class DiffPanelView: NSView {
     var onCommitDoubleTapped: ((String?, String) -> Void)?
     /// Called when the user clicks the base branch label to change it.
     var onBaseBranchClicked: ((_ anchorView: NSView) -> Void)?
+    /// Called when the user requests a manual git refresh for the selected thread.
+    var onRefreshRequested: (() -> Void)?
 
     private var allBranchEntries: [FileDiffEntry] = []
 
@@ -233,9 +237,22 @@ final class DiffPanelView: NSView {
         tabBarStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(tabBarStack)
 
+        let topRightButtonConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
+        refreshButton.image = NSImage(
+            systemSymbolName: "arrow.clockwise",
+            accessibilityDescription: "Refresh changes panel"
+        )?.withSymbolConfiguration(topRightButtonConfig)
+        refreshButton.isBordered = false
+        refreshButton.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.6)
+        refreshButton.target = self
+        refreshButton.action = #selector(refreshButtonTapped)
+        refreshButton.translatesAutoresizingMaskIntoConstraints = false
+        refreshButton.toolTip = "Refresh git status, branch, commits, and changes"
+        refreshButton.setContentHuggingPriority(.required, for: .horizontal)
+        refreshButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+
         // Info button — shows color legend popover
-        let infoConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
-        infoButton.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Color legend")?.withSymbolConfiguration(infoConfig)
+        infoButton.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Color legend")?.withSymbolConfiguration(topRightButtonConfig)
         infoButton.isBordered = false
         infoButton.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.6)
         infoButton.target = self
@@ -244,7 +261,16 @@ final class DiffPanelView: NSView {
         infoButton.toolTip = "Color legend"
         infoButton.setContentHuggingPriority(.required, for: .horizontal)
         infoButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-        addSubview(infoButton)
+
+        topRightButtonStack.orientation = .horizontal
+        topRightButtonStack.spacing = 6
+        topRightButtonStack.alignment = .centerY
+        topRightButtonStack.setContentHuggingPriority(.required, for: .horizontal)
+        topRightButtonStack.setContentCompressionResistancePriority(.required, for: .horizontal)
+        topRightButtonStack.translatesAutoresizingMaskIntoConstraints = false
+        topRightButtonStack.addArrangedSubview(refreshButton)
+        topRightButtonStack.addArrangedSubview(infoButton)
+        addSubview(topRightButtonStack)
 
         // Commit context label — shown under tab bar when viewing a specific commit's changes
         commitContextLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
@@ -337,7 +363,7 @@ final class DiffPanelView: NSView {
             backButton.centerYAnchor.constraint(equalTo: commitDetailHeaderView.centerYAnchor),
 
             commitDetailTitleLabel.leadingAnchor.constraint(equalTo: backButton.trailingAnchor, constant: 4),
-            commitDetailTitleLabel.trailingAnchor.constraint(equalTo: commitDetailHeaderView.trailingAnchor, constant: -12),
+            commitDetailTitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: topRightButtonStack.leadingAnchor, constant: -4),
             commitDetailTitleLabel.centerYAnchor.constraint(equalTo: commitDetailHeaderView.centerYAnchor),
         ])
 
@@ -359,10 +385,10 @@ final class DiffPanelView: NSView {
 
             tabBarStack.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4),
             tabBarStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            tabBarStack.trailingAnchor.constraint(lessThanOrEqualTo: infoButton.leadingAnchor, constant: -4),
+            tabBarStack.trailingAnchor.constraint(lessThanOrEqualTo: topRightButtonStack.leadingAnchor, constant: -4),
 
-            infoButton.centerYAnchor.constraint(equalTo: tabBarStack.centerYAnchor),
-            infoButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            topRightButtonStack.centerYAnchor.constraint(equalTo: tabBarStack.centerYAnchor),
+            topRightButtonStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
 
             commitContextLabel.topAnchor.constraint(equalTo: tabBarStack.bottomAnchor, constant: 2),
             commitContextLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
@@ -804,6 +830,10 @@ final class DiffPanelView: NSView {
         popover.show(relativeTo: infoButton.bounds, of: infoButton, preferredEdge: .minY)
     }
 
+    @objc private func refreshButtonTapped() {
+        onRefreshRequested?()
+    }
+
     private func makeLegendViewController() -> NSViewController {
         let items: [(NSColor, String)] = [
             (NSColor(red: 0.35, green: 0.65, blue: 0.35, alpha: 1.0), "Staged — changes staged for commit"),
@@ -881,6 +911,14 @@ final class DiffPanelView: NSView {
         commitEntries = []
         updateTabTitles()
         rebuildRows()
+    }
+
+    func setRefreshInProgress(_ isRefreshing: Bool) {
+        refreshButton.isEnabled = !isRefreshing
+        refreshButton.alphaValue = isRefreshing ? 0.45 : 1
+        refreshButton.toolTip = isRefreshing
+            ? "Refreshing git status, branch, commits, and changes..."
+            : "Refresh git status, branch, commits, and changes"
     }
 
     // MARK: - Commit Detail Mode

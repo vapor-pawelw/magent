@@ -165,6 +165,8 @@ final class ThreadListViewController: NSViewController {
     /// The active Task captures its generation at spawn time and bails if a newer call has since arrived,
     /// preventing stale no-preserve tasks from overwriting later preserve tasks.
     var diffPanelRefreshGeneration: [UUID: Int] = [:]
+    /// Guards the manual changes-panel refresh button against overlapping git refresh passes.
+    var isDiffPanelManualRefreshInFlight = false
     /// Generation counter for the git remote check Task spawned by reloadData().
     /// Prevents stale Tasks from running when reloadData() is called rapidly.
     private var remoteCheckGeneration: Int = 0
@@ -588,6 +590,9 @@ final class ThreadListViewController: NSViewController {
         }
         diffPanelView.onBaseBranchClicked = { [weak self] anchorView in
             self?.showBaseBranchMenu(anchorView: anchorView)
+        }
+        diffPanelView.onRefreshRequested = { [weak self] in
+            self?.manuallyRefreshSelectedThreadGitState()
         }
         view.addSubview(diffPanelView)
 

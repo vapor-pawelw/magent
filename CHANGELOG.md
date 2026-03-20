@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - Keyboard shortcuts (New Thread, New Tab, Close Tab, Refresh/Hard Refresh Web Tab) are now configurable via settings and update at runtime without restart.
 
 ### Sidebar
+- The changes panel now has a refresh button in its top-right corner so you can manually reload git status, branch/base info, commits, and file changes for the selected thread without waiting for background polling.
 - Branch info at the bottom of the changes panel now displays on two lines — current branch on top, base/target branch below with a `⤷` arrow — and strips `origin/` prefixes for cleaner display.
 
 ### Thread

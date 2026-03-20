@@ -14,6 +14,7 @@
 - **Single-clicking a commit** selects it (highlighted). The ALL CHANGES tab is independent and unaffected by commit selection.
 - **Double-tapping "Uncommitted" or any commit row** enters **commit detail mode** (see below).
 - The **ALL CHANGES** tab (right tab) always shows all files changed in the branch (merge-base to working tree, including both committed and uncommitted changes). It is independent of which commit is selected in the COMMITS tab. Clicking a file opens the inline diff viewer showing the branch diff vs. base.
+- A small refresh button sits in the panel's top-right corner next to the `ⓘ` legend button. Tapping it manually refreshes branch state, dirty status, delivery/base-branch-derived git state, and then reloads the panel's commits and changes without resetting the current tab or pagination.
 - The `ⓘ` color-legend button is hidden while the COMMITS tab is active.
 
 ### Commit Detail Mode
@@ -48,11 +49,13 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - `activeEntries` computed property returns `allBranchEntries` (always the full branch diff, independent of commit selection).
 - `onCommitSelected: ((String?) -> Void)?` — fires on single-click; nil = Uncommitted.
 - `onCommitDoubleTapped: ((String?, String) -> Void)?` — fires on double-click; args are (hash or nil, display title). Controller loads entries and calls `enterCommitDetailMode`.
+- `onRefreshRequested: (() -> Void)?` — fires when the user taps the top-right refresh button.
 - `updateCommitEntries(hash:entries:subject:)` — called by controller; only applies if `selectedCommitHash == hash` to avoid stale updates from cancelled async loads.
 - `enterCommitDetailMode(hash:title:entries:)` — public; hides tab bar, shows commit detail header + file list.
 - `resetCommitDetailMode()` — private; restores tab bar, clears detail state. Called from `clear()`, `update()`, and `backButtonTapped()`.
 - `rebuildCommitDetailRows()` — builds file rows from `commitDetailEntries`; called by `rebuildRows()` when `isInCommitDetailMode`.
 - `isInCommitDetailMode`, `commitDetailHash`, `commitDetailEntries`, `commitDetailHeaderView`, `backButton`, `commitDetailTitleLabel` — detail-mode state and UI.
+- `setRefreshInProgress(_:)` disables and dims the refresh button while a manual refresh task is running.
 - `rebuildCommitsRows()` — always hides `commitContextLabel`, then adds the "Uncommitted" `CommitRowView` only if `uncommittedEntries` is non-empty, then commits, then "Load More".
 - `update(preserveSelection:)` — when `true`, always preserves `activeTab`. If a commit hash is selected and still exists in the new commit list, also preserves `selectedCommitHash`, clears `commitEntries`, and fires `onCommitSelected` to reload them. If `selectedCommitHash` is `nil` (user is on ALL CHANGES tab), the tab is still preserved so a background refresh doesn't yank the user back to COMMITS. Hides `commitContextLabel` via `rebuildCommitsRows()`. Used by background/polling refreshes (agent completion, load-more); thread-switch calls pass `false`.
 - `rebuildChangesRows()` — always hides `commitContextLabel`, shows `allBranchEntries` file rows or "No changes in this branch" empty state. Independent of commit selection.
@@ -65,7 +68,9 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 
 ### Controller Layer
 - `ThreadListViewController.onCommitSelected` is wired in `ThreadListViewController.swift` setup.
+- `ThreadListViewController.onRefreshRequested` is wired in `ThreadListViewController.swift` setup.
 - `handleCommitSelected(_:)` in `ThreadListViewController+SidebarActions.swift` — launches async task to call `GitService.commitDiffStats`, then calls `diffPanelView.updateCommitEntries`. Guard: `selectedThreadID == thread.id` to drop stale results.
+- `manuallyRefreshSelectedThreadGitState()` in `ThreadListViewController+SidebarActions.swift` guards against overlapping taps, runs `refreshBranchStates()`, `refreshDirtyStates()`, and `refreshDeliveredStates()`, then calls `refreshDiffPanel(resetPagination:false, preserveSelection:true)` for the still-selected thread.
 - `ThreadListViewController.diffPanelCommitLimitByThreadId` and `diffPanelCommitPageSize` drive pagination as before.
 
 ### Controller Layer (Commit Detail)
@@ -82,6 +87,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 ## Gotchas
 
 - **Background refresh and sidebar reloads must not reset selection or tab**: `refreshDiffPanel` is called on agent completion, load-more, and after structural sidebar reloads — not only on explicit thread-switch. Pass `preserveSelection: true` in all cases where the thread did not change. This includes the case where `selectedCommitHash == nil` (user is on the CHANGES tab with "Uncommitted" selected) — without `preserveSelection: true`, the tab would reset to `.commits` on every background refresh.
+- **Manual refresh must refresh thread git metadata before reloading panel content**: the refresh button is intended to update branch labels and dirty/delivered state immediately, not just rerun `diffStats`. Run `refreshBranchStates()`, `refreshDirtyStates()`, and `refreshDeliveredStates()` before `refreshDiffPanel(...)`, and keep `preserveSelection: true` / `resetPagination: false` so a manual sync behaves like a non-destructive background refresh.
 - **`outlineViewSelectionDidChange` must be suppressed during `reloadData()`**: NSOutlineView fires `outlineViewSelectionDidChange` mid-reload when rows are shuffled (e.g. via `bumpThreadToTopOfSection`). The previously-selected row index can temporarily map to a different thread, making `selectionChanged = true` and causing a `preserveSelection: false` refresh — which resets the panel. The handler is now guarded by `guard !isReloadingData else { return }`. Since `outlineViewSelectionDidChange` is suppressed during `reloadData()`, `threadManager(didUpdateThreads:)` must explicitly call `refreshDiffPanel(for: selected, preserveSelection: true)` after a structural reload (not just `refreshDiffPanelContext`, which only updates labels and does not refresh panel content). In-place updates (non-structural) continue to use `refreshDiffPanelContext` as before.
 - **`outlineViewSelectionDidChange` must not fire a second Task when the delegate already handles refresh**: When `selectionChanged = true`, the delegate calls `refreshDiffPanelForSelectedThread()` (no-preserve Task A). Do NOT also call `refreshDiffPanel` directly — that creates a redundant no-preserve Task B that can arrive after Task A and re-reset the panel. When `selectionChanged = false` (same thread re-selected programmatically), always call `refreshDiffPanel(preserveSelection: true)`.
 - **`autoSelectFirst()` and `selectThread(byId:)` must not call the delegate for the same thread**: These methods call `recordSelectedThread` (sets `selectedThreadID`) then `outlineView.selectRowIndexes`, which fires `outlineViewSelectionDidChange` with `selectionChanged = false` → preserve Task B. If the delegate is also called unconditionally (→ no-preserve Task A), and Task A completes after Task B, the panel resets. Fix: check `isNewThread = selectedThreadID != thread.id` before `recordSelectedThread`, and only call the delegate when `isNewThread`.
