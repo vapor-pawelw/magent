@@ -550,6 +550,32 @@ extension ThreadDetailViewController {
         togglePromptTOCVisibility()
     }
 
+    @objc func continueInButtonTapped(_ sender: NSButton) {
+        let settings = PersistenceService.shared.loadSettings()
+        let agents = settings.availableActiveAgents
+        guard !agents.isEmpty else { return }
+
+        let menu = NSMenu()
+        for agent in agents {
+            let item = NSMenuItem(
+                title: agent.displayName,
+                action: #selector(continueInAgentMenuItemTapped(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = agent
+            menu.addItem(item)
+        }
+
+        let point = NSPoint(x: 0, y: sender.bounds.maxY + 4)
+        menu.popUp(positioning: nil, at: point, in: sender)
+    }
+
+    @objc func continueInAgentMenuItemTapped(_ sender: NSMenuItem) {
+        guard let agent = sender.representedObject as? AgentType else { return }
+        continueTabInAgent(at: currentTabIndex, targetAgent: agent)
+    }
+
     func continueTabInAgent(at index: Int, targetAgent: AgentType) {
         guard index < tabSlots.count, case .terminal(let sessionName) = tabSlots[index] else { return }
         let sourceAgent = threadManager.effectiveAgentType(for: thread.projectId)

@@ -48,6 +48,7 @@ final class ThreadDetailViewController: NSViewController {
     let resyncLocalPathsButton = NSButton()
     let archiveThreadButton = NSButton()
     let reviewButton = NSButton()
+    let continueInButton = NSButton()
     let exportContextButton = NSButton()
     let scrollOverlay = TerminalScrollOverlayView()
     let togglePromptTOCButton = NSButton()
@@ -360,6 +361,12 @@ final class ThreadDetailViewController: NSViewController {
         reviewButton.toolTip = String(localized: .NotificationStrings.reviewButtonTooltip)
         reviewButton.isHidden = true
 
+        continueInButton.bezelStyle = .texturedRounded
+        continueInButton.image = NSImage(systemSymbolName: "arrowshape.turn.up.forward", accessibilityDescription: "Continue in...")
+        continueInButton.target = self
+        continueInButton.action = #selector(continueInButtonTapped(_:))
+        continueInButton.toolTip = "Continue in another agent"
+
         exportContextButton.bezelStyle = .texturedRounded
         exportContextButton.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: String(localized: .NotificationStrings.contextExport))
         exportContextButton.target = self
@@ -401,7 +408,7 @@ final class ThreadDetailViewController: NSViewController {
         topBar.detachesHiddenViews = true
         topBar.translatesAutoresizingMaskIntoConstraints = false
         // Review button next to add-tab, then tab bar, then PR/Jira, then utility buttons, then archive
-        for view in [addTabButton, reviewButton, tabBarStack, openPRButton, openInJiraButton, prJiraSeparator, openInXcodeButton, openInFinderButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, archiveThreadButton] as [NSView] {
+        for view in [addTabButton, reviewButton, continueInButton, tabBarStack, openPRButton, openInJiraButton, prJiraSeparator, openInXcodeButton, openInFinderButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, archiveThreadButton] as [NSView] {
             topBar.addArrangedSubview(view)
         }
 
