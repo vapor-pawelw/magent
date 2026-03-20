@@ -370,27 +370,27 @@ extension ThreadDetailViewController {
     func ensureSessionPrepared(
         sessionName: String,
         onAction: (@MainActor @Sendable (ThreadManager.SessionRecreationAction?) -> Void)? = nil
-    ) async {
-        if preparedSessions.contains(sessionName) { return }
+    ) async -> Bool {
+        if preparedSessions.contains(sessionName) { return false }
 
         if let existingTask = sessionPreparationTasks[sessionName] {
-            await existingTask.value
-            return
+            return await existingTask.value
         }
 
         let task = Task { [weak self] in
-            guard let self else { return }
-            _ = await self.threadManager.recreateSessionIfNeeded(
+            guard let self else { return false }
+            return await self.threadManager.recreateSessionIfNeeded(
                 sessionName: sessionName,
                 thread: self.thread,
                 onAction: onAction
             )
         }
         sessionPreparationTasks[sessionName] = task
-        await task.value
+        let recreated = await task.value
 
         preparedSessions.insert(sessionName)
         sessionPreparationTasks.removeValue(forKey: sessionName)
+        return recreated
     }
 
     @MainActor
@@ -403,9 +403,19 @@ extension ThreadDetailViewController {
 
             for sessionName in sessionNames {
                 if Task.isCancelled { break }
-                await self.ensureSessionPrepared(sessionName: sessionName)
+                _ = await self.ensureSessionPrepared(sessionName: sessionName)
             }
         }
+    }
+
+    @MainActor
+    func requireStartupOverlay(for sessionName: String) {
+        startupOverlayRequiredSessions.insert(sessionName)
+    }
+
+    @MainActor
+    func consumeStartupOverlayRequirement(for sessionName: String) -> Bool {
+        startupOverlayRequiredSessions.remove(sessionName) != nil
     }
 
     // MARK: - Pin/Unpin

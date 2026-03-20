@@ -325,6 +325,7 @@ extension ThreadDetailViewController {
                     if pendingIndex < self.tabSlots.count {
                         self.tabSlots[pendingIndex] = .terminal(sessionName: tab.tmuxSessionName)
                     }
+                    self.requireStartupOverlay(for: tab.tmuxSessionName)
 
                     // Update tab title and make it closable.
                     let title = self.thread.displayName(for: tab.tmuxSessionName, at: pendingIndex)

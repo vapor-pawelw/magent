@@ -163,8 +163,9 @@ final class ThreadDetailViewController: NSViewController {
     var initialPromptFailureBannerSessionName: String?
     var initialPromptFailureBannerTopConstraint: NSLayoutConstraint?
     var preparedSessions: Set<String> = []
-    var sessionPreparationTasks: [String: Task<Void, Never>] = [:]
+    var sessionPreparationTasks: [String: Task<Bool, Never>] = [:]
     var backgroundSessionPreparationTask: Task<Void, Never>?
+    var startupOverlayRequiredSessions: Set<String> = []
     var emptyStateView: NSView?
     var promptTOCView: PromptTableOfContentsView?
     var promptTOCTopConstraint: NSLayoutConstraint?
@@ -550,7 +551,7 @@ final class ThreadDetailViewController: NSViewController {
 
     // MARK: - Tab Setup
 
-    private func setupTabs() async {
+    private func setupTabs(requireStartupOverlayForInitialSession: Bool = false) async {
         // If the thread is still being created (worktree + tmux setup in progress),
         // show the creation overlay and wait for the magentThreadCreationFinished notification.
         if threadManager.pendingThreadIds.contains(thread.id) {
@@ -649,6 +650,10 @@ final class ThreadDetailViewController: NSViewController {
             rebuildTabBar()
             rebindAllTabActions()
 
+            if requireStartupOverlayForInitialSession {
+                requireStartupOverlay(for: initialSessionName)
+            }
+
             // Initialize indicator dots from thread model
             for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
                 if case .terminal(let sessionName) = slot {
@@ -661,7 +666,7 @@ final class ThreadDetailViewController: NSViewController {
             }
         }
 
-        await ensureSessionPrepared(sessionName: initialSessionName) { [weak self] action in
+        let recreatedInitialSession = await ensureSessionPrepared(sessionName: initialSessionName) { [weak self] action in
             guard let self,
                   initialSessionName == self.loadingOverlaySessionName else { return }
             self.updateLoadingOverlayDetail(action?.loadingOverlayDetail)
@@ -672,6 +677,10 @@ final class ThreadDetailViewController: NSViewController {
             // shifted indices since initialIndex was computed.
             let resolvedIndex = displayIndex(forSession: initialSessionName) ?? initialIndex
             selectPreparedTab(at: resolvedIndex)
+            let keepStartupOverlay = recreatedInitialSession || consumeStartupOverlayRequirement(for: initialSessionName)
+            if !keepStartupOverlay {
+                dismissLoadingOverlay()
+            }
             prepareSessionsInBackground(orderedSessions.enumerated().compactMap { offset, sessionName in
                 offset == initialIndex ? nil : sessionName
             })
@@ -884,6 +893,7 @@ final class ThreadDetailViewController: NSViewController {
         thread.busySessions.remove(sessionName)
         thread.waitingForInputSessions.remove(sessionName)
         threadManager.clearInitialPromptInjectionFailure(for: sessionName)
+        startupOverlayRequiredSessions.remove(sessionName)
         ReusableTerminalViewCache.shared.remove(sessionName: sessionName)
 
         rebindAllTabActions()
@@ -1015,7 +1025,7 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         // Thread is ready — reload tabs now that sessions exist.
-        Task { await setupTabs() }
+        Task { await setupTabs(requireStartupOverlayForInitialSession: true) }
     }
 
     func showCreationOverlay() {

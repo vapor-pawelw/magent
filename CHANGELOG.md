@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Thread
 - Added "Continue in" forward button next to the review button in the terminal header, letting you hand off the current tab's context to another agent without opening the tab's context menu.
 - Fixed "Creating tab..." spinner getting stuck after a new tab finishes creation, blocking keyboard input to the terminal.
+- Fixed unnecessary `Starting agent...` flashes when switching to an already-live tab whose tmux session did not need recovery.
 
 ### Performance
 - Switching between threads now reuses cached terminal views and skips redundant recent session validation, so already-live tabs appear faster.

@@ -80,7 +80,7 @@ extension ThreadDetailViewController {
                     sessionName: sessionName
                 )
                 self.startLoadingOverlayTracking(sessionName: sessionName, agentType: sessionAgentType)
-                await self.ensureSessionPrepared(sessionName: sessionName) { [weak self] action in
+                let recreated = await self.ensureSessionPrepared(sessionName: sessionName) { [weak self] action in
                     guard let self,
                           sessionName == self.loadingOverlaySessionName else { return }
                     self.updateLoadingOverlayDetail(action?.loadingOverlayDetail)
@@ -95,6 +95,10 @@ extension ThreadDetailViewController {
                     return
                 }
                 self.selectPreparedTab(at: currentDisplayIndex)
+                let keepStartupOverlay = recreated || self.consumeStartupOverlayRequirement(for: sessionName)
+                if !keepStartupOverlay {
+                    self.dismissLoadingOverlay()
+                }
             }
             return
         }
