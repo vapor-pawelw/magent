@@ -8,7 +8,7 @@ When the user submits the New Thread or New Tab sheet, their prompt is written t
 
 1. **`acceptTapped`** in `AgentLaunchPromptSheetController` — writes `magent-pending-prompt-<UUID>.json` to `/tmp` via `PendingInitialPromptStore.save(...)`, then immediately clears the draft from persistent storage.
 2. **`createThread` / `addTab`** in `ThreadManager` — inside the `MainActor.run` block that runs **before** `injectAfterStart` is called, `registerPendingPromptCleanup(fileURL:sessionName:)` subscribes to `magentAgentKeysInjected` for the new session.
-3. **`injectAfterStart`** (background `Task`) — waits for the actual agent prompt marker when an initial prompt is involved, sends tmux keys, and posts `magentAgentKeysInjected` when done. The subscriber from step 2 deletes the temp file.
+3. **`injectAfterStart`** (background `Task`) — waits for the agent-specific prompt marker via `waitForAgentPrompt` (see `docs/agent-prompt-detection.md` for per-agent detection details), sends tmux keys, and posts `magentAgentKeysInjected` when done. The subscriber from step 2 deletes the temp file.
 4. **60-second fallback** — if injection never fires (e.g., session dies), `DispatchQueue.main.asyncAfter` deletes the file after 60 s.
 
 ## Critical Ordering Constraint
