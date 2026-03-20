@@ -3,6 +3,7 @@
 User-facing behavior:
 - `General` settings owns update preferences and actions: the launch-check checkbox, manual `Check for Updates Now`, and an `Update to <version>` button when a newer release has already been detected.
 - Launch-time update checks run only when `AppSettings.autoCheckForUpdates` is enabled.
+- In debug builds, the "Update available" banner is suppressed entirely. The update check still runs and populates `detectedUpdate` (so the Settings panel works), but `showAvailableUpdateBanner` returns early under `#if DEBUG`.
 - When no published release exists yet in `vapor-pawelw/magent-releases`, manual checks say there are no new releases instead of surfacing a raw GitHub `404`.
 - When a newer version is found, Magent shows a persistent dismissible banner with `Update Now`, `Skip this version`, and a collapsed-by-default `Show Changes` control.
 - Settings mirrors the same detected version and the same read-only changelog, using a fixed-height scrollable text area when expanded.

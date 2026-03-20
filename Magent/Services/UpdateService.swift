@@ -218,6 +218,9 @@ final class UpdateService {
     }
 
     private func showAvailableUpdateBanner(_ available: AvailableUpdate) {
+        #if DEBUG
+        return
+        #endif
         let availableVersion = available.version.displayString
         let currentVersion = currentVersionString()
         BannerManager.shared.show(
