@@ -517,6 +517,20 @@ final class ThreadDetailViewController: NSViewController {
         for view in [addTabButton, reviewButton, continueInButton, tabBarStack, openPRButton, openInJiraButton, prJiraSeparator, openInXcodeButton, openInFinderButton, exportContextButton, resyncLocalPathsButton, archiveSeparator, archiveThreadButton] as [NSView] {
             topBar.addArrangedSubview(view)
         }
+        let trailingTopBarSpacing: CGFloat = 8
+        for view in [
+            tabBarStack,
+            openPRButton,
+            openInJiraButton,
+            prJiraSeparator,
+            openInXcodeButton,
+            openInFinderButton,
+            exportContextButton,
+            resyncLocalPathsButton,
+            archiveSeparator,
+        ] as [NSView] {
+            topBar.setCustomSpacing(trailingTopBarSpacing, after: view)
+        }
 
         terminalContainer.translatesAutoresizingMaskIntoConstraints = false
         terminalContainer.wantsLayer = true
