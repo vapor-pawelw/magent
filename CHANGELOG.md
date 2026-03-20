@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 ### Settings
 - Added a read-only Keyboard Shortcuts reference card to General settings showing all app keybinds.
 - Keyboard shortcuts (New Thread, New Tab, Close Tab, Refresh/Hard Refresh Web Tab) are now configurable via settings and update at runtime without restart.
+- Jira ticket detection in Settings can now be limited to specific project prefixes, using a comma- or semicolon-separated filter like `IP, APPL, UT`.
 
 ### Sidebar
 - The changes panel now has a refresh button in its top-right corner so you can manually reload git status, branch/base info, commits, and file changes for the selected thread without waiting for background polling.

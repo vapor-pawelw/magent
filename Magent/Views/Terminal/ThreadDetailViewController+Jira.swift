@@ -55,7 +55,7 @@ extension ThreadDetailViewController {
 
         // Branch-detected ticket: show button to open ticket directly
         guard settings.jiraTicketDetectionEnabled,
-              let ticketKey = thread.effectiveJiraTicketKey, !siteURL.isEmpty else {
+              let ticketKey = thread.effectiveJiraTicketKey(settings: settings), !siteURL.isEmpty else {
             openInJiraButton.isHidden = true
             refreshPRJiraSeparator()
             return
@@ -113,7 +113,7 @@ extension ThreadDetailViewController {
         }
 #endif
 
-        if url == nil, let key = thread.effectiveJiraTicketKey {
+        if url == nil, let key = thread.effectiveJiraTicketKey(settings: settings) {
             ticketKey = key
             url = jira.ticketURL(siteURL: siteURL, ticketKey: key)
         }

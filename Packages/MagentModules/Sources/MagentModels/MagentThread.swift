@@ -174,6 +174,8 @@ public nonisolated enum ThreadSidebarListState: Int, CaseIterable, Sendable {
 }
 
 public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
+    private static let jiraTicketKeyRegex = try! NSRegularExpression(pattern: #"[A-Za-z]+-\d+"#)
+
     public let id: UUID
     public let projectId: UUID
     public var name: String
@@ -269,20 +271,36 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     }
 
     /// Detects a Jira ticket key (e.g. "IP-1234") from the current branch name using
-    /// case-insensitive matching. Returns the key uppercased for Jira URL compatibility.
-    public var detectedBranchTicketKey: String? {
+    /// case-insensitive matching. When `allowedPrefixes` is non-empty, only matching
+    /// prefixes are returned. The key is uppercased for Jira URL compatibility.
+    public func detectedBranchTicketKey(allowedPrefixes: Set<String> = []) -> String? {
         let branch = currentBranch
-        guard let match = branch.range(
-            of: #"[A-Za-z]+-\d+"#,
-            options: .regularExpression
-        ) else { return nil }
-        return String(branch[match]).uppercased()
+        let branchRange = NSRange(branch.startIndex..<branch.endIndex, in: branch)
+        let normalizedPrefixes = Set(allowedPrefixes.map { $0.uppercased() })
+
+        for match in Self.jiraTicketKeyRegex.matches(in: branch, range: branchRange) {
+            guard let range = Range(match.range, in: branch) else { continue }
+            let ticketKey = String(branch[range]).uppercased()
+            let prefix = ticketKey.split(separator: "-", maxSplits: 1).first.map(String.init) ?? ""
+            if normalizedPrefixes.isEmpty || normalizedPrefixes.contains(prefix) {
+                return ticketKey
+            }
+        }
+
+        return nil
     }
 
     /// Returns the explicitly-set Jira ticket key (from sync), or falls back to
     /// detecting one from the branch name.
+    @available(*, deprecated, message: "Use effectiveJiraTicketKey(settings:) so Jira prefix filters are respected.")
     public var effectiveJiraTicketKey: String? {
-        jiraTicketKey ?? detectedBranchTicketKey
+        jiraTicketKey ?? detectedBranchTicketKey()
+    }
+
+    /// Returns the explicitly-set Jira ticket key (from sync), or falls back to
+    /// branch-based detection filtered by the current settings.
+    public func effectiveJiraTicketKey(settings: AppSettings) -> String? {
+        jiraTicketKey ?? detectedBranchTicketKey(allowedPrefixes: settings.jiraTicketDetectionPrefixFilterSet)
     }
 
     public var sidebarListState: ThreadSidebarListState {

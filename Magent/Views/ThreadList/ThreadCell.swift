@@ -513,7 +513,7 @@ final class ThreadCell: NSTableCellView {
         // Secondary line 2 (PR/ticket row): ticket key with status badge, PR number with status badge.
         let cellSettings = PersistenceService.shared.loadSettings()
         let jiraEnabled = cellSettings.jiraIntegrationEnabled && cellSettings.jiraTicketDetectionEnabled
-        let ticketKey = jiraEnabled ? thread.effectiveJiraTicketKey : nil
+        let ticketKey = jiraEnabled ? thread.effectiveJiraTicketKey(settings: cellSettings) : nil
         let badgeFontSize: CGFloat = 8
         let showJiraBadges = cellSettings.showJiraStatusBadges
         let showPRBadges = cellSettings.showPRStatusBadges

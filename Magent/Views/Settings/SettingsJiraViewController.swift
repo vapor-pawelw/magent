@@ -1,7 +1,7 @@
 import Cocoa
 import MagentCore
 
-final class SettingsJiraViewController: NSViewController {
+final class SettingsJiraViewController: NSViewController, NSTextFieldDelegate {
 
     private let persistence = PersistenceService.shared
     private let jira = JiraService.shared
@@ -16,6 +16,8 @@ final class SettingsJiraViewController: NSViewController {
     private var refreshButton: NSButton!
     private var siteURLField: NSTextField!
     private var ticketDetectionCheckbox: NSButton!
+    private var ticketPrefixFilterField: NSTextField!
+    private var pendingTicketPrefixRefreshWorkItem: DispatchWorkItem?
 
     // Views that should be hidden when integration is off
     private var integrationDependentViews: [NSView] = []
@@ -142,7 +144,7 @@ final class SettingsJiraViewController: NSViewController {
 
         let (detectionCard, detectionStack) = createSectionCard(
             title: "Ticket Detection",
-            description: "Automatically detect Jira ticket keys in branch names and show links to open them in Jira."
+            description: "Automatically detect Jira ticket keys in branch names and show links to open them in Jira. Optionally limit detection to specific prefixes."
         )
         stack.addArrangedSubview(detectionCard)
 
@@ -153,6 +155,24 @@ final class SettingsJiraViewController: NSViewController {
         )
         ticketDetectionCheckbox.state = settings.jiraTicketDetectionEnabled ? .on : .off
         detectionStack.addArrangedSubview(ticketDetectionCheckbox)
+
+        let prefixFilterLabel = NSTextField(labelWithString: "Allowed Jira Prefixes")
+        prefixFilterLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        detectionStack.addArrangedSubview(prefixFilterLabel)
+
+        ticketPrefixFilterField = NSTextField(string: settings.jiraTicketDetectionPrefixes)
+        ticketPrefixFilterField.font = .systemFont(ofSize: 13)
+        ticketPrefixFilterField.placeholderString = "e.g. IP, APPL, UT"
+        ticketPrefixFilterField.translatesAutoresizingMaskIntoConstraints = false
+        ticketPrefixFilterField.delegate = self
+        detectionStack.addArrangedSubview(ticketPrefixFilterField)
+
+        let prefixFilterDescription = NSTextField(
+            wrappingLabelWithString: "Optional. Separate prefixes with commas or semicolons. Empty means detect all Jira prefixes."
+        )
+        prefixFilterDescription.font = .systemFont(ofSize: 11)
+        prefixFilterDescription.textColor = NSColor(resource: .textSecondary)
+        detectionStack.addArrangedSubview(prefixFilterDescription)
 
         // Track views that depend on integration being enabled
         integrationDependentViews = [statusCard, siteCard, detectionCard]
@@ -183,7 +203,9 @@ final class SettingsJiraViewController: NSViewController {
             siteCard.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
             detectionCard.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40),
             siteURLField.widthAnchor.constraint(equalTo: siteStack.widthAnchor),
+            ticketPrefixFilterField.widthAnchor.constraint(equalTo: detectionStack.widthAnchor),
             authDetailLabel.widthAnchor.constraint(equalTo: statusStack.widthAnchor),
+            prefixFilterDescription.widthAnchor.constraint(equalTo: detectionStack.widthAnchor),
         ])
     }
 
@@ -294,8 +316,10 @@ final class SettingsJiraViewController: NSViewController {
             v.isHidden = !integrationOn
         }
 
+        let detectionEnabled = integrationOn && settings.jiraTicketDetectionEnabled
         ticketDetectionCheckbox.isEnabled = integrationOn
-        ticketDetectionCheckbox.state = (integrationOn && settings.jiraTicketDetectionEnabled) ? .on : .off
+        ticketDetectionCheckbox.state = detectionEnabled ? .on : .off
+        ticketPrefixFilterField.isEnabled = detectionEnabled
     }
 
     // MARK: - Actions
@@ -335,6 +359,7 @@ final class SettingsJiraViewController: NSViewController {
         settings.jiraTicketDetectionEnabled = enabled
         try? persistence.saveSettings(settings)
         NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+        updateIntegrationState()
 
         if enabled {
             ThreadManager.shared.enableAndRefreshJiraDetection()
@@ -352,5 +377,32 @@ final class SettingsJiraViewController: NSViewController {
         settings.jiraSiteURL = value
         siteURLField.stringValue = value
         try? persistence.saveSettings(settings)
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else { return }
+
+        if field == ticketPrefixFilterField {
+            settings.jiraTicketDetectionPrefixes = field.stringValue
+            try? persistence.saveSettings(settings)
+            NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
+            scheduleTicketPrefixRefresh()
+        }
+    }
+
+    private func scheduleTicketPrefixRefresh() {
+        pendingTicketPrefixRefreshWorkItem?.cancel()
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            if settings.jiraIntegrationEnabled && settings.jiraTicketDetectionEnabled {
+                ThreadManager.shared.enableAndRefreshJiraDetection()
+            } else {
+                ThreadManager.shared.clearAllJiraDetectionState()
+            }
+        }
+
+        pendingTicketPrefixRefreshWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 }

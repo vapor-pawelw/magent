@@ -346,14 +346,14 @@ extension ThreadListViewController {
             } else {
                 menuTitle = String(localized: .ThreadStrings.threadOpenInJira)
             }
-        } else if settings.jiraTicketDetectionEnabled, let ticketKey = thread.effectiveJiraTicketKey {
+        } else if settings.jiraTicketDetectionEnabled, let ticketKey = thread.effectiveJiraTicketKey(settings: settings) {
             menuTitle = jiraMenuTitle(ticketKey: ticketKey, thread: thread)
         } else {
             return nil
         }
 #else
         guard settings.jiraTicketDetectionEnabled,
-              let ticketKey = thread.effectiveJiraTicketKey else { return nil }
+              let ticketKey = thread.effectiveJiraTicketKey(settings: settings) else { return nil }
         menuTitle = jiraMenuTitle(ticketKey: ticketKey, thread: thread)
 #endif
 
@@ -395,7 +395,7 @@ extension ThreadListViewController {
         }
 
         // Change Status submenu
-        if let ticketKey = thread.effectiveJiraTicketKey,
+        if let ticketKey = thread.effectiveJiraTicketKey(settings: settings),
            let changeStatusItem = buildChangeStatusSubmenu(for: thread, ticketKey: ticketKey, settings: settings) {
             submenu.addItem(NSMenuItem.separator())
             submenu.addItem(changeStatusItem)
@@ -528,7 +528,7 @@ extension ThreadListViewController {
         }
 #endif
 
-        if url == nil, let ticketKey = thread.effectiveJiraTicketKey {
+        if url == nil, let ticketKey = thread.effectiveJiraTicketKey(settings: settings) {
             url = jira.ticketURL(siteURL: siteURL, ticketKey: ticketKey)
         }
 

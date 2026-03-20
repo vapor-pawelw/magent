@@ -41,14 +41,14 @@ extension ThreadManager {
         // Collect detected ticket keys and which threads reference them
         var keyToThreadIds: [String: [UUID]] = [:]
         for thread in snapshot {
-            guard let ticketKey = thread.effectiveJiraTicketKey else { continue }
+            guard let ticketKey = thread.effectiveJiraTicketKey(settings: settings) else { continue }
             keyToThreadIds[ticketKey, default: []].append(thread.id)
         }
 
         guard !keyToThreadIds.isEmpty else {
             // No detected keys — just populate from cache and prune
             populateVerifiedTicketsFromCache()
-            if forThreadIds == nil { pruneJiraTicketCache() }
+            if forThreadIds == nil { pruneJiraTicketCache(settings: settings) }
             return
         }
 
@@ -79,7 +79,7 @@ extension ThreadManager {
         populateVerifiedTicketsFromCache()
 
         if forThreadIds == nil {
-            pruneJiraTicketCache()
+            pruneJiraTicketCache(settings: settings)
         }
     }
 
@@ -143,7 +143,7 @@ extension ThreadManager {
         for i in threads.indices where !threads[i].isArchived {
             let previous = threads[i].verifiedJiraTicket
             if detectionEnabled,
-               let ticketKey = threads[i].effectiveJiraTicketKey,
+               let ticketKey = threads[i].effectiveJiraTicketKey(settings: s),
                let cached = jiraTicketCache[ticketKey] {
                 threads[i].verifiedJiraTicket = cached
                 if previous != cached { changed = true }
@@ -187,7 +187,7 @@ extension ThreadManager {
     func refreshJiraTicketForSelectedThread(_ thread: MagentThread) {
         let refreshSettings = persistence.loadSettings()
         guard refreshSettings.jiraIntegrationEnabled, refreshSettings.jiraTicketDetectionEnabled else { return }
-        guard let ticketKey = thread.effectiveJiraTicketKey else { return }
+        guard let ticketKey = thread.effectiveJiraTicketKey(settings: refreshSettings) else { return }
 
         loadJiraTicketCacheIfNeeded()
         if let cached = jiraTicketCache[ticketKey],
@@ -229,12 +229,12 @@ extension ThreadManager {
 
     // MARK: - Cache Pruning
 
-    /// Removes cache entries not referenced by any active thread's `effectiveJiraTicketKey`.
-    private func pruneJiraTicketCache() {
+    /// Removes cache entries not referenced by any active thread's settings-filtered Jira ticket key.
+    private func pruneJiraTicketCache(settings: AppSettings) {
         let referencedKeys = Set(
             threads
                 .filter { !$0.isArchived }
-                .compactMap(\.effectiveJiraTicketKey)
+                .compactMap { $0.effectiveJiraTicketKey(settings: settings) }
         )
         let before = jiraTicketCache.count
         jiraTicketCache = jiraTicketCache.filter { referencedKeys.contains($0.key) }
@@ -247,7 +247,8 @@ extension ThreadManager {
 
     /// Force-refreshes a single thread's Jira ticket data, bypassing the 60-second throttle.
     func forceRefreshJiraTicket(for thread: MagentThread) {
-        guard let ticketKey = thread.effectiveJiraTicketKey else { return }
+        let settings = persistence.loadSettings()
+        guard let ticketKey = thread.effectiveJiraTicketKey(settings: settings) else { return }
         loadJiraTicketCacheIfNeeded()
         // Also invalidate project statuses so they're re-fetched on next menu open
         loadProjectStatusesCacheIfNeeded()
