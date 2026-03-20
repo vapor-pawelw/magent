@@ -1,4 +1,5 @@
 import Cocoa
+import MagentCore
 import WebKit
 
 /// Lightweight in-app browser view with back/forward/refresh navigation.
@@ -95,19 +96,22 @@ final class WebTabView: NSView, WKNavigationDelegate {
     // MARK: - Key Equivalents
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.command]
-                || event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.command, .shift],
-              event.charactersIgnoringModifiers == "r"
-        else {
-            return super.performKeyEquivalent(with: event)
+        let bindings = PersistenceService.shared.loadSettings().keyBindings
+        let modifiers = KeyModifiers.from(event.modifierFlags.intersection(.deviceIndependentFlagsMask))
+
+        let hardRefreshBinding = bindings.binding(for: .hardRefreshWebTab)
+        if event.keyCode == hardRefreshBinding.keyCode && modifiers == hardRefreshBinding.modifiers {
+            hardRefresh()
+            return true
         }
 
-        if event.modifierFlags.contains(.shift) {
-            hardRefresh()
-        } else {
+        let refreshBinding = bindings.binding(for: .refreshWebTab)
+        if event.keyCode == refreshBinding.keyCode && modifiers == refreshBinding.modifiers {
             webView.reload()
+            return true
         }
-        return true
+
+        return super.performKeyEquivalent(with: event)
     }
 
     // MARK: - Navigation Actions

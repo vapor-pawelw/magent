@@ -89,6 +89,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var preserveAgentColorTheme: Bool
     public var rememberLastTypeSelection: Bool
     public var switchToNewlyCreatedThread: Bool
+    public var keyBindings: KeyBindingSettings
 
     public init(
         projects: [Project] = [],
@@ -136,7 +137,8 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showPromptTOCOverlay: Bool = true,
         preserveAgentColorTheme: Bool = false,
         rememberLastTypeSelection: Bool = true,
-        switchToNewlyCreatedThread: Bool = true
+        switchToNewlyCreatedThread: Bool = true,
+        keyBindings: KeyBindingSettings = KeyBindingSettings()
     ) {
         self.projects = projects
         self.activeAgents = activeAgents
@@ -184,6 +186,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.preserveAgentColorTheme = preserveAgentColorTheme
         self.rememberLastTypeSelection = rememberLastTypeSelection
         self.switchToNewlyCreatedThread = switchToNewlyCreatedThread
+        self.keyBindings = keyBindings
     }
 
     public init(from decoder: Decoder) throws {
@@ -237,6 +240,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         preserveAgentColorTheme = try container.decodeIfPresent(Bool.self, forKey: .preserveAgentColorTheme) ?? false
         rememberLastTypeSelection = try container.decodeIfPresent(Bool.self, forKey: .rememberLastTypeSelection) ?? true
         switchToNewlyCreatedThread = try container.decodeIfPresent(Bool.self, forKey: .switchToNewlyCreatedThread) ?? true
+        keyBindings = try container.decodeIfPresent(KeyBindingSettings.self, forKey: .keyBindings) ?? KeyBindingSettings()
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -289,6 +293,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(preserveAgentColorTheme, forKey: .preserveAgentColorTheme)
         try container.encode(rememberLastTypeSelection, forKey: .rememberLastTypeSelection)
         try container.encode(switchToNewlyCreatedThread, forKey: .switchToNewlyCreatedThread)
+        try container.encode(keyBindings, forKey: .keyBindings)
     }
 
     public var visibleSections: [ThreadSection] {
@@ -435,6 +440,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case preserveAgentColorTheme
         case rememberLastTypeSelection
         case switchToNewlyCreatedThread
+        case keyBindings
 
         // Legacy keys kept for migration.
         case agentCommand

@@ -136,6 +136,7 @@ extension ThreadDetailViewController {
         dismissLoadingOverlay()
         refreshPendingPromptBanner()
         refreshInitialPromptFailureBanner()
+        refreshPendingPromptBanner()
         scrollOverlay.isHidden = true
         setScrollFABVisible(false)
         promptTOCCanShowForCurrentTab = false

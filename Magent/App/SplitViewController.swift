@@ -50,6 +50,8 @@ final class SplitViewController: NSSplitViewController {
     private var preferredSidebarWidth: CGFloat = defaultSidebarWidth
     private var enforcedSidebarWidth: CGFloat?
     private var isRestoringSidebarWidth = false
+    private var keyEventMonitor: Any?
+    private var cachedKeyBindings: KeyBindingSettings = KeyBindingSettings()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -99,26 +101,63 @@ final class SplitViewController: NSSplitViewController {
             object: nil
         )
 
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-            guard event.modifierFlags.contains(.command) else { return event }
+        reloadKeyBindings()
 
-            switch event.charactersIgnoringModifiers {
-            case "t":
-                self.newTabShortcut()
-                return nil
-            case "w":
-                self.closeTabShortcut()
-                return nil
-            default:
-                return event
-            }
-        }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(keyBindingsDidChange),
+            name: .magentKeyBindingsDidChange,
+            object: nil
+        )
     }
 
     /// Forwarded from the main menu's "New Thread" item (⌘N).
     @objc func requestNewThread() {
         threadListVC.requestNewThread()
+    }
+
+    // MARK: - Key Bindings
+
+    @objc private func keyBindingsDidChange() {
+        reloadKeyBindings()
+    }
+
+    private func reloadKeyBindings() {
+        if let monitor = keyEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyEventMonitor = nil
+        }
+
+        cachedKeyBindings = PersistenceService.shared.loadSettings().keyBindings
+
+        keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            return self.handleKeyEvent(event)
+        }
+    }
+
+    private func handleKeyEvent(_ event: NSEvent) -> NSEvent? {
+        let eventModifiers = KeyModifiers.from(event.modifierFlags.intersection(.deviceIndependentFlagsMask))
+
+        if matchesBinding(.newTab, keyCode: event.keyCode, modifiers: eventModifiers) {
+            newTabShortcut()
+            return nil
+        }
+        if matchesBinding(.closeTab, keyCode: event.keyCode, modifiers: eventModifiers) {
+            closeTabShortcut()
+            return nil
+        }
+        if matchesBinding(.newThread, keyCode: event.keyCode, modifiers: eventModifiers) {
+            requestNewThread()
+            return nil
+        }
+
+        return event
+    }
+
+    private func matchesBinding(_ action: KeyBindingAction, keyCode: UInt16, modifiers: KeyModifiers) -> Bool {
+        let binding = cachedKeyBindings.binding(for: action)
+        return binding.keyCode == keyCode && binding.modifiers == modifiers
     }
 
     private func applyInitialSidebarWidthIfNeeded() {

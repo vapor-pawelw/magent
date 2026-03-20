@@ -133,6 +133,35 @@ final class SettingsGeneralViewController: NSViewController {
         syncLocalPathsOnArchiveDesc.textColor = NSColor(resource: .textSecondary)
         archiveSection.addArrangedSubview(syncLocalPathsOnArchiveDesc)
 
+        // --- Keyboard Shortcuts card ---
+        let (keybindsCard, keybindsStack) = createSectionCard(title: "Keyboard Shortcuts")
+        stackView.addArrangedSubview(keybindsCard)
+
+        let keybindsGrid = NSGridView()
+        keybindsGrid.rowSpacing = 6
+        keybindsGrid.columnSpacing = 12
+        keybindsGrid.translatesAutoresizingMaskIntoConstraints = false
+
+        for action in KeyBindingAction.allCases {
+            let binding = settings.keyBindings.binding(for: action)
+
+            let nameLabel = NSTextField(labelWithString: action.displayName)
+            nameLabel.font = .systemFont(ofSize: 13)
+            nameLabel.textColor = .labelColor
+
+            let shortcutLabel = NSTextField(labelWithString: binding.displayString)
+            shortcutLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+            shortcutLabel.textColor = .secondaryLabelColor
+
+            keybindsGrid.addRow(with: [nameLabel, shortcutLabel])
+        }
+
+        keybindsGrid.column(at: 0).xPlacement = .leading
+        keybindsGrid.column(at: 1).xPlacement = .trailing
+
+        keybindsStack.addArrangedSubview(keybindsGrid)
+
+        // --- Environment Variables card ---
         let envVars: [(String, String)] = [
             ("$MAGENT_WORKTREE_PATH", "Absolute path to the thread's git worktree directory"),
             ("$MAGENT_PROJECT_PATH", "Absolute path to the original git repository"),
@@ -192,6 +221,8 @@ final class SettingsGeneralViewController: NSViewController {
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
             updatesCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             archiveCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            keybindsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            keybindsGrid.widthAnchor.constraint(equalTo: keybindsStack.widthAnchor),
             envCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             updatesDesc.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
             updateStatusLabel.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),

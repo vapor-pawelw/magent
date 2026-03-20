@@ -320,6 +320,17 @@
         }
       }
     },
+    "settingsCategoryKeybinds": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keybinds"
+          }
+        }
+      }
+    },
     "settingsCategoryJira": {
       "extractionState": "manual",
       "localizations": {

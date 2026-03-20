@@ -195,7 +195,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Thread menu
         let threadMenuItem = NSMenuItem()
         let threadMenu = NSMenu(title: "Thread")
-        threadMenu.addItem(withTitle: "New Thread", action: #selector(SplitViewController.requestNewThread), keyEquivalent: "n")
+        threadMenu.addItem(withTitle: "New Thread", action: #selector(SplitViewController.requestNewThread), keyEquivalent: "")
         threadMenuItem.submenu = threadMenu
         mainMenu.addItem(threadMenuItem)
 
