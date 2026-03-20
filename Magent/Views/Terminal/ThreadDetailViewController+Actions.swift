@@ -334,6 +334,10 @@ extension ThreadDetailViewController {
                     }
                     self.rebindAllTabActions()
 
+                    // Dismiss the "Creating tab..." overlay before handing off to selectTab,
+                    // which will show its own "Starting agent..." overlay if needed.
+                    self.dismissLoadingOverlay()
+
                     // Hand off to normal selectTab flow, which shows "Starting agent..." overlay.
                     self.selectTab(at: pendingIndex)
                 }

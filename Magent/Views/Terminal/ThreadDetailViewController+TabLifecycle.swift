@@ -351,6 +351,11 @@ extension ThreadDetailViewController {
         overlay.animator().alphaValue = 0
         overlay.isHidden = true
         loadingOverlaySessionName = nil
+
+        // Restore first responder to the current terminal so it can accept keyboard input.
+        if let tv = currentTerminalView(), tv.superview != nil, !tv.isHidden {
+            view.window?.makeFirstResponder(tv)
+        }
     }
 
     @MainActor
