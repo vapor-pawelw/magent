@@ -3,6 +3,16 @@ import MagentCore
 
 extension ThreadManager {
 
+    struct KnownGoodSessionContext {
+        let threadId: UUID
+        let expectedPath: String
+        let projectPath: String
+        let isAgentSession: Bool
+        let validatedAt: Date
+    }
+
+    private static let knownGoodSessionTTL: TimeInterval = 120
+
     enum SessionRecreationAction {
         case recreateMissingAgentSession
         case recreateMismatchedAgentSession
@@ -138,6 +148,20 @@ extension ThreadManager {
         let projectPath = project?.repoPath ?? thread.worktreePath
         let projectName = project?.name ?? "project"
         let isAgentSession = refreshedThread.agentTmuxSessions.contains(sessionName)
+        let expectedPath = refreshedThread.isMain ? projectPath : refreshedThread.worktreePath
+
+        if isSessionContextKnownGood(
+            sessionName: sessionName,
+            threadId: refreshedThread.id,
+            expectedPath: expectedPath,
+            projectPath: projectPath,
+            isAgentSession: isAgentSession
+        ) {
+            if await tmux.hasSession(name: sessionName) {
+                return false
+            }
+            knownGoodSessionContexts.removeValue(forKey: sessionName)
+        }
 
         if await tmux.hasSession(name: sessionName) {
             let sessionMatches = await sessionMatchesThreadContext(
@@ -147,6 +171,13 @@ extension ThreadManager {
                 isAgentSession: isAgentSession
             )
             if sessionMatches {
+                markSessionContextKnownGood(
+                    sessionName: sessionName,
+                    threadId: refreshedThread.id,
+                    expectedPath: expectedPath,
+                    projectPath: projectPath,
+                    isAgentSession: isAgentSession
+                )
                 await setSessionEnvironment(
                     sessionName: sessionName,
                     thread: refreshedThread,
@@ -166,8 +197,10 @@ extension ThreadManager {
             }
 
             // Session name exists but points at another thread/project context.
+            knownGoodSessionContexts.removeValue(forKey: sessionName)
             try? await tmux.killSession(name: sessionName)
         } else {
+            knownGoodSessionContexts.removeValue(forKey: sessionName)
             if let onAction {
                 await MainActor.run {
                     onAction(isAgentSession ? .recreateMissingAgentSession : .recreateMissingTerminalSession)
@@ -187,12 +220,15 @@ extension ThreadManager {
         let sessionAgentType = agentType(for: refreshedThread, sessionName: sessionName)
             ?? effectiveAgentType(for: refreshedThread.projectId)
         let resumeSessionID = refreshedThread.sessionConversationIDs[sessionName]
-        let envExports: String
-        if thread.isMain {
-            envExports = "export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_THREAD_ID=\(thread.id.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
-        } else {
-            envExports = "export MAGENT_WORKTREE_PATH=\(thread.worktreePath) && export MAGENT_PROJECT_PATH=\(projectPath) && export MAGENT_WORKTREE_NAME=\(thread.name) && export MAGENT_PROJECT_NAME=\(projectName) && export MAGENT_THREAD_ID=\(thread.id.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
-        }
+        let sessionEnvironment = sessionEnvironmentVariables(
+            threadId: thread.id,
+            worktreePath: thread.isMain ? nil : thread.worktreePath,
+            projectPath: projectPath,
+            worktreeName: thread.isMain ? "main" : thread.name,
+            projectName: projectName,
+            agentType: isAgentSession ? sessionAgentType : nil
+        )
+        let envExports = shellExportCommand(for: sessionEnvironment)
         if isAgentSession {
             startCmd = agentStartCommand(
                 settings: settings,
@@ -226,6 +262,14 @@ extension ThreadManager {
             await tmux.setupBellPipe(for: sessionName)
         }
 
+        markSessionContextKnownGood(
+            sessionName: sessionName,
+            threadId: thread.id,
+            expectedPath: expectedPath,
+            projectPath: projectPath,
+            isAgentSession: isAgentSession
+        )
+
         // Run normal injection (terminal command + agent context)
         let injection = effectiveInjection(for: thread.projectId)
         injectAfterStart(
@@ -246,24 +290,57 @@ extension ThreadManager {
         projectPath: String,
         projectName: String
     ) async {
-        if thread.isMain {
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_PATH", value: projectPath)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: "main")
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: projectName)
-        } else {
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_PATH", value: thread.worktreePath)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_PATH", value: projectPath)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: thread.name)
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_PROJECT_NAME", value: projectName)
-        }
-        try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_THREAD_ID", value: thread.id.uuidString)
-        if let agent = agentType(for: thread, sessionName: sessionName) {
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_AGENT_TYPE", value: agent.rawValue)
-        } else {
+        let sessionEnvironment = sessionEnvironmentVariables(
+            threadId: thread.id,
+            worktreePath: thread.isMain ? nil : thread.worktreePath,
+            projectPath: projectPath,
+            worktreeName: thread.isMain ? "main" : thread.name,
+            projectName: projectName,
+            agentType: agentType(for: thread, sessionName: sessionName)
+        )
+        await applySessionEnvironmentVariables(
+            sessionName: sessionName,
+            environmentVariables: sessionEnvironment
+        )
+        if agentType(for: thread, sessionName: sessionName) == nil {
             // Ensure terminal sessions don't inherit stale agent-type markers.
             try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_AGENT_TYPE", value: "")
         }
-        try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_SOCKET", value: IPCSocketServer.socketPath)
+    }
+
+    private func isSessionContextKnownGood(
+        sessionName: String,
+        threadId: UUID,
+        expectedPath: String,
+        projectPath: String,
+        isAgentSession: Bool,
+        now: Date = Date()
+    ) -> Bool {
+        guard let cached = knownGoodSessionContexts[sessionName] else { return false }
+        guard now.timeIntervalSince(cached.validatedAt) <= Self.knownGoodSessionTTL else {
+            knownGoodSessionContexts.removeValue(forKey: sessionName)
+            return false
+        }
+        return cached.threadId == threadId
+            && cached.expectedPath == expectedPath
+            && cached.projectPath == projectPath
+            && cached.isAgentSession == isAgentSession
+    }
+
+    private func markSessionContextKnownGood(
+        sessionName: String,
+        threadId: UUID,
+        expectedPath: String,
+        projectPath: String,
+        isAgentSession: Bool
+    ) {
+        knownGoodSessionContexts[sessionName] = KnownGoodSessionContext(
+            threadId: threadId,
+            expectedPath: expectedPath,
+            projectPath: projectPath,
+            isAgentSession: isAgentSession,
+            validatedAt: Date()
+        )
     }
 
     // MARK: - Session Context Matching

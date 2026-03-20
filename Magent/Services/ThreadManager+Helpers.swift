@@ -5,11 +5,76 @@ import MagentCore
 
 extension ThreadManager {
 
+    // MARK: - Session Environment
+
+    func sessionEnvironmentVariables(
+        threadId: UUID,
+        worktreePath: String? = nil,
+        projectPath: String,
+        worktreeName: String,
+        projectName: String,
+        agentType: AgentType? = nil
+    ) -> [(String, String)] {
+        var envVars: [(String, String)] = [
+            ("MAGENT_PROJECT_PATH", projectPath),
+            ("MAGENT_WORKTREE_NAME", worktreeName),
+            ("MAGENT_PROJECT_NAME", projectName),
+            ("MAGENT_THREAD_ID", threadId.uuidString),
+            ("MAGENT_SOCKET", IPCSocketServer.socketPath),
+        ]
+        if let worktreePath {
+            envVars.insert(("MAGENT_WORKTREE_PATH", worktreePath), at: 0)
+        }
+        if let agentType {
+            envVars.append(("MAGENT_AGENT_TYPE", agentType.rawValue))
+        }
+        return envVars
+    }
+
+    func shellExportCommand(for environmentVariables: [(String, String)]) -> String {
+        environmentVariables
+            .map { key, value in
+                "export \(key)=\(ShellExecutor.shellQuote(value))"
+            }
+            .joined(separator: " && ")
+    }
+
+    func applySessionEnvironmentVariables(
+        sessionName: String,
+        environmentVariables: [(String, String)]
+    ) async {
+        await withTaskGroup(of: Void.self) { group in
+            for (key, value) in environmentVariables {
+                group.addTask { [tmux] in
+                    try? await tmux.setEnvironment(sessionName: sessionName, key: key, value: value)
+                }
+            }
+        }
+    }
+
     // MARK: - Agent Readiness
 
-    /// Polls tmux pane content for agent-specific readiness signals.
-    /// Returns `true` when the agent TUI is detected, or `false` on timeout.
-    func waitForAgentReady(
+    /// Waits until the pane can be captured, which is enough to start sending keys.
+    /// This avoids paying a fixed startup delay on fast machines while still giving
+    /// tmux a brief window to finish creating the pane on slower ones.
+    private func waitForPaneCaptureReady(
+        sessionName: String,
+        timeout: TimeInterval = 1.0,
+        interval: TimeInterval = 0.05
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await tmux.capturePane(sessionName: sessionName, lastLines: 1) != nil {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+        return false
+    }
+
+    /// Polls tmux pane content for the actual agent input prompt marker.
+    /// Returns `true` only when the user prompt is visible, or `false` on timeout.
+    func waitForAgentPrompt(
         sessionName: String,
         agentType: AgentType?,
         timeout: TimeInterval = 10,
@@ -18,8 +83,7 @@ extension ThreadManager {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let content = await tmux.capturePane(sessionName: sessionName, lastLines: 30) {
-                let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-                if isAgentContentReady(trimmed, agentType: agentType) {
+                if isAgentPromptReady(content, agentType: agentType) {
                     return true
                 }
             }
@@ -67,17 +131,120 @@ extension ThreadManager {
         return blockerPatterns.contains { content.contains($0) }
     }
 
-    /// Checks whether captured pane content indicates the agent is ready,
-    /// using agent-specific signals.
-    func isAgentContentReady(_ content: String, agentType: AgentType?) -> Bool {
+    private func isAgentPromptReady(_ paneContent: String, agentType: AgentType?) -> Bool {
         switch agentType {
         case .claude:
-            return content.contains("╭") || content.contains("\u{276F}")
+            if paneContentShowsEscToInterrupt(paneContent) { return false }
+            if paneShowsBarePromptMarker(paneContent, marker: "\u{276F}", agentType: agentType) {
+                return true
+            }
+            return false
         case .codex:
-            return content.contains("\u{203A}") || content.filter({ !$0.isWhitespace }).count > 100
+            return paneShowsBarePromptMarker(paneContent, marker: "\u{203A}", agentType: agentType)
         case .custom, .none:
+            let content = paneContent.trimmingCharacters(in: .whitespacesAndNewlines)
             return content.filter({ !$0.isWhitespace }).count > 50
         }
+    }
+
+    func isAgentContentReady(_ content: String, agentType: AgentType?) -> Bool {
+        isAgentPromptReady(content, agentType: agentType)
+    }
+
+    private func paneShowsBarePromptMarker(
+        _ paneContent: String,
+        marker: Character,
+        agentType: AgentType?
+    ) -> Bool {
+        let recentLines = latestScopedPaneLines(from: paneContent, agentType: agentType)
+            .suffix(12)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !recentLines.isEmpty else { return false }
+        let bareMarker = String(marker)
+        return recentLines.contains { line in
+            line.filter { !$0.isWhitespace } == bareMarker
+        }
+    }
+
+    private func latestScopedPaneLines(from paneContent: String, agentType: AgentType?) -> [String] {
+        let lines = paneContent
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .map(String.init)
+        guard agentType == .codex,
+              let scopeSeparatorIndex = lines.lastIndex(where: isPaneScopeSeparator) else {
+            return lines
+        }
+        let latestScopeStart = lines.index(after: scopeSeparatorIndex)
+        guard latestScopeStart < lines.endIndex else { return lines }
+        return Array(lines[latestScopeStart...])
+    }
+
+    private func isPaneScopeSeparator(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 20 else { return false }
+        return trimmed.allSatisfy { $0 == "─" }
+    }
+
+    private func showInjectionRetryBanner(
+        message: String,
+        sessionName: String,
+        agentContext: String,
+        initialPrompt: String?,
+        shouldSubmitInitialPrompt: Bool,
+        agentType: AgentType?
+    ) async {
+        await MainActor.run {
+            BannerManager.shared.show(
+                message: message,
+                style: .warning,
+                duration: nil,
+                isDismissible: true,
+                actions: [BannerAction(title: "Retry") { [weak self] in
+                    self?.injectAfterStart(
+                        sessionName: sessionName,
+                        terminalCommand: "",
+                        agentContext: agentContext,
+                        initialPrompt: initialPrompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    )
+                }]
+            )
+        }
+    }
+
+    private func postInitialPromptInjectionTimeout(
+        sessionName: String,
+        prompt: String,
+        shouldSubmitInitialPrompt: Bool,
+        agentType: AgentType?
+    ) async {
+        initialPromptInjectionFailuresBySession[sessionName] = InitialPromptInjectionFailureInfo(
+            prompt: prompt,
+            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+            agentType: agentType
+        )
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: .magentInitialPromptInjectionFailed,
+                object: self,
+                userInfo: [
+                    "sessionName": sessionName,
+                    "prompt": prompt,
+                    "shouldSubmitInitialPrompt": shouldSubmitInitialPrompt,
+                    "agentType": agentType?.rawValue as Any,
+                ]
+            )
+        }
+    }
+
+    func initialPromptInjectionFailure(for sessionName: String) -> InitialPromptInjectionFailureInfo? {
+        initialPromptInjectionFailuresBySession[sessionName]
+    }
+
+    func clearInitialPromptInjectionFailure(for sessionName: String) {
+        initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
     }
 
     // MARK: - Injection
@@ -111,8 +278,7 @@ extension ThreadManager {
         guard !terminalCommand.isEmpty || !agentContext.isEmpty || prompt != nil else { return }
         NSLog("[injectAfterStart] session=\(sessionName) hasPrompt=\(hasPrompt) injectOnly=\(prompt != nil && !shouldSubmitInitialPrompt) hasTermCmd=\(!terminalCommand.isEmpty) agentType=\(agentType?.rawValue ?? "nil")")
         Task {
-            // Wait for tmux session to start
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            _ = await waitForPaneCaptureReady(sessionName: sessionName)
             if !terminalCommand.isEmpty {
                 try? await tmux.sendKeys(sessionName: sessionName, keys: terminalCommand)
                 NotificationCenter.default.post(
@@ -125,32 +291,19 @@ extension ThreadManager {
                 // Inject-only mode: paste the prompt text but don't press Enter.
                 // Wait for agent readiness so the text lands in the right input area.
                 NotificationCenter.default.post(name: .magentAgentInjectionStarted, object: nil, userInfo: ["sessionName": sessionName])
-                let agentReady = await waitForAgentReady(sessionName: sessionName, agentType: agentType)
-                if !agentReady {
-                    // Check for interactive shell blockers (trust dialogs, update prompts, etc.)
-                    // that could cause the pasted text to accidentally answer a prompt.
-                    let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? ""
-                    if detectsInteractiveShellBlocker(paneContent) {
-                        await MainActor.run {
-                            BannerManager.shared.show(
-                                message: "Prompt text not injected — shell is waiting for user input. Answer the prompt in the terminal, then retry.",
-                                style: .warning,
-                                duration: nil,
-                                isDismissible: true,
-                                actions: [BannerAction(title: "Retry") { [weak self] in
-                                    self?.injectAfterStart(
-                                        sessionName: sessionName,
-                                        terminalCommand: "",
-                                        agentContext: agentContext,
-                                        initialPrompt: prompt,
-                                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
-                                        agentType: agentType
-                                    )
-                                }]
-                            )
-                        }
-                        return
-                    }
+                let promptReady = await waitForAgentPrompt(
+                    sessionName: sessionName,
+                    agentType: agentType,
+                    timeout: 30
+                )
+                if !promptReady {
+                    await postInitialPromptInjectionTimeout(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    )
+                    return
                 }
                 try? await tmux.sendText(sessionName: sessionName, text: prompt)
                 NotificationCenter.default.post(
@@ -164,35 +317,19 @@ extension ThreadManager {
                 // submitting as a first prompt that blocks the real one.
                 // Wait for the agent TUI to be ready before sending the prompt.
                 NotificationCenter.default.post(name: .magentAgentInjectionStarted, object: nil, userInfo: ["sessionName": sessionName])
-                let agentReady = await waitForAgentReady(sessionName: sessionName, agentType: agentType)
-                if !agentReady {
-                    // Timed out — check whether an interactive shell prompt is blocking startup
-                    // (e.g. an oh-my-zsh update prompt, homebrew yes/no, "press any key").
-                    // If so, abort injection and let the user know rather than sending the
-                    // prompt text into the wrong context.
-                    let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? ""
-                    if detectsInteractiveShellBlocker(paneContent) {
-                        await MainActor.run {
-                            BannerManager.shared.show(
-                                message: "Initial prompt not sent — shell is waiting for user input. Answer the prompt in the terminal, then retry.",
-                                style: .warning,
-                                duration: nil,
-                                isDismissible: true,
-                                actions: [BannerAction(title: "Retry") { [weak self] in
-                                    // Re-inject without re-running the terminal command
-                                    self?.injectAfterStart(
-                                        sessionName: sessionName,
-                                        terminalCommand: "",
-                                        agentContext: agentContext,
-                                        initialPrompt: prompt,
-                                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
-                                        agentType: agentType
-                                    )
-                                }]
-                            )
-                        }
-                        return
-                    }
+                let promptReady = await waitForAgentPrompt(
+                    sessionName: sessionName,
+                    agentType: agentType,
+                    timeout: 30
+                )
+                if !promptReady {
+                    await postInitialPromptInjectionTimeout(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType
+                    )
+                    return
                 }
                 // Send text and Enter separately — the Enter key gets lost if sent in the
                 // same send-keys call while the TUI is still processing buffered input.
@@ -238,6 +375,30 @@ extension ThreadManager {
                 if !terminalCommand.isEmpty {
                     try? await Task.sleep(nanoseconds: 300_000_000)
                 }
+                let promptReady = await waitForAgentPrompt(sessionName: sessionName, agentType: agentType)
+                if !promptReady {
+                    let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? ""
+                    if detectsInteractiveShellBlocker(paneContent) {
+                        await showInjectionRetryBanner(
+                            message: "Agent context not injected — shell is waiting for user input. Answer the prompt in the terminal, then retry.",
+                            sessionName: sessionName,
+                            agentContext: agentContext,
+                            initialPrompt: nil,
+                            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                            agentType: agentType
+                        )
+                    } else {
+                        await showInjectionRetryBanner(
+                            message: "Agent context not injected — the agent input prompt did not appear yet. Retry after the agent finishes starting.",
+                            sessionName: sessionName,
+                            agentContext: agentContext,
+                            initialPrompt: nil,
+                            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                            agentType: agentType
+                        )
+                    }
+                    return
+                }
                 try? await tmux.sendKeys(sessionName: sessionName, keys: agentContext)
             }
         }
@@ -254,16 +415,23 @@ extension ThreadManager {
         paneCommand: String,
         childProcesses: [(pid: pid_t, args: String)]
     ) -> AgentType? {
-        let commandLower = paneCommand.lowercased()
-        if commandLower.contains("claude") { return .claude }
-        if commandLower.contains("codex") { return .codex }
-
-        for child in childProcesses {
-            let argsLower = child.args.lowercased()
-            if argsLower.contains("claude") { return .claude }
-            if argsLower.contains("codex") { return .codex }
+        if let directMatch = detectedAgentType(from: paneCommand) {
+            return directMatch
         }
 
+        for child in childProcesses {
+            if let childMatch = detectedAgentType(from: child.args) {
+                return childMatch
+            }
+        }
+
+        return nil
+    }
+
+    func detectedAgentType(from commandLine: String) -> AgentType? {
+        let commandLower = commandLine.lowercased()
+        if commandLower.contains("claude") { return .claude }
+        if commandLower.contains("codex") { return .codex }
         return nil
     }
 
@@ -272,6 +440,9 @@ extension ThreadManager {
     func detectedAgentTypeInSession(_ sessionName: String) async -> AgentType? {
         guard let paneState = await tmux.activePaneStates(forSessions: [sessionName])[sessionName] else {
             return nil
+        }
+        if let directMatch = detectedAgentType(from: paneState.command) {
+            return directMatch
         }
         let children = paneState.pid > 0
             ? await tmux.childProcesses(forParents: [paneState.pid])[paneState.pid] ?? []
@@ -301,6 +472,10 @@ extension ThreadManager {
         let paneStates = await tmux.activePaneStates(forSessions: [sessionName])
         guard let paneState = paneStates[sessionName] else {
             return persistedAgentType
+        }
+
+        if let directMatch = detectedAgentType(from: paneState.command) {
+            return directMatch
         }
 
         let childProcessesByPid = paneState.pid > 0
@@ -1180,6 +1355,9 @@ extension Notification.Name {
     static let magentAgentInjectionStarted = Notification.Name("magentAgentInjectionStarted")
     /// Posted by `injectAfterStart` after all tmux keys (including Enter) are sent.
     static let magentAgentKeysInjected = Notification.Name("magentAgentKeysInjected")
+    /// Posted by `injectAfterStart` when an initial prompt was never injected because
+    /// the agent prompt marker failed to appear within the timeout window.
+    static let magentInitialPromptInjectionFailed = Notification.Name("magentInitialPromptInjectionFailed")
     /// Posted by `removeTabBySessionName` just before model cleanup begins.
     /// Carries "threadId" (UUID) and "sessionName" (String) so the terminal
     /// detail view can remove the surface immediately and prevent a Ghostty

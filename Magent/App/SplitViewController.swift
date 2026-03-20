@@ -227,6 +227,7 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func presentThread(_ thread: MagentThread) {
+        currentDetailVC?.cacheTerminalViewsForReuse()
         let detailVC = ThreadDetailViewController(thread: thread)
         currentDetailVC = detailVC
 
@@ -378,6 +379,7 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func showEmptyState() {
+        currentDetailVC?.cacheTerminalViewsForReuse()
         currentDetailVC = nil
         ThreadManager.shared.setActiveThread(nil)
         preserveSidebarWidthDuringContentChange {

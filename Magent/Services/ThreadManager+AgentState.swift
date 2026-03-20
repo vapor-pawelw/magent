@@ -241,12 +241,16 @@ extension ThreadManager {
             return
         }
 
-        // Collect pane PIDs so we can fetch child processes for agent detection
-        var allPanePids = Set<pid_t>()
-        for (_, paneState) in paneStates where paneState.pid > 0 {
-            allPanePids.insert(paneState.pid)
-        }
-        let childProcessesByPid = await tmux.childProcesses(forParents: allPanePids)
+        // Only fall back to a full child-process scan for panes whose current command
+        // does not already identify the running agent.
+        let unresolvedPanePids = Set(
+            paneStates.values.compactMap { paneState -> pid_t? in
+                guard paneState.pid > 0 else { return nil }
+                guard detectedAgentType(from: paneState.command) == nil else { return nil }
+                return paneState.pid
+            }
+        )
+        let childProcessesByPid = await tmux.childProcesses(forParents: unresolvedPanePids)
 
         // Snapshot thread IDs and their sessions before iterating. The `threads`
         // array can shrink during `await` suspension points (e.g. archive), which
@@ -262,7 +266,9 @@ extension ThreadManager {
 
                 if threads[ti].waitingForInputSessions.contains(session) { continue }
 
-                let children = childProcessesByPid[paneState.pid] ?? []
+                let children = detectedAgentType(from: paneState.command) == nil
+                    ? childProcessesByPid[paneState.pid] ?? []
+                    : []
                 let detectedAgent = detectedRunningAgentType(
                     paneCommand: paneState.command,
                     childProcesses: children
@@ -487,7 +493,7 @@ extension ThreadManager {
     private func paneShowsEscToInterrupt(sessionName: String) async -> Bool {
         // Capture enough history to include at least one scope separator so we can
         // ignore stale matches from older scopes.
-        guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 200) else {
+        guard let paneContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 200) else {
             return false
         }
 

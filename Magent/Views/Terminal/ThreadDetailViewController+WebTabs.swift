@@ -134,6 +134,7 @@ extension ThreadDetailViewController {
 
         // Hide terminal overlays while web tab is active
         dismissLoadingOverlay()
+        refreshInitialPromptFailureBanner()
         scrollOverlay.isHidden = true
         setScrollFABVisible(false)
         promptTOCCanShowForCurrentTab = false

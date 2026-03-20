@@ -172,7 +172,15 @@ extension ThreadManager {
             trustDirectoryIfNeeded(worktreePath, agentType: selectedAgentType)
 
             // Create tmux session with selected agent command (or shell if no active agents)
-            let envExports = "export MAGENT_WORKTREE_PATH=\(worktreePath) && export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=\(name) && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_THREAD_ID=\(threadID.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
+            let sessionEnvironment = sessionEnvironmentVariables(
+                threadId: threadID,
+                worktreePath: worktreePath,
+                projectPath: project.repoPath,
+                worktreeName: name,
+                projectName: project.name,
+                agentType: selectedAgentType
+            )
+            let envExports = shellExportCommand(for: sessionEnvironment)
             let startCmd: String
             if useAgentCommand {
                 startCmd = agentStartCommand(
@@ -195,22 +203,10 @@ extension ThreadManager {
             )
 
             // Also set on the tmux session so new panes/windows inherit them.
-            // Fire all setEnvironment calls concurrently — they are independent.
-            await withTaskGroup(of: Void.self) { group in
-                let envVars: [(String, String)] = [
-                    ("MAGENT_WORKTREE_PATH", worktreePath),
-                    ("MAGENT_PROJECT_PATH", project.repoPath),
-                    ("MAGENT_WORKTREE_NAME", name),
-                    ("MAGENT_PROJECT_NAME", project.name),
-                    ("MAGENT_THREAD_ID", threadID.uuidString),
-                    ("MAGENT_SOCKET", IPCSocketServer.socketPath),
-                ] + (selectedAgentType.map { [("MAGENT_AGENT_TYPE", $0.rawValue)] } ?? [])
-                for (key, value) in envVars {
-                    group.addTask { [tmux] in
-                        try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: key, value: value)
-                    }
-                }
-            }
+            await applySessionEnvironmentVariables(
+                sessionName: tmuxSessionName,
+                environmentVariables: sessionEnvironment
+            )
 
             let thread = MagentThread(
                 id: threadID,
@@ -337,7 +333,14 @@ extension ThreadManager {
         }
 
         trustDirectoryIfNeeded(project.repoPath, agentType: selectedAgentType)
-        let envExports = "export MAGENT_PROJECT_PATH=\(project.repoPath) && export MAGENT_WORKTREE_NAME=main && export MAGENT_PROJECT_NAME=\(project.name) && export MAGENT_THREAD_ID=\(threadID.uuidString) && export MAGENT_SOCKET=\(IPCSocketServer.socketPath)"
+        let sessionEnvironment = sessionEnvironmentVariables(
+            threadId: threadID,
+            projectPath: project.repoPath,
+            worktreeName: "main",
+            projectName: project.name,
+            agentType: selectedAgentType
+        )
+        let envExports = shellExportCommand(for: sessionEnvironment)
         let startCmd = agentStartCommand(
             settings: settings,
             projectId: project.id,
@@ -352,20 +355,10 @@ extension ThreadManager {
         )
         // Main thread is always an agent session.
 
-        await withTaskGroup(of: Void.self) { group in
-            let envVars: [(String, String)] = [
-                ("MAGENT_PROJECT_PATH", project.repoPath),
-                ("MAGENT_WORKTREE_NAME", "main"),
-                ("MAGENT_PROJECT_NAME", project.name),
-                ("MAGENT_THREAD_ID", threadID.uuidString),
-                ("MAGENT_SOCKET", IPCSocketServer.socketPath),
-            ] + (selectedAgentType.map { [("MAGENT_AGENT_TYPE", $0.rawValue)] } ?? [])
-            for (key, value) in envVars {
-                group.addTask { [tmux] in
-                    try? await tmux.setEnvironment(sessionName: tmuxSessionName, key: key, value: value)
-                }
-            }
-        }
+        await applySessionEnvironmentVariables(
+            sessionName: tmuxSessionName,
+            environmentVariables: sessionEnvironment
+        )
 
         let thread = MagentThread(
             id: threadID,

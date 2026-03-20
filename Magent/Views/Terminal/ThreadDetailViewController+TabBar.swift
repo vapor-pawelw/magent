@@ -131,7 +131,6 @@ extension ThreadDetailViewController {
         for termView in terminalViews {
             termView.isHidden = (termView !== tv)
         }
-
         view.window?.makeFirstResponder(tv)
         currentTabIndex = index
         updateTerminalScrollControlsState()
@@ -145,6 +144,7 @@ extension ThreadDetailViewController {
         }
         UserDefaults.standard.set(thread.id.uuidString, forKey: Self.lastOpenedThreadDefaultsKey)
         UserDefaults.standard.set(sessionName, forKey: Self.lastOpenedSessionDefaultsKey)
+        refreshInitialPromptFailureBanner()
 
         // Clear unread completion and waiting dots for this tab
         guard index < tabItems.count else { return }

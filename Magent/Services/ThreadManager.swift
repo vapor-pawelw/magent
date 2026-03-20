@@ -12,6 +12,11 @@ protocol ThreadManagerDelegate: AnyObject {
 }
 
 final class ThreadManager {
+    struct InitialPromptInjectionFailureInfo {
+        let prompt: String
+        let shouldSubmitInitialPrompt: Bool
+        let agentType: AgentType?
+    }
 
     static let shared = ThreadManager()
 
@@ -31,6 +36,8 @@ final class ThreadManager {
     var autoRenameInProgress: Set<UUID> = []
     /// Tracks threads for which an auto-rename failure banner has already been shown this session.
     var autoRenameFailedBannerShownThreadIds: Set<UUID> = []
+    var knownGoodSessionContexts: [String: KnownGoodSessionContext] = [:]
+    var initialPromptInjectionFailuresBySession: [String: InitialPromptInjectionFailureInfo] = [:]
     /// Per-thread cache of AI-generated rename payloads, keyed by normalized prompt.
     /// Avoids repeat agent calls when the same prompt is re-used for rename on the same thread.
     /// Cleared when a thread is archived or deleted.

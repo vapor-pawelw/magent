@@ -22,10 +22,88 @@ final class AppBackgroundView: NSView {
     }
 }
 
+@MainActor
+final class ReusableTerminalViewCache {
+    static let shared = ReusableTerminalViewCache()
+
+    static let maxCachedViews = 8
+    static let maxIdleAge: TimeInterval = 60 * 60
+
+    private struct Entry {
+        let sessionName: String
+        let view: TerminalSurfaceView
+        let reuseKey: String
+        let cachedAt: Date
+        var lastAccessedAt: Date
+    }
+
+    private var entriesBySession: [String: Entry] = [:]
+    private var fifoSessionNames: [String] = []
+
+    func take(sessionName: String, reuseKey: String) -> TerminalSurfaceView? {
+        pruneExpiredEntries()
+        guard var entry = entriesBySession.removeValue(forKey: sessionName) else { return nil }
+        guard entry.reuseKey == reuseKey else {
+            fifoSessionNames.removeAll { $0 == sessionName }
+            return nil
+        }
+        fifoSessionNames.removeAll { $0 == sessionName }
+        entry.lastAccessedAt = Date()
+        return entry.view
+    }
+
+    func store(_ view: TerminalSurfaceView, sessionName: String, reuseKey: String) {
+        pruneExpiredEntries()
+        remove(sessionName: sessionName)
+
+        view.removeFromSuperview()
+        view.isHidden = true
+
+        let now = Date()
+        entriesBySession[sessionName] = Entry(
+            sessionName: sessionName,
+            view: view,
+            reuseKey: reuseKey,
+            cachedAt: now,
+            lastAccessedAt: now
+        )
+        fifoSessionNames.append(sessionName)
+        evictOverflowIfNeeded()
+    }
+
+    func remove(sessionName: String) {
+        entriesBySession.removeValue(forKey: sessionName)
+        fifoSessionNames.removeAll { $0 == sessionName }
+    }
+
+    func removeAll() {
+        entriesBySession.removeAll()
+        fifoSessionNames.removeAll()
+    }
+
+    private func pruneExpiredEntries(now: Date = Date()) {
+        let expiredSessionNames = entriesBySession.compactMap { sessionName, entry -> String? in
+            guard now.timeIntervalSince(entry.lastAccessedAt) > Self.maxIdleAge else { return nil }
+            return sessionName
+        }
+        guard !expiredSessionNames.isEmpty else { return }
+        for sessionName in expiredSessionNames {
+            remove(sessionName: sessionName)
+        }
+    }
+
+    private func evictOverflowIfNeeded() {
+        while entriesBySession.count > Self.maxCachedViews {
+            guard let oldestSessionName = fifoSessionNames.first else { return }
+            fifoSessionNames.removeFirst()
+            entriesBySession.removeValue(forKey: oldestSessionName)
+        }
+    }
+}
+
 // MARK: - ThreadDetailViewController
 
 final class ThreadDetailViewController: NSViewController {
-
     static let lastOpenedThreadDefaultsKey = "MagentLastOpenedThreadID"
     static let lastOpenedSessionDefaultsKey = "MagentLastOpenedSessionName"
     static let promptTOCPositionDefaultsPrefix = "MagentPromptTOCPosition"
@@ -80,6 +158,9 @@ final class ThreadDetailViewController: NSViewController {
     /// poll timer from dismissing the overlay before keys are actually sent.
     var loadingOverlayWaitingForInjection = false
     var loadingOverlayInjectionObservers: [NSObjectProtocol] = []
+    var initialPromptFailureBanner: BannerView?
+    var initialPromptFailureBannerSessionName: String?
+    var initialPromptFailureBannerTopConstraint: NSLayoutConstraint?
     var preparedSessions: Set<String> = []
     var sessionPreparationTasks: [String: Task<Void, Never>] = [:]
     var backgroundSessionPreparationTask: Task<Void, Never>?
@@ -271,6 +352,18 @@ final class ThreadDetailViewController: NSViewController {
             name: .magentTabWillClose,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleInitialPromptInjectionFailedNotification(_:)),
+            name: .magentInitialPromptInjectionFailed,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAgentKeysInjectedNotification(_:)),
+            name: .magentAgentKeysInjected,
+            object: nil
+        )
 
         Task {
             await setupTabs()
@@ -288,7 +381,19 @@ final class ThreadDetailViewController: NSViewController {
         scrollFABRefreshTask?.cancel()
         backgroundSessionPreparationTask?.cancel()
         sessionPreparationTasks.values.forEach { $0.cancel() }
+        dismissInitialPromptFailureBanner()
         NotificationCenter.default.removeObserver(self)
+    }
+
+    func cacheTerminalViewsForReuse() {
+        for (index, sessionName) in thread.tmuxSessionNames.enumerated() {
+            guard index < terminalViews.count else { continue }
+            ReusableTerminalViewCache.shared.store(
+                terminalViews[index],
+                sessionName: sessionName,
+                reuseKey: terminalReuseKey(for: sessionName)
+            )
+        }
     }
 
     // MARK: - UI Setup
@@ -620,11 +725,25 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     func makeTerminalView(for sessionName: String) -> TerminalSurfaceView {
-        let tmuxCommand = buildTmuxCommand(for: sessionName)
-        let view = TerminalSurfaceView(
-            workingDirectory: thread.worktreePath,
-            command: tmuxCommand
-        )
+        let reuseKey = terminalReuseKey(for: sessionName)
+        let view: TerminalSurfaceView
+        if let cachedView = ReusableTerminalViewCache.shared.take(
+            sessionName: sessionName,
+            reuseKey: reuseKey
+        ) {
+            view = cachedView
+        } else {
+            let tmuxCommand = buildTmuxCommand(for: sessionName)
+            view = TerminalSurfaceView(
+                workingDirectory: thread.worktreePath,
+                command: tmuxCommand
+            )
+        }
+        configureTerminalViewHandlers(view, sessionName: sessionName)
+        return view
+    }
+
+    private func configureTerminalViewHandlers(_ view: TerminalSurfaceView, sessionName: String) {
         view.onCopy = { [sessionName = sessionName] in
             Task { await TmuxService.shared.copySelectionToClipboard(sessionName: sessionName) }
         }
@@ -646,7 +765,11 @@ final class ThreadDetailViewController: NSViewController {
                 yFraction: yFraction
             )
         }
-        return view
+    }
+
+    private func terminalReuseKey(for sessionName: String) -> String {
+        let tmuxCommand = buildTmuxCommand(for: sessionName)
+        return "\(thread.worktreePath)\n\(tmuxCommand)"
     }
 
     private func buildTmuxCommand(for sessionName: String) -> String {
@@ -753,6 +876,8 @@ final class ThreadDetailViewController: NSViewController {
         thread.unreadCompletionSessions.remove(sessionName)
         thread.busySessions.remove(sessionName)
         thread.waitingForInputSessions.remove(sessionName)
+        threadManager.clearInitialPromptInjectionFailure(for: sessionName)
+        ReusableTerminalViewCache.shared.remove(sessionName: sessionName)
 
         rebindAllTabActions()
         rebuildTabBar()
@@ -781,6 +906,7 @@ final class ThreadDetailViewController: NSViewController {
             let wasSelected = displayIdx == currentTabIndex
             let oldView = terminalViews[termIdx]
             oldView.removeFromSuperview()
+            ReusableTerminalViewCache.shared.remove(sessionName: sessionName)
 
             let newView = makeTerminalView(for: sessionName)
             terminalViews[termIdx] = newView
@@ -806,6 +932,24 @@ final class ThreadDetailViewController: NSViewController {
         refreshDiffViewerIfVisible()
         syncTransientState()
         schedulePromptTOCRefresh()
+    }
+
+    @objc private func handleInitialPromptInjectionFailedNotification(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let sessionName = userInfo["sessionName"] as? String,
+              thread.tmuxSessionNames.contains(sessionName) else {
+            return
+        }
+        refreshInitialPromptFailureBanner()
+    }
+
+    @objc private func handleAgentKeysInjectedNotification(_ notification: Notification) {
+        guard let sessionName = notification.userInfo?["sessionName"] as? String,
+              threadManager.initialPromptInjectionFailure(for: sessionName) != nil else {
+            return
+        }
+        threadManager.clearInitialPromptInjectionFailure(for: sessionName)
+        refreshInitialPromptFailureBanner()
     }
 
     @objc private func handleAgentWaitingNotification(_ notification: Notification) {
@@ -920,6 +1064,7 @@ final class ThreadDetailViewController: NSViewController {
     private func reloadTerminalViewsForUpdatedTerminalPreferences() {
         guard !terminalViews.isEmpty else { return }
 
+        ReusableTerminalViewCache.shared.removeAll()
         for terminalView in terminalViews {
             terminalView.removeFromSuperview()
         }
@@ -1011,6 +1156,74 @@ final class ThreadDetailViewController: NSViewController {
             appearanceMode: appearanceMode,
             mouseWheelBehavior: mouseWheelBehavior
         )
+    }
+
+    func refreshInitialPromptFailureBanner() {
+        guard let sessionName = currentSessionName(),
+              let failure = threadManager.initialPromptInjectionFailure(for: sessionName) else {
+            dismissInitialPromptFailureBanner()
+            return
+        }
+        showInitialPromptFailureBanner(sessionName: sessionName, failure: failure)
+    }
+
+    private func showInitialPromptFailureBanner(
+        sessionName: String,
+        failure: ThreadManager.InitialPromptInjectionFailureInfo
+    ) {
+        if initialPromptFailureBannerSessionName == sessionName,
+           initialPromptFailureBanner != nil {
+            return
+        }
+
+        dismissInitialPromptFailureBanner()
+
+        let banner = BannerView(config: BannerConfig(
+            message: "Initial prompt injection failed for this tab.",
+            style: .warning,
+            duration: nil,
+            isDismissible: false,
+            actions: [
+                BannerAction(title: "Inject Prompt") { [weak self] in
+                    guard let self else { return }
+                    let injection = self.threadManager.effectiveInjection(for: self.thread.projectId)
+                    self.threadManager.injectAfterStart(
+                        sessionName: sessionName,
+                        terminalCommand: "",
+                        agentContext: injection.agentContext,
+                        initialPrompt: failure.prompt,
+                        shouldSubmitInitialPrompt: failure.shouldSubmitInitialPrompt,
+                        agentType: failure.agentType
+                    )
+                },
+                BannerAction(title: "Already Injected") { [weak self] in
+                    guard let self else { return }
+                    self.threadManager.clearInitialPromptInjectionFailure(for: sessionName)
+                    self.refreshInitialPromptFailureBanner()
+                },
+            ]
+        ))
+        banner.translatesAutoresizingMaskIntoConstraints = false
+        terminalContainer.addSubview(banner, positioned: .above, relativeTo: nil)
+        let topConstraint = banner.topAnchor.constraint(equalTo: terminalContainer.topAnchor, constant: 12)
+        NSLayoutConstraint.activate([
+            topConstraint,
+            banner.centerXAnchor.constraint(equalTo: terminalContainer.centerXAnchor),
+            banner.leadingAnchor.constraint(greaterThanOrEqualTo: terminalContainer.leadingAnchor, constant: 20),
+            banner.trailingAnchor.constraint(lessThanOrEqualTo: terminalContainer.trailingAnchor, constant: -20),
+            banner.widthAnchor.constraint(lessThanOrEqualToConstant: 640),
+        ])
+
+        initialPromptFailureBanner = banner
+        initialPromptFailureBannerSessionName = sessionName
+        initialPromptFailureBannerTopConstraint = topConstraint
+    }
+
+    private func dismissInitialPromptFailureBanner() {
+        initialPromptFailureBanner?.removeFromSuperview()
+        initialPromptFailureBanner = nil
+        initialPromptFailureBannerSessionName = nil
+        initialPromptFailureBannerTopConstraint = nil
     }
 
 }
