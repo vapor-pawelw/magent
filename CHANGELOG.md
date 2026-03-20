@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - Switching between threads now reuses cached terminal views and skips redundant recent session validation, so already-live tabs appear faster.
 
 ### Agents
+- Fixed initial prompt injection failing for Codex threads — the agent prompt detection now recognizes Codex's `›` marker even when placeholder text appears on the same line.
 - If the initial prompt does not reach the agent input within startup timeout, only the affected tab now shows a persistent recovery banner with actions to re-inject the prompt or confirm it was already entered manually.
 
 ## 1.3.1 - 2026-03-20

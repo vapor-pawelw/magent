@@ -89,6 +89,10 @@ extension ThreadManager {
             }
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
+        // Log final pane state on timeout for diagnostics
+        let finalContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? "<nil>"
+        let finalLines = finalContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).suffix(5).map { $0.trimmingCharacters(in: .whitespaces) }
+        NSLog("[waitForAgentPrompt] TIMEOUT session=\(sessionName) agentType=\(agentType?.rawValue ?? "nil") finalLines=\(finalLines)")
         return false
     }
 
@@ -163,7 +167,11 @@ extension ThreadManager {
         guard !recentLines.isEmpty else { return false }
         let bareMarker = String(marker)
         return recentLines.contains { line in
-            line.filter { !$0.isWhitespace } == bareMarker
+            // Check if the line is just the marker (Claude: bare ❯) or starts
+            // with the marker (Codex: › followed by placeholder text like
+            // "› Write tests for @filename").
+            let filtered = line.filter { !$0.isWhitespace }
+            return filtered == bareMarker || line.hasPrefix(bareMarker)
         }
     }
 
