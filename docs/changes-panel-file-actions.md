@@ -8,12 +8,14 @@
 - Selecting inline diff text now supports the standard `Cmd+C` shortcut and copies the selected text to the macOS clipboard.
 - Left-clicking an image preview inside the inline diff opens a larger overlay above the full thread view with a darkened background; clicking anywhere or pressing Escape dismisses it.
 - Double-clicking a file opens the file with the system default macOS app.
-- Right-clicking a file opens a context menu with `Show in Finder`. Directory rows keep that Finder action but do not try to open the inline diff viewer.
+- Right-clicking a file opens a context menu with `Copy Filename`, `Show in Finder`, and (for non-committed files) `Stage` or `Unstage`. Directory rows also show the stage/unstage option when applicable. The `DiffFileRowView.workingStatus` property is set from `FileDiffEntry.workingStatus` in `makeEntryRow`; stage/unstage calls `GitService.shared.stageFile`/`unstageFile` then fires `onRefreshRequested` to reload the panel.
 
 ## Implementation Notes
 
+- File rows display the filename first (in status color, 11pt) followed by the directory path (gray, 10pt, smaller). Directory path is truncated from the leading side with `…` if the total exceeds 50 characters, prioritizing filename visibility. Truncation mode is `byTruncatingTail` so the filename is always visible.
 - Row interactions are implemented in `Magent/Views/ThreadList/DiffPanelView.swift` (`DiffFileRowView` + `DiffPanelView` callbacks).
 - The panel needs the selected thread's `worktreePath` to resolve `FileDiffEntry.relativePath` into a real file URL; this is passed from `ThreadListViewController+SidebarActions.refreshDiffPanel(for:)`.
+- File entries from `parseDiffEntries` are sorted by `FileWorkingStatus.sortOrder` (untracked 0 → unstaged 1 → staged 2 → committed 3), then alphabetically by `relativePath` within each group. This applies to all views: commit detail, uncommitted, and ALL CHANGES.
 - `GitService` diff/status commands force `core.quotePath=false` so sidebar entries use stable, unquoted relative paths even when filenames contain spaces or other characters Git would C-escape by default.
 - Opening files uses `NSWorkspace.shared.open(url)`.
 - Revealing files in Finder uses `NSWorkspace.shared.activateFileViewerSelecting([url])`.
