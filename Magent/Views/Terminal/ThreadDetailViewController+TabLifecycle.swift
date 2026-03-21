@@ -369,27 +369,41 @@ extension ThreadDetailViewController {
     @MainActor
     func ensureSessionPrepared(
         sessionName: String,
+        forceRevalidate: Bool = false,
         onAction: (@MainActor @Sendable (ThreadManager.SessionRecreationAction?) -> Void)? = nil
     ) async -> Bool {
-        if preparedSessions.contains(sessionName) { return false }
+        if preparedSessions.contains(sessionName), !forceRevalidate { return false }
+
+        if forceRevalidate, let existingTask = sessionPreparationTasks[sessionName] {
+            existingTask.cancel()
+            sessionPreparationTasks.removeValue(forKey: sessionName)
+            sessionPreparationTaskTokens.removeValue(forKey: sessionName)
+        }
 
         if let existingTask = sessionPreparationTasks[sessionName] {
             return await existingTask.value
         }
 
+        let taskToken = UUID()
         let task = Task { [weak self] in
             guard let self else { return false }
+            let latestThread = self.threadManager.threads.first(where: { $0.id == self.thread.id }) ?? self.thread
             return await self.threadManager.recreateSessionIfNeeded(
                 sessionName: sessionName,
-                thread: self.thread,
+                thread: latestThread,
                 onAction: onAction
             )
         }
         sessionPreparationTasks[sessionName] = task
+        sessionPreparationTaskTokens[sessionName] = taskToken
         let recreated = await task.value
 
+        guard sessionPreparationTaskTokens[sessionName] == taskToken else {
+            return recreated
+        }
         preparedSessions.insert(sessionName)
         sessionPreparationTasks.removeValue(forKey: sessionName)
+        sessionPreparationTaskTokens.removeValue(forKey: sessionName)
         return recreated
     }
 

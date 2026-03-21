@@ -167,6 +167,7 @@ final class ThreadDetailViewController: NSViewController {
     var pendingPromptBannerTopConstraint: NSLayoutConstraint?
     var preparedSessions: Set<String> = []
     var sessionPreparationTasks: [String: Task<Bool, Never>] = [:]
+    var sessionPreparationTaskTokens: [String: UUID] = [:]
     var backgroundSessionPreparationTask: Task<Void, Never>?
     var startupOverlayRequiredSessions: Set<String> = []
     var emptyStateView: NSView?
@@ -647,6 +648,7 @@ final class ThreadDetailViewController: NSViewController {
             preparedSessions.removeAll()
             sessionPreparationTasks.values.forEach { $0.cancel() }
             sessionPreparationTasks.removeAll()
+            sessionPreparationTaskTokens.removeAll()
             backgroundSessionPreparationTask?.cancel()
             backgroundSessionPreparationTask = nil
 
@@ -768,6 +770,7 @@ final class ThreadDetailViewController: NSViewController {
 
     func makeTerminalView(for sessionName: String) -> TerminalSurfaceView {
         let reuseKey = terminalReuseKey(for: sessionName)
+        let resolvedThread = latestThreadSnapshot()
         let view: TerminalSurfaceView
         if let cachedView = ReusableTerminalViewCache.shared.take(
             sessionName: sessionName,
@@ -777,12 +780,23 @@ final class ThreadDetailViewController: NSViewController {
         } else {
             let tmuxCommand = buildTmuxCommand(for: sessionName)
             view = TerminalSurfaceView(
-                workingDirectory: thread.worktreePath,
+                workingDirectory: resolvedThread.worktreePath,
                 command: tmuxCommand
             )
         }
         configureTerminalViewHandlers(view, sessionName: sessionName)
         return view
+    }
+
+    func rebuildDetachedTerminalView(for sessionName: String) {
+        guard let termIdx = thread.tmuxSessionNames.firstIndex(of: sessionName),
+              termIdx < terminalViews.count else { return }
+
+        let existingView = terminalViews[termIdx]
+        guard existingView.superview == nil else { return }
+
+        ReusableTerminalViewCache.shared.remove(sessionName: sessionName)
+        terminalViews[termIdx] = makeTerminalView(for: sessionName)
     }
 
     private func configureTerminalViewHandlers(_ view: TerminalSurfaceView, sessionName: String) {
@@ -810,20 +824,26 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     private func terminalReuseKey(for sessionName: String) -> String {
+        let resolvedThread = latestThreadSnapshot()
         let tmuxCommand = buildTmuxCommand(for: sessionName)
-        return "\(thread.worktreePath)\n\(tmuxCommand)"
+        return "\(resolvedThread.worktreePath)\n\(tmuxCommand)"
+    }
+
+    private func latestThreadSnapshot() -> MagentThread {
+        threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
     }
 
     private func buildTmuxCommand(for sessionName: String) -> String {
+        let resolvedThread = latestThreadSnapshot()
         let settings = PersistenceService.shared.loadSettings()
-        let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
-        let selectedAgentType = threadManager.agentType(for: thread, sessionName: sessionName)
+        let isAgentSession = resolvedThread.agentTmuxSessions.contains(sessionName)
+        let selectedAgentType = threadManager.agentType(for: resolvedThread, sessionName: sessionName)
 
-        let project = settings.projects.first(where: { $0.id == thread.projectId })
+        let project = settings.projects.first(where: { $0.id == resolvedThread.projectId })
         let projectName = project?.name ?? "project"
-        let wd = thread.worktreePath
+        let wd = resolvedThread.worktreePath
         let projectPath: String
-        if thread.isMain {
+        if resolvedThread.isMain {
             projectPath = wd
         } else {
             projectPath = project?.repoPath ?? wd
@@ -833,11 +853,11 @@ final class ThreadDetailViewController: NSViewController {
             "export MAGENT_PROJECT_PATH=\(projectPath)",
             "export MAGENT_PROJECT_NAME=\(projectName)",
         ]
-        if thread.isMain {
+        if resolvedThread.isMain {
             envParts.append("export MAGENT_WORKTREE_NAME=main")
         } else {
             envParts.append("export MAGENT_WORKTREE_PATH=\(wd)")
-            envParts.append("export MAGENT_WORKTREE_NAME=\(thread.name)")
+            envParts.append("export MAGENT_WORKTREE_NAME=\(resolvedThread.name)")
         }
         let envExports = envParts.joined(separator: " && ")
 
@@ -845,10 +865,10 @@ final class ThreadDetailViewController: NSViewController {
 
         let startCmd: String
         if isAgentSession, let selectedAgentType {
-            let resumeSessionID = thread.sessionConversationIDs[sessionName]
+            let resumeSessionID = resolvedThread.sessionConversationIDs[sessionName]
             startCmd = threadManager.agentStartCommand(
                 settings: settings,
-                projectId: thread.projectId,
+                projectId: resolvedThread.projectId,
                 agentType: selectedAgentType,
                 envExports: envExportsWithSocket,
                 workingDirectory: wd,

@@ -68,7 +68,10 @@ extension ThreadDetailViewController {
     }
 
     private func selectTerminalTab(at index: Int, sessionName: String) {
-        guard preparedSessions.contains(sessionName) else {
+        let needsLazyAttachRevalidation = preparedSessions.contains(sessionName)
+            && terminalView(forSession: sessionName)?.superview == nil
+
+        guard preparedSessions.contains(sessionName) && !needsLazyAttachRevalidation else {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 // Hide current terminal/web content so the old tab doesn't show through.
@@ -80,17 +83,23 @@ extension ThreadDetailViewController {
                     sessionName: sessionName
                 )
                 self.startLoadingOverlayTracking(sessionName: sessionName, agentType: sessionAgentType)
-                let recreated = await self.ensureSessionPrepared(sessionName: sessionName) { [weak self] action in
+                let recreated = await self.ensureSessionPrepared(
+                    sessionName: sessionName,
+                    forceRevalidate: needsLazyAttachRevalidation
+                ) { [weak self] action in
                     guard let self,
                           sessionName == self.loadingOverlaySessionName else { return }
                     self.updateLoadingOverlayDetail(action?.loadingOverlayDetail)
+                }
+                if needsLazyAttachRevalidation {
+                    self.rebuildDetachedTerminalView(for: sessionName)
                 }
                 // Re-resolve display index (may have shifted — tab may have been closed).
                 guard let currentDisplayIndex = self.displayIndex(forSession: sessionName) else {
                     self.dismissLoadingOverlay()
                     // Tab was removed while preparing; fall back to the nearest valid tab.
                     if !self.tabSlots.isEmpty {
-                        self.selectTab(at: max(0, (self.currentTabIndex ?? 1) - 1))
+                        self.selectTab(at: max(0, self.currentTabIndex - 1))
                     }
                     return
                 }
