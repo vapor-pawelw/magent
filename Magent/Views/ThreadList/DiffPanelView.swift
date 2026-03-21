@@ -19,10 +19,13 @@ private final class DiffPanelResizeHandle: NSView {
 
 private final class DiffFileRowView: NSView {
     let filePath: String
+    var workingStatus: FileWorkingStatus = .committed
     var onClick: ((String) -> Void)?
     var onSecondaryClick: ((String) -> Void)?
     var onDoubleClick: ((String) -> Void)?
     var onShowInFinder: ((String) -> Void)?
+    var onCopyFilename: ((String) -> Void)?
+    var onStageToggle: ((String) -> Void)?
 
     var isFileSelected: Bool = false {
         didSet {
@@ -56,15 +59,38 @@ private final class DiffFileRowView: NSView {
         onSecondaryClick?(filePath)
 
         let menu = NSMenu()
+
+        let copyItem = NSMenuItem(title: "Copy Filename", action: #selector(copyFilenameToPasteboard), keyEquivalent: "")
+        copyItem.target = self
+        menu.addItem(copyItem)
+
         let finderItem = NSMenuItem(title: "Show in Finder", action: #selector(showInFinderFromMenu(_:)), keyEquivalent: "")
         finderItem.target = self
         finderItem.image = OpenActionIcons.finderIcon(size: 16)
         menu.addItem(finderItem)
+
+        if workingStatus != .committed {
+            menu.addItem(.separator())
+            let stageTitle = workingStatus == .staged ? "Unstage" : "Stage"
+            let stageItem = NSMenuItem(title: stageTitle, action: #selector(stageToggleFromMenu), keyEquivalent: "")
+            stageItem.target = self
+            menu.addItem(stageItem)
+        }
+
         return menu
+    }
+
+    @objc private func copyFilenameToPasteboard() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(filePath, forType: .string)
     }
 
     @objc private func showInFinderFromMenu(_ sender: NSMenuItem) {
         onShowInFinder?(filePath)
+    }
+
+    @objc private func stageToggleFromMenu() {
+        onStageToggle?(filePath)
     }
 }
 
@@ -634,6 +660,21 @@ final class DiffPanelView: NSView {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
+    // MARK: - Stage / Unstage
+
+    private func toggleStage(path: String, currentStatus: FileWorkingStatus) {
+        guard let worktreePath else { return }
+        Task {
+            let gitService = GitService.shared
+            if currentStatus == .staged {
+                await gitService.unstageFile(worktreePath: worktreePath, relativePath: path)
+            } else {
+                await gitService.stageFile(worktreePath: worktreePath, relativePath: path)
+            }
+            onRefreshRequested?()
+        }
+    }
+
     // MARK: - Commit Selection
 
     private func selectCommit(_ hash: String?) {
@@ -1049,6 +1090,7 @@ final class DiffPanelView: NSView {
 
     private func makeEntryRow(_ entry: FileDiffEntry) -> NSView {
         let container = DiffFileRowView(filePath: entry.relativePath)
+        container.workingStatus = entry.workingStatus
         container.translatesAutoresizingMaskIntoConstraints = false
         let isDirectory = isDirectoryPath(entry.relativePath)
         if isDirectory {
@@ -1075,14 +1117,41 @@ final class DiffPanelView: NSView {
         container.onShowInFinder = { [weak self] path in
             self?.showFileInFinder(path)
         }
+        container.onStageToggle = { [weak self] path in
+            self?.toggleStage(path: path, currentStatus: entry.workingStatus)
+        }
 
         let displayPath = entry.relativePath.hasSuffix("/") ? String(entry.relativePath.dropLast()) : entry.relativePath
         let basename = (displayPath as NSString).lastPathComponent
         let filename = isDirectory ? "\(basename)/" : basename
-        let nameLabel = NSTextField(labelWithString: filename)
-        nameLabel.font = .systemFont(ofSize: 11)
-        nameLabel.textColor = colorForStatus(entry.workingStatus)
-        nameLabel.lineBreakMode = .byTruncatingHead
+        let dirPath = (displayPath as NSString).deletingLastPathComponent
+        let nameLabel = NSTextField(labelWithString: "")
+        nameLabel.allowsDefaultTighteningForTruncation = false
+
+        let attributed = NSMutableAttributedString()
+        attributed.append(NSAttributedString(
+            string: filename,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: colorForStatus(entry.workingStatus),
+            ]
+        ))
+        if !dirPath.isEmpty && !isDirectory {
+            var truncatedDir = dirPath
+            let maxDirChars = max(0, 50 - filename.count)
+            if truncatedDir.count > maxDirChars {
+                truncatedDir = "…" + truncatedDir.suffix(max(0, maxDirChars - 1))
+            }
+            attributed.append(NSAttributedString(
+                string: "  " + truncatedDir,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 10),
+                    .foregroundColor: NSColor(resource: .textSecondary).withAlphaComponent(0.7),
+                ]
+            ))
+        }
+        nameLabel.attributedStringValue = attributed
+        nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
         let pathTooltip = fullPathTooltip(for: entry.relativePath)
         nameLabel.toolTip = pathTooltip
