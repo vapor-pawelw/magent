@@ -72,6 +72,7 @@ private final class DiffFileRowView: NSView {
 
 private final class CommitRowView: NSView {
     let commitHash: String
+    var commitMessage: String = ""
     var onClick: ((String) -> Void)?
     var onDoubleClick: ((String) -> Void)?
 
@@ -99,6 +100,31 @@ private final class CommitRowView: NSView {
         } else {
             onClick?(commitHash)
         }
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard commitHash != "__uncommitted__" else { return nil }
+        let menu = NSMenu()
+
+        let copyHash = NSMenuItem(title: "Copy Hash", action: #selector(copyHashToPasteboard), keyEquivalent: "")
+        copyHash.target = self
+        menu.addItem(copyHash)
+
+        let copyMessage = NSMenuItem(title: "Copy Message", action: #selector(copyMessageToPasteboard), keyEquivalent: "")
+        copyMessage.target = self
+        menu.addItem(copyMessage)
+
+        return menu
+    }
+
+    @objc private func copyHashToPasteboard() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(commitHash, forType: .string)
+    }
+
+    @objc private func copyMessageToPasteboard() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(commitMessage, forType: .string)
     }
 }
 
@@ -1152,6 +1178,7 @@ final class DiffPanelView: NSView {
 
     private func makeCommitRow(_ commit: BranchCommit) -> NSView {
         let container = CommitRowView(commitHash: commit.shortHash)
+        container.commitMessage = commit.subject
         container.translatesAutoresizingMaskIntoConstraints = false
         container.isSelected = (selectedCommitHash == commit.shortHash)
         container.onClick = { [weak self] hash in
