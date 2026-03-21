@@ -701,7 +701,8 @@ extension ThreadDetailViewController: NSMenuDelegate {
         case .projectDefault:
             addTab(using: nil, useAgentCommand: true)
         case .web:
-            presentNewTabSheet()
+            let blankURL = URL(string: "about:blank")!
+            openWebTab(url: blankURL, identifier: "web:\(UUID().uuidString)", title: "Web")
         }
     }
 
