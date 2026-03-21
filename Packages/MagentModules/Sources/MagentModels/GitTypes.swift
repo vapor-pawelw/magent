@@ -158,6 +158,16 @@ public nonisolated enum FileWorkingStatus: Sendable {
     case staged      // staged changes
     case unstaged    // unstaged modifications
     case untracked   // untracked file
+
+    /// Sort priority: untracked (0) → unstaged (1) → staged (2) → committed (3).
+    public var sortOrder: Int {
+        switch self {
+        case .untracked: 0
+        case .unstaged: 1
+        case .staged: 2
+        case .committed: 3
+        }
+    }
 }
 
 public nonisolated struct FileDiffEntry: Sendable {
