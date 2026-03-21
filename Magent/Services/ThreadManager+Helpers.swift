@@ -285,6 +285,7 @@ extension ThreadManager {
         shouldSubmitInitialPrompt: Bool,
         agentType: AgentType?
     ) async {
+        clearMagentBusy(sessionName: sessionName)
         await MainActor.run {
             BannerManager.shared.show(
                 message: message,
@@ -311,6 +312,7 @@ extension ThreadManager {
         shouldSubmitInitialPrompt: Bool,
         agentType: AgentType?
     ) async {
+        clearMagentBusy(sessionName: sessionName)
         pendingPromptInjectionSessions.removeValue(forKey: sessionName)
         pendingPromptInjectionTasks.removeValue(forKey: sessionName)
         initialPromptInjectionFailuresBySession[sessionName] = InitialPromptInjectionFailureInfo(
@@ -416,7 +418,20 @@ extension ThreadManager {
         PendingInitialPromptStore.clearAfterInjection(fileURL: fileURL, sessionName: sessionName)
     }
 
+    /// Removes a session from `magentBusySessions` on the owning thread and
+    /// notifies the sidebar so the spinner can update.
+    func clearMagentBusy(sessionName: String) {
+        guard let idx = threads.firstIndex(where: {
+            $0.magentBusySessions.contains(sessionName)
+        }) else { return }
+        threads[idx].magentBusySessions.remove(sessionName)
+        Task { @MainActor in
+            self.delegate?.threadManager(self, didUpdateThreads: self.threads)
+        }
+    }
+
     private func postAgentKeysInjectedNotification(sessionName: String, includedInitialPrompt: Bool) {
+        clearMagentBusy(sessionName: sessionName)
         NotificationCenter.default.post(
             name: .magentAgentKeysInjected,
             object: nil,
@@ -430,7 +445,22 @@ extension ThreadManager {
     func injectAfterStart(sessionName: String, terminalCommand: String, agentContext: String, initialPrompt: String? = nil, shouldSubmitInitialPrompt: Bool = true, agentType: AgentType? = nil) {
         let prompt = initialPrompt.flatMap { $0.isEmpty ? nil : $0 }
         let hasPrompt = shouldSubmitInitialPrompt && prompt != nil
-        guard !terminalCommand.isEmpty || !agentContext.isEmpty || prompt != nil else { return }
+
+        // Mark session as magent-busy for the duration of injection/readiness detection.
+        // This ensures the sidebar shows a spinner even before the agent starts.
+        if let idx = threads.firstIndex(where: {
+            $0.tmuxSessionNames.contains(sessionName)
+        }), !threads[idx].magentBusySessions.contains(sessionName) {
+            threads[idx].magentBusySessions.insert(sessionName)
+            Task { @MainActor in
+                self.delegate?.threadManager(self, didUpdateThreads: self.threads)
+            }
+        }
+
+        guard !terminalCommand.isEmpty || !agentContext.isEmpty || prompt != nil else {
+            clearMagentBusy(sessionName: sessionName)
+            return
+        }
         NSLog("[injectAfterStart] session=\(sessionName) hasPrompt=\(hasPrompt) injectOnly=\(prompt != nil && !shouldSubmitInitialPrompt) hasTermCmd=\(!terminalCommand.isEmpty) agentType=\(agentType?.rawValue ?? "nil")")
 
         // Track pending prompt injection so the UI can show a "waiting" banner
@@ -472,7 +502,10 @@ extension ThreadManager {
                     agentType: agentType,
                     timeout: 30
                 )
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    self.clearMagentBusy(sessionName: sessionName)
+                    return
+                }
                 if !promptReady {
                     await postInitialPromptInjectionFailure(
                         sessionName: sessionName,
@@ -508,7 +541,10 @@ extension ThreadManager {
                     agentType: agentType,
                     timeout: 30
                 )
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    self.clearMagentBusy(sessionName: sessionName)
+                    return
+                }
                 if !promptReady {
                     await postInitialPromptInjectionFailure(
                         sessionName: sessionName,
@@ -1027,6 +1063,19 @@ extension ThreadManager {
             changed = true
         }
 
+        // Re-key magentBusySessions — filter against all tmux sessions (not just agent ones)
+        // since magent busy applies to any session during injection/setup.
+        let validAllSessions = Set(threads[index].tmuxSessionNames)
+        let remappedMagentBusy = Set(
+            threads[index].magentBusySessions
+                .map { sessionRenameMap[$0] ?? $0 }
+                .filter { validAllSessions.contains($0) || $0 == MagentThread.threadSetupSentinel }
+        )
+        if remappedMagentBusy != threads[index].magentBusySessions {
+            threads[index].magentBusySessions = remappedMagentBusy
+            changed = true
+        }
+
         // Keep notification dedup state aligned with waiting sessions after rename.
         let renamedTargets = Set(sessionRenameMap.values)
         for (oldName, newName) in sessionRenameMap where notifiedWaitingSessions.remove(oldName) != nil {
@@ -1064,6 +1113,15 @@ extension ThreadManager {
                 notifiedWaitingSessions.remove(session)
             }
             threads[index].waitingForInputSessions = prunedWaiting
+            changed = true
+        }
+
+        // Prune magentBusySessions against all known tmux sessions + the setup sentinel.
+        let validMagentTargets = Set(threads[index].tmuxSessionNames)
+            .union([MagentThread.threadSetupSentinel])
+        let prunedMagentBusy = threads[index].magentBusySessions.intersection(validMagentTargets)
+        if prunedMagentBusy != threads[index].magentBusySessions {
+            threads[index].magentBusySessions = prunedMagentBusy
             changed = true
         }
 

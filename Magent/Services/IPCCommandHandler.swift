@@ -807,7 +807,7 @@ final class IPCCommandHandler {
 
     func makeThreadStatus(for thread: MagentThread) -> IPCThreadStatus {
         IPCThreadStatus(
-            isBusy: thread.hasAgentBusy,
+            isBusy: thread.isAnyBusy,
             isWaitingForInput: thread.hasWaitingForInput,
             hasUnreadCompletion: thread.hasUnreadAgentCompletion,
             isDirty: thread.isDirty,

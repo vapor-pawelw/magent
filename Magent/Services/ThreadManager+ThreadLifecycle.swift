@@ -94,7 +94,9 @@ extension ThreadManager {
             sectionId: requestedSectionId ?? settings.defaultSection(for: project.id)?.id
         )
         pendingThreadIds.insert(threadID)
-        threads.append(pendingThread)
+        var pendingThreadWithBusy = pendingThread
+        pendingThreadWithBusy.magentBusySessions.insert(MagentThread.threadSetupSentinel)
+        threads.append(pendingThreadWithBusy)
         if let lastIndex = threads.indices.last {
             placeThreadAtBottomOfSidebarGroup(threadId: threads[lastIndex].id)
         }
@@ -254,6 +256,10 @@ extension ThreadManager {
             pendingThreadIds.remove(threadID)
             if let idx = threads.firstIndex(where: { $0.id == threadID }) {
                 threads[idx] = thread
+                // Transition magent busy from thread-setup sentinel to session-level busy.
+                // The session stays magent-busy until injectAfterStart completes (prompt
+                // injection or agent-readiness detection for non-prompt threads).
+                threads[idx].magentBusySessions = [tmuxSessionName]
             }
 
             try persistence.saveActiveThreads(threads)
@@ -389,11 +395,13 @@ extension ThreadManager {
             customTabNames: [tmuxSessionName: firstTabDisplayName]
         )
 
-        // Insert main threads at front
-        threads.insert(thread, at: 0)
+        // Insert main threads at front — mark magent busy until injection/readiness completes.
+        var busyThread = thread
+        busyThread.magentBusySessions.insert(tmuxSessionName)
+        threads.insert(busyThread, at: 0)
         try persistence.saveActiveThreads(threads)
         await MainActor.run {
-            delegate?.threadManager(self, didCreateThread: thread)
+            delegate?.threadManager(self, didCreateThread: busyThread)
         }
 
         // Inject terminal command and agent context

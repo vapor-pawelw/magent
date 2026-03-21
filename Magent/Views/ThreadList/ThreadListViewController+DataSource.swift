@@ -378,7 +378,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if let thread = item as? MagentThread {
             rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion
             rowView.showsSubtleBottomSeparator = false
-            rowView.showsBusyShimmer = thread.hasAgentBusy
+            rowView.showsBusyShimmer = thread.isAnyBusy
             rowView.showsArchivingOverlay = thread.isArchiving
         } else {
             rowView.showsCompletionHighlight = false
@@ -871,7 +871,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
                 cell.configureAsMain(
                     isUnreadCompletion: thread.hasUnreadAgentCompletion,
-                    isBusy: thread.hasAgentBusy,
+                    isBusy: thread.isAnyBusy,
                     isWaitingForInput: thread.hasWaitingForInput,
                     isDirty: thread.isDirty,
                     isBlockedByRateLimit: thread.isBlockedByRateLimit,

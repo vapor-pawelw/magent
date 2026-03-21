@@ -234,6 +234,10 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     // Transient (not persisted) — tracks which agent sessions are currently working
     public var busySessions: Set<String> = []
+    // Transient (not persisted) — tracks Magent-driven setup/injection work.
+    // Uses tmux session names for per-session injection, and the sentinel
+    // `MagentThread.threadSetupSentinel` for thread-level creation busy.
+    public var magentBusySessions: Set<String> = []
     // Transient (not persisted) — tracks which agent sessions are waiting for user input
     public var waitingForInputSessions: Set<String> = []
     // Transient (not persisted) — tracks whether worktree has uncommitted/untracked changes
@@ -313,8 +317,21 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         return .visible
     }
 
+    /// Sentinel value inserted into `magentBusySessions` during thread creation (phase 2),
+    /// before any tmux session name is available.
+    public static let threadSetupSentinel = "__magent_thread_setup__"
+
     public var hasAgentBusy: Bool {
         !busySessions.isEmpty
+    }
+
+    public var hasMagentBusy: Bool {
+        !magentBusySessions.isEmpty
+    }
+
+    /// True when either the agent or Magent itself is doing work on this thread.
+    public var isAnyBusy: Bool {
+        hasAgentBusy || hasMagentBusy
     }
 
     public var hasWaitingForInput: Bool {
@@ -322,7 +339,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     }
 
     public var showArchiveSuggestion: Bool {
-        return hasEverDoneWork && isFullyDelivered && !isDirty && !hasAgentBusy && !hasWaitingForInput
+        return hasEverDoneWork && isFullyDelivered && !isDirty && !isAnyBusy && !hasWaitingForInput
     }
 
     /// True only when every tab in the thread currently reports an active rate-limit message.

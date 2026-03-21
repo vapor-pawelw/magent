@@ -641,10 +641,12 @@ final class ThreadCell: NSTableCellView {
             completionImageView?.contentTintColor = .systemYellow
             completionImageView?.toolTip = "Agent needs input"
             completionImageView?.isHidden = false
-        } else if thread.hasAgentBusy {
+        } else if thread.isAnyBusy {
             busySpinner?.isHidden = false
             busySpinner?.startAnimation(nil)
-            busySpinner?.toolTip = "Agent working"
+            busySpinner?.toolTip = thread.hasMagentBusy && !thread.hasAgentBusy
+                ? "Setting up..."
+                : "Agent working"
             rateLimitImageView?.image = nil
             rateLimitImageView?.toolTip = nil
             rateLimitImageView?.isHidden = true
@@ -871,8 +873,8 @@ final class ThreadCell: NSTableCellView {
             }
         } else if thread.hasWaitingForInput {
             statuses.append("Waiting for input")
-        } else if thread.hasAgentBusy {
-            statuses.append("Agent busy")
+        } else if thread.isAnyBusy {
+            statuses.append(thread.hasMagentBusy && !thread.hasAgentBusy ? "Setting up" : "Agent busy")
         } else if thread.hasUnreadAgentCompletion {
             statuses.append("Agent completed")
         }
