@@ -642,6 +642,12 @@ extension ThreadListViewController {
                 menu.addItem(item)
             }
 
+            menu.addItem(NSMenuItem.separator())
+            let otherItem = NSMenuItem(title: "Other…", action: #selector(self.baseBranchOtherSelected(_:)), keyEquivalent: "")
+            otherItem.target = self
+            otherItem.representedObject = threadId
+            menu.addItem(otherItem)
+
             menu.popUp(positioning: nil, at: NSPoint(x: 0, y: anchorView.bounds.height), in: anchorView)
         }
     }
@@ -651,6 +657,60 @@ extension ThreadListViewController {
               let thread = selectedThreadFromState() else { return }
         threadManager.setBaseBranch(branch, for: thread.id)
         refreshDiffPanel(for: thread)
+    }
+
+    @objc private func baseBranchOtherSelected(_ sender: NSMenuItem) {
+        guard let threadId = sender.representedObject as? UUID,
+              let thread = threadManager.threads.first(where: { $0.id == threadId }) else { return }
+        let currentBase = threadManager.resolveBaseBranch(for: thread)
+
+        Task { @MainActor in
+            // Fetch all branches for combo box suggestions
+            let repoPath = thread.worktreePath
+            let localBranches = await GitService.shared.listBranchesByDate(repoPath: repoPath)
+            let remoteBranches = await GitService.shared.listRemoteBranchesByDate(repoPath: repoPath)
+
+            // Merge local + remote (strip origin/ for display), deduplicate, preserve order
+            var seen = Set<String>()
+            var allBranches: [String] = []
+            for branch in localBranches {
+                if seen.insert(branch).inserted {
+                    allBranches.append(branch)
+                }
+            }
+            for branch in remoteBranches {
+                let name = branch.hasPrefix("origin/") ? String(branch.dropFirst(7)) : branch
+                if seen.insert(name).inserted {
+                    allBranches.append(name)
+                }
+            }
+
+            let alert = NSAlert()
+            alert.messageText = "Set Target Branch"
+            alert.informativeText = "Type a branch name or choose from the list:"
+            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: "Cancel")
+
+            let comboBox = NSComboBox(frame: NSRect(x: 0, y: 0, width: 280, height: 26))
+            comboBox.isEditable = true
+            comboBox.completes = true
+            comboBox.stringValue = currentBase.hasPrefix("origin/") ? String(currentBase.dropFirst(7)) : currentBase
+            comboBox.addItems(withObjectValues: allBranches)
+            comboBox.numberOfVisibleItems = 12
+            alert.accessoryView = comboBox
+
+            // Make combo box first responder so user can type immediately
+            alert.window.initialFirstResponder = comboBox
+
+            let response = alert.runModal()
+            guard response == .alertFirstButtonReturn else { return }
+
+            let entered = comboBox.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !entered.isEmpty else { return }
+
+            threadManager.setBaseBranch(entered, for: thread.id)
+            refreshDiffPanel(for: thread)
+        }
     }
 
     func refreshDiffPanel(for thread: MagentThread, resetPagination: Bool = true, preserveSelection: Bool = false) {

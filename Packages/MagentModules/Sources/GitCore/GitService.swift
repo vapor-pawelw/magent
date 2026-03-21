@@ -472,6 +472,19 @@ public final class GitService: Sendable {
             .filter { !$0.isEmpty }
     }
 
+    /// Returns all remote branch names (with `origin/` prefix stripped) sorted by most-recent committer date.
+    public func listRemoteBranchesByDate(repoPath: String) async -> [String] {
+        let result = await ShellExecutor.execute(
+            "git for-each-ref --sort=-committerdate --format='%(refname:short)' refs/remotes/origin/",
+            workingDirectory: repoPath
+        )
+        guard result.exitCode == 0 else { return [] }
+        return result.stdout
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0 != "origin/HEAD" }
+    }
+
     /// Returns `true` when all commits on HEAD are present in `baseBranch` (via merge,
     /// fast-forward, or cherry-pick). Callers must guard against fresh/empty branches using
     /// `MagentThread.hasEverDoneWork` before calling this — an empty `baseBranch..HEAD` log

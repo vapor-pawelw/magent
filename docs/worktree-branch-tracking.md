@@ -34,6 +34,8 @@ Base branch is no longer stored as a fixed string per thread. Instead, `GitServi
 
 The changes panel footer shows branch info on two lines: the current branch on line 1, and `⤷ <base>` on line 2 where `<base>` is a clickable button. All `origin/` prefixes are stripped for display (both in the footer and in the branch selection menu); internal values retain the full ref. Clicking the base branch button opens a menu of ancestor branches (produced by `GitService.listAncestorBranches`). The menu is listed with the farthest ancestor at the top and the closest at the bottom, matching the upward pop direction from the bottom-left anchor. The current base is check-marked. Selecting a different branch writes it into `WorktreeMetadata.detectedBaseBranch` via `ThreadManager.setBaseBranch(_:for:)`, which immediately updates the diff panel.
 
+The menu always includes an "Other…" item (below a separator) that opens an alert with an `NSComboBox` pre-filled with the current base branch. The combo box lists all local and remote branches sorted by most-recent committer date, with auto-completion enabled. This serves as a fallback when the desired target branch is not in the ancestor list.
+
 `listAncestorBranches` scopes its search to `merge-base(HEAD, defaultBranch)..HEAD` — only branches whose remote refs appear on commits between the fork point and HEAD are listed. The default branch (`origin/main` or equivalent) is always appended as the last option even when its tip has diverged from the merge-base commit. This prevents unrelated historical branches (merged into main long ago) from cluttering the picker.
 
 ### PR/MR Target Branch Mismatch
