@@ -1074,6 +1074,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     func textDidChange(_ notification: Notification) {
+        // Clear URL validation error when the user types
+        if currentMode == "web", promptLabel?.textColor == .systemRed {
+            promptLabel?.stringValue = promptLabelText
+            promptLabel?.textColor = .labelColor
+        }
         persistDraft()
     }
 
@@ -1189,6 +1194,22 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let rawTitle = config.showTitleField
             ? titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
+
+        // Validate URL when Web is selected — block submission on empty or unparseable input.
+        if case .web = item {
+            let normalizedURL: URL? = {
+                guard !rawPrompt.isEmpty else { return nil }
+                if let parsed = URL(string: rawPrompt), parsed.scheme != nil { return parsed }
+                return URL(string: "https://\(rawPrompt)")
+            }()
+            guard normalizedURL != nil else {
+                NSSound.beep()
+                promptLabel?.stringValue = rawPrompt.isEmpty ? "Initial URL (required)" : "Initial URL (invalid)"
+                promptLabel?.textColor = .systemRed
+                window?.makeFirstResponder(promptTextView)
+                return
+            }
+        }
 
         // Validate base branch exists before proceeding
         if config.showDescriptionAndBranchFields, let repoPath = resolvedRepoPath() {
