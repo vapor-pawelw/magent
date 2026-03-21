@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Agents
 - When a thread starts with a pre-injected prompt, a "Prompt will be injected once the agent is ready" info banner now appears immediately with an "Inject Now" button to bypass polling. The banner disappears automatically once injection succeeds, or is replaced by the failure banner if injection times out.
+- Fixed another startup prompt-injection timeout on tall panes by widening the tmux readiness capture window before trimming blank filler lines, so newly started agents are less likely to miss a visible input prompt.
 
 ### Settings
 - Added a read-only Keyboard Shortcuts reference card to General settings showing all app keybinds.

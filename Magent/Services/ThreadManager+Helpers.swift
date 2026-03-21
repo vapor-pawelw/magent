@@ -4,6 +4,9 @@ import UserNotifications
 import MagentCore
 
 extension ThreadManager {
+    private static let agentPromptCaptureLines = 120
+    private static let agentPromptTimeoutLogLines = 8
+    private static let recentPromptDetectionLines = 12
 
     // MARK: - Session Environment
 
@@ -88,9 +91,15 @@ extension ThreadManager {
         while Date() < deadline {
             let content: String?
             if needsAnsi {
-                content = await tmux.capturePaneWithEscapes(sessionName: sessionName, lastLines: 30)
+                content = await tmux.capturePaneWithEscapes(
+                    sessionName: sessionName,
+                    lastLines: Self.agentPromptCaptureLines
+                )
             } else {
-                content = await tmux.capturePane(sessionName: sessionName, lastLines: 30)
+                content = await tmux.capturePane(
+                    sessionName: sessionName,
+                    lastLines: Self.agentPromptCaptureLines
+                )
             }
             if let content, isAgentPromptReady(content, agentType: agentType) {
                 return true
@@ -98,8 +107,18 @@ extension ThreadManager {
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         }
         // Log final pane state on timeout for diagnostics
-        let finalContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? "<nil>"
-        let finalLines = finalContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).suffix(5).map { $0.trimmingCharacters(in: .whitespaces) }
+        let finalContent = await tmux.capturePane(
+            sessionName: sessionName,
+            lastLines: Self.agentPromptCaptureLines
+        ) ?? "<nil>"
+        let finalLines = finalContent
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .map(String.init)
+            .reversed()
+            .drop(while: { $0.trimmingCharacters(in: .whitespaces).isEmpty })
+            .reversed()
+            .suffix(Self.agentPromptTimeoutLogLines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
         NSLog("[waitForAgentPrompt] TIMEOUT session=\(sessionName) agentType=\(agentType?.rawValue ?? "nil") finalLines=\(finalLines)")
         return false
     }
@@ -170,7 +189,7 @@ extension ThreadManager {
     ) -> Bool {
         let recentLines = latestScopedPaneLines(from: paneContent, agentType: agentType)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .suffix(12)
+            .suffix(Self.recentPromptDetectionLines)
         guard !recentLines.isEmpty else { return false }
         let bareMarker = String(marker)
         return recentLines.contains { line in
