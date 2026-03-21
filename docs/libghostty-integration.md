@@ -289,23 +289,30 @@ The `void*` is the **app**'s userdata (i.e. `GhosttyAppManager`) — **there is 
 
 When a tab is closed via the IPC path (`magent-cli close-tab` → `IPCCommandHandler` → `threadManager.removeTab`), the tmux session is killed by the model layer — **`removeFromSuperview()` is never called on the `TerminalSurfaceView`**. Without `removeFromSuperview`, `viewDidMoveToWindow(nil)` never fires, `destroySurface()` is never called, and `ghostty_surface_free` is never called. `CVDisplayLink` continues firing `ghostty_app_tick` against the zombie surface, causing a crash.
 
-### Fix: magentTabWillClose notification
+### Fix: magentTabWillClose notification — must fire BEFORE killSession
 
-`removeTabBySessionName` (which is `@MainActor`) posts `.magentTabWillClose` **before** mutating the model:
+`removeTabBySessionName` (which is `@MainActor`) posts `.magentTabWillClose` **before** calling `tmux.killSession()`:
 ```swift
+// 1. Destroy surface synchronously (no await yet)
 NotificationCenter.default.post(
     name: .magentTabWillClose,
     object: nil,
     userInfo: ["threadId": threadId, "sessionName": sessionName]
 )
+// 2. Now safe to kill the tmux session (async, suspends MainActor)
+try? await tmux.killSession(name: sessionName)
 ```
-Because `removeTabBySessionName` is `@MainActor`, this notification fires **synchronously** — `ThreadDetailViewController.handleTabWillCloseNotification` runs to completion (calling `removeFromSuperview()` → `destroySurface()` → `ghostty_surface_free`) before model mutation resumes.
+Because `NotificationCenter.post` is synchronous, `ThreadDetailViewController.handleTabWillCloseNotification` runs to completion (calling `removeFromSuperview()` → `destroySurface()` → `ghostty_surface_free`) before any `await` suspension point.
+
+**Why ordering matters**: `killSession` is `async` and suspends the MainActor. While suspended, the terminal process exits and `DispatchQueue.main.async` callbacks (including display-link ticks → `ghostty_app_tick`) can run. If the surface hasn't been freed yet, the tick crashes on the zombie surface. Posting the notification before the first `await` ensures the surface is destroyed while still holding the MainActor synchronously.
+
+**Post-await re-resolution**: After `killSession` returns, the thread array may have shifted (concurrent closes, archive, etc.). The method re-resolves the thread by ID (`threads.firstIndex(where: { $0.id == closingThreadId })`) instead of using the stale pre-await index.
 
 This pattern works for both paths:
 - **GUI path** (`closeTab(at:)` → `removeTab`): notification fires synchronously and handles all UI cleanup. The `Task` completion block only syncs the local `thread` copy.
 - **IPC path** (`IPCCommandHandler.closeTab` → `removeTab`): notification fires synchronously and is the only cleanup trigger — no UI code in the IPC call chain.
 
-**Rule**: Any code path that kills a tmux session (and thus kills the process inside a Ghostty surface) must ensure `ghostty_surface_free` is called before the next `ghostty_app_tick`. The correct way is to call `removeFromSuperview()` on the `TerminalSurfaceView` before or immediately after killing the session. The `magentTabWillClose` notification exists precisely for code paths that don't have direct access to the view hierarchy.
+**Rule**: Any code path that kills a tmux session (and thus kills the process inside a Ghostty surface) must ensure `ghostty_surface_free` is called **before the first `await`** in the same `@MainActor` method. The `magentTabWillClose` notification exists precisely for code paths that don't have direct access to the view hierarchy.
 
 **Terminal-view cache gotcha:** removing a `TerminalSurfaceView` from the view hierarchy still leads to `viewDidMoveToWindow(nil)` and `destroySurface()`. Reattaching that same AppKit view later recreates a fresh Ghostty surface in `viewDidMoveToWindow(window != nil)`. Any terminal-view cache should therefore be described as wrapper/view reuse only; it does not preserve a live Ghostty surface across detachment.
 

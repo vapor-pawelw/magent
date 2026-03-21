@@ -323,21 +323,13 @@ extension ThreadManager {
     @MainActor
     private func removeTabBySessionName(threadIndex index: Int, sessionName: String) async throws {
         NSLog("[TabClose] removeTabBySessionName start: index=\(index) session=\(sessionName)")
-        try? await tmux.killSession(name: sessionName)
-        NSLog("[TabClose] removeTabBySessionName: killSession done")
 
-        // Guard re-checked after the async killSession suspension: another concurrent close
-        // might have shifted or removed indices while killSession was running.
-        guard index < threads.count else {
-            NSLog("[TabClose] removeTabBySessionName: index \(index) out of bounds (threads.count=\(threads.count)), returning")
-            return
-        }
-
-        // Notify the terminal detail view to remove the surface view immediately.
-        // This is critical for the IPC path (which never calls removeFromSuperview directly):
-        // without this, the Ghostty surface stays alive after the process dies, causing
-        // ghostty_app_tick to crash on the zombie surface.  The observer runs synchronously
-        // (same MainActor) so the view hierarchy is cleaned up before model state is mutated.
+        // Destroy the Ghostty surface BEFORE killing the tmux session.
+        // killSession is async and suspends the MainActor; while suspended, the terminal
+        // process exits and ghostty_app_tick can run on the freed MainActor, crashing on
+        // the zombie surface.  By posting the notification first, the observer
+        // (handleTabWillCloseNotification) runs synchronously on the MainActor, removing
+        // the surface view and calling ghostty_surface_free before any tick can see it.
         let closingThreadId = threads[index].id
         NotificationCenter.default.post(
             name: .magentTabWillClose,
@@ -345,21 +337,31 @@ extension ThreadManager {
             userInfo: ["threadId": closingThreadId, "sessionName": sessionName]
         )
 
+        try? await tmux.killSession(name: sessionName)
+        NSLog("[TabClose] removeTabBySessionName: killSession done")
+
+        // Re-resolve thread index by ID after the async suspension: another concurrent
+        // close might have shifted or removed indices while killSession was running.
+        guard let idx = threads.firstIndex(where: { $0.id == closingThreadId }) else {
+            NSLog("[TabClose] removeTabBySessionName: thread \(closingThreadId) gone after killSession, returning")
+            return
+        }
+
         // Also remove from pinned, agent, unread completion, waiting, and custom tab names if present
-        threads[index].pinnedTmuxSessions.removeAll { $0 == sessionName }
-        threads[index].agentTmuxSessions.removeAll { $0 == sessionName }
-        threads[index].sessionConversationIDs.removeValue(forKey: sessionName)
-        threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
-        threads[index].unreadCompletionSessions.remove(sessionName)
-        threads[index].busySessions.remove(sessionName)
-        threads[index].waitingForInputSessions.remove(sessionName)
-        threads[index].rateLimitedSessions.removeValue(forKey: sessionName)
+        threads[idx].pinnedTmuxSessions.removeAll { $0 == sessionName }
+        threads[idx].agentTmuxSessions.removeAll { $0 == sessionName }
+        threads[idx].sessionConversationIDs.removeValue(forKey: sessionName)
+        threads[idx].sessionAgentTypes.removeValue(forKey: sessionName)
+        threads[idx].unreadCompletionSessions.remove(sessionName)
+        threads[idx].busySessions.remove(sessionName)
+        threads[idx].waitingForInputSessions.remove(sessionName)
+        threads[idx].rateLimitedSessions.removeValue(forKey: sessionName)
         notifiedWaitingSessions.remove(sessionName)
-        threads[index].customTabNames.removeValue(forKey: sessionName)
-        threads[index].submittedPromptsBySession.removeValue(forKey: sessionName)
-        threads[index].tmuxSessionNames.removeAll { $0 == sessionName }
-        if threads[index].lastSelectedTmuxSessionName == sessionName {
-            threads[index].lastSelectedTmuxSessionName = threads[index].tmuxSessionNames.first
+        threads[idx].customTabNames.removeValue(forKey: sessionName)
+        threads[idx].submittedPromptsBySession.removeValue(forKey: sessionName)
+        threads[idx].tmuxSessionNames.removeAll { $0 == sessionName }
+        if threads[idx].lastSelectedTmuxSessionName == sessionName {
+            threads[idx].lastSelectedTmuxSessionName = threads[idx].tmuxSessionNames.first
         }
         NSLog("[TabClose] removeTabBySessionName: saving threads")
         try persistence.saveActiveThreads(threads)

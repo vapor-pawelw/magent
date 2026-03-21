@@ -877,16 +877,34 @@ final class ThreadDetailViewController: NSViewController {
     /// as an early-cleanup fast-path for the GUI path (where closeTab's MainActor.run block
     /// will subsequently find the index already gone and return via its bounds-guard).
     @objc private func handleTabWillCloseNotification(_ notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let threadId = userInfo["threadId"] as? UUID,
-              threadId == thread.id,
-              let sessionName = userInfo["sessionName"] as? String else { return }
+        guard let userInfo = notification.userInfo else {
+            NSLog("[TabClose] handleTabWillClose: missing userInfo")
+            return
+        }
+        guard let threadId = userInfo["threadId"] as? UUID else {
+            NSLog("[TabClose] handleTabWillClose: missing threadId in userInfo")
+            return
+        }
+        guard threadId == thread.id else {
+            NSLog("[TabClose] handleTabWillClose: ignoring notification for threadId=\(threadId), current thread=\(thread.id)")
+            return
+        }
+        guard let sessionName = userInfo["sessionName"] as? String else {
+            NSLog("[TabClose] handleTabWillClose: missing sessionName for threadId=\(threadId)")
+            return
+        }
 
         // Find display index via tabSlots.
-        guard let displayIndex = tabSlots.firstIndex(of: .terminal(sessionName: sessionName)) else { return }
+        guard let displayIndex = tabSlots.firstIndex(of: .terminal(sessionName: sessionName)) else {
+            NSLog("[TabClose] handleTabWillClose: session \(sessionName) missing from tabSlots for threadId=\(threadId)")
+            return
+        }
         // Find terminal array index.
         guard let termIdx = thread.tmuxSessionNames.firstIndex(of: sessionName),
-              termIdx < terminalViews.count else { return }
+              termIdx < terminalViews.count else {
+            NSLog("[TabClose] handleTabWillClose: session \(sessionName) missing from thread/terminalViews for threadId=\(threadId); tmuxSessions=\(thread.tmuxSessionNames.count) terminalViews=\(terminalViews.count)")
+            return
+        }
 
         GhosttyAppManager.log("handleTabWillClose: threadId=\(threadId) session=\(sessionName) displayIndex=\(displayIndex)")
 
