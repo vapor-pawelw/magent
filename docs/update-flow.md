@@ -3,6 +3,7 @@
 User-facing behavior:
 - `General` settings owns update preferences and actions: the launch-check checkbox, manual `Check for Updates Now`, and an `Update to <version>` button when a newer release has already been detected.
 - Launch-time update checks run only when `AppSettings.autoCheckForUpdates` is enabled.
+- When auto-check is enabled, Magent also polls for new versions every hour in the background. The poller starts/stops immediately when the setting is toggled mid-session. Periodic checks that find an available update only show the banner once per version per session to avoid clobbering unrelated banners.
 - In debug builds, the "Update available" banner is suppressed entirely. The update check still runs and populates `detectedUpdate` (so the Settings panel works), but `showAvailableUpdateBanner` returns early under `#if DEBUG`.
 - When no published release exists yet in `vapor-pawelw/magent-releases`, manual checks say there are no new releases instead of surfacing a raw GitHub `404`.
 - When a newer version is found, Magent shows a persistent dismissible banner with `Update Now`, `Skip this version`, and a collapsed-by-default `Show Changes` control.
@@ -33,8 +34,15 @@ What changed in this thread (magent-launch-crash):
 - Added a quarantine/provenance scrub step for updated app bundles before relaunch in both the direct bundle-replacement path and the Homebrew path.
 - This specifically avoids installs that appear broken until the user manually clears xattrs from `/Applications/Magent.app`.
 
+What changed in this thread (walrein):
+- Added hourly background polling via `startPeriodicUpdateChecks()` / `stopPeriodicUpdateChecks()` in `UpdateService`.
+- Periodic checks use a `.periodic` trigger that suppresses the update banner if it was already shown for that version this session (`shownUpdateBannerForVersion`), preventing banner clobbering.
+- Settings toggle calls `handleAutoCheckSettingChanged()` to immediately start/stop the poller.
+- Poller is started in `AppDelegate` after the initial launch check, gated by the setting. Stopped on `applicationWillTerminate`.
+
 Gotchas for future agents:
 - Do not switch back to GitHub's `/releases/latest` endpoint unless you also handle its `404`-when-empty behavior. An empty public release repo is a valid state during setup.
 - `skippedUpdateVersion` suppresses the banner for that version, not the underlying detected update state. Settings should continue to show the available version so the user can install it manually.
 - If you change update UI state, keep the banner flow and `SettingsGeneralViewController` in sync through `UpdateService.pendingUpdateSummary` and `magentUpdateStateChanged` rather than duplicating fetch logic in the view.
 - Until releases are properly signed/notarized, keep the updater-side `xattr` scrub in both relaunch flows. Replacing the app bundle without clearing `com.apple.quarantine` / `com.apple.provenance` can leave the fresh install launchable from Terminal but blocked in Finder/LaunchServices.
+- The periodic poller intentionally avoids re-showing update banners for the same version. If you add a new banner-showing path triggered by periodic checks, gate it behind `shownUpdateBannerForVersion` to avoid clobbering higher-priority banners (recovery, warning, progress).

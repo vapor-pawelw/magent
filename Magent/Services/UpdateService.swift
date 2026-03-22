@@ -125,6 +125,10 @@ final class UpdateService {
     private var isChecking = false
     private var isUpdating = false
     private var detectedUpdate: AvailableUpdate?
+    private var pollingTask: Task<Void, Never>?
+    private var shownUpdateBannerForVersion: String?
+
+    private static let pollingInterval: TimeInterval = 3600 // 1 hour
 
     private enum InstallStrategy {
         case homebrewCask
@@ -134,6 +138,7 @@ final class UpdateService {
     private enum CheckTrigger {
         case launch
         case manual
+        case periodic
     }
 
     func checkForUpdatesOnLaunchIfEnabled() async {
@@ -144,6 +149,31 @@ final class UpdateService {
 
     func checkForUpdatesManually() async {
         await checkForUpdates(trigger: .manual)
+    }
+
+    func startPeriodicUpdateChecks() {
+        guard persistence.loadSettings().autoCheckForUpdates else { return }
+        stopPeriodicUpdateChecks()
+        pollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(Self.pollingInterval * 1_000_000_000))
+                guard !Task.isCancelled else { break }
+                await self?.checkForUpdates(trigger: .periodic)
+            }
+        }
+    }
+
+    func stopPeriodicUpdateChecks() {
+        pollingTask?.cancel()
+        pollingTask = nil
+    }
+
+    func handleAutoCheckSettingChanged() {
+        if persistence.loadSettings().autoCheckForUpdates {
+            startPeriodicUpdateChecks()
+        } else {
+            stopPeriodicUpdateChecks()
+        }
     }
 
     var pendingUpdateSummary: PendingUpdateSummary? {
@@ -204,6 +234,10 @@ final class UpdateService {
                     }
                     return
                 }
+                if trigger == .periodic {
+                    // Only show banner if we haven't already shown one for this version
+                    guard shownUpdateBannerForVersion != availableVersion else { return }
+                }
                 showAvailableUpdateBanner(available)
             }
         } catch {
@@ -222,6 +256,7 @@ final class UpdateService {
         return
         #endif
         let availableVersion = available.version.displayString
+        shownUpdateBannerForVersion = availableVersion
         let currentVersion = currentVersionString()
         BannerManager.shared.show(
             message: String(localized: .UpdateStrings.updateAvailable(currentVersion, availableVersion)),

@@ -119,10 +119,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         Task { await server.start() }
         Task { @MainActor in
             await UpdateService.shared.checkForUpdatesOnLaunchIfEnabled()
+            UpdateService.shared.startPeriodicUpdateChecks()
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        UpdateService.shared.stopPeriodicUpdateChecks()
         NotificationCenter.default.removeObserver(self, name: .magentSettingsDidChange, object: nil)
         if let systemAppearanceObserver {
             DistributedNotificationCenter.default().removeObserver(systemAppearanceObserver)
