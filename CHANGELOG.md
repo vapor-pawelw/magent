@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - Jira ticket detection in Settings can now be limited to specific project prefixes, using a comma- or semicolon-separated filter like `IP, APPL, UT`.
 
 ### Sidebar
+- Added colored priority arrows (↑ High Priority in red, ↓ Low Priority in green) to the thread sign menu alongside existing emoji signs.
 - Thread rows now show a busy spinner from the moment a thread is created until the agent is ready (or prompt injection finishes), so new threads no longer appear idle during setup.
 - File rows in the changes panel now show filename first (in status color) followed by the directory path (gray, smaller) for better scannability.
 - Right-clicking a file row now offers Copy Filename, Show in Finder, and Stage/Unstage (for uncommitted files and directories).

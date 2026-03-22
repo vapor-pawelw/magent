@@ -166,21 +166,44 @@ extension ThreadListViewController {
         return submenu
     }
 
-    private static let signEmojiOptions: [(emoji: String, label: String)] = [
-        ("🛑", "Stop"),
-        ("✅", "Done"),
-        ("⏸️", "Paused"),
-        ("⚠️", "Attention"),
-        ("🔥", "Urgent"),
+    struct SignOption {
+        var emoji: String
+        var label: String
+        var tintColor: NSColor?
+    }
+
+    static let signEmojiOptions: [SignOption] = [
+        SignOption(emoji: "↑", label: "High Priority", tintColor: .systemRed),
+        SignOption(emoji: "↓", label: "Low Priority", tintColor: .systemGreen),
+        SignOption(emoji: "🛑", label: "Stop"),
+        SignOption(emoji: "✅", label: "Done"),
+        SignOption(emoji: "⏸️", label: "Paused"),
+        SignOption(emoji: "⚠️", label: "Attention"),
+        SignOption(emoji: "🔥", label: "Urgent"),
     ]
+
+    /// Returns the tint color for a sign emoji string, if any.
+    static func signEmojiTintColor(for emoji: String) -> NSColor? {
+        signEmojiOptions.first(where: { $0.emoji == emoji })?.tintColor
+    }
 
     private func buildSignEmojiSubmenu(for thread: MagentThread) -> NSMenu {
         let submenu = NSMenu()
+        var addedSeparator = false
         for option in Self.signEmojiOptions {
+            if !addedSeparator && option.tintColor == nil {
+                submenu.addItem(.separator())
+                addedSeparator = true
+            }
             let isSelected = thread.signEmoji == option.emoji
             let item = NSMenuItem(title: "\(option.emoji)  \(option.label)", action: #selector(setThreadSignEmoji(_:)), keyEquivalent: "")
             item.target = self
             item.state = isSelected ? .on : .off
+            if let tint = option.tintColor {
+                let attributed = NSMutableAttributedString(string: option.emoji, attributes: [.foregroundColor: tint, .font: NSFont.menuFont(ofSize: 0)])
+                attributed.append(NSAttributedString(string: "  \(option.label)", attributes: [.font: NSFont.menuFont(ofSize: 0)]))
+                item.attributedTitle = attributed
+            }
             item.representedObject = [
                 "threadId": thread.id,
                 "emoji": isSelected ? "" : option.emoji

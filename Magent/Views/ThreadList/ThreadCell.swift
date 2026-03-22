@@ -247,7 +247,7 @@ final class ThreadCell: NSTableCellView {
 
         let emojiLabel = NSTextField(labelWithString: "")
         emojiLabel.translatesAutoresizingMaskIntoConstraints = false
-        emojiLabel.font = .systemFont(ofSize: 9)
+        emojiLabel.font = .systemFont(ofSize: 9, weight: .bold)
         emojiLabel.alignment = .center
         emojiLabel.isHidden = true
         addSubview(emojiLabel)
@@ -583,6 +583,7 @@ final class ThreadCell: NSTableCellView {
 
         if let emoji = thread.signEmoji {
             signEmojiLabel?.stringValue = emoji
+            signEmojiLabel?.textColor = ThreadListViewController.signEmojiTintColor(for: emoji) ?? .labelColor
             signEmojiLabel?.isHidden = false
         } else {
             signEmojiLabel?.stringValue = ""
@@ -844,8 +845,14 @@ final class ThreadCell: NSTableCellView {
     }
 
     private func updateMainTextColorForSelection() {
-        guard isConfiguredAsMain else { return }
-        textField?.textColor = backgroundStyle == .emphasized ? .white : .labelColor
+        let isEmphasized = backgroundStyle == .emphasized
+        if isConfiguredAsMain {
+            textField?.textColor = isEmphasized ? .white : .labelColor
+        }
+        if let emoji = signEmojiLabel?.stringValue, !emoji.isEmpty {
+            let tint = ThreadListViewController.signEmojiTintColor(for: emoji)
+            signEmojiLabel?.textColor = isEmphasized ? .white : (tint ?? .labelColor)
+        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
