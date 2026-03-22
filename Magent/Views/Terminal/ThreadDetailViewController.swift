@@ -595,8 +595,10 @@ final class ThreadDetailViewController: NSViewController {
         let pinnedSet = Set(thread.pinnedTmuxSessions)
 
         var sessions: [String] = thread.tmuxSessionNames
-        if sessions.isEmpty {
-            // Thread has no sessions — create a fallback and register it in the manager
+        let hasWebTabsOnly = sessions.isEmpty && !thread.persistedWebTabs.isEmpty
+
+        if sessions.isEmpty && !hasWebTabsOnly {
+            // Thread has no sessions and no web tabs — create a fallback and register it in the manager
             // so that recreateSessionIfNeeded sees it as an agent session and close-tab works.
             let slug = TmuxSessionNaming.repoSlug(from:
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
@@ -620,6 +622,56 @@ final class ThreadDetailViewController: NSViewController {
         let unpinned = sessions.filter { !pinnedSet.contains($0) }
         let orderedSessions = pinned + unpinned
         pinnedCount = pinned.count
+
+        await MainActor.run {
+            preparedSessions.removeAll()
+            sessionPreparationTasks.values.forEach { $0.cancel() }
+            sessionPreparationTasks.removeAll()
+            sessionPreparationTaskTokens.removeAll()
+            backgroundSessionPreparationTask?.cancel()
+            backgroundSessionPreparationTask = nil
+
+            // Clear any existing web tabs from a previous setupTabs call
+            for wt in webTabs { wt.view?.removeFromSuperview() }
+            webTabs.removeAll()
+            tabSlots.removeAll()
+            activeWebTabId = nil
+
+            for (i, sessionName) in orderedSessions.enumerated() {
+                let title = thread.displayName(for: sessionName, at: i)
+                createTabItem(title: title, closable: true, pinned: i < pinnedCount)
+                tabSlots.append(.terminal(sessionName: sessionName))
+            }
+
+            // Build terminalViews outside the display-order loop because this array
+            // must be parallel to thread.tmuxSessionNames (canonical order), not
+            // orderedSessions (display order with pinned tabs first).
+            terminalViews = thread.tmuxSessionNames.map(makeTerminalView(for:))
+
+            // Restore persisted web tabs (pages load lazily on selection).
+            // Pinned web tabs are inserted into the pinned section; unpinned appended at end.
+            restoreWebTabItems()
+
+            rebuildTabBar()
+            rebindAllTabActions()
+        }
+
+        // Web-only thread: skip terminal session setup entirely, just select the first web tab.
+        if hasWebTabsOnly {
+            await MainActor.run {
+                dismissLoadingOverlay()
+                if let firstWebSlotIndex = tabSlots.firstIndex(where: {
+                    if case .web = $0 { return true }
+                    return false
+                }) {
+                    selectTab(at: firstWebSlotIndex)
+                } else {
+                    showEmptyState()
+                }
+            }
+            return
+        }
+
         let initialIndex: Int
         let defaults = UserDefaults.standard
         let defaultsThreadId = defaults
@@ -645,38 +697,7 @@ final class ThreadDetailViewController: NSViewController {
         )
 
         await MainActor.run {
-            preparedSessions.removeAll()
-            sessionPreparationTasks.values.forEach { $0.cancel() }
-            sessionPreparationTasks.removeAll()
-            sessionPreparationTaskTokens.removeAll()
-            backgroundSessionPreparationTask?.cancel()
-            backgroundSessionPreparationTask = nil
-
-            // Clear any existing web tabs from a previous setupTabs call
-            for wt in webTabs { wt.view?.removeFromSuperview() }
-            webTabs.removeAll()
-            tabSlots.removeAll()
-            activeWebTabId = nil
-
             startLoadingOverlayTracking(sessionName: initialSessionName, agentType: initialAgentType)
-
-            for (i, sessionName) in orderedSessions.enumerated() {
-                let title = thread.displayName(for: sessionName, at: i)
-                createTabItem(title: title, closable: true, pinned: i < pinnedCount)
-                tabSlots.append(.terminal(sessionName: sessionName))
-            }
-
-            // Build terminalViews outside the display-order loop because this array
-            // must be parallel to thread.tmuxSessionNames (canonical order), not
-            // orderedSessions (display order with pinned tabs first).
-            terminalViews = thread.tmuxSessionNames.map(makeTerminalView(for:))
-
-            // Restore persisted web tabs (pages load lazily on selection).
-            // Pinned web tabs are inserted into the pinned section; unpinned appended at end.
-            restoreWebTabItems()
-
-            rebuildTabBar()
-            rebindAllTabActions()
 
             if requireStartupOverlayForInitialSession {
                 requireStartupOverlay(for: initialSessionName)
@@ -1107,6 +1128,8 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         // Thread is ready — reload tabs now that sessions exist.
+        // Web-only threads (no tmux sessions) are handled inside setupTabs which
+        // selects the first web tab automatically.
         Task { await setupTabs(requireStartupOverlayForInitialSession: true) }
     }
 

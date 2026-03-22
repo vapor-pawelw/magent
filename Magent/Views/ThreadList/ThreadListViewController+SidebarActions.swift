@@ -276,7 +276,8 @@ extension ThreadListViewController {
                 taskDescription: result.description,
                 requestedBranchName: result.branchName,
                 pendingPromptFileURL: result.pendingPromptFileURL,
-                requestedSectionId: result.selectedSectionId
+                requestedSectionId: result.selectedSectionId,
+                initialWebURL: result.initialWebURL
             )
         }
     }
@@ -318,6 +319,8 @@ extension ThreadListViewController {
             createThread(for: project, requestedAgentType: agentType, useAgentCommand: true, baseBranch: baseBranch)
         case .projectDefault:
             createThread(for: project, requestedAgentType: nil, useAgentCommand: true, baseBranch: baseBranch)
+        case .web:
+            presentNewThreadSheet(for: project, anchorView: outlineView)
         }
     }
 
@@ -351,7 +354,8 @@ extension ThreadListViewController {
         taskDescription: String? = nil,
         requestedBranchName: String? = nil,
         pendingPromptFileURL: URL? = nil,
-        requestedSectionId: UUID? = nil
+        requestedSectionId: UUID? = nil,
+        initialWebURL: URL? = nil
     ) {
         isCreatingThread = true
         reloadData()
@@ -366,7 +370,8 @@ extension ThreadListViewController {
                     requestedName: requestedBranchName,
                     requestedBaseBranch: baseBranch,
                     pendingPromptFileURL: pendingPromptFileURL,
-                    requestedSectionId: requestedSectionId
+                    requestedSectionId: requestedSectionId,
+                    initialWebURL: initialWebURL
                 )
                 if let desc = taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !desc.isEmpty {

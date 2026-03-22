@@ -23,6 +23,17 @@
         }
       }
     },
+    "webTabCloseMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will close the web tab. Are you sure?"
+          }
+        }
+      }
+    },
     "tabRenameMessage": {
       "extractionState": "manual",
       "localizations": {

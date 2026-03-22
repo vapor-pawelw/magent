@@ -74,6 +74,7 @@ public nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
 public nonisolated enum WebTabIconType: String, Codable, Sendable {
     case jira
     case pullRequest
+    case web
     case none
 }
 

@@ -250,14 +250,19 @@ extension ThreadDetailViewController {
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in
             guard let self, let result else { return }
-            self.addTab(
-                using: result.agentType,
-                useAgentCommand: result.useAgentCommand,
-                initialPrompt: result.prompt,
-                shouldSubmitInitialPrompt: true,
-                customTitle: result.tabTitle,
-                pendingPromptFileURL: result.pendingPromptFileURL
-            )
+            if let webURL = result.initialWebURL {
+                let title = result.tabTitle ?? webURL.host ?? "Web"
+                self.openWebTab(url: webURL, identifier: "web:\(UUID().uuidString)", title: title, iconType: .web)
+            } else {
+                self.addTab(
+                    using: result.agentType,
+                    useAgentCommand: result.useAgentCommand,
+                    initialPrompt: result.prompt,
+                    shouldSubmitInitialPrompt: true,
+                    customTitle: result.tabTitle,
+                    pendingPromptFileURL: result.pendingPromptFileURL
+                )
+            }
         }
     }
 
@@ -517,7 +522,7 @@ extension ThreadDetailViewController {
         case .projectDefault:
             let settings = PersistenceService.shared.loadSettings()
             startReview(using: defaultReviewAgentType(from: settings))
-        case .terminal:
+        case .terminal, .web:
             return
         }
     }
@@ -695,6 +700,9 @@ extension ThreadDetailViewController: NSMenuDelegate {
             addTab(using: agentType, useAgentCommand: true)
         case .projectDefault:
             addTab(using: nil, useAgentCommand: true)
+        case .web:
+            let blankURL = URL(string: "about:blank")!
+            openWebTab(url: blankURL, identifier: "web:\(UUID().uuidString)", title: "Web", iconType: .web)
         }
     }
 

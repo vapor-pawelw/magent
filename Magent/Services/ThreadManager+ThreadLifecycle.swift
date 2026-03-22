@@ -18,7 +18,8 @@ extension ThreadManager {
         requestedBaseBranch: String? = nil,
         pendingPromptFileURL: URL? = nil,
         requestedSectionId: UUID? = nil,
-        skipAutoSelect: Bool = false
+        skipAutoSelect: Bool = false,
+        initialWebURL: URL? = nil
     ) async throws -> MagentThread {
         var name = ""
         var foundUnique = false
@@ -151,6 +152,56 @@ extension ThreadManager {
                 var cache = persistence.loadWorktreeCache(worktreesBasePath: basePath)
                 cache.worktrees[name] = WorktreeMetadata(forkPointCommit: forkPoint, createdAt: Date())
                 persistence.saveWorktreeCache(cache, worktreesBasePath: basePath)
+            }
+
+            // Web-only thread: skip tmux session creation, only add the web tab.
+            if let webURL = initialWebURL {
+                let identifier = "web:\(UUID().uuidString)"
+                let title = webURL.host ?? "Web"
+                let webTab = PersistedWebTab(identifier: identifier, url: webURL, title: title, iconType: .web)
+
+                var thread = MagentThread(
+                    id: threadID,
+                    projectId: project.id,
+                    name: name,
+                    worktreePath: worktreePath,
+                    branchName: branchName,
+                    tmuxSessionNames: [],
+                    sectionId: requestedSectionId ?? settings.defaultSection(for: project.id)?.id,
+                    baseBranch: baseBranch,
+                    localFileSyncPathsSnapshot: localFileSyncPathsSnapshot
+                )
+                thread.persistedWebTabs.append(webTab)
+
+                pendingThreadIds.remove(threadID)
+                if let idx = threads.firstIndex(where: { $0.id == threadID }) {
+                    threads[idx] = thread
+                }
+
+                try persistence.saveActiveThreads(threads)
+                await MainActor.run {
+                    delegate?.threadManager(self, didUpdateThreads: threads)
+                    NotificationCenter.default.post(
+                        name: .magentThreadCreationFinished,
+                        object: nil,
+                        userInfo: [
+                            "threadId": threadID,
+                            "initialWebTabIdentifier": identifier,
+                        ] as [String: Any]
+                    )
+                    if !missingLocalSyncPaths.isEmpty {
+                        let noun = missingLocalSyncPaths.count == 1 ? "path" : "paths"
+                        BannerManager.shared.show(
+                            message: "Thread created, but \(missingLocalSyncPaths.count) local sync \(noun) were missing in the source repo.",
+                            style: .warning,
+                            duration: 8.0,
+                            details: missingLocalSyncPaths.joined(separator: "\n"),
+                            detailsCollapsedTitle: "Show missing paths",
+                            detailsExpandedTitle: "Hide missing paths"
+                        )
+                    }
+                }
+                return thread
             }
 
             let selectedAgentType: AgentType?

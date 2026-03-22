@@ -44,6 +44,16 @@ extension ThreadDetailViewController {
             }
 
         case .web(let identifier):
+            let alert = NSAlert()
+            alert.messageText = String(localized: .ThreadStrings.tabCloseTitle)
+            alert.informativeText = String(localized: .ThreadStrings.webTabCloseMessage)
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: String(localized: .CommonStrings.commonClose))
+            alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+
+            let response = alert.runModal()
+            guard response == .alertFirstButtonReturn else { return }
+
             closeWebTab(identifier: identifier)
         }
     }

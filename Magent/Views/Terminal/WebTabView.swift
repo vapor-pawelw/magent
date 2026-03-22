@@ -2,6 +2,33 @@ import Cocoa
 import MagentCore
 import WebKit
 
+/// Normalizes a user-entered URL string into a proper URL.
+/// Handles bare host:port (e.g. "localhost:3000"), loopback addresses,
+/// and scheme-less hostnames. Returns nil for empty or unparseable input.
+enum WebURLNormalizer {
+    static func normalize(_ input: String) -> URL? {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let url = URL(string: trimmed), let scheme = url.scheme, !scheme.isEmpty {
+            // URL(string:) parses "localhost:3000" as scheme="localhost" host=nil —
+            // detect that case: a real scheme won't have digits-only as the path-like part
+            let looksLikeBareHostPort = url.host == nil && url.port == nil && scheme.allSatisfy(\.isLetter)
+                && trimmed.hasPrefix("\(scheme):") && !trimmed.hasPrefix("\(scheme)://")
+                && trimmed.dropFirst(scheme.count + 1).allSatisfy({ $0.isNumber || $0 == "/" })
+
+            if !looksLikeBareHostPort {
+                return url
+            }
+        }
+
+        // No scheme — prepend http:// for localhost/loopback, https:// otherwise
+        let prefix = (trimmed.hasPrefix("localhost") || trimmed.hasPrefix("127.0.0.1") || trimmed.hasPrefix("[::1]"))
+            ? "http://" : "https://"
+        return URL(string: prefix + trimmed)
+    }
+}
+
 /// Lightweight in-app browser view with back/forward/refresh navigation.
 /// Used for Jira tickets and similar web content displayed inside a tab.
 final class WebTabView: NSView, WKNavigationDelegate {
@@ -182,27 +209,7 @@ final class WebTabView: NSView, WKNavigationDelegate {
     }
 
     private func navigateToAddressFieldValue() {
-        let input = addressField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !input.isEmpty else { return }
-
-        // If the input already has a recognized scheme, use it as-is
-        if let url = URL(string: input), let scheme = url.scheme, !scheme.isEmpty {
-            // URL(string:) parses "localhost:3000" as scheme="localhost" host=nil —
-            // detect that case: a real scheme won't have digits-only as the path-like part
-            let looksLikeBareHostPort = url.host == nil && url.port == nil && scheme.allSatisfy(\.isLetter)
-                && input.hasPrefix("\(scheme):") && !input.hasPrefix("\(scheme)://")
-                && input.dropFirst(scheme.count + 1).allSatisfy({ $0.isNumber || $0 == "/" })
-
-            if !looksLikeBareHostPort {
-                webView.load(URLRequest(url: url))
-                return
-            }
-        }
-
-        // No scheme — prepend http:// for localhost/127.0.0.1, https:// otherwise
-        let prefix = (input.hasPrefix("localhost") || input.hasPrefix("127.0.0.1") || input.hasPrefix("[::1]"))
-            ? "http://" : "https://"
-        guard let url = URL(string: prefix + input) else { return }
+        guard let url = WebURLNormalizer.normalize(addressField.stringValue) else { return }
         webView.load(URLRequest(url: url))
     }
 }

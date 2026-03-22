@@ -39,12 +39,16 @@ Each tab within a thread:
 
 Tabs can also display in-app web content (WKWebView) alongside terminal tabs:
 
+- **"Web" type** in the New Thread and New Tab sheets creates a web tab. Threads created with Web type get a worktree and branch but no tmux session. URL is optional — blank creates an empty web tab with an address bar.
 - **Middle-click** on the Jira or PR toolbar button opens the page in a web tab instead of the external browser
-- Web tabs show a permanent type icon (Jira/PR) in the tab bar, with back/forward/refresh navigation controls
+- **Right-click "+"** on the tab bar quick-creates a blank web tab; on the sidebar it opens the thread sheet with Web pre-selected
+- User-created web tabs show a globe icon and auto-update their title from the page hostname on navigation. Jira/PR tabs keep their fixed icons and titles.
+- Web tabs show an editable URL address bar, with back/forward/refresh navigation controls
 - **CMD+R** refreshes the active web tab; **CMD+SHIFT+R** hard-refreshes (bypasses cache via `reloadFromOrigin`)
-- Deduplication: opening the same URL again focuses the existing tab instead of creating a new one
+- URL normalization (shared `WebURLNormalizer`): bare hostnames get `https://`, localhost/loopback addresses get `http://`, `host:port` patterns without `://` are detected and normalized
 - Web tabs are persisted across app restarts but load lazily — the WKWebView is only created when the tab is first selected
 - Web tabs participate in the same tab bar as terminal tabs: they can be pinned, renamed, drag-reordered, and freely mixed with terminal tabs in both the pinned and unpinned sections
+- Closing a web tab asks for confirmation, matching terminal tab close behavior
 - Display order is decoupled from content arrays via a `TabSlot` indirection layer, allowing free mixing of terminal and web tabs without breaking terminal view indexing
 
 ## Configuration (First Run / Settings)

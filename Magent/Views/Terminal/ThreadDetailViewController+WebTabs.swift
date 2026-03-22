@@ -97,7 +97,30 @@ extension ThreadDetailViewController {
         // Lazy-create WebTabView if needed
         if webTabs[webIndex].view == nil {
             let entry = webTabs[webIndex]
-            webTabs[webIndex].view = WebTabView(url: entry.url, identifier: entry.identifier)
+            let webTabView = WebTabView(url: entry.url, identifier: entry.identifier)
+
+            // Auto-update tab title from page host for user-created web tabs.
+            if entry.iconType == .web {
+                let tabId = entry.identifier
+                webTabView.onTitleChange = { [weak self] _ in
+                    guard let self,
+                          let url = webTabView.webView.url,
+                          url.absoluteString != "about:blank",
+                          let host = url.host else { return }
+                    // Use short host — strip "www." prefix
+                    let shortHost = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+                    guard let slotIndex = self.tabSlots.firstIndex(of: .web(identifier: tabId)),
+                          slotIndex < self.tabItems.count else { return }
+                    self.tabItems[slotIndex].titleLabel.stringValue = shortHost
+                    // Persist the updated title
+                    if let pIdx = self.thread.persistedWebTabs.firstIndex(where: { $0.identifier == tabId }) {
+                        self.thread.persistedWebTabs[pIdx].title = shortHost
+                        self.persistWebTabs()
+                    }
+                }
+            }
+
+            webTabs[webIndex].view = webTabView
         }
 
         guard let selectedView = webTabs[webIndex].view else { return }
@@ -232,6 +255,10 @@ extension ThreadDetailViewController {
         case .pullRequest:
             let provider = threadManager._cachedRemoteByProjectId[thread.projectId]?.provider ?? .unknown
             item.typeIcon.image = openPRButtonImage(for: provider)
+            item.typeIcon.isHidden = false
+        case .web:
+            item.typeIcon.image = NSImage(systemSymbolName: "globe", accessibilityDescription: "Web")
+            item.typeIcon.contentTintColor = .secondaryLabelColor
             item.typeIcon.isHidden = false
         case .none:
             break

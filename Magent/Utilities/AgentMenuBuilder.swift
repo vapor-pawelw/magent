@@ -65,6 +65,11 @@ enum AgentMenuBuilder {
             terminalItem.target = target
             terminalItem.representedObject = extraData.merging(["mode": "terminal"]) { _, new in new }
             menu.addItem(terminalItem)
+
+            let webItem = NSMenuItem(title: "Web", action: action, keyEquivalent: "")
+            webItem.target = target
+            webItem.representedObject = extraData.merging(["mode": "web"]) { _, new in new }
+            menu.addItem(webItem)
         }
     }
 
@@ -74,6 +79,7 @@ enum AgentMenuBuilder {
             case projectDefault
             case agent(AgentType)
             case terminal
+            case web
         }
         let mode: Mode
         let data: [String: String]
@@ -88,6 +94,8 @@ enum AgentMenuBuilder {
         case "agent":
             let raw = data["agentRaw"] ?? ""
             return Selection(mode: .agent(AgentType(rawValue: raw) ?? .claude), data: data)
+        case "web":
+            return Selection(mode: .web, data: data)
         default:
             return Selection(mode: .projectDefault, data: data)
         }
