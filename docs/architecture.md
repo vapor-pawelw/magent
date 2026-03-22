@@ -322,6 +322,7 @@ Key invariants:
 - `tabSlots` + `tabItems` change order during drag/pin operations; `persistTabOrder()` syncs `terminalViews` and `thread.tmuxSessionNames` to match
 - Single unified `pinnedCount` covers all tab types
 - Content lookup uses session name / identifier keys, not positional indices (via `terminalView(forSession:)`, `currentTerminalView()`, etc.)
+- **Web-only threads**: When a thread is created with the "Web" type, it has a worktree and branch but zero tmux sessions (`tmuxSessionNames` is empty). `setupTabs` detects this (`sessions.isEmpty && !persistedWebTabs.isEmpty`) and skips fallback session creation, selecting the first web tab directly instead of going through terminal session preparation.
 
 ## tmux Session Ownership
 

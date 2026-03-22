@@ -25,6 +25,10 @@ All notable changes to this project will be documented in this file.
 - Branch info at the bottom of the changes panel now displays on two lines — current branch on top, base/target branch below with a `⤷` arrow — and strips `origin/` prefixes for cleaner display.
 
 ### Thread
+- New "Web" type in the New Thread and New Tab sheets opens a web tab instead of a terminal/agent session. Threads created with Web type still get a worktree and branch but no tmux session. URL field is optional — blank creates an empty web tab with an address bar to type into later.
+- Web tabs now show a globe icon and auto-update their tab title from the page hostname as you navigate.
+- Right-click the "+" button on the tab bar or sidebar to quickly add a Web tab (tab bar creates instantly, sidebar opens the sheet for branch/description fields).
+- Closing a web tab now asks for confirmation, matching the terminal tab close behavior.
 - Web tabs now show an editable URL address bar instead of a read-only title label. The field reflects the current page URL, supports typing a new URL and pressing Return to navigate, and auto-prepends `https://` (or `http://` for localhost/loopback addresses) when no scheme is given.
 - Description, branch, and base branch fields in the new-thread sheet are now editable for terminal-type threads (previously greyed out).
 - Added "Continue in" forward button next to the review button in the terminal header, letting you hand off the current tab's context to another agent without opening the tab's context menu.
