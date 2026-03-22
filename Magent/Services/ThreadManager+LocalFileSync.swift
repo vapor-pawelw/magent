@@ -913,18 +913,23 @@ extension ThreadManager {
     private func applyLocalSyncDiffColoring(to textView: NSTextView, diff: String) {
         let storage = NSMutableAttributedString()
         let baseFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        let baseColor = NSColor.labelColor
 
-        let addedBg = NSColor.systemGreen.withAlphaComponent(0.15)
-        let removedBg = NSColor.systemRed.withAlphaComponent(0.15)
+        let addedFg = NSColor(calibratedRed: 0.35, green: 0.75, blue: 0.35, alpha: 1.0)
+        let addedBg = NSColor.systemGreen.withAlphaComponent(0.08)
+        let removedFg = NSColor(calibratedRed: 0.9, green: 0.35, blue: 0.35, alpha: 1.0)
+        let removedBg = NSColor.systemRed.withAlphaComponent(0.08)
         let headerColor = NSColor.secondaryLabelColor
 
         for line in diff.components(separatedBy: "\n") {
-            var attrs: [NSAttributedString.Key: Any] = [.font: baseFont]
+            var attrs: [NSAttributedString.Key: Any] = [.font: baseFont, .foregroundColor: baseColor]
             if line.hasPrefix("+++") || line.hasPrefix("---") || line.hasPrefix("@@") {
                 attrs[.foregroundColor] = headerColor
             } else if line.hasPrefix("+") {
+                attrs[.foregroundColor] = addedFg
                 attrs[.backgroundColor] = addedBg
             } else if line.hasPrefix("-") {
+                attrs[.foregroundColor] = removedFg
                 attrs[.backgroundColor] = removedBg
             }
             storage.append(NSAttributedString(string: line + "\n", attributes: attrs))

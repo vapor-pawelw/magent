@@ -118,6 +118,13 @@ extension ThreadDetailViewController {
         }
 
         startResyncSpinner()
+        BannerManager.shared.show(
+            message: "Syncing Local Paths from main repo\u{2026}",
+            style: .info,
+            duration: nil,
+            isDismissible: false,
+            showsSpinner: true
+        )
         let projectSnapshot = project
         let worktreePath = currentThread.worktreePath
         let syncPathsSnapshot = syncPaths
@@ -152,6 +159,9 @@ extension ThreadDetailViewController {
                     }
                 }
             } catch ThreadManagerError.archiveCancelled {
+                await MainActor.run {
+                    BannerManager.shared.dismissCurrent()
+                }
                 return
             } catch {
                 await MainActor.run {
@@ -181,6 +191,13 @@ extension ThreadDetailViewController {
         }
 
         startResyncSpinner()
+        BannerManager.shared.show(
+            message: "Syncing Local Paths back to main repo\u{2026}",
+            style: .info,
+            duration: nil,
+            isDismissible: false,
+            showsSpinner: true
+        )
         let projectSnapshot = project
         let worktreePath = currentThread.worktreePath
         let syncPathsSnapshot = syncPaths
@@ -202,6 +219,9 @@ extension ThreadDetailViewController {
                     )
                 }
             } catch ThreadManagerError.archiveCancelled {
+                await MainActor.run {
+                    BannerManager.shared.dismissCurrent()
+                }
                 return
             } catch {
                 await MainActor.run {

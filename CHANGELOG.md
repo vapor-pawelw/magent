@@ -9,6 +9,8 @@ All notable changes to this project will be documented in this file.
 - Magent now checks for new versions every hour in the background (respects the existing auto-check setting and responds immediately to setting toggles).
 
 ### Thread
+- Local Sync now shows a persistent spinner banner while syncing files, replacing the toolbar-only spinner that was easy to miss.
+- Local Sync conflict diffs are now readable in dark mode — added/removed lines use colored text instead of relying solely on background tinting.
 - Local Sync conflict alerts now offer a "Show Diff" button for text files, letting you inspect exactly what changed before choosing to override or ignore.
 - Fixed UI freezing during Local Sync Path resync by moving filesystem copy and hash work off the main thread.
 
