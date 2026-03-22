@@ -253,6 +253,7 @@ extension ThreadManager {
 
     private struct LocalSyncConflict {
         let relativePath: String
+        let sourcePath: String
         let destinationPath: String
         let kind: LocalSyncConflictKind
     }
@@ -463,6 +464,7 @@ extension ThreadManager {
                         let shouldOverwrite = try await shouldOverwriteLocalSyncConflict(
                             LocalSyncConflict(
                                 relativePath: relativePath,
+                                sourcePath: sourcePath,
                                 destinationPath: destinationPath,
                                 kind: .directoryBlocksFile
                             ),
@@ -484,6 +486,7 @@ extension ThreadManager {
                         let shouldOverwrite = try await shouldOverwriteLocalSyncConflict(
                             LocalSyncConflict(
                                 relativePath: relativePath,
+                                sourcePath: sourcePath,
                                 destinationPath: destinationPath,
                                 kind: .fileDifferent
                             ),
@@ -557,6 +560,7 @@ extension ThreadManager {
                 let shouldOverwrite = try await shouldOverwriteLocalSyncConflict(
                     LocalSyncConflict(
                         relativePath: relativePath,
+                        sourcePath: destinationPath,
                         destinationPath: destinationPath,
                         kind: .fileBlocksDirectory
                     ),
@@ -743,81 +747,241 @@ extension ThreadManager {
         _ conflict: LocalSyncConflict,
         direction: LocalSyncConflictDirection
     ) -> LocalSyncConflictChoice {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
+        let canShowDiff = conflict.kind == .fileDifferent
+            && localSyncIsTextFile(atPath: conflict.sourcePath)
+            && localSyncIsTextFile(atPath: conflict.destinationPath)
 
-        let destinationPath = conflict.destinationPath
-            .replacingOccurrences(of: NSHomeDirectory(), with: "~")
+        while true {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
 
-        switch direction {
-        case .intoRepo:
-            alert.messageText = String(localized: .ThreadStrings.threadArchiveConflictTitle(conflict.relativePath))
-            switch conflict.kind {
-            case .fileDifferent:
-                alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictFileDifferent(destinationPath))
-            case .fileBlocksDirectory:
-                alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictFileBlocksDirectory(destinationPath))
-            case .directoryBlocksFile:
-                alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictDirectoryBlocksFile(destinationPath))
+            let destinationPath = conflict.destinationPath
+                .replacingOccurrences(of: NSHomeDirectory(), with: "~")
+
+            switch direction {
+            case .intoRepo:
+                alert.messageText = String(localized: .ThreadStrings.threadArchiveConflictTitle(conflict.relativePath))
+                switch conflict.kind {
+                case .fileDifferent:
+                    alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictFileDifferent(destinationPath))
+                case .fileBlocksDirectory:
+                    alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictFileBlocksDirectory(destinationPath))
+                case .directoryBlocksFile:
+                    alert.informativeText = String(localized: .ThreadStrings.threadArchiveConflictDirectoryBlocksFile(destinationPath))
+                }
+            case .intoWorktree:
+                alert.messageText = "Resync Local Paths Conflict"
+                switch conflict.kind {
+                case .fileDifferent:
+                    alert.informativeText =
+                        "The worktree already has a different file at \"\(destinationPath)\". Override it with the copy from the main repo?"
+                case .fileBlocksDirectory:
+                    alert.informativeText =
+                        "The worktree has a file at \"\(destinationPath)\", but local sync needs a directory there. Override it with the directory from the main repo?"
+                case .directoryBlocksFile:
+                    alert.informativeText =
+                        "The worktree has a directory at \"\(destinationPath)\", but local sync needs a file there. Override it with the file from the main repo?"
+                }
             }
-        case .intoWorktree:
-            alert.messageText = "Resync Local Paths Conflict"
-            switch conflict.kind {
-            case .fileDifferent:
-                alert.informativeText =
-                    "The worktree already has a different file at \"\(destinationPath)\". Override it with the copy from the main repo?"
-            case .fileBlocksDirectory:
-                alert.informativeText =
-                    "The worktree has a file at \"\(destinationPath)\", but local sync needs a directory there. Override it with the directory from the main repo?"
-            case .directoryBlocksFile:
-                alert.informativeText =
-                    "The worktree has a directory at \"\(destinationPath)\", but local sync needs a file there. Override it with the file from the main repo?"
+
+            let optionHint = "\n\nHold Option for \"Override All\" or \"Ignore All\"."
+            alert.informativeText += optionHint
+
+            let overrideButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictOverride))
+            let ignoreButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictIgnore))
+            if canShowDiff {
+                alert.addButton(withTitle: "Show Diff")
             }
-        }
+            let cancelTitle: String = switch direction {
+            case .intoRepo:
+                String(localized: .ThreadStrings.threadArchiveConflictCancelArchive)
+            case .intoWorktree:
+                String(localized: .CommonStrings.commonCancel)
+            }
+            alert.addButton(withTitle: cancelTitle)
 
-        let optionHint = "\n\nHold Option for \"Override All\" or \"Ignore All\"."
-        alert.informativeText += optionHint
-
-        let overrideButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictOverride))
-        let ignoreButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictIgnore))
-        let cancelTitle: String = switch direction {
-        case .intoRepo:
-            String(localized: .ThreadStrings.threadArchiveConflictCancelArchive)
-        case .intoWorktree:
-            String(localized: .CommonStrings.commonCancel)
-        }
-        alert.addButton(withTitle: cancelTitle)
-
-        var optionHeld = NSEvent.modifierFlags.contains(.option)
-        func updateButtonTitles() {
-            overrideButton.title = optionHeld
-                ? String(localized: .ThreadStrings.threadArchiveConflictOverrideAll)
-                : String(localized: .ThreadStrings.threadArchiveConflictOverride)
-            ignoreButton.title = optionHeld
-                ? "Ignore All"
-                : String(localized: .ThreadStrings.threadArchiveConflictIgnore)
-        }
-        updateButtonTitles()
-
-        let monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-            optionHeld = event.modifierFlags.contains(.option)
+            var optionHeld = NSEvent.modifierFlags.contains(.option)
+            func updateButtonTitles() {
+                overrideButton.title = optionHeld
+                    ? String(localized: .ThreadStrings.threadArchiveConflictOverrideAll)
+                    : String(localized: .ThreadStrings.threadArchiveConflictOverride)
+                ignoreButton.title = optionHeld
+                    ? "Ignore All"
+                    : String(localized: .ThreadStrings.threadArchiveConflictIgnore)
+            }
             updateButtonTitles()
-            return event
+
+            let monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+                optionHeld = event.modifierFlags.contains(.option)
+                updateButtonTitles()
+                return event
+            }
+
+            let response = alert.runModal()
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+            }
+
+            let useAllChoice = optionHeld || (NSApp.currentEvent?.modifierFlags.contains(.option) == true)
+
+            // Button order: Override (first), Ignore (second), [Show Diff (third)], Cancel (third or fourth)
+            switch response {
+            case .alertFirstButtonReturn:
+                return useAllChoice ? .overwriteAll : .overwrite
+            case .alertSecondButtonReturn:
+                return useAllChoice ? .skipAll : .skip
+            case .alertThirdButtonReturn where canShowDiff:
+                presentLocalSyncDiffPanel(conflict, direction: direction)
+                continue // re-present the conflict alert after closing diff
+            default:
+                return .cancel
+            }
+        }
+    }
+
+    // MARK: - Diff
+
+    @MainActor
+    private func presentLocalSyncDiffPanel(_ conflict: LocalSyncConflict, direction: LocalSyncConflictDirection) {
+        let sourceContent = (try? String(contentsOfFile: conflict.sourcePath, encoding: .utf8)) ?? "(unreadable)"
+        let destContent = (try? String(contentsOfFile: conflict.destinationPath, encoding: .utf8)) ?? "(unreadable)"
+
+        // source = where the file is being copied FROM, destination = where it would land.
+        // For intoWorktree: source is project, destination is worktree.
+        // For intoRepo: source is worktree, destination is project repo.
+        let sourceLabel: String
+        let destLabel: String
+        let shortSource = conflict.sourcePath.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+        let shortDest = conflict.destinationPath.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+        switch direction {
+        case .intoWorktree:
+            destLabel = "Worktree: \(shortDest)"
+            sourceLabel = "Project: \(shortSource)"
+        case .intoRepo:
+            destLabel = "Project: \(shortDest)"
+            sourceLabel = "Worktree: \(shortSource)"
         }
 
-        let response = alert.runModal()
-        if let monitor {
-            NSEvent.removeMonitor(monitor)
+        let diff = localSyncUnifiedDiff(
+            oldText: destContent,
+            newText: sourceContent,
+            oldLabel: destLabel,
+            newLabel: sourceLabel
+        )
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 700, height: 500),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "Diff: \(conflict.relativePath)"
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = false
+
+        let scrollView = NSScrollView(frame: panel.contentView!.bounds)
+        scrollView.autoresizingMask = [.width, .height]
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+
+        let textView = NSTextView(frame: scrollView.contentView.bounds)
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.autoresizingMask = [.width]
+        textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.isHorizontallyResizable = true
+        textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+
+        applyLocalSyncDiffColoring(to: textView, diff: diff)
+
+        scrollView.documentView = textView
+        panel.contentView = scrollView
+        panel.center()
+
+        // Stop modal run loop when the panel is closed.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: panel,
+            queue: .main
+        ) { _ in
+            NSApp.stopModal()
+        }
+        NSApp.runModal(for: panel)
+    }
+
+    private func applyLocalSyncDiffColoring(to textView: NSTextView, diff: String) {
+        let storage = NSMutableAttributedString()
+        let baseFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+
+        let addedBg = NSColor.systemGreen.withAlphaComponent(0.15)
+        let removedBg = NSColor.systemRed.withAlphaComponent(0.15)
+        let headerColor = NSColor.secondaryLabelColor
+
+        for line in diff.components(separatedBy: "\n") {
+            var attrs: [NSAttributedString.Key: Any] = [.font: baseFont]
+            if line.hasPrefix("+++") || line.hasPrefix("---") || line.hasPrefix("@@") {
+                attrs[.foregroundColor] = headerColor
+            } else if line.hasPrefix("+") {
+                attrs[.backgroundColor] = addedBg
+            } else if line.hasPrefix("-") {
+                attrs[.backgroundColor] = removedBg
+            }
+            storage.append(NSAttributedString(string: line + "\n", attributes: attrs))
         }
 
-        let useAllChoice = optionHeld || (NSApp.currentEvent?.modifierFlags.contains(.option) == true)
-        switch response {
-        case .alertFirstButtonReturn:
-            return useAllChoice ? .overwriteAll : .overwrite
-        case .alertSecondButtonReturn:
-            return useAllChoice ? .skipAll : .skip
-        default:
-            return .cancel
+        textView.textStorage?.setAttributedString(storage)
+    }
+
+    /// Produces a basic unified diff between two strings.
+    private func localSyncUnifiedDiff(oldText: String, newText: String, oldLabel: String, newLabel: String) -> String {
+        // Use the system `diff` command for a proper unified diff.
+        let tempDir = NSTemporaryDirectory()
+        let oldFile = (tempDir as NSString).appendingPathComponent("magent-diff-old-\(UUID().uuidString)")
+        let newFile = (tempDir as NSString).appendingPathComponent("magent-diff-new-\(UUID().uuidString)")
+
+        defer {
+            try? FileManager.default.removeItem(atPath: oldFile)
+            try? FileManager.default.removeItem(atPath: newFile)
         }
+
+        do {
+            try oldText.write(toFile: oldFile, atomically: true, encoding: .utf8)
+            try newText.write(toFile: newFile, atomically: true, encoding: .utf8)
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/diff")
+            process.arguments = ["-u", "--label", oldLabel, "--label", newLabel, oldFile, newFile]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            process.waitUntilExit()
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8), !output.isEmpty {
+                return output
+            }
+        } catch {
+            // Fall through to simple diff
+        }
+
+        // Fallback: simple line-by-line comparison
+        let oldFallbackLines = oldText.components(separatedBy: "\n")
+        let newFallbackLines = newText.components(separatedBy: "\n")
+        var result = "--- \(oldLabel)\n+++ \(newLabel)\n"
+        result += "@@ -1,\(oldFallbackLines.count) +1,\(newFallbackLines.count) @@\n"
+        for line in oldFallbackLines { result += "-\(line)\n" }
+        for line in newFallbackLines { result += "+\(line)\n" }
+        return result
+    }
+
+    /// Returns `true` if the file at the given path appears to be a text file (not binary).
+    private func localSyncIsTextFile(atPath path: String) -> Bool {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return false }
+        defer { handle.closeFile() }
+        // Check first 8 KB for null bytes — a common binary indicator.
+        let sample = handle.readData(ofLength: 8192)
+        return !sample.contains(0)
     }
 }

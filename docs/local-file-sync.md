@@ -93,8 +93,11 @@ Interactive archive (UI) offers:
 
 - `Override` (current conflict only)
 - `Ignore` (skip current conflict)
+- `Show Diff` (for "different file" conflicts on non-binary text files only) — opens a modal panel with a unified diff color-coded with green/red backgrounds, labeled with "Worktree:" / "Project:" prefixes so the origin of each side is clear. After closing the diff panel the conflict alert re-presents for the user to choose.
 - `Cancel Archive` (abort archive)
 - Holding Option changes `Override` to `Override All` and `Ignore` to `Ignore All` for the rest of that sync run
+
+Binary detection: files are considered binary if the first 8 KB contain a null byte; the Show Diff button is hidden for binary files and for non-file conflicts (file-blocks-directory, directory-blocks-file).
 
 Non-interactive archive flows skip conflicting targets by default (no destructive overwrite prompt).
 
