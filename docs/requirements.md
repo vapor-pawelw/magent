@@ -42,7 +42,7 @@ Tabs can also display in-app web content (WKWebView) alongside terminal tabs:
 - **"Web" type** in the New Thread and New Tab sheets creates a web tab. Threads created with Web type get a worktree and branch but no tmux session. URL is optional — blank creates an empty web tab with an address bar.
 - **Middle-click** on the Jira or PR toolbar button opens the page in a web tab instead of the external browser
 - **Right-click "+"** on the tab bar quick-creates a blank web tab; on the sidebar it opens the thread sheet with Web pre-selected
-- User-created web tabs show a globe icon and auto-update their title from the page hostname on navigation. Jira/PR tabs keep their fixed icons and titles.
+- User-created web tabs show a globe icon and auto-update their title from the page hostname on navigation. Jira/PR tabs keep their fixed icons and titles. Renaming a web tab sets a custom title that overrides the auto-update; renaming to empty restores the default hostname-based naming.
 - **Middle-click or Cmd-click** on a link inside a web tab opens it in a new web tab instead of navigating the current tab. Links with `target="_blank"` also open in a new tab (via `WKUIDelegate`).
 - Web tabs show an editable URL address bar, with back/forward/refresh navigation controls
 - **CMD+R** refreshes the active web tab; **CMD+SHIFT+R** hard-refreshes (bypasses cache via `reloadFromOrigin`)
