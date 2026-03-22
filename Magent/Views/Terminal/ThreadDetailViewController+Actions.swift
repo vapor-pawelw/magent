@@ -124,16 +124,14 @@ extension ThreadDetailViewController {
         Task {
             defer { Task { @MainActor in self.stopResyncSpinner() } }
             do {
-                // Detach the filesystem walk so the recursive copy/hash work does not
-                // inherit this AppKit controller's MainActor executor.
-                let missingPaths = try await Task.detached(priority: .userInitiated) {
-                    try await ThreadManager.shared.syncConfiguredLocalPathsIntoWorktree(
-                        project: projectSnapshot,
-                        worktreePath: worktreePath,
-                        syncPaths: syncPathsSnapshot,
-                        promptForConflicts: true
-                    )
-                }.value
+                // The sync method is @concurrent so I/O runs on the concurrent pool;
+                // only conflict alerts hop back to MainActor automatically.
+                let missingPaths = try await ThreadManager.shared.syncConfiguredLocalPathsIntoWorktree(
+                    project: projectSnapshot,
+                    worktreePath: worktreePath,
+                    syncPaths: syncPathsSnapshot,
+                    promptForConflicts: true
+                )
 
                 await MainActor.run {
                     if missingPaths.isEmpty {
@@ -189,16 +187,14 @@ extension ThreadDetailViewController {
         Task {
             defer { Task { @MainActor in self.stopResyncSpinner() } }
             do {
-                // Detach the filesystem walk so the recursive copy/hash work does not
-                // inherit this AppKit controller's MainActor executor.
-                try await Task.detached(priority: .userInitiated) {
-                    try await ThreadManager.shared.syncConfiguredLocalPathsFromWorktree(
-                        project: projectSnapshot,
-                        worktreePath: worktreePath,
-                        syncPaths: syncPathsSnapshot,
-                        promptForConflicts: true
-                    )
-                }.value
+                // The sync method is @concurrent so I/O runs on the concurrent pool;
+                // only conflict alerts hop back to MainActor automatically.
+                try await ThreadManager.shared.syncConfiguredLocalPathsFromWorktree(
+                    project: projectSnapshot,
+                    worktreePath: worktreePath,
+                    syncPaths: syncPathsSnapshot,
+                    promptForConflicts: true
+                )
                 await MainActor.run {
                     BannerManager.shared.show(
                         message: "Local Sync Paths pushed back to the main repo.",

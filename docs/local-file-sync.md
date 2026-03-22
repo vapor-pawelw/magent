@@ -37,7 +37,7 @@ Non-main threads expose a top-bar resync button (↺) that, when clicked, shows 
 - **Project → Worktree**: copies the thread's eligible local sync paths from the main repo worktree into the thread (was the only available direction before)
 - **Worktree → Project**: pushes local sync paths from the thread worktree back to the main repo (same merge logic as archive sync-back, but on demand)
 
-The button is hidden when the project has no Local Sync Paths configured (re-evaluates when settings change, so it appears automatically after paths are added). While sync is running the button is replaced by a spinner; it returns when the operation completes. Both directions run filesystem work (recursive copy, hashing) in a detached task off the main thread so the UI stays responsive during large syncs.
+The button is hidden when the project has no Local Sync Paths configured (re-evaluates when settings change, so it appears automatically after paths are added). While sync is running the button is replaced by a spinner; it returns when the operation completes. Both directions run filesystem work (recursive copy, hashing) via `@concurrent` methods on the concurrent thread pool so the UI stays responsive during large syncs. Only conflict alert presentation hops back to the main actor.
 
 ### Project → Worktree
 
@@ -66,7 +66,7 @@ Before removing a thread worktree, Magent can merge configured paths for that th
 
 - Missing source path in thread worktree: skipped
 - Files unchanged in the thread since creation are skipped (no copy-back)
-- Non-interactive archive merge-back runs off the UI path, so large sync sets do not freeze the app while the thread row is marked as archiving
+- Archive merge-back sync methods are `@concurrent`, running filesystem work on the concurrent pool so the UI stays responsive while the thread row is marked as archiving
 - Merge-back is additive and non-destructive:
   - directory entries are processed recursively
   - intermediate directories are created only when at least one child file is being copied
