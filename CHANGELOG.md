@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Fixed UI freezing during Local Sync Path resync by moving filesystem copy and hash work off the main thread.
 
 ### Web Tabs
+- Renamed web tabs now stick — the custom name overrides the default URL-based title until you clear it. Renaming to an empty string restores automatic hostname-based naming.
 - Middle-click and Cmd-click on links now open them in a new web tab instead of navigating the current tab.
 - Links with `target="_blank"` now open in a new web tab instead of being silently dropped.
 - Toolbar buttons are now consistently sized with improved spacing, and Refresh is moved to the right of the address bar.

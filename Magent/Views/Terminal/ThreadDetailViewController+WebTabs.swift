@@ -26,7 +26,7 @@ extension ThreadDetailViewController {
             )
             webTabs.append(entry)
 
-            let item = TabItemView(title: persisted.title)
+            let item = TabItemView(title: persisted.displayTitle)
             item.showCloseButton = true
             attachDragGesture(to: item)
             applyWebTabIcon(to: item, iconType: persisted.iconType)
@@ -109,6 +109,7 @@ extension ThreadDetailViewController {
             }
 
             // Auto-update tab title from page host for user-created web tabs.
+            // Skip if user has set a custom title via rename.
             if entry.iconType == .web {
                 let tabId = entry.identifier
                 webTabView.onTitleChange = { [weak self] _ in
@@ -116,14 +117,14 @@ extension ThreadDetailViewController {
                           let url = webTabView.webView.url,
                           url.absoluteString != "about:blank",
                           let shortHost = WebURLNormalizer.shortHost(from: url) else { return }
+                    guard let pIdx = self.thread.persistedWebTabs.firstIndex(where: { $0.identifier == tabId }),
+                          self.thread.persistedWebTabs[pIdx].customTitle == nil else { return }
                     guard let slotIndex = self.tabSlots.firstIndex(of: .web(identifier: tabId)),
                           slotIndex < self.tabItems.count else { return }
                     self.tabItems[slotIndex].titleLabel.stringValue = shortHost
-                    // Persist the updated title
-                    if let pIdx = self.thread.persistedWebTabs.firstIndex(where: { $0.identifier == tabId }) {
-                        self.thread.persistedWebTabs[pIdx].title = shortHost
-                        self.persistWebTabs()
-                    }
+                    // Persist the updated default title
+                    self.thread.persistedWebTabs[pIdx].title = shortHost
+                    self.persistWebTabs()
                 }
             }
 
@@ -212,30 +213,34 @@ extension ThreadDetailViewController {
         guard displayIndex < tabSlots.count, displayIndex < tabItems.count,
               case .web(let identifier) = tabSlots[displayIndex] else { return }
 
-        let currentName = tabItems[displayIndex].titleLabel.stringValue
+        guard let pIdx = thread.persistedWebTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
+        let persisted = thread.persistedWebTabs[pIdx]
 
         let alert = NSAlert()
         alert.messageText = "Rename Tab"
-        alert.informativeText = "Enter a new name for this tab."
+        alert.informativeText = "Enter a new name for this tab, or leave empty to restore the default."
         alert.addButton(withTitle: "Rename")
         alert.addButton(withTitle: "Cancel")
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-        textField.stringValue = currentName
+        textField.stringValue = persisted.customTitle ?? ""
+        textField.placeholderString = persisted.title
         alert.accessoryView = textField
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
 
         let newName = textField.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !newName.isEmpty else { return }
 
-        tabItems[displayIndex].titleLabel.stringValue = newName
-
-        if let pIdx = thread.persistedWebTabs.firstIndex(where: { $0.identifier == identifier }) {
-            thread.persistedWebTabs[pIdx].title = newName
-            persistWebTabs()
+        if newName.isEmpty {
+            // Restore default naming mechanism
+            thread.persistedWebTabs[pIdx].customTitle = nil
+            tabItems[displayIndex].titleLabel.stringValue = thread.persistedWebTabs[pIdx].title
+        } else {
+            thread.persistedWebTabs[pIdx].customTitle = newName
+            tabItems[displayIndex].titleLabel.stringValue = newName
         }
+        persistWebTabs()
     }
 
     /// Called when selecting a terminal tab — ensures web tabs are hidden.

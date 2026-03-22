@@ -84,13 +84,17 @@ public nonisolated struct PersistedWebTab: Codable, Sendable, Equatable {
     public var title: String
     public let iconType: WebTabIconType
     public var isPinned: Bool
+    /// User-set custom title. When non-nil, overrides the default URL-based naming.
+    /// Setting to nil restores the default mechanism.
+    public var customTitle: String?
 
-    public init(identifier: String, url: URL, title: String, iconType: WebTabIconType, isPinned: Bool = false) {
+    public init(identifier: String, url: URL, title: String, iconType: WebTabIconType, isPinned: Bool = false, customTitle: String? = nil) {
         self.identifier = identifier
         self.url = url
         self.title = title
         self.iconType = iconType
         self.isPinned = isPinned
+        self.customTitle = customTitle
     }
 
     public init(from decoder: Decoder) throws {
@@ -100,6 +104,12 @@ public nonisolated struct PersistedWebTab: Codable, Sendable, Equatable {
         title = try container.decode(String.self, forKey: .title)
         iconType = try container.decodeIfPresent(WebTabIconType.self, forKey: .iconType) ?? .none
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        customTitle = try container.decodeIfPresent(String.self, forKey: .customTitle)
+    }
+
+    /// The display title: custom title if set, otherwise the auto-generated title.
+    public var displayTitle: String {
+        customTitle ?? title
     }
 }
 
