@@ -98,6 +98,15 @@ extension ThreadDetailViewController {
         if webTabs[webIndex].view == nil {
             let entry = webTabs[webIndex]
             let webTabView = WebTabView(url: entry.url, identifier: entry.identifier)
+            webTabView.onOpenInNewTab = { [weak self] url in
+                guard let self else { return }
+                self.openWebTab(
+                    url: url,
+                    identifier: "web:\(UUID().uuidString)",
+                    title: WebURLNormalizer.shortHost(from: url) ?? "Web",
+                    iconType: .web
+                )
+            }
 
             // Auto-update tab title from page host for user-created web tabs.
             if entry.iconType == .web {
@@ -106,9 +115,7 @@ extension ThreadDetailViewController {
                     guard let self,
                           let url = webTabView.webView.url,
                           url.absoluteString != "about:blank",
-                          let host = url.host else { return }
-                    // Use short host — strip "www." prefix
-                    let shortHost = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+                          let shortHost = WebURLNormalizer.shortHost(from: url) else { return }
                     guard let slotIndex = self.tabSlots.firstIndex(of: .web(identifier: tabId)),
                           slotIndex < self.tabItems.count else { return }
                     self.tabItems[slotIndex].titleLabel.stringValue = shortHost

@@ -27,11 +27,16 @@ enum WebURLNormalizer {
             ? "http://" : "https://"
         return URL(string: prefix + trimmed)
     }
+
+    static func shortHost(from url: URL) -> String? {
+        guard let host = url.host else { return nil }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
 }
 
 /// Lightweight in-app browser view with back/forward/refresh navigation.
 /// Used for Jira tickets and similar web content displayed inside a tab.
-final class WebTabView: NSView, WKNavigationDelegate {
+final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
 
     let webView: WKWebView
     private let toolbar: NSStackView
@@ -44,6 +49,8 @@ final class WebTabView: NSView, WKNavigationDelegate {
 
     /// Fires when the page title changes (for updating the tab item label).
     var onTitleChange: ((String?) -> Void)?
+    /// Fires when the current page requests opening a URL in a separate tab.
+    var onOpenInNewTab: ((URL) -> Void)?
 
     init(url: URL, identifier: String) {
         self.tabIdentifier = identifier
@@ -72,7 +79,7 @@ final class WebTabView: NSView, WKNavigationDelegate {
 
         toolbar = NSStackView()
         toolbar.orientation = .horizontal
-        toolbar.spacing = 4
+        toolbar.spacing = 8
         toolbar.alignment = .centerY
         toolbar.translatesAutoresizingMaskIntoConstraints = false
 
@@ -81,8 +88,10 @@ final class WebTabView: NSView, WKNavigationDelegate {
         wantsLayer = true
 
         for btn in [backButton, forwardButton, refreshButton] {
-            btn.bezelStyle = .inline
-            btn.isBordered = false
+            btn.bezelStyle = .texturedSquare
+            btn.isBordered = true
+            btn.controlSize = .small
+            btn.imageScaling = .scaleProportionallyDown
             btn.translatesAutoresizingMaskIntoConstraints = false
             btn.setContentHuggingPriority(.required, for: .horizontal)
         }
@@ -98,8 +107,8 @@ final class WebTabView: NSView, WKNavigationDelegate {
 
         toolbar.addArrangedSubview(backButton)
         toolbar.addArrangedSubview(forwardButton)
-        toolbar.addArrangedSubview(refreshButton)
         toolbar.addArrangedSubview(addressField)
+        toolbar.addArrangedSubview(refreshButton)
 
         addSubview(toolbar)
         addSubview(webView)
@@ -110,6 +119,13 @@ final class WebTabView: NSView, WKNavigationDelegate {
             toolbar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             toolbar.heightAnchor.constraint(equalToConstant: 28),
 
+            backButton.widthAnchor.constraint(equalToConstant: 28),
+            backButton.heightAnchor.constraint(equalTo: backButton.widthAnchor),
+            forwardButton.widthAnchor.constraint(equalToConstant: 28),
+            forwardButton.heightAnchor.constraint(equalTo: forwardButton.widthAnchor),
+            refreshButton.widthAnchor.constraint(equalToConstant: 28),
+            refreshButton.heightAnchor.constraint(equalTo: refreshButton.widthAnchor),
+
             webView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 2),
             webView.leadingAnchor.constraint(equalTo: leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -117,6 +133,7 @@ final class WebTabView: NSView, WKNavigationDelegate {
         ])
 
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.load(URLRequest(url: url))
         updateNavButtons()
     }
@@ -172,7 +189,47 @@ final class WebTabView: NSView, WKNavigationDelegate {
         forwardButton.isEnabled = webView.canGoForward
     }
 
+    private func shouldOpenInNewTab(_ navigationAction: WKNavigationAction) -> Bool {
+        guard navigationAction.navigationType == .linkActivated else { return false }
+        return navigationAction.buttonNumber == 2 || navigationAction.modifierFlags.contains(.command)
+    }
+
+    private func openInNewTabIfPossible(_ navigationAction: WKNavigationAction) -> Bool {
+        guard let url = navigationAction.request.url else { return false }
+        onOpenInNewTab?(url)
+        return true
+    }
+
     // MARK: - WKNavigationDelegate
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+    ) {
+        if navigationAction.targetFrame?.isMainFrame == true,
+           shouldOpenInNewTab(navigationAction),
+           openInNewTabIfPossible(navigationAction) {
+            decisionHandler(.cancel)
+            return
+        }
+
+        decisionHandler(.allow)
+    }
+
+    // MARK: - WKUIDelegate
+
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        if navigationAction.targetFrame == nil {
+            _ = openInNewTabIfPossible(navigationAction)
+        }
+        return nil
+    }
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         MainActor.assumeIsolated {
