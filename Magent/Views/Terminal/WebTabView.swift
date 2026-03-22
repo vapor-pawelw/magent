@@ -49,6 +49,8 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
 
     /// Fires when the page title changes (for updating the tab item label).
     var onTitleChange: ((String?) -> Void)?
+    /// Fires when the committed URL changes (for persisting the current location).
+    var onURLChange: ((URL) -> Void)?
     /// Fires when the current page requests opening a URL in a separate tab.
     var onOpenInNewTab: ((URL) -> Void)?
 
@@ -244,6 +246,9 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         MainActor.assumeIsolated {
             updateNavButtons()
             updateAddressField()
+            if let url = webView.url, url.absoluteString != "about:blank" {
+                onURLChange?(url)
+            }
         }
     }
 

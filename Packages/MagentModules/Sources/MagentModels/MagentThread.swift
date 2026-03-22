@@ -80,7 +80,7 @@ public nonisolated enum WebTabIconType: String, Codable, Sendable {
 
 public nonisolated struct PersistedWebTab: Codable, Sendable, Equatable {
     public let identifier: String
-    public let url: URL
+    public var url: URL
     public var title: String
     public let iconType: WebTabIconType
     public var isPinned: Bool

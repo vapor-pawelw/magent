@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Fixed UI freezing during Local Sync Path resync by moving filesystem copy and hash work off the main thread.
 
 ### Web Tabs
+- Web tabs now remember the current page URL across app restarts, reopening where you left off instead of the original URL.
 - Renamed web tabs now stick — the custom name overrides the default URL-based title until you clear it. Renaming to an empty string restores automatic hostname-based naming.
 - Web tabs now identify as Safari so sites like Confluence no longer show "unsupported browser" errors.
 - Middle-click and Cmd-click on links now open them in a new web tab instead of navigating the current tab.

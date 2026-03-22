@@ -108,6 +108,16 @@ extension ThreadDetailViewController {
                 )
             }
 
+            // Persist current URL on navigation so it survives app restart.
+            let urlTabId = entry.identifier
+            webTabView.onURLChange = { [weak self] url in
+                guard let self,
+                      let pIdx = self.thread.persistedWebTabs.firstIndex(where: { $0.identifier == urlTabId }),
+                      self.thread.persistedWebTabs[pIdx].url != url else { return }
+                self.thread.persistedWebTabs[pIdx].url = url
+                self.persistWebTabs()
+            }
+
             // Auto-update tab title from page host for user-created web tabs.
             // Skip if user has set a custom title via rename.
             if entry.iconType == .web {
