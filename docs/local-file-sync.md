@@ -37,7 +37,7 @@ Non-main threads expose a top-bar resync button (↺) that, when clicked, shows 
 - **Project → Worktree**: copies the thread's eligible local sync paths from the main repo worktree into the thread (was the only available direction before)
 - **Worktree → Project**: pushes local sync paths from the thread worktree back to the main repo (same merge logic as archive sync-back, but on demand)
 
-The button is hidden when the project has no Local Sync Paths configured (re-evaluates when settings change, so it appears automatically after paths are added). While sync is running the button is replaced by a spinner; it returns when the operation completes. Both directions run filesystem work (recursive copy, hashing) via `@concurrent` methods on the concurrent thread pool so the UI stays responsive during large syncs. Only conflict alert presentation hops back to the main actor.
+The button is hidden when the project has no Local Sync Paths configured (re-evaluates when settings change, so it appears automatically after paths are added). While sync is running the button is replaced by a spinner and a persistent non-dismissible banner with a spinner is shown (e.g. "Syncing Local Paths from main repo…"). The banner is replaced by the success/warning/error result banner when the operation completes, or dismissed on cancellation. Both directions run filesystem work (recursive copy, hashing) via `@concurrent` methods on the concurrent thread pool so the UI stays responsive during large syncs. Only conflict alert presentation hops back to the main actor.
 
 ### Project → Worktree
 
@@ -93,7 +93,7 @@ Interactive archive (UI) offers:
 
 - `Override` (current conflict only)
 - `Ignore` (skip current conflict)
-- `Show Diff` (for "different file" conflicts on non-binary text files only) — opens a modal panel with a unified diff color-coded with green/red backgrounds, labeled with "Worktree:" / "Project:" prefixes so the origin of each side is clear. After closing the diff panel the conflict alert re-presents for the user to choose.
+- `Show Diff` (for "different file" conflicts on non-binary text files only) — opens a modal panel with a unified diff color-coded with green/red foreground text and subtle tinted backgrounds (matching `InlineDiffViewController` colors), labeled with "Worktree:" / "Project:" prefixes so the origin of each side is clear. Context lines use `labelColor` for dark mode readability. After closing the diff panel the conflict alert re-presents for the user to choose.
 - `Cancel Archive` (abort archive)
 - Holding Option changes `Override` to `Override All` and `Ignore` to `Ignore All` for the rest of that sync run
 
