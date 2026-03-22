@@ -13,6 +13,9 @@ All notable changes to this project will be documented in this file.
 - Keyboard shortcuts (New Thread, New Tab, Close Tab, Refresh/Hard Refresh Web Tab) are now configurable via settings and update at runtime without restart.
 - Jira ticket detection in Settings can now be limited to specific project prefixes, using a comma- or semicolon-separated filter like `IP, APPL, UT`.
 
+### Pull Requests
+- Fixed PR/MR detection failing silently on newer `gh` CLI versions that removed the `--sort` flag.
+
 ### Sidebar
 - Added colored priority arrows (↑ High Priority in red, ↓ Low Priority in green) to the thread sign menu alongside existing emoji signs. Arrow signs use a larger font than emoji signs for better visibility.
 - Thread rows now show a busy spinner from the moment a thread is created until the agent is ready (or prompt injection finishes), so new threads no longer appear idle during setup.

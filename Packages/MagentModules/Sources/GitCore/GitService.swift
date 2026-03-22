@@ -268,7 +268,7 @@ public final class GitService: Sendable {
 
         // Prefer open PRs; fall back to all states (merged/closed) if none found.
         for state in ["open", "all"] {
-            let cmd = "gh pr list --repo \(quotedRepo) --head \(quotedBranch) --json \(fields) --state \(state) --sort created --limit 1"
+            let cmd = "gh pr list --repo \(quotedRepo) --head \(quotedBranch) --json \(fields) --state \(state) --search 'sort:created-desc' --limit 1"
             let result = await ShellExecutor.execute(cmd)
             guard result.exitCode == 0 else { continue }
 
@@ -311,7 +311,7 @@ public final class GitService: Sendable {
         // Prefer open MRs; fall back to all states if none found.
         for mrState in ["opened", "all"] {
             let flag = mrState == "all" ? "--all" : "--state \(mrState)"
-            let cmd = "glab mr list --repo \(quotedRepo) --source-branch \(quotedBranch) \(flag) --sort created_at --output json --per-page 1"
+            let cmd = "glab mr list --repo \(quotedRepo) --source-branch \(quotedBranch) \(flag) --output json --per-page 1"
             let result = await ShellExecutor.execute(cmd)
             guard result.exitCode == 0 else { continue }
 
