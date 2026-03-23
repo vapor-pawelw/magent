@@ -2,6 +2,7 @@ import Foundation
 
 public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
     case newThread
+    case newThreadFromBranch
     case newTab
     case closeTab
     case refreshWebTab
@@ -10,6 +11,7 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
     public var displayName: String {
         switch self {
         case .newThread: "New Thread"
+        case .newThreadFromBranch: "New Thread from Branch"
         case .newTab: "New Tab"
         case .closeTab: "Close Tab"
         case .refreshWebTab: "Refresh Web Tab"
@@ -20,6 +22,7 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
     public var defaultBinding: KeyBinding {
         switch self {
         case .newThread: KeyBinding(keyCode: 45, modifiers: [.command]) // Cmd+N
+        case .newThreadFromBranch: KeyBinding(keyCode: 45, modifiers: [.command, .shift]) // Cmd+Shift+N
         case .newTab: KeyBinding(keyCode: 17, modifiers: [.command]) // Cmd+T
         case .closeTab: KeyBinding(keyCode: 13, modifiers: [.command]) // Cmd+W
         case .refreshWebTab: KeyBinding(keyCode: 15, modifiers: [.command]) // Cmd+R

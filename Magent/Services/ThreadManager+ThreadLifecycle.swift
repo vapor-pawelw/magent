@@ -18,6 +18,7 @@ extension ThreadManager {
         requestedBaseBranch: String? = nil,
         pendingPromptFileURL: URL? = nil,
         requestedSectionId: UUID? = nil,
+        insertAfterThreadId: UUID? = nil,
         skipAutoSelect: Bool = false,
         initialWebURL: URL? = nil
     ) async throws -> MagentThread {
@@ -99,7 +100,11 @@ extension ThreadManager {
         pendingThreadWithBusy.magentBusySessions.insert(MagentThread.threadSetupSentinel)
         threads.append(pendingThreadWithBusy)
         if let lastIndex = threads.indices.last {
-            placeThreadAtBottomOfSidebarGroup(threadId: threads[lastIndex].id)
+            if let insertAfterThreadId {
+                placeThreadAfterSibling(threadId: threads[lastIndex].id, afterThreadId: insertAfterThreadId)
+            } else {
+                placeThreadAtBottomOfSidebarGroup(threadId: threads[lastIndex].id)
+            }
         }
         if skipAutoSelect {
             skipNextAutoSelect = true

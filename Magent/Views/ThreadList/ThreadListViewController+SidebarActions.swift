@@ -209,7 +209,7 @@ extension ThreadListViewController {
         return projects.first
     }
 
-    func presentNewThreadSheet(for project: Project, anchorView: NSView, baseBranch: String? = nil) {
+    func presentNewThreadSheet(for project: Project, anchorView: NSView, baseBranch: String? = nil, sourceThread: MagentThread? = nil) {
         guard let window = view.window else { return }
         let settings = persistence.loadSettings()
 
@@ -239,6 +239,11 @@ extension ThreadListViewController {
             }
         }
 
+        // When creating from an existing thread, pre-select its section.
+        if let sourceThread, let sourceSectionId = threadManager.effectiveSectionId(for: sourceThread, settings: settings) {
+            defaultSectionIdByProjectId[sourceThread.projectId] = sourceSectionId
+        }
+
         let defaultBranchName = project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
         // Only prefill the base branch field when explicitly creating from another thread's branch.
         // When nil, the field stays empty and uses the default branch placeholder.
@@ -263,10 +268,28 @@ extension ThreadListViewController {
             defaultBranchName: defaultBranchName,
             showDraftCheckbox: true
         )
+        let capturedSourceThread = sourceThread
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in
             guard let self, let result else { return }
             let targetProject = result.selectedProject ?? project
+
+            // Only insert after the source thread when the new thread will land in the
+            // same project, section, and sidebar group. Otherwise fall back to normal
+            // bottom-of-group placement.
+            let effectiveInsertAfter: UUID? = {
+                guard let source = capturedSourceThread else { return nil }
+                // Project must match.
+                guard targetProject.id == source.projectId else { return nil }
+                // Source must be in the normal visible group (not pinned/hidden).
+                guard source.sidebarListState == .visible else { return nil }
+                // Section must match (compare effective section of source vs what the user picked).
+                let settings = self.persistence.loadSettings()
+                let sourceSectionId = self.threadManager.effectiveSectionId(for: source, settings: settings)
+                if sourceSectionId != result.selectedSectionId { return nil }
+                return source.id
+            }()
+
             self.createThread(
                 for: targetProject,
                 requestedAgentType: result.agentType,
@@ -278,6 +301,7 @@ extension ThreadListViewController {
                 requestedBranchName: result.branchName,
                 pendingPromptFileURL: result.pendingPromptFileURL,
                 requestedSectionId: result.selectedSectionId,
+                insertAfterThreadId: effectiveInsertAfter,
                 initialWebURL: result.initialWebURL,
                 draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "") } : nil
             )
@@ -326,6 +350,29 @@ extension ThreadListViewController {
         }
     }
 
+    /// Called from SplitViewController's Cmd+Shift+N shortcut. Creates a new thread
+    /// branching from the currently selected thread's branch, inheriting its section
+    /// and inserting right below it in the sidebar.
+    func requestNewThreadFromBranch() {
+        guard !isCreatingThread else { return }
+
+        let settings = persistence.loadSettings()
+        guard let sourceThread = selectedThreadFromState(),
+              let project = settings.projects.first(where: { $0.id == sourceThread.projectId }),
+              let baseBranch = baseBranchForNewThread(from: sourceThread, project: project) else {
+            // Fall back to regular new-thread flow when no thread is selected or no branch is available.
+            requestNewThread()
+            return
+        }
+
+        presentNewThreadSheet(
+            for: project,
+            anchorView: outlineView,
+            baseBranch: baseBranch,
+            sourceThread: sourceThread
+        )
+    }
+
     /// Called from SplitViewController's Cmd+N shortcut to respect the loading guard.
     /// Picks the most relevant project context and opens that project's agent menu.
     func requestNewThread() {
@@ -357,6 +404,7 @@ extension ThreadListViewController {
         requestedBranchName: String? = nil,
         pendingPromptFileURL: URL? = nil,
         requestedSectionId: UUID? = nil,
+        insertAfterThreadId: UUID? = nil,
         initialWebURL: URL? = nil,
         draftPrompt: (AgentType, String)? = nil
     ) {
@@ -374,6 +422,7 @@ extension ThreadListViewController {
                     requestedBaseBranch: baseBranch,
                     pendingPromptFileURL: pendingPromptFileURL,
                     requestedSectionId: requestedSectionId,
+                    insertAfterThreadId: insertAfterThreadId,
                     initialWebURL: initialWebURL
                 )
                 if let desc = taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),

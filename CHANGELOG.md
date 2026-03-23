@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 - Right-clicking a completed thread now offers "Mark as Read" at the top of the context menu, clearing the completion badge without switching to it.
 - Thread rows now show how long the thread has been busy or idle (e.g. "<1m", "5m", "2h") in a subtle label at the bottom-right corner. Can be toggled off in Settings > Threads.
+- Cmd+Shift+N creates a new thread branching from the selected thread's branch, inheriting its section and inserting right below it in the sidebar.
 
 ### Thread
 - Fixed tab sessions restarting when switching between threads — terminal surfaces are now preserved in the reuse cache instead of being destroyed and recreated.

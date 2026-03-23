@@ -116,6 +116,11 @@ final class SplitViewController: NSSplitViewController {
         threadListVC.requestNewThread()
     }
 
+    /// Forwarded from the main menu's "New Thread from Branch" item (⌘⇧N).
+    @objc func requestNewThreadFromBranch() {
+        threadListVC.requestNewThreadFromBranch()
+    }
+
     // MARK: - Key Bindings
 
     @objc private func keyBindingsDidChange() {
@@ -145,6 +150,10 @@ final class SplitViewController: NSSplitViewController {
         }
         if matchesBinding(.closeTab, keyCode: event.keyCode, modifiers: eventModifiers) {
             closeTabShortcut()
+            return nil
+        }
+        if matchesBinding(.newThreadFromBranch, keyCode: event.keyCode, modifiers: eventModifiers) {
+            requestNewThreadFromBranch()
             return nil
         }
         if matchesBinding(.newThread, keyCode: event.keyCode, modifiers: eventModifiers) {

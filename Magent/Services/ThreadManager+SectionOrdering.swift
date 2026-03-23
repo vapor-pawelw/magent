@@ -52,6 +52,37 @@ extension ThreadManager {
         threads[index].displayOrder = maxOrder + 1
     }
 
+    /// Places a thread immediately after a sibling thread in the display order.
+    /// Falls back to `placeThreadAtBottomOfSidebarGroup` when the sibling cannot be found.
+    func placeThreadAfterSibling(threadId: UUID, afterThreadId: UUID) {
+        guard let threadIndex = threads.firstIndex(where: { $0.id == threadId }),
+              let siblingIndex = threads.firstIndex(where: { $0.id == afterThreadId }) else {
+            placeThreadAtBottomOfSidebarGroup(threadId: threadId)
+            return
+        }
+
+        let settings = persistence.loadSettings()
+        let sibling = threads[siblingIndex]
+        let siblingOrder = sibling.displayOrder
+        let sectionId = effectiveSectionId(for: sibling, settings: settings)
+
+        // Find all threads in the same group that come after the sibling (by display order)
+        // and shift them down by 1 to make room.
+        let group = displayOrderGroup(
+            projectId: sibling.projectId,
+            sidebarGroup: sidebarGroup(for: sibling),
+            sectionId: sectionId,
+            settings: settings,
+            excluding: threadId
+        )
+        for peer in group where peer.displayOrder > siblingOrder {
+            if let i = threads.firstIndex(where: { $0.id == peer.id }) {
+                threads[i].displayOrder += 1
+            }
+        }
+        threads[threadIndex].displayOrder = siblingOrder + 1
+    }
+
     // MARK: - Dock Badge
 
     @MainActor
