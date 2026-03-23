@@ -27,6 +27,8 @@ All notable changes to this project will be documented in this file.
 - Toolbar buttons are now consistently sized with improved spacing, and Refresh is moved to the right of the address bar.
 
 ### CLI
+- Interactive thread picker now shows statuses (busy, input, done, dirty, etc.) on a dedicated line instead of inline with branch info. PR and Jira ticket details appear on their own line when present.
+- Tab picker now shows per-tab status badges (busy, input, done, limited) on a separate line.
 - Fixed `magent-cli` not being installed to `/tmp` on launch — atomic file write silently failed across filesystem boundaries.
 
 ## 1.3.2 - 2026-03-22

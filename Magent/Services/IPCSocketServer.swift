@@ -5,7 +5,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v24"
+    private static let cliVersion = "magent-cli-v25"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -282,8 +282,16 @@ actor IPCSocketServer {
             [ "$8" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_MUTED" "[hidden]")")
             [ "$9" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_YELLOW" "[branch?]")")
             [ "${10}" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_RED" "[jira]")")
-            [ -n "$badges" ] || badges="$(paint "$ANSI_MUTED" "[idle]")"
             printf '%s' "$badges"
+        }
+
+        format_tab_badges() {
+            tab_badges=""
+            [ "$1" = "true" ] && tab_badges=$(append_badge "$tab_badges" "$(paint "$ANSI_BLUE" "[busy]")")
+            [ "$2" = "true" ] && tab_badges=$(append_badge "$tab_badges" "$(paint "$ANSI_YELLOW" "[input]")")
+            [ "$3" = "true" ] && tab_badges=$(append_badge "$tab_badges" "$(paint "$ANSI_GREEN" "[done]")")
+            [ "$4" = "true" ] && tab_badges=$(append_badge "$tab_badges" "$(paint "$ANSI_RED" "[limited]")")
+            printf '%s' "$tab_badges"
         }
 
         format_picker_title() {
@@ -302,7 +310,6 @@ actor IPCSocketServer {
             picker_branch="$3"
             picker_worktree="$4"
             picker_agent="$5"
-            picker_badges="$6"
 
             picker_meta=""
             if [ -n "$picker_name" ] && [ "$picker_name" != "$picker_title" ]; then
@@ -312,11 +319,26 @@ actor IPCSocketServer {
             picker_meta=$(join_with_dot "$picker_meta" "$(paint "$ANSI_MUTED" "$picker_worktree")")
             picker_meta=$(join_with_dot "$picker_meta" "$(paint "$ANSI_BLUE" "$picker_agent")")
 
-            if [ -n "$picker_meta" ]; then
-                printf '%s  %s' "$picker_badges" "$picker_meta"
-            else
-                printf '%s' "$picker_badges"
+            printf '%s' "$picker_meta"
+        }
+
+        format_picker_pr_jira() {
+            pr_label="$1"
+            pr_status="$2"
+            jira_key="$3"
+
+            pr_jira=""
+            if [ -n "$pr_label" ] && [ "$pr_label" != "-" ]; then
+                pr_text="$pr_label"
+                if [ -n "$pr_status" ] && [ "$pr_status" != "-" ]; then
+                    pr_text="$pr_text ($pr_status)"
+                fi
+                pr_jira=$(join_with_dot "$pr_jira" "$(paint "$ANSI_CYAN" "$pr_text")")
             fi
+            if [ -n "$jira_key" ] && [ "$jira_key" != "-" ]; then
+                pr_jira=$(join_with_dot "$pr_jira" "$(paint "$ANSI_YELLOW" "$jira_key")")
+            fi
+            printf '%s' "$pr_jira"
         }
 
         format_ls_status() {
@@ -372,8 +394,8 @@ actor IPCSocketServer {
                     } else {
                         n++
                         printf "%3d) %s\n", n, $2
-                        if (NF >= 3 && $3 != "") {
-                            printf "     %s\n", $3
+                        for (i = 3; i <= NF; i++) {
+                            if ($i != "") printf "     %s\n", $i
                         }
                         printf "\n"
                     }
@@ -446,7 +468,10 @@ actor IPCSocketServer {
                         (if (.status.isPinned // false) then "true" else "false" end),
                         (if (.status.isSidebarHidden // false) then "true" else "false" end),
                         (if (.status.hasBranchMismatch // false) then "true" else "false" end),
-                        (if (.status.jiraUnassigned // false) then "true" else "false" end)
+                        (if (.status.jiraUnassigned // false) then "true" else "false" end),
+                        (.prLabel // "-"),
+                        (.prStatusText // "-"),
+                        (.jiraTicketKey // "-")
                     ] | @tsv)
                   end
             ')
@@ -454,7 +479,7 @@ actor IPCSocketServer {
             if [ -n "$thread_raw" ]; then
                 thread_tmp=$(mktemp 2>/dev/null || mktemp -t magent-thread-picker)
                 printf '%s\n' "$thread_raw" >"$thread_tmp"
-                thread_lines=$(while IFS="$(printf '\t')" read -r row_type thread_id thread_is_main thread_title thread_name thread_branch thread_worktree thread_agent thread_busy thread_input thread_done thread_dirty thread_limited thread_delivered thread_pinned thread_hidden thread_mismatch thread_jira; do
+                thread_lines=$(while IFS="$(printf '\t')" read -r row_type thread_id thread_is_main thread_title thread_name thread_branch thread_worktree thread_agent thread_busy thread_input thread_done thread_dirty thread_limited thread_delivered thread_pinned thread_hidden thread_mismatch thread_jira thread_pr_label thread_pr_status thread_jira_key; do
                     if [ "$row_type" = "S" ]; then
                         section_color="$thread_is_main"
                         section_bullet=$(paint_hex "$section_color" "●")
@@ -462,10 +487,11 @@ actor IPCSocketServer {
                         section_label="$section_bullet $section_name"
                         printf '__section__%s%s%s%s\n' "$thread_id" "$SEP" "$section_label" "$SEP"
                     else
-                        thread_badges=$(format_thread_badges "$thread_busy" "$thread_input" "$thread_done" "$thread_dirty" "$thread_limited" "$thread_delivered" "$thread_pinned" "$thread_hidden" "$thread_mismatch" "$thread_jira")
                         thread_label=$(format_picker_title "$thread_is_main" "$thread_title")
-                        thread_detail=$(format_picker_detail "$thread_title" "$thread_name" "$thread_branch" "$thread_worktree" "$thread_agent" "$thread_badges")
-                        printf '%s%s%s%s%s\n' "$thread_id" "$SEP" "$thread_label" "$SEP" "$thread_detail"
+                        thread_detail=$(format_picker_detail "$thread_title" "$thread_name" "$thread_branch" "$thread_worktree" "$thread_agent")
+                        thread_pr_jira=$(format_picker_pr_jira "$thread_pr_label" "$thread_pr_status" "$thread_jira_key")
+                        thread_badges=$(format_thread_badges "$thread_busy" "$thread_input" "$thread_done" "$thread_dirty" "$thread_limited" "$thread_delivered" "$thread_pinned" "$thread_hidden" "$thread_mismatch" "$thread_jira")
+                        printf '%s%s%s%s%s%s%s%s%s\n' "$thread_id" "$SEP" "$thread_label" "$SEP" "$thread_detail" "$SEP" "$thread_pr_jira" "$SEP" "$thread_badges"
                     fi
                 done <"$thread_tmp")
                 rm -f "$thread_tmp"
@@ -496,7 +522,21 @@ actor IPCSocketServer {
                 return 0
             fi
 
-            tab_lines=$(printf '%s' "$tab_resp" | jq -r '.tabs | sort_by(.index)[] | "\(.sessionName)\u001fTab #\(.index)\u001f\((if .isAgent then (.agentType // "agent") else "terminal" end)) · \(.sessionName)"')
+            tab_raw=$(printf '%s' "$tab_resp" | jq -r '.tabs | sort_by(.index)[] | [
+                .sessionName,
+                .index,
+                (if .isAgent then (.agentType // "agent") else "terminal" end),
+                (if (.isBusy // false) then "true" else "false" end),
+                (if (.isWaitingForInput // false) then "true" else "false" end),
+                (if (.hasUnreadCompletion // false) then "true" else "false" end),
+                (if (.isBlockedByRateLimit // false) then "true" else "false" end)
+            ] | @tsv')
+            tab_lines=$(printf '%s\n' "$tab_raw" | while IFS="$(printf '\t')" read -r tab_session tab_idx tab_agent_type tab_busy tab_input tab_done tab_limited; do
+                tab_label="Tab #${tab_idx}"
+                tab_detail=$(join_with_dot "" "$(paint "$ANSI_BLUE" "$tab_agent_type")" "$(paint "$ANSI_MUTED" "$tab_session")")
+                tab_badges=$(format_tab_badges "$tab_busy" "$tab_input" "$tab_done" "$tab_limited")
+                printf '%s%s%s%s%s%s%s\n' "$tab_session" "$SEP" "$tab_label" "$SEP" "$tab_detail" "$SEP" "$tab_badges"
+            done)
             {
                 printf '__back__%s← Back%sReturn to thread list\n' "$SEP" "$SEP"
                 printf '%s\n' "$tab_lines"
