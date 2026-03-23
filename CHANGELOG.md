@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Settings
+- "Remember type selection" now remembers the last agent type globally across all projects, not per-project.
 - Software update now shows explicit download progress before closing the app. After download completes, an "Install and Relaunch" button lets you choose when to restart.
 - Magent now checks for new versions every hour in the background (respects the existing auto-check setting and responds immediately to setting toggles).
 

@@ -162,14 +162,17 @@ struct AgentLaunchSheetPrefill {
 
 enum AgentLastSelectionStore {
     private static let persistence = PersistenceService.shared
+    private static let globalKey = "global"
 
     static func lastSelection(for scope: AgentLaunchPromptDraftScope) -> String? {
-        persistence.loadAgentLastSelections()[scope.storageKey]
+        let selections = persistence.loadAgentLastSelections()
+        // Try global key first, fall back to legacy per-scope key for backwards compat
+        return selections[globalKey] ?? selections[scope.storageKey]
     }
 
     static func save(_ selectionRaw: String, for scope: AgentLaunchPromptDraftScope) {
         var selections = persistence.loadAgentLastSelections()
-        selections[scope.storageKey] = selectionRaw
+        selections[globalKey] = selectionRaw
         persistence.saveAgentLastSelections(selections)
     }
 }
