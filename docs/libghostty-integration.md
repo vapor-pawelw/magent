@@ -314,7 +314,7 @@ This pattern works for both paths:
 
 **Rule**: Any code path that kills a tmux session (and thus kills the process inside a Ghostty surface) must ensure `ghostty_surface_free` is called **before the first `await`** in the same `@MainActor` method. The `magentTabWillClose` notification exists precisely for code paths that don't have direct access to the view hierarchy.
 
-**Terminal-view cache gotcha:** removing a `TerminalSurfaceView` from the view hierarchy still leads to `viewDidMoveToWindow(nil)` and `destroySurface()`. Reattaching that same AppKit view later recreates a fresh Ghostty surface in `viewDidMoveToWindow(window != nil)`. Any terminal-view cache should therefore be described as wrapper/view reuse only; it does not preserve a live Ghostty surface across detachment.
+**Terminal-view cache surface preservation:** `ReusableTerminalViewCache.store()` sets `preserveSurfaceOnDetach = true` on the `TerminalSurfaceView` before calling `removeFromSuperview()`. This prevents `viewDidMoveToWindow(nil)` from calling `destroySurface()`, so the live Ghostty surface survives while cached. When the view is re-attached to a window, `preserveSurfaceOnDetach` is cleared automatically and the existing surface continues rendering — no session restart. If the cached view is evicted (or deallocated without re-attachment), `deinit` cleans up the preserved surface.
 
 ## Link Opening and Hover (GHOSTTY_ACTION_OPEN_URL / GHOSTTY_ACTION_MOUSE_OVER_LINK)
 
