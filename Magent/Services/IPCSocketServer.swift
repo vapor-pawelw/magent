@@ -1142,8 +1142,13 @@ actor IPCSocketServer {
         esac
         """#
 
-        try? script.write(toFile: path, atomically: true, encoding: .utf8)
-        chmod(path, 0o755)
+        do {
+            try script.write(toFile: path, atomically: false, encoding: .utf8)
+            chmod(path, 0o755)
+            NSLog("[IPC] CLI script installed at %@", path)
+        } catch {
+            NSLog("[IPC] Failed to write CLI script to %@: %@", path, error.localizedDescription)
+        }
         installPersistentLaunchers()
     }
 

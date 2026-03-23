@@ -22,6 +22,9 @@ All notable changes to this project will be documented in this file.
 - Links with `target="_blank"` now open in a new web tab instead of being silently dropped.
 - Toolbar buttons are now consistently sized with improved spacing, and Refresh is moved to the right of the address bar.
 
+### CLI
+- Fixed `magent-cli` not being installed to `/tmp` on launch — atomic file write silently failed across filesystem boundaries.
+
 ## 1.3.2 - 2026-03-22
 
 
