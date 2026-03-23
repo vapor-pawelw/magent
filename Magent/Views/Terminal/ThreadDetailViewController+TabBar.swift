@@ -64,6 +64,8 @@ extension ThreadDetailViewController {
             selectTerminalTab(at: index, sessionName: sessionName)
         case .web(let identifier):
             selectWebTabByIdentifier(identifier, displayIndex: index)
+        case .draft(let identifier):
+            selectDraftTab(identifier: identifier, displayIndex: index)
         }
     }
 
@@ -74,9 +76,10 @@ extension ThreadDetailViewController {
         guard preparedSessions.contains(sessionName) && !needsLazyAttachRevalidation else {
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                // Hide current terminal/web content so the old tab doesn't show through.
+                // Hide current terminal/web/draft content so the old tab doesn't show through.
                 for termView in self.terminalViews { termView.isHidden = true }
                 self.hideActiveWebTab()
+                self.hideActiveDraftTab()
 
                 let sessionAgentType = await self.threadManager.loadingOverlayAgentType(
                     for: self.thread,
@@ -121,6 +124,7 @@ extension ThreadDetailViewController {
         guard let tv = terminalView(forSession: sessionName) else { return }
 
         hideActiveWebTab()
+        hideActiveDraftTab()
 
         for (i, item) in tabItems.enumerated() {
             item.isSelected = (i == index)
@@ -260,6 +264,11 @@ extension ThreadDetailViewController {
                 item.availableAgentsForContinue = settings.availableActiveAgents
             case .web:
                 item.onRename = { [weak self] in self?.showWebTabRenameDialog(at: i) }
+                item.onContinueIn = nil
+                item.onExportContext = nil
+                item.availableAgentsForContinue = []
+            case .draft:
+                item.onRename = nil
                 item.onContinueIn = nil
                 item.onExportContext = nil
                 item.availableAgentsForContinue = []

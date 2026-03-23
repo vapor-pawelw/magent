@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - Fixed banner buttons and dismiss (X) being unresponsive — clicks were silently ignored due to a coordinate-space mismatch between the flipped split view and the unflipped banner overlay.
 
 ### Thread
+- New "Draft" checkbox on the initial prompt window lets you save a prompt as a draft tab instead of running it immediately. Draft tabs persist across relaunches, show an editable agent picker and prompt, and can be discarded or started when ready.
 - Sync status in the sidebar now shows "Sync failed" in red when PR or Jira sync encounters network or auth errors, instead of silently showing the last successful sync time.
 - Local Sync now shows a persistent spinner banner while syncing files, replacing the toolbar-only spinner that was easy to miss.
 - Local Sync conflict diffs are now readable in dark mode — added/removed lines use colored text instead of relying solely on background tinting.

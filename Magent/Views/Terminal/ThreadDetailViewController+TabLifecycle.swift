@@ -55,6 +55,9 @@ extension ThreadDetailViewController {
             guard response == .alertFirstButtonReturn else { return }
 
             closeWebTab(identifier: identifier)
+
+        case .draft(let identifier):
+            closeDraftTab(identifier: identifier)
         }
     }
 
@@ -96,17 +99,23 @@ extension ThreadDetailViewController {
         batchCloseSlots(slotsToClose)
     }
 
-    /// Close a batch of slots (terminal + web).
+    /// Close a batch of slots (terminal + web + draft).
     private func batchCloseSlots(_ slots: [TabSlot]) {
         var terminalSessionsToClose: [String] = []
         var webIdsToClose: [String] = []
+        var draftIdsToClose: [String] = []
         for slot in slots {
             switch slot {
             case .terminal(let name): terminalSessionsToClose.append(name)
             case .web(let id): webIdsToClose.append(id)
+            case .draft(let id): draftIdsToClose.append(id)
             }
         }
-        // Close web tabs first (synchronous)
+        // Close draft tabs first (synchronous)
+        for id in draftIdsToClose {
+            removeDraftTab(identifier: id)
+        }
+        // Close web tabs (synchronous)
         for id in webIdsToClose {
             closeWebTab(identifier: id)
         }

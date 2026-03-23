@@ -207,6 +207,8 @@ struct AgentLaunchSheetConfig {
     let baseBranchRepoPath: String?
     /// The project's default branch name (e.g. "main"). Used as placeholder and for validation fallback.
     let defaultBranchName: String?
+    /// When true, a "Draft" checkbox is shown (only enabled for agent mode).
+    let showDraftCheckbox: Bool
 
     init(
         title: String,
@@ -226,7 +228,8 @@ struct AgentLaunchSheetConfig {
         defaultSectionIdByProjectId: [UUID: UUID] = [:],
         baseBranchPrefill: String? = nil,
         baseBranchRepoPath: String? = nil,
-        defaultBranchName: String? = nil
+        defaultBranchName: String? = nil,
+        showDraftCheckbox: Bool = false
     ) {
         self.title = title
         self.acceptButtonTitle = acceptButtonTitle
@@ -246,6 +249,7 @@ struct AgentLaunchSheetConfig {
         self.baseBranchPrefill = baseBranchPrefill
         self.baseBranchRepoPath = baseBranchRepoPath
         self.defaultBranchName = defaultBranchName
+        self.showDraftCheckbox = showDraftCheckbox
     }
 }
 
@@ -268,6 +272,8 @@ struct AgentLaunchSheetResult {
     let selectedSectionId: UUID?
     /// URL for web tab creation. Non-nil when the user selected the "Web" type.
     let initialWebURL: URL?
+    /// When true, the prompt should be saved as a draft tab instead of being executed immediately.
+    let isDraft: Bool
 }
 
 /// A rounded chip view that shows accent-tinted background, adapting correctly to light/dark mode.
@@ -296,6 +302,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let baseBranchHintLabel = NSTextField(labelWithString: "")
     private let baseBranchErrorLabel = NSTextField(labelWithString: "")
     private let titleField = NSTextField()
+    private let draftCheckbox = NSButton(checkboxWithTitle: "Draft", target: nil, action: nil)
+    private var draftCheckboxRow: NSView?
     private let rememberCheckbox = NSButton(checkboxWithTitle: "Remember type selection", target: nil, action: nil)
     private let switchToNewThreadCheckbox = NSButton(checkboxWithTitle: "Switch to new thread", target: nil, action: nil)
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
@@ -550,6 +558,31 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         promptScrollView.autohidesScrollers = true
         promptScrollView.documentView = promptTextView
         stack.addArrangedSubview(promptScrollView)
+
+        // Draft checkbox — right-aligned below the prompt, only visible for agent mode
+        if config.showDraftCheckbox {
+            draftCheckbox.state = .off
+            draftCheckbox.font = .systemFont(ofSize: 11)
+            draftCheckbox.contentTintColor = .controlAccentColor
+            draftCheckbox.toolTip = "Save this prompt as a draft tab instead of running it immediately"
+
+            let draftRow = NSStackView()
+            draftRow.orientation = .horizontal
+            draftRow.alignment = .centerY
+            draftRow.translatesAutoresizingMaskIntoConstraints = false
+            let draftSpacer = NSView()
+            draftSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            draftSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            draftRow.addArrangedSubview(draftSpacer)
+            draftRow.addArrangedSubview(draftCheckbox)
+
+            stack.setCustomSpacing(4, after: promptScrollView)
+            stack.addArrangedSubview(draftRow)
+            NSLayoutConstraint.activate([draftRow.widthAnchor.constraint(equalTo: stack.widthAnchor)])
+            stack.setCustomSpacing(14, after: draftRow)
+            draftCheckboxRow = draftRow
+            updateDraftCheckboxVisibility()
+        }
 
         let lineHeight = promptFont.ascender + abs(promptFont.descender) + promptFont.leading
         let promptHeight = max((lineHeight * 7) + 20, 130)
@@ -1122,6 +1155,16 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         promptTextView.isEditable = true
         promptTextView.alphaValue = 1.0
         promptLabel?.stringValue = promptLabelText
+        updateDraftCheckboxVisibility()
+    }
+
+    private func updateDraftCheckboxVisibility() {
+        guard config.showDraftCheckbox else { return }
+        let isAgent = currentMode == "agent"
+        draftCheckboxRow?.isHidden = !isAgent
+        if !isAgent {
+            draftCheckbox.state = .off
+        }
     }
 
     // MARK: - NSTextViewDelegate
@@ -1227,6 +1270,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func performAccept(item: PickerItem, rawPrompt: String, rawDesc: String, rawBranch: String, rawBaseBranch: String, rawTitle: String) {
+        let isDraft = config.showDraftCheckbox && draftCheckbox.state == .on
+
         AgentLastSelectionStore.save(item.storageRaw, for: currentDraftScope)
 
         // Write crash-recovery temp file before clearing the draft, so the submitted
@@ -1238,6 +1283,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }()
         let pendingPromptFileURL: URL?
         if case .web = item {
+            pendingPromptFileURL = nil
+        } else if isDraft {
+            // Drafts are persisted in the thread model, not through tmux injection —
+            // skip the crash-recovery temp file so it doesn't linger as an orphan.
             pendingPromptFileURL = nil
         } else {
             pendingPromptFileURL = rawPrompt.isEmpty ? nil : PendingInitialPromptStore.save(
@@ -1285,7 +1334,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 pendingPromptFileURL: pendingPromptFileURL,
                 selectedProject: selectedProject,
                 selectedSectionId: selectedSectionId,
-                initialWebURL: nil
+                initialWebURL: nil,
+                isDraft: false
             ))
         case .agent(let type, _):
             finish(with: AgentLaunchSheetResult(
@@ -1296,10 +1346,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 branchName: rawBranch.isEmpty ? nil : rawBranch,
                 baseBranch: rawBaseBranch.isEmpty ? nil : rawBaseBranch,
                 tabTitle: rawTitle.isEmpty ? nil : rawTitle,
-                pendingPromptFileURL: pendingPromptFileURL,
+                pendingPromptFileURL: isDraft ? nil : pendingPromptFileURL,
                 selectedProject: selectedProject,
                 selectedSectionId: selectedSectionId,
-                initialWebURL: nil
+                initialWebURL: nil,
+                isDraft: isDraft
             ))
         case .web:
             let url = WebURLNormalizer.normalize(rawPrompt) ?? URL(string: "about:blank")!
@@ -1314,7 +1365,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 pendingPromptFileURL: nil,
                 selectedProject: selectedProject,
                 selectedSectionId: selectedSectionId,
-                initialWebURL: url
+                initialWebURL: url,
+                isDraft: false
             ))
         }
     }
