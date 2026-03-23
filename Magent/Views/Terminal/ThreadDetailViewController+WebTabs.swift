@@ -141,6 +141,7 @@ extension ThreadDetailViewController {
         for tv in terminalViews {
             tv.isHidden = true
         }
+        hideActiveDraftTab()
 
         // Hide all web tab views except the selected one
         for wt in webTabs {

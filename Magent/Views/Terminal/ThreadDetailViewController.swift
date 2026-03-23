@@ -138,6 +138,7 @@ final class ThreadDetailViewController: NSViewController {
     enum TabSlot: Equatable {
         case terminal(sessionName: String)
         case web(identifier: String)
+        case draft(identifier: String)
     }
     var tabItems: [TabItemView] = []
     var tabSlots: [TabSlot] = []
@@ -145,6 +146,8 @@ final class ThreadDetailViewController: NSViewController {
     var terminalViews: [TerminalSurfaceView] = []
     /// Web tab entries in creation order (NOT display order).
     var webTabs: [WebTabEntry] = []
+    var draftTabs: [DraftTabEntry] = []
+    var activeDraftTabId: String?
     var activeWebTabId: String?
     var currentTabIndex = 0
     /// Index of the non-closable "primary" tab. -1 means all tabs are closable (main threads).
@@ -631,11 +634,14 @@ final class ThreadDetailViewController: NSViewController {
             backgroundSessionPreparationTask?.cancel()
             backgroundSessionPreparationTask = nil
 
-            // Clear any existing web tabs from a previous setupTabs call
+            // Clear any existing web/draft tabs from a previous setupTabs call
             for wt in webTabs { wt.view?.removeFromSuperview() }
             webTabs.removeAll()
+            for dt in draftTabs { dt.viewController?.view.removeFromSuperview() }
+            draftTabs.removeAll()
             tabSlots.removeAll()
             activeWebTabId = nil
+            activeDraftTabId = nil
 
             for (i, sessionName) in orderedSessions.enumerated() {
                 let title = thread.displayName(for: sessionName, at: i)
@@ -651,6 +657,9 @@ final class ThreadDetailViewController: NSViewController {
             // Restore persisted web tabs (pages load lazily on selection).
             // Pinned web tabs are inserted into the pinned section; unpinned appended at end.
             restoreWebTabItems()
+
+            // Restore persisted draft tabs (view controllers created lazily on selection).
+            restoreDraftTabItems()
 
             rebuildTabBar()
             rebindAllTabActions()
