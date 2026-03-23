@@ -29,6 +29,11 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     public var onSubmitLine: ((String) -> Void)?
     /// Called after the user scrolls the terminal surface.
     public var onScroll: (() -> Void)?
+    /// When true, the surface is preserved when the view is removed from its window
+    /// (e.g. when cached for reuse across thread switches). The flag is automatically
+    /// cleared once the view re-attaches to a window.
+    public var preserveSurfaceOnDetach = false
+
     /// Returns a tmux-reported openable URL under the most recent mouse click for this view's session.
     public var resolveTmuxMouseOpenableURL: (() -> String?)?
     /// Resolves a visible URL near the current mouse position using normalized pane coordinates.
@@ -72,7 +77,23 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         fatalError("init(coder:) has not been implemented")
     }
 
-    deinit {}
+    deinit {
+        // Clean up a preserved surface that was never re-attached (e.g. cache eviction).
+        // Surface and C strings are nonisolated(unsafe) because deinit is nonisolated,
+        // but this view is always deallocated on the main actor in practice.
+        if let surface {
+            let appManager = GhosttyAppManager.shared
+            MainActor.assumeIsolated {
+                appManager.unregisterSurface(surface)
+                if appManager.focusedSurface == surface {
+                    appManager.focusedSurface = nil
+                }
+            }
+            ghostty_surface_free(surface)
+        }
+        if let cWorkingDirectory { free(cWorkingDirectory) }
+        if let cCommand { free(cCommand) }
+    }
 
     // MARK: - Layer
 
@@ -132,16 +153,19 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
     override public func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        GhosttyAppManager.log("viewDidMoveToWindow: window=\(window != nil), surface=\(surface != nil)")
-        if window != nil && surface == nil {
-            createSurface()
-        }
+        GhosttyAppManager.log("viewDidMoveToWindow: window=\(window != nil), surface=\(surface != nil), preserve=\(preserveSurfaceOnDetach)")
         if window != nil {
+            preserveSurfaceOnDetach = false
+            if surface == nil {
+                createSurface()
+            }
             updateSurfaceSize()
             GhosttyAppManager.shared.surfaceDidAppear()
         } else {
             GhosttyAppManager.shared.surfaceDidDisappear()
-            destroySurface()
+            if !preserveSurfaceOnDetach {
+                destroySurface()
+            }
         }
     }
 

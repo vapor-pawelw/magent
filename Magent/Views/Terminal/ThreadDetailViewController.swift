@@ -56,6 +56,7 @@ final class ReusableTerminalViewCache {
         pruneExpiredEntries()
         remove(sessionName: sessionName)
 
+        view.preserveSurfaceOnDetach = true
         view.removeFromSuperview()
         view.isHidden = true
 
