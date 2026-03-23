@@ -40,11 +40,11 @@ extension ThreadListViewController {
 
         menu.addItem(NSMenuItem.separator())
 
-        let promptRenameItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameWithAgent), action: #selector(renameThreadFromPrompt(_:)), keyEquivalent: "")
-        promptRenameItem.target = self
-        promptRenameItem.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
-        promptRenameItem.representedObject = thread
-        menu.addItem(promptRenameItem)
+        // Rename with prompt (submenu: recent prompts + custom)
+        let renamePromptItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameWithPrompt), action: nil, keyEquivalent: "")
+        renamePromptItem.image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: nil)
+        renamePromptItem.submenu = buildRenameWithPromptSubmenu(for: thread)
+        menu.addItem(renamePromptItem)
 
         let descriptionItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetDescription), action: #selector(setThreadDescription(_:)), keyEquivalent: "")
         descriptionItem.target = self
@@ -153,6 +153,43 @@ extension ThreadListViewController {
         menu.addItem(deleteItem)
 
         return menu
+    }
+
+    private func buildRenameWithPromptSubmenu(for thread: MagentThread) -> NSMenu {
+        let submenu = NSMenu()
+
+        // Collect recent prompts across all sessions (newest last), deduplicate, take last 3
+        let recentPrompts: [String] = {
+            var seen = Set<String>()
+            var result: [String] = []
+            for prompt in thread.submittedPromptsBySession.values.flatMap({ $0 }).reversed() {
+                let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, seen.insert(trimmed).inserted else { continue }
+                result.append(trimmed)
+                if result.count >= 3 { break }
+            }
+            return result.reversed() // oldest-first for menu order
+        }()
+
+        for prompt in recentPrompts {
+            let truncated = prompt.count > 60 ? String(prompt.prefix(57)) + "…" : prompt
+            let item = NSMenuItem(title: truncated, action: #selector(renameWithRecentPrompt(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = ["thread": thread, "prompt": prompt] as [String: Any]
+            submenu.addItem(item)
+        }
+
+        if !recentPrompts.isEmpty {
+            submenu.addItem(.separator())
+        }
+
+        let customItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameCustom), action: #selector(renameThreadFromPrompt(_:)), keyEquivalent: "")
+        customItem.target = self
+        customItem.image = NSImage(systemSymbolName: "text.cursor", accessibilityDescription: nil)
+        customItem.representedObject = thread
+        submenu.addItem(customItem)
+
+        return submenu
     }
 
     private func buildThreadIconSubmenu(for thread: MagentThread) -> NSMenu {
@@ -961,6 +998,33 @@ extension ThreadListViewController {
             errorAlert.alertStyle = .warning
             errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
             errorAlert.runModal()
+        }
+    }
+
+    @objc private func renameWithRecentPrompt(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let thread = info["thread"] as? MagentThread,
+              let prompt = info["prompt"] as? String else { return }
+
+        Task {
+            do {
+                let didRename = try await threadManager.renameThreadFromPrompt(thread, prompt: prompt)
+                guard didRename else { return }
+                await MainActor.run {
+                    if let updated = self.threadManager.threads.first(where: { $0.id == thread.id }) {
+                        self.delegate?.threadList(self, didRenameThread: updated)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    let errorAlert = NSAlert()
+                    errorAlert.messageText = String(localized: .CommonStrings.commonRenameFailed)
+                    errorAlert.informativeText = error.localizedDescription
+                    errorAlert.alertStyle = .warning
+                    errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
+                    errorAlert.runModal()
+                }
+            }
         }
     }
 

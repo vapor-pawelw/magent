@@ -804,6 +804,17 @@
         }
       }
     },
+    "threadRenameCustom": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom…"
+          }
+        }
+      }
+    },
     "threadRenameTitle": {
       "extractionState": "manual",
       "localizations": {
@@ -815,13 +826,13 @@
         }
       }
     },
-    "threadRenameWithAgent": {
+    "threadRenameWithPrompt": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rename Using Prompt…"
+            "value": "Rename with prompt…"
           }
         }
       }

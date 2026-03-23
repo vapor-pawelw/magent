@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Fixed banner buttons and dismiss (X) being unresponsive — clicks were silently ignored due to a coordinate-space mismatch between the flipped split view and the unflipped banner overlay.
 
 ### Sidebar
+- "Rename Using Prompt" in the thread context menu is now a "Rename with prompt" submenu showing the 3 most recent agent prompts for quick one-click rename, plus a "Custom…" option for free-form input.
 - Right-clicking a completed thread now offers "Mark as Read" at the top of the context menu, clearing the completion badge without switching to it.
 - Thread rows now show how long the thread has been busy or idle (e.g. "<1m", "5m", "2h") in a subtle label at the bottom-right corner. Can be toggled off in Settings > Threads.
 - Cmd+Shift+N creates a new thread branching from the selected thread's branch, inheriting its section and inserting right below it in the sidebar.
