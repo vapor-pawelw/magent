@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - Magent now checks for new versions every hour in the background (respects the existing auto-check setting and responds immediately to setting toggles).
 
 ### Thread
+- New "Draft" checkbox on the initial prompt window lets you save a prompt as a draft tab instead of running it immediately. Draft tabs persist across relaunches, show an editable agent picker and prompt, and can be discarded or started when ready.
 - Local Sync conflict alerts now offer a "Show Diff" button for text files, letting you inspect exactly what changed before choosing to override or ignore.
 - Fixed UI freezing during Local Sync Path resync by moving filesystem copy and hash work off the main thread.
 
