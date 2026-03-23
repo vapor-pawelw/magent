@@ -255,12 +255,20 @@ extension ThreadDetailViewController {
             showTitleField: true,
             autoGenerateHint: nil,
             terminalInjectionPrefill: injection.terminalCommand.isEmpty ? nil : injection.terminalCommand,
-            agentContextPrefill: injection.agentContext.isEmpty ? nil : injection.agentContext
+            agentContextPrefill: injection.agentContext.isEmpty ? nil : injection.agentContext,
+            showDraftCheckbox: true
         )
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in
             guard let self, let result else { return }
-            if let webURL = result.initialWebURL {
+            if result.isDraft, let agentType = result.agentType {
+                let identifier = "draft:\(UUID().uuidString)"
+                self.openDraftTab(
+                    identifier: identifier,
+                    agentType: agentType,
+                    prompt: result.prompt ?? ""
+                )
+            } else if let webURL = result.initialWebURL {
                 let title = result.tabTitle ?? webURL.host ?? "Web"
                 self.openWebTab(url: webURL, identifier: "web:\(UUID().uuidString)", title: title, iconType: .web)
             } else {

@@ -260,7 +260,8 @@ extension ThreadListViewController {
             defaultSectionIdByProjectId: defaultSectionIdByProjectId,
             baseBranchPrefill: resolvedBaseBranchPrefill,
             baseBranchRepoPath: project.repoPath,
-            defaultBranchName: defaultBranchName
+            defaultBranchName: defaultBranchName,
+            showDraftCheckbox: true
         )
         let controller = AgentLaunchPromptSheetController(config: config)
         controller.present(for: window) { [weak self] result in
@@ -271,13 +272,14 @@ extension ThreadListViewController {
                 requestedAgentType: result.agentType,
                 useAgentCommand: result.useAgentCommand,
                 baseBranch: result.baseBranch,
-                initialPrompt: result.prompt,
-                shouldSubmitInitialPrompt: true,
+                initialPrompt: result.isDraft ? nil : result.prompt,
+                shouldSubmitInitialPrompt: !result.isDraft,
                 taskDescription: result.description,
                 requestedBranchName: result.branchName,
                 pendingPromptFileURL: result.pendingPromptFileURL,
                 requestedSectionId: result.selectedSectionId,
-                initialWebURL: result.initialWebURL
+                initialWebURL: result.initialWebURL,
+                draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "") } : nil
             )
         }
     }
@@ -355,7 +357,8 @@ extension ThreadListViewController {
         requestedBranchName: String? = nil,
         pendingPromptFileURL: URL? = nil,
         requestedSectionId: UUID? = nil,
-        initialWebURL: URL? = nil
+        initialWebURL: URL? = nil,
+        draftPrompt: (AgentType, String)? = nil
     ) {
         isCreatingThread = true
         reloadData()
@@ -376,6 +379,12 @@ extension ThreadListViewController {
                 if let desc = taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !desc.isEmpty {
                     try? self.threadManager.setTaskDescription(threadId: created.id, description: desc)
+                }
+                // If this is a draft, add a persisted draft tab to the newly created thread.
+                if let (agentType, prompt) = draftPrompt {
+                    let identifier = "draft:\(UUID().uuidString)"
+                    let draftTab = PersistedDraftTab(identifier: identifier, agentType: agentType, prompt: prompt)
+                    self.threadManager.updatePersistedDraftTabs(for: created.id, draftTabs: [draftTab])
                 }
                 await MainActor.run {
                     self.isCreatingThread = false
