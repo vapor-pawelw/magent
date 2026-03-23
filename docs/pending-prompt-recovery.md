@@ -4,9 +4,13 @@
 
 When the user submits the New Thread or New Tab sheet, their prompt is written to a crash-recovery temp file in `/tmp` before the draft is cleared. If the app crashes between submission and tmux injection, the file survives and surfaces as a recovery banner on the next launch.
 
+## Non-tmux Tab Exemption
+
+Tab types that don't go through tmux injection (web tabs, draft tabs) must set `pendingPromptFileURL = nil` in `performAccept`. The cleanup listener (`clearAfterInjection`) only fires on `magentAgentKeysInjected`, which never arrives for non-tmux tabs — so any temp file written for them would linger and trigger a stale recovery banner on next launch.
+
 ## File Lifecycle
 
-1. **`acceptTapped`** in `AgentLaunchPromptSheetController` — writes `magent-pending-prompt-<UUID>.json` to `/tmp` via `PendingInitialPromptStore.save(...)`, then immediately clears the draft from persistent storage.
+1. **`acceptTapped`** in `AgentLaunchPromptSheetController` — writes `magent-pending-prompt-<UUID>.json` to `/tmp` via `PendingInitialPromptStore.save(...)`, then immediately clears the draft from persistent storage. Non-tmux tab types (web, draft) skip this step entirely.
 2. **`createThread` / `addTab`** in `ThreadManager` — immediately after tmux session creation, `markSessionContextKnownGood` is called so that the concurrent `setupTabs` → `recreateSessionIfNeeded` path short-circuits. Then, inside the `MainActor.run` block that runs **before** `injectAfterStart` is called, `registerPendingPromptCleanup(fileURL:sessionName:)` subscribes to `magentAgentKeysInjected` for the new session.
 3. **`injectAfterStart`** (background `Task`) — waits for the agent-specific prompt marker via `waitForAgentPrompt` (see `docs/agent-prompt-detection.md` for per-agent detection details), sends tmux keys, and posts `magentAgentKeysInjected` only after the full startup injection for that session is complete. The subscriber from step 2 deletes the temp file.
 4. **60-second fallback** — if injection never fires (e.g., session dies), `DispatchQueue.main.asyncAfter` deletes the file after 60 s.
