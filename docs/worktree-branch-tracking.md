@@ -28,7 +28,7 @@
 
 Base branch is no longer stored as a fixed string per thread. Instead, `GitService.detectBaseBranch(worktreePath:currentBranch:)` walks the decorated commit history (`git log --simplify-by-decoration`) to find the nearest `origin/*` ancestor, excluding the current branch's own remote tracking ref. When the decorated walk finds no remote refs (common when `origin/main` has diverged past the merge-base), it falls back to checking `main`/`master` via `merge-base` and returns the first one that shares a common ancestor with HEAD. The result is cached in `WorktreeMetadata` keyed by the branch name it was detected for (`detectedFor`). The cache is stale when `detectedFor != thread.currentBranch`, triggering re-detection automatically.
 
-`resolveBaseBranch(for:)` reads the cache first, then falls back to `project.defaultBranch` → `thread.baseBranch` → `"main"`. This means the changes panel and delivery check always use an accurate base branch even after branch switches inside the worktree.
+`resolveBaseBranch(for:)` reads the cache first, then falls back to `thread.baseBranch` → `project.defaultBranch` → `"main"`. The thread's stored base branch (set at creation time) takes priority over the project default so the user's explicit choice is respected. This means the changes panel and delivery check always use an accurate base branch even after branch switches inside the worktree.
 
 ### Manual Base Branch Override
 

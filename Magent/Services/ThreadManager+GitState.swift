@@ -38,12 +38,15 @@ extension ThreadManager {
                detectedFor == thread.currentBranch {
                 return detected
             }
-            if let defaultBranch = project.defaultBranch, !defaultBranch.isEmpty {
-                return defaultBranch
-            }
         }
+        // Thread's stored base branch (from creation) takes priority over
+        // the project default so the user's explicit choice is respected.
         if let base = thread.baseBranch, !base.isEmpty {
             return base
+        }
+        if let project = settings.projects.first(where: { $0.id == thread.projectId }),
+           let defaultBranch = project.defaultBranch, !defaultBranch.isEmpty {
+            return defaultBranch
         }
         return "main"
     }
