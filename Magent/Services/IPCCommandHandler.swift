@@ -530,7 +530,15 @@ final class IPCCommandHandler {
 
         let tabs = thread.tmuxSessionNames.enumerated().map { index, sessionName in
             let isAgent = thread.agentTmuxSessions.contains(sessionName)
-            return IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent)
+            var tab = IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent)
+            if isAgent {
+                tab.agentType = threadManager.agentType(for: thread, sessionName: sessionName)?.rawValue
+                tab.isBusy = thread.busySessions.contains(sessionName) || thread.magentBusySessions.contains(sessionName)
+                tab.isWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
+                tab.hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
+                tab.isBlockedByRateLimit = thread.rateLimitedSessions[sessionName] != nil
+            }
+            return tab
         }
         return IPCResponse(ok: true, id: request.id, tabs: tabs)
     }

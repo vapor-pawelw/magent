@@ -162,6 +162,10 @@ public nonisolated struct IPCThreadInfo: Encodable, Sendable {
     public var sectionId: String?
     public var tabs: [IPCTabInfo]?
     public var status: IPCThreadStatus?
+    public var agentType: String?
+    public var prLabel: String?
+    public var prStatusText: String?
+    public var jiraTicketKey: String?
 
     public init(thread: MagentThread, projectName: String) {
         self.id = thread.id.uuidString
@@ -202,6 +206,11 @@ public nonisolated struct IPCTabInfo: Encodable, Sendable {
     public let index: Int
     public let sessionName: String
     public let isAgent: Bool
+    public var agentType: String?
+    public var isBusy: Bool?
+    public var isWaitingForInput: Bool?
+    public var hasUnreadCompletion: Bool?
+    public var isBlockedByRateLimit: Bool?
 
     public init(index: Int, sessionName: String, isAgent: Bool) {
         self.index = index

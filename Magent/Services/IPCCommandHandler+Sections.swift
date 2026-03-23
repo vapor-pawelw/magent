@@ -105,6 +105,22 @@ extension IPCCommandHandler {
                 let projName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
                 var info = IPCThreadInfo(thread: thread, projectName: projName)
                 info.status = makeThreadStatus(for: thread)
+                // Agent type: use first agent session's type, fallback to project default
+                if let firstAgent = thread.agentTmuxSessions.first {
+                    info.agentType = threadManager.agentType(for: thread, sessionName: firstAgent)?.rawValue
+                }
+                if info.agentType == nil && !thread.agentTmuxSessions.isEmpty {
+                    info.agentType = settings.defaultAgentType?.rawValue
+                }
+                // PR info
+                if let pr = thread.pullRequestInfo {
+                    info.prLabel = pr.displayLabel
+                    info.prStatusText = pr.statusText
+                }
+                // Jira ticket key
+                if AppFeatures.jiraSyncEnabled {
+                    info.jiraTicketKey = thread.effectiveJiraTicketKey(settings: settings)
+                }
                 return info
             } : nil
 
