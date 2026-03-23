@@ -98,8 +98,11 @@ struct BannerConfig {
 final class BannerOverlayView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
+        // point is in superview (NSSplitView, flipped) coordinates —
+        // convert to our own coordinate space before forwarding to subviews.
+        let local = convert(point, from: superview)
         for subview in subviews {
-            if let hit = subview.hitTest(point) {
+            if let hit = subview.hitTest(local) {
                 return hit
             }
         }
