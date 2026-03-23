@@ -251,6 +251,48 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var magentBusySessions: Set<String> = []
     // Transient (not persisted) — tracks which agent sessions are waiting for user input
     public var waitingForInputSessions: Set<String> = []
+
+    // MARK: - Busy state duration tracking (transient, debounced)
+
+    /// When the current debounced busy/non-busy state started. `nil` until the first observation.
+    public var busyStateSince: Date?
+    /// The last confirmed (debounced) busy state.
+    private var _debouncedBusyState: Bool?
+    /// When the raw `isAnyBusy` value last diverged from `_debouncedBusyState`.
+    private var _rawStateChangeTime: Date?
+
+    /// Call after any mutation to `busySessions` / `magentBusySessions`.
+    /// Applies a 1-second debounce: the state change is only committed once
+    /// `isAnyBusy` has been stable for ≥ 1 s.
+    public mutating func updateBusyStateDuration() {
+        let currentBusy = isAnyBusy
+        if _debouncedBusyState == nil {
+            // First observation — seed immediately.
+            _debouncedBusyState = currentBusy
+            busyStateSince = Date()
+            _rawStateChangeTime = nil
+            return
+        }
+        if currentBusy == _debouncedBusyState {
+            // State matches debounced — cancel any pending transition.
+            _rawStateChangeTime = nil
+            return
+        }
+        // State differs from debounced.
+        let now = Date()
+        if let changeTime = _rawStateChangeTime {
+            if now.timeIntervalSince(changeTime) >= 1.0 {
+                // Stable for ≥ 1 s — commit the transition.
+                _debouncedBusyState = currentBusy
+                busyStateSince = now
+                _rawStateChangeTime = nil
+            }
+            // else: not yet stable, keep waiting.
+        } else {
+            // Record the start of a potential transition.
+            _rawStateChangeTime = now
+        }
+    }
     // Transient (not persisted) — tracks whether worktree has uncommitted/untracked changes
     public var isDirty: Bool = false
     // Transient (not persisted) — tracks whether all commits are in the base branch
@@ -326,6 +368,23 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             return .hidden
         }
         return .visible
+    }
+
+    /// Returns the debounced busy-state duration as a compact string (e.g. "30s", "2m", "1h").
+    /// Shows only the single largest time component. Returns `nil` if no state has been observed yet.
+    public var busyStateDurationString: String? {
+        guard let since = busyStateSince else { return nil }
+        let elapsed = Int(Date().timeIntervalSince(since))
+        guard elapsed >= 0 else { return nil }
+        if elapsed < 60 {
+            return "<1m"
+        } else if elapsed < 3600 {
+            return "\(elapsed / 60)m"
+        } else if elapsed < 86400 {
+            return "\(elapsed / 3600)h"
+        } else {
+            return "\(elapsed / 86400)d"
+        }
     }
 
     /// Sentinel value inserted into `magentBusySessions` during thread creation (phase 2),
@@ -415,6 +474,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case hasEverDoneWork
         case persistedWebTabs
         case signEmoji
+        case busyStateSince
     }
 
     public init(
@@ -525,6 +585,12 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         hasEverDoneWork = try container.decodeIfPresent(Bool.self, forKey: .hasEverDoneWork) ?? false
         persistedWebTabs = try container.decodeIfPresent([PersistedWebTab].self, forKey: .persistedWebTabs) ?? []
         signEmoji = try container.decodeIfPresent(String.self, forKey: .signEmoji)
+        busyStateSince = try container.decodeIfPresent(Date.self, forKey: .busyStateSince)
+        // On launch all sessions are idle, so seed the debounced state to match.
+        // This prevents updateBusyStateDuration() from overwriting the restored timestamp.
+        if busyStateSince != nil {
+            _debouncedBusyState = false
+        }
 
         // Decode new set, or migrate from old boolean
         if let sessions = try container.decodeIfPresent(Set<String>.self, forKey: .unreadCompletionSessions) {
@@ -583,6 +649,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             try container.encode(persistedWebTabs, forKey: .persistedWebTabs)
         }
         try container.encodeIfPresent(signEmoji, forKey: .signEmoji)
+        try container.encodeIfPresent(busyStateSince, forKey: .busyStateSince)
     }
 }
 

@@ -58,6 +58,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var narrowThreads: Bool
     public var showPRStatusBadges: Bool
     public var showJiraStatusBadges: Bool
+    public var showBusyStateDuration: Bool
     public var autoRenameSlugPrompt: String
     public var useThreadSections: Bool
     public var isConfigured: Bool
@@ -108,6 +109,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         narrowThreads: Bool = false,
         showPRStatusBadges: Bool = true,
         showJiraStatusBadges: Bool = true,
+        showBusyStateDuration: Bool = true,
         autoRenameSlugPrompt: String = AppSettings.defaultSlugPrompt,
         useThreadSections: Bool = true,
         isConfigured: Bool = false,
@@ -157,6 +159,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.narrowThreads = narrowThreads
         self.showPRStatusBadges = showPRStatusBadges
         self.showJiraStatusBadges = showJiraStatusBadges
+        self.showBusyStateDuration = showBusyStateDuration
         self.autoRenameSlugPrompt = autoRenameSlugPrompt
         self.useThreadSections = useThreadSections
         self.isConfigured = isConfigured
@@ -212,6 +215,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         narrowThreads = try container.decodeIfPresent(Bool.self, forKey: .narrowThreads) ?? false
         showPRStatusBadges = try container.decodeIfPresent(Bool.self, forKey: .showPRStatusBadges) ?? true
         showJiraStatusBadges = try container.decodeIfPresent(Bool.self, forKey: .showJiraStatusBadges) ?? true
+        showBusyStateDuration = try container.decodeIfPresent(Bool.self, forKey: .showBusyStateDuration) ?? true
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt) ?? Self.defaultSlugPrompt
         useThreadSections = try container.decodeIfPresent(Bool.self, forKey: .useThreadSections) ?? true
         isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
@@ -429,6 +433,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case narrowThreads
         case showPRStatusBadges
         case showJiraStatusBadges
+        case showBusyStateDuration
         case autoRenameWorktrees
         case autoRenameSlugPrompt
         case useThreadSections

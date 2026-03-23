@@ -8,6 +8,9 @@ All notable changes to this project will be documented in this file.
 - Software update now shows explicit download progress before closing the app. After download completes, an "Install and Relaunch" button lets you choose when to restart.
 - Magent now checks for new versions every hour in the background (respects the existing auto-check setting and responds immediately to setting toggles).
 
+### Sidebar
+- Thread rows now show how long the thread has been busy or idle (e.g. "<1m", "5m", "2h") in a subtle label at the bottom-right corner. Can be toggled off in Settings > Threads.
+
 ### Thread
 - Local Sync now shows a persistent spinner banner while syncing files, replacing the toolbar-only spinner that was easy to miss.
 - Local Sync conflict diffs are now readable in dark mode — added/removed lines use colored text instead of relying solely on background tinting.

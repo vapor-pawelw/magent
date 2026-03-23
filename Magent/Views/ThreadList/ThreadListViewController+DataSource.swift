@@ -878,6 +878,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     isRateLimitExpiredAndResumable: thread.isRateLimitExpiredAndResumable,
                     rateLimitTooltip: thread.rateLimitLiftDescription.map { "Rate limit reached. \($0)" },
                     currentBranch: currentBranch,
+                    busyStateSince: thread.busyStateSince,
                     leadingOffset: Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel + 14
                 )
                 return cell

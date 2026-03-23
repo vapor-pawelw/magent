@@ -66,6 +66,9 @@ final class ThreadCell: NSTableCellView {
     private var leadingStackConstraint: NSLayoutConstraint?
     private var mainAccentBar: NSView?
     private var signEmojiLabel: NSTextField?
+    private var durationLabel: NSTextField?
+    private var durationTimer: Timer?
+    private var currentDurationSince: Date?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
     private var showsRenamePulse = false
@@ -680,6 +683,8 @@ final class ThreadCell: NSTableCellView {
             completionImageView?.isHidden = true
         }
 
+        configureDuration(since: cellSettings.showBusyStateDuration ? thread.busyStateSince : nil)
+
         syncRowVisibility()
         showsRenamePulse = isAutoRenaming
         applyRenamePulse(isAutoRenaming)
@@ -694,6 +699,7 @@ final class ThreadCell: NSTableCellView {
         isRateLimitExpiredAndResumable: Bool = false,
         rateLimitTooltip: String? = nil,
         currentBranch: String? = nil,
+        busyStateSince: Date? = nil,
         leadingOffset: CGFloat = 0
     ) {
         isConfiguredAsMain = true
@@ -822,6 +828,9 @@ final class ThreadCell: NSTableCellView {
             completionImageView?.isHidden = true
         }
 
+        let showDuration = PersistenceService.shared.loadSettings().showBusyStateDuration
+        configureDuration(since: showDuration ? busyStateSince : nil)
+
         syncRowVisibility()
     }
 
@@ -833,6 +842,81 @@ final class ThreadCell: NSTableCellView {
         let hasJira = !(jiraTicketLabel?.isHidden ?? true)
         let hasPR = !(prNumberLabel?.isHidden ?? true)
         prRowStack?.isHidden = !hasJira && !hasPR
+    }
+
+    // MARK: - Busy-state duration label
+
+    private static func durationFont() -> NSFont {
+        .monospacedDigitSystemFont(ofSize: 9, weight: .regular)
+    }
+
+    private func ensureDurationLabel() {
+        guard durationLabel == nil else { return }
+        let label = NSTextField(labelWithString: "")
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = Self.durationFont()
+        label.textColor = NSColor.secondaryLabelColor.withAlphaComponent(0.4)
+        label.lineBreakMode = .byClipping
+        label.maximumNumberOfLines = 1
+        label.setContentHuggingPriority(.required, for: .horizontal)
+        label.setContentCompressionResistancePriority(.required, for: .horizontal)
+        label.isHidden = true
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.trailingAnchor.constraint(
+                equalTo: trailingAnchor,
+                constant: -ThreadListViewController.sidebarTrailingInset
+            ),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -3),
+        ])
+        durationLabel = label
+    }
+
+    private func configureDuration(since: Date?) {
+        ensureDurationLabel()
+        currentDurationSince = since
+        if let since {
+            refreshDurationText(since: since)
+            durationLabel?.isHidden = false
+            startDurationTimer()
+        } else {
+            durationLabel?.stringValue = ""
+            durationLabel?.isHidden = true
+            stopDurationTimer()
+        }
+    }
+
+    private func refreshDurationText(since: Date) {
+        let elapsed = max(0, Int(Date().timeIntervalSince(since)))
+        let text: String
+        if elapsed < 60 {
+            text = "<1m"
+        } else if elapsed < 3600 {
+            text = "\(elapsed / 60)m"
+        } else if elapsed < 86400 {
+            text = "\(elapsed / 3600)h"
+        } else {
+            text = "\(elapsed / 86400)d"
+        }
+        durationLabel?.stringValue = text
+    }
+
+    private func startDurationTimer() {
+        guard durationTimer == nil else { return }
+        durationTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            guard let self, let since = self.currentDurationSince else { return }
+            self.refreshDurationText(since: since)
+        }
+    }
+
+    private func stopDurationTimer() {
+        durationTimer?.invalidate()
+        durationTimer = nil
+    }
+
+    override func removeFromSuperview() {
+        stopDurationTimer()
+        super.removeFromSuperview()
     }
 
     private func setDirtyDot(_ dot: NSImageView?, visible: Bool) {

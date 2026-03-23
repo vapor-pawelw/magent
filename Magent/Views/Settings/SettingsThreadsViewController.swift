@@ -15,6 +15,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var narrowThreadsCheckbox: NSButton!
     private var showPRStatusBadgesCheckbox: NSButton!
     private var showJiraStatusBadgesCheckbox: NSButton!
+    private var showBusyStateDurationCheckbox: NSButton!
     private var autoReorderOnCompletionCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
     var terminalInjectionTextView: NSTextView!
@@ -252,6 +253,14 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         statusBadgesDesc.font = .systemFont(ofSize: 11)
         statusBadgesDesc.textColor = NSColor(resource: .textSecondary)
         sidebarSection.addArrangedSubview(statusBadgesDesc)
+
+        showBusyStateDurationCheckbox = NSButton(
+            checkboxWithTitle: "Show busy/idle duration on thread rows",
+            target: self,
+            action: #selector(showBusyStateDurationToggled)
+        )
+        showBusyStateDurationCheckbox.state = settings.showBusyStateDuration ? .on : .off
+        sidebarSection.addArrangedSubview(showBusyStateDurationCheckbox)
 
         let (injectionCard, injectionSection) = createSectionCard(
             title: "Startup Injection",
@@ -702,6 +711,11 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
 
     @objc private func showJiraStatusBadgesToggled() {
         settings.showJiraStatusBadges = showJiraStatusBadgesCheckbox.state == .on
+        persistSettings(notify: true)
+    }
+
+    @objc private func showBusyStateDurationToggled() {
+        settings.showBusyStateDuration = showBusyStateDurationCheckbox.state == .on
         persistSettings(notify: true)
     }
 
