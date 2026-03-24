@@ -570,8 +570,12 @@ extension ThreadManager {
 
         promptRenameResultCache.removeValue(forKey: thread.id)
 
+        // Re-load settings after the await — the original `settings` was captured before
+        // persistArchiveState and may be stale.
+        let freshSettings = persistence.loadSettings()
+
         // Show the banner immediately — the archive is logically complete from the user's perspective.
-        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "Unknown Project"
+        let projectName = freshSettings.projects.first(where: { $0.id == thread.projectId })?.name ?? "Unknown Project"
         showArchivedThreadBanner(for: thread, projectName: projectName, warning: archiveWarning)
 
         // Run the slow cleanup (tmux kills, worktree removal, symlink/stale-session sweeps) in a
@@ -580,10 +584,10 @@ extension ThreadManager {
         // synchronous code between awaits (file-system walks, persistence I/O, task-group
         // coordination) on the UI path and make the app feel hung.
         // Capture everything needed so the detached task never hops back to the main actor.
-        let capturedProject = settings.projects.first(where: { $0.id == thread.projectId })
+        let capturedProject = freshSettings.projects.first(where: { $0.id == thread.projectId })
         let capturedTmux = tmux
         let capturedGit = git
-        let capturedSettings = settings
+        let capturedSettings = freshSettings
         // Snapshot thread/session state before the detached task. These can go stale if new
         // threads are created between capture and execution, but the window is sub-millisecond
         // and the previous non-detached version had the same race (threads could change between
@@ -686,7 +690,14 @@ extension ThreadManager {
         restoredThread.busySessions.removeAll()
         restoredThread.waitingForInputSessions.removeAll()
 
-        allThreads[archivedIndex] = restoredThread
+        // Re-load allThreads and re-locate the index — the array may have shifted during the
+        // preceding awaits (worktree creation, branch check, prune).
+        allThreads = persistence.loadThreads()
+        guard let freshArchivedIndex = allThreads.firstIndex(where: { $0.id == restoredThread.id }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+
+        allThreads[freshArchivedIndex] = restoredThread
         try persistence.saveThreads(allThreads)
         await MainActor.run {
             NotificationCenter.default.post(name: .magentArchivedThreadsDidChange, object: nil)
@@ -694,9 +705,15 @@ extension ThreadManager {
 
         threads.append(restoredThread)
         bumpThreadToTopOfSection(restoredThread.id)
+        // Sync any changes bumpThreadToTopOfSection made back into the persisted list.
+        // Re-locate by ID instead of reusing freshArchivedIndex — the local allThreads array
+        // is unchanged, but a defensive lookup prevents silent breakage if a future edit
+        // inserts another persistence reload between here and line 695.
         if let restoredActiveIndex = threads.firstIndex(where: { $0.id == restoredThread.id }) {
             restoredThread = threads[restoredActiveIndex]
-            allThreads[archivedIndex] = restoredThread
+            if let persistIndex = allThreads.firstIndex(where: { $0.id == restoredThread.id }) {
+                allThreads[persistIndex] = restoredThread
+            }
         }
         try persistence.saveThreads(allThreads)
 
@@ -1028,23 +1045,21 @@ extension ThreadManager {
         let attributed = archivedThreadBannerAttributedMessage(for: thread, warning: warning)
         let details = archivedThreadBannerDetails(for: thread, projectName: projectName)
 
-        Task { @MainActor [weak self] in
-            BannerManager.shared.show(
-                attributedMessage: attributed,
-                style: warning == nil ? .info : .warning,
-                duration: Self.archivedThreadBannerDuration,
-                isDismissible: true,
-                actions: [
-                    BannerAction(title: "Restore") { [weak self] in
-                        Task { [weak self] in
-                            _ = await self?.restoreArchivedThreadFromUserAction(id: thread.id, threadName: thread.name)
-                        }
+        BannerManager.shared.show(
+            attributedMessage: attributed,
+            style: warning == nil ? .info : .warning,
+            duration: Self.archivedThreadBannerDuration,
+            isDismissible: true,
+            actions: [
+                BannerAction(title: "Restore") { [weak self] in
+                    Task { [weak self] in
+                        _ = await self?.restoreArchivedThreadFromUserAction(id: thread.id, threadName: thread.name)
                     }
-                ],
-                details: details,
-                detailsCollapsedTitle: "More Info",
-                detailsExpandedTitle: "Less Info"
-            )
-        }
+                }
+            ],
+            details: details,
+            detailsCollapsedTitle: "More Info",
+            detailsExpandedTitle: "Less Info"
+        )
     }
 }
