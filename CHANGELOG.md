@@ -28,6 +28,7 @@ All notable changes to this project will be documented in this file.
 - Sync status in the sidebar now shows "Sync failed" in red when PR or Jira sync encounters network or auth errors, instead of silently showing the last successful sync time.
 - Local Sync now shows a persistent spinner banner while syncing files, replacing the toolbar-only spinner that was easy to miss.
 - Local Sync conflict diffs are now readable in dark mode — added/removed lines use colored text instead of relying solely on background tinting.
+- Option-clicking the Local Sync button now syncs files to/from the base branch's worktree instead of the project root, useful for stacked worktree workflows.
 - Local Sync conflict alerts now offer a "Show Diff" button for text files, letting you inspect exactly what changed before choosing to override or ignore.
 - Fixed UI freezing during Local Sync Path resync by moving filesystem copy and hash work off the main thread.
 - PR/MR actions now stay hidden until Magent has a definitive CLI lookup result, so threads without detected PRs no longer show dead "Show PR" actions.

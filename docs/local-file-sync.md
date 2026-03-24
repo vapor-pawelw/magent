@@ -34,8 +34,15 @@ The thread also stores a snapshot of that normalized path list at creation time.
 
 Non-main threads expose a top-bar resync button (↺) that, when clicked, shows a direction menu:
 
-- **Project → Worktree**: copies the thread's eligible local sync paths from the main repo worktree into the thread (was the only available direction before)
+- **Project → Worktree**: copies the thread's eligible local sync paths from the main repo worktree into the thread
 - **Worktree → Project**: pushes local sync paths from the thread worktree back to the main repo (same merge logic as archive sync-back, but on demand)
+
+**Option-click** changes the menu to sync against the base branch's worktree instead of the project root:
+
+- **Base Worktree → Worktree**: copies from the sibling thread whose `currentBranch` matches this thread's resolved base branch
+- **Worktree → Base Worktree**: pushes from this worktree into the base branch's worktree
+
+Base branch resolution uses the same priority as the changes panel footer (`⤷ <base>`): detected remote branch → stored baseBranch → project default → "main". If no sibling thread is checked out on the resolved base branch, a warning banner is shown and the normal Project menu appears instead.
 
 The button is hidden when the project has no Local Sync Paths configured (re-evaluates when settings change, so it appears automatically after paths are added). While sync is running the button is replaced by a spinner and a persistent non-dismissible banner with a spinner is shown (e.g. "Syncing Local Paths from main repo…"). The banner is replaced by the success/warning/error result banner when the operation completes, or dismissed on cancellation. Both directions run filesystem work (recursive copy, hashing) via `@concurrent` methods on the concurrent thread pool so the UI stays responsive during large syncs. Only conflict alert presentation hops back to the main actor.
 

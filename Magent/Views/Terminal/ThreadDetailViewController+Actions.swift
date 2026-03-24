@@ -83,25 +83,93 @@ extension ThreadDetailViewController {
         guard !thread.isMain else { return }
         guard let event = NSApp.currentEvent else { return }
 
+        let isOptionPressed = event.modifierFlags.contains(.option)
+        let baseWorktreePath: String? = isOptionPressed ? resolveBaseWorktreePath() : nil
+
+        // Option held but no sibling thread owns the base branch — show the normal
+        // menu but tell the user why the base-worktree option isn't available.
+        if isOptionPressed, baseWorktreePath == nil {
+            let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+            let baseBranch = threadManager.resolveBaseBranch(for: currentThread)
+            BannerManager.shared.show(
+                message: "No worktree found for base branch \"\(baseBranch)\".",
+                style: .warning
+            )
+        }
+
         let menu = NSMenu()
-        let intoWorktreeItem = NSMenuItem(
-            title: "Project → Worktree",
-            action: #selector(resyncProjectIntoWorktreeTapped),
-            keyEquivalent: ""
-        )
-        intoWorktreeItem.target = self
-        let intoRepoItem = NSMenuItem(
-            title: "Worktree → Project",
-            action: #selector(resyncWorktreeIntoProjectTapped),
-            keyEquivalent: ""
-        )
-        intoRepoItem.target = self
-        menu.addItem(intoWorktreeItem)
-        menu.addItem(intoRepoItem)
+
+        if let basePath = baseWorktreePath {
+            let intoWorktreeItem = NSMenuItem(
+                title: "Base Worktree → Worktree",
+                action: #selector(resyncIntoWorktreeTapped(_:)),
+                keyEquivalent: ""
+            )
+            intoWorktreeItem.target = self
+            intoWorktreeItem.representedObject = basePath
+            let intoBaseItem = NSMenuItem(
+                title: "Worktree → Base Worktree",
+                action: #selector(resyncFromWorktreeTapped(_:)),
+                keyEquivalent: ""
+            )
+            intoBaseItem.target = self
+            intoBaseItem.representedObject = basePath
+            menu.addItem(intoWorktreeItem)
+            menu.addItem(intoBaseItem)
+        } else {
+            let intoWorktreeItem = NSMenuItem(
+                title: "Project → Worktree",
+                action: #selector(resyncIntoWorktreeTapped(_:)),
+                keyEquivalent: ""
+            )
+            intoWorktreeItem.target = self
+            let intoRepoItem = NSMenuItem(
+                title: "Worktree → Project",
+                action: #selector(resyncFromWorktreeTapped(_:)),
+                keyEquivalent: ""
+            )
+            intoRepoItem.target = self
+            menu.addItem(intoWorktreeItem)
+            menu.addItem(intoRepoItem)
+        }
+
         NSMenu.popUpContextMenu(menu, with: event, for: resyncLocalPathsButton)
     }
 
-    @objc private func resyncProjectIntoWorktreeTapped() {
+    /// Finds the worktree path of a sibling thread that owns the current thread's base branch.
+    /// Returns nil if no sibling thread is checked out on the base branch.
+    private func resolveBaseWorktreePath() -> String? {
+        let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let baseBranch = threadManager.resolveBaseBranch(for: currentThread)
+        return threadManager.threads.first(where: {
+            !$0.isArchived
+            && $0.id != currentThread.id
+            && $0.projectId == currentThread.projectId
+            && $0.currentBranch == baseBranch
+        })?.worktreePath
+    }
+
+    // MARK: - Local Sync Actions
+
+    /// Syncs configured local paths into this worktree.
+    /// `sender.representedObject` optionally carries a source root override (base worktree path);
+    /// when nil, the project repo root is used.
+    @objc private func resyncIntoWorktreeTapped(_ sender: NSMenuItem) {
+        let sourceRootOverride = sender.representedObject as? String
+        let sourceLabel = sourceRootOverride.map { ($0 as NSString).lastPathComponent } ?? "the main repo"
+        performResyncIntoWorktree(sourceLabel: sourceLabel, sourceRootOverride: sourceRootOverride)
+    }
+
+    /// Syncs configured local paths from this worktree back to the project or base worktree.
+    /// `sender.representedObject` optionally carries a destination root override (base worktree path);
+    /// when nil, the project repo root is used.
+    @objc private func resyncFromWorktreeTapped(_ sender: NSMenuItem) {
+        let destinationRootOverride = sender.representedObject as? String
+        let destLabel = destinationRootOverride.map { ($0 as NSString).lastPathComponent } ?? "the main repo"
+        performResyncFromWorktree(destLabel: destLabel, destinationRootOverride: destinationRootOverride)
+    }
+
+    private func performResyncIntoWorktree(sourceLabel: String, sourceRootOverride: String? = nil) {
         guard !thread.isMain else { return }
 
         let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
@@ -119,7 +187,7 @@ extension ThreadDetailViewController {
 
         startResyncSpinner()
         BannerManager.shared.show(
-            message: "Syncing Local Paths from main repo\u{2026}",
+            message: "Syncing Local Paths from \(sourceLabel)\u{2026}",
             style: .info,
             duration: nil,
             isDismissible: false,
@@ -131,25 +199,24 @@ extension ThreadDetailViewController {
         Task {
             defer { Task { @MainActor in self.stopResyncSpinner() } }
             do {
-                // The sync method is @concurrent so I/O runs on the concurrent pool;
-                // only conflict alerts hop back to MainActor automatically.
                 let missingPaths = try await ThreadManager.shared.syncConfiguredLocalPathsIntoWorktree(
                     project: projectSnapshot,
                     worktreePath: worktreePath,
                     syncPaths: syncPathsSnapshot,
-                    promptForConflicts: true
+                    promptForConflicts: true,
+                    sourceRootOverride: sourceRootOverride
                 )
 
                 await MainActor.run {
                     if missingPaths.isEmpty {
                         BannerManager.shared.show(
-                            message: "Local Sync Paths refreshed from the main repo.",
+                            message: "Local Sync Paths refreshed from \(sourceLabel).",
                             style: .info
                         )
                     } else {
                         let noun = missingPaths.count == 1 ? "path was" : "paths were"
                         BannerManager.shared.show(
-                            message: "Local Sync refresh finished, but \(missingPaths.count) configured \(noun) missing in the main repo.",
+                            message: "Local Sync refresh finished, but \(missingPaths.count) configured \(noun) missing in \(sourceLabel).",
                             style: .warning,
                             duration: 8.0,
                             details: missingPaths.joined(separator: "\n"),
@@ -174,7 +241,7 @@ extension ThreadDetailViewController {
         }
     }
 
-    @objc private func resyncWorktreeIntoProjectTapped() {
+    private func performResyncFromWorktree(destLabel: String, destinationRootOverride: String? = nil) {
         guard !thread.isMain else { return }
 
         let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
@@ -192,7 +259,7 @@ extension ThreadDetailViewController {
 
         startResyncSpinner()
         BannerManager.shared.show(
-            message: "Syncing Local Paths back to main repo\u{2026}",
+            message: "Syncing Local Paths back to \(destLabel)\u{2026}",
             style: .info,
             duration: nil,
             isDismissible: false,
@@ -204,17 +271,16 @@ extension ThreadDetailViewController {
         Task {
             defer { Task { @MainActor in self.stopResyncSpinner() } }
             do {
-                // The sync method is @concurrent so I/O runs on the concurrent pool;
-                // only conflict alerts hop back to MainActor automatically.
                 try await ThreadManager.shared.syncConfiguredLocalPathsFromWorktree(
                     project: projectSnapshot,
                     worktreePath: worktreePath,
                     syncPaths: syncPathsSnapshot,
-                    promptForConflicts: true
+                    promptForConflicts: true,
+                    destinationRootOverride: destinationRootOverride
                 )
                 await MainActor.run {
                     BannerManager.shared.show(
-                        message: "Local Sync Paths pushed back to the main repo.",
+                        message: "Local Sync Paths pushed back to \(destLabel).",
                         style: .info
                     )
                 }
@@ -226,7 +292,7 @@ extension ThreadDetailViewController {
             } catch {
                 await MainActor.run {
                     BannerManager.shared.show(
-                        message: "Failed to sync Local Sync Paths to main repo: \(error.localizedDescription)",
+                        message: "Failed to sync Local Sync Paths to \(destLabel): \(error.localizedDescription)",
                         style: .error
                     )
                 }

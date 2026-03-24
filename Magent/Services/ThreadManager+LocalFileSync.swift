@@ -278,16 +278,18 @@ extension ThreadManager {
         project: Project,
         worktreePath: String,
         syncPaths: [String],
-        promptForConflicts: Bool = false
+        promptForConflicts: Bool = false,
+        sourceRootOverride: String? = nil
     ) async throws -> [String] {
         guard !syncPaths.isEmpty else { return [] }
 
+        let sourceRoot = sourceRootOverride ?? project.repoPath
         var missingPaths: [String] = []
         let conflictMode: LocalSyncConflictMode = promptForConflicts ? .prompt : .overwrite
         var overwriteAll = !promptForConflicts
         var ignoreAll = false
         for relativePath in syncPaths {
-            let sourcePath = (project.repoPath as NSString).appendingPathComponent(relativePath)
+            let sourcePath = (sourceRoot as NSString).appendingPathComponent(relativePath)
             guard localSyncItemKind(atPath: sourcePath) != nil else {
                 missingPaths.append(relativePath)
                 continue
@@ -333,10 +335,12 @@ extension ThreadManager {
         project: Project,
         worktreePath: String,
         syncPaths: [String],
-        promptForConflicts: Bool
+        promptForConflicts: Bool,
+        destinationRootOverride: String? = nil
     ) async throws {
         guard !syncPaths.isEmpty else { return }
 
+        let destinationRoot = destinationRootOverride ?? project.repoPath
         let baselineHashes = await loadLocalSyncBaselineFileHashes(worktreePath: worktreePath)
         let conflictMode: LocalSyncConflictMode = promptForConflicts ? .prompt : .skip
         var overwriteAll = false
@@ -345,13 +349,13 @@ extension ThreadManager {
             let sourcePath = (worktreePath as NSString).appendingPathComponent(relativePath)
             guard localSyncItemKind(atPath: sourcePath) != nil else { continue }
 
-            let destinationPath = (project.repoPath as NSString).appendingPathComponent(relativePath)
+            let destinationPath = (destinationRoot as NSString).appendingPathComponent(relativePath)
             do {
                 try await mergeLocalSyncItem(
                     sourcePath: sourcePath,
                     destinationPath: destinationPath,
                     relativePath: relativePath,
-                    destinationRootPath: project.repoPath,
+                    destinationRootPath: destinationRoot,
                     conflictMode: conflictMode,
                     overwriteAll: &overwriteAll,
                     ignoreAll: &ignoreAll,
