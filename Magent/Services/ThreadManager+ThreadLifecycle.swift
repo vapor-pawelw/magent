@@ -86,6 +86,16 @@ extension ThreadManager {
         // The thread has no tmux sessions yet; those are created in phase 2 below.
         let threadID = UUID()
         let settings = persistence.loadSettings()
+        // Include the requested base branch on the pending thread so that the
+        // changes panel shows the correct target branch immediately (before Phase 2
+        // resolves the final value).
+        let pendingBaseBranch: String? = {
+            let trimmed = requestedBaseBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let trimmed, !trimmed.isEmpty { return trimmed }
+            let projectDefault = project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let projectDefault, !projectDefault.isEmpty { return projectDefault }
+            return nil
+        }()
         let pendingThread = MagentThread(
             id: threadID,
             projectId: project.id,
@@ -93,7 +103,8 @@ extension ThreadManager {
             worktreePath: worktreePath,
             branchName: branchName,
             tmuxSessionNames: [],
-            sectionId: requestedSectionId ?? settings.defaultSection(for: project.id)?.id
+            sectionId: requestedSectionId ?? settings.defaultSection(for: project.id)?.id,
+            baseBranch: pendingBaseBranch
         )
         pendingThreadIds.insert(threadID)
         var pendingThreadWithBusy = pendingThread

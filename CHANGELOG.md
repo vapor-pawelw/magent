@@ -13,6 +13,8 @@ All notable changes to this project will be documented in this file.
 - Fixed banner buttons and dismiss (X) being unresponsive — clicks were silently ignored due to a coordinate-space mismatch between the flipped split view and the unflipped banner overlay.
 
 ### Sidebar
+- The changes panel in the bottom left is now always visible, even for threads with no commits or changes — shows "No commits" / "No changes in this branch" empty states instead of hiding entirely.
+- Fixed target branch in the changes panel not reflecting the base branch when creating a thread off another thread.
 - Fixed UI freezing when archiving a thread — persistence I/O now runs off the main actor so the archiving overlay stays responsive.
 - Thread row contents now visually dim while archiving is in progress.
 - "Rename Using Prompt" in the thread context menu is now a "Rename with prompt" submenu showing the 3 most recent agent prompts for quick one-click rename, plus a "Custom…" option for free-form input.

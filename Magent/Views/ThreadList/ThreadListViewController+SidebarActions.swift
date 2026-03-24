@@ -835,7 +835,7 @@ extension ThreadListViewController {
                     allBranchEntries: allBranchEntries,
                     commits: commits,
                     hasMoreCommits: hasMoreCommits,
-                    forceVisible: current.isMain,
+                    forceVisible: true,
                     worktreePath: current.worktreePath,
                     branchName: current.isMain ? nil : (current.actualBranch ?? current.branchName),
                     baseBranch: baseBranch,

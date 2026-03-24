@@ -857,6 +857,14 @@ final class DiffPanelView: NSView {
             uncommittedRow.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
         }
 
+        if uncommittedEntries.isEmpty && commits.isEmpty {
+            let row = makeEmptyStateRow(message: "No commits")
+            stackView.addArrangedSubview(row)
+            row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor).isActive = true
+            row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor).isActive = true
+            return
+        }
+
         for commit in commits {
             let row = makeCommitRow(commit)
             stackView.addArrangedSubview(row)

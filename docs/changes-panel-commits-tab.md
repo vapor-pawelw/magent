@@ -2,8 +2,8 @@
 
 ## User Behavior
 
-- The selected main thread always keeps the bottom-left sidebar panel visible, even when there are no dirty files.
-- For non-main threads, the panel is shown only when there are dirty files or branch commits; clean branches with no commits ahead of base hide the panel entirely.
+- The bottom-left sidebar panel is always visible for every thread, regardless of dirty state or commit count.
+- When a thread has no uncommitted changes and no branch commits, the COMMITS tab shows a "No commits" empty state label. The ALL CHANGES tab shows "No changes in this branch" in the same situation.
 - **COMMITS is the left-most (default) tab.** It contains an "Uncommitted" row at the top only when the working tree has uncommitted changes; when clean, the row is hidden entirely. If uncommitted changes exist, the "Uncommitted" row is pre-selected.
 - Below "Uncommitted" (or at the top when clean), the COMMITS tab lists branch commits newest-first. Each row shows:
   - **Short hash** (monospaced, dimmed) — left side
@@ -56,7 +56,7 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - `rebuildCommitDetailRows()` — builds file rows from `commitDetailEntries`; called by `rebuildRows()` when `isInCommitDetailMode`.
 - `isInCommitDetailMode`, `commitDetailHash`, `commitDetailEntries`, `commitDetailHeaderView`, `backButton`, `commitDetailTitleLabel` — detail-mode state and UI.
 - `setRefreshInProgress(_:)` disables and dims the refresh button while a manual refresh task is running.
-- `rebuildCommitsRows()` — always hides `commitContextLabel`, then adds the "Uncommitted" `CommitRowView` only if `uncommittedEntries` is non-empty, then commits, then "Load More".
+- `rebuildCommitsRows()` — always hides `commitContextLabel`, then adds the "Uncommitted" `CommitRowView` only if `uncommittedEntries` is non-empty. If both `uncommittedEntries` and `commits` are empty, shows a "No commits" empty state row and returns early. Otherwise lists commits, then "Load More".
 - `update(preserveSelection:)` — when `true`, always preserves `activeTab`. If a commit hash is selected and still exists in the new commit list, also preserves `selectedCommitHash`, clears `commitEntries`, and fires `onCommitSelected` to reload them. If `selectedCommitHash` is `nil` (user is on ALL CHANGES tab), the tab is still preserved so a background refresh doesn't yank the user back to COMMITS. Hides `commitContextLabel` via `rebuildCommitsRows()`. Used by background/polling refreshes (agent completion, load-more); thread-switch calls pass `false`.
 - `rebuildChangesRows()` — always hides `commitContextLabel`, shows `allBranchEntries` file rows or "No changes in this branch" empty state. Independent of commit selection.
 - `CommitRowView` — selectable NSView subclass (like `DiffFileRowView`) with `isSelected` highlight. Uses `"__uncommitted__"` as a sentinel hash for the Uncommitted row's `updateCommitRowSelectionAppearance`. Right-click shows a context menu with "Copy Hash" and "Copy Message" (suppressed for the `__uncommitted__` sentinel). The `commitMessage` property is set in `makeCommitRow` from `BranchCommit.subject`.
