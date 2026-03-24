@@ -58,6 +58,12 @@
 - The archiving overlay now belongs to `AlwaysEmphasizedRowView`, not `ThreadCell`, so the tint/spinner covers the full selected row bounds instead of only the cell content area.
 - `ThreadManager.archiveThread` shows the archive banner immediately after the UI state is updated, then fires remaining cleanup (tmux kills, worktree removal, symlink sweep, stale-session sweep) in a background `Task`. Tmux sessions are killed concurrently via `withTaskGroup`.
 
+## What changed in the infernape thread (stale data after suspension points)
+
+- `archiveThread`: settings are now reloaded via `persistence.loadSettings()` after the `persistArchiveState` await instead of reusing the pre-suspension capture. The stale reference was used for the banner project name and the detached cleanup task.
+- `restoreArchivedThread`: `allThreads` is reloaded and the archived index re-located by ID after the worktree-creation awaits, preventing stale-index overwrites if concurrent archive/restore modified persistence in the meantime. The second write-back (after `bumpThreadToTopOfSection`) also uses a fresh index lookup instead of reusing the earlier one.
+- Removed a redundant `Task { @MainActor }` wrapper around `BannerManager.shared.show(...)` in `showArchivedThreadBanner` — `ThreadManager` is already main-actor-isolated, so the wrapper only deferred the banner to a later run-loop tick.
+
 ## Gotchas
 
 - **Use `saveActiveThreads` for active-only saves.** `ThreadManager` keeps only non-archived threads in its in-memory `threads` array. Calling `PersistenceService.saveThreads(threads)` with that list overwrites `threads.json` with active-only data and silently wipes all archived threads from disk. Always call `PersistenceService.saveActiveThreads(_:)` instead — it merges the incoming active list with the existing archived threads on disk before writing. Archive/restore flows that already build a complete `allThreads` array should continue to call `saveThreads(allThreads)` directly.
