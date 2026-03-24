@@ -213,11 +213,7 @@ extension ThreadManager {
     // MARK: - Exclude Ticket
 
     func excludeJiraTicket(key: String, projectId: UUID) {
-        var settings = persistence.loadSettings()
-        if let idx = settings.projects.firstIndex(where: { $0.id == projectId }) {
-            settings.projects[idx].jiraExcludedTicketKeys.insert(key)
-            try? persistence.saveSettings(settings)
-        }
+        Self.excludeJiraTicketInPersistence(key: key, projectId: projectId, persistence: persistence)
     }
 
     // MARK: - Status Mismatch Banner

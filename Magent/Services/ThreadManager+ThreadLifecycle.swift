@@ -540,10 +540,6 @@ extension ThreadManager {
             }
         }
 
-        if let ticketKey = thread.jiraTicketKey {
-            excludeJiraTicket(key: ticketKey, projectId: thread.projectId)
-        }
-
         let archivedAt = Date()
 
         // Prompt-injection bookkeeping is global to ThreadManager rather than persisted on
@@ -553,26 +549,25 @@ extension ThreadManager {
         // Remove from active list
         threads.removeAll { $0.id == thread.id }
 
-        // Mark as archived in persistence
-        var allThreads = persistence.loadThreads()
-        if let i = allThreads.firstIndex(where: { $0.id == thread.id }) {
-            allThreads[i].isArchived = true
-            allThreads[i].archivedAt = archivedAt
-            clearPersistedSessionState(for: &allThreads[i])
-        }
-        try persistence.saveThreads(allThreads)
-        await MainActor.run {
-            NotificationCenter.default.post(name: .magentArchivedThreadsDidChange, object: nil)
-        }
+        // Run persistence I/O off the main actor so the sidebar stays responsive while the
+        // archiving overlay is visible.
+        try await persistArchiveState(
+            threadId: thread.id,
+            projectId: thread.projectId,
+            jiraTicketKey: thread.jiraTicketKey,
+            archivedAt: archivedAt
+        )
 
-        await MainActor.run {
-            delegate?.threadManager(self, didArchiveThread: thread)
-        }
+        // Safe to call directly — archiveThread is @MainActor (implicit via build settings),
+        // so execution resumes on the main actor after the @concurrent persistArchiveState await.
+        NotificationCenter.default.post(name: .magentArchivedThreadsDidChange, object: nil)
+        delegate?.threadManager(self, didArchiveThread: thread)
 
         promptRenameResultCache.removeValue(forKey: thread.id)
 
         // Show the banner immediately — the archive is logically complete from the user's perspective.
-        showArchivedThreadBanner(for: thread, warning: archiveWarning)
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "Unknown Project"
+        showArchivedThreadBanner(for: thread, projectName: projectName, warning: archiveWarning)
 
         // Run the slow cleanup (tmux kills, worktree removal, symlink/stale-session sweeps) in a
         // detached task so it does NOT inherit the caller's UI actor/executor context.
@@ -671,7 +666,7 @@ extension ThreadManager {
 
         restoredThread.isArchived = false
         restoredThread.archivedAt = nil
-        clearPersistedSessionState(for: &restoredThread)
+        Self.clearPersistedSessionState(for: &restoredThread)
         restoredThread.unreadCompletionSessions.removeAll()
         restoredThread.lastAgentCompletionAt = nil
         restoredThread.isDirty = false
@@ -870,7 +865,9 @@ extension ThreadManager {
         }
     }
 
-    private func clearPersistedSessionState(for thread: inout MagentThread) {
+    /// Clears transient session state from a thread. Nonisolated so it can be called
+    /// from both main-actor and @concurrent contexts (e.g. `persistArchiveState`).
+    nonisolated private static func clearPersistedSessionState(for thread: inout MagentThread) {
         thread.tmuxSessionNames = []
         thread.agentTmuxSessions = []
         thread.sessionConversationIDs = [:]
@@ -879,6 +876,39 @@ extension ThreadManager {
         thread.lastSelectedTmuxSessionName = nil
         thread.customTabNames = [:]
         thread.submittedPromptsBySession = [:]
+    }
+
+    /// Excludes a Jira ticket from future assignment. Nonisolated so it can be called
+    /// from both main-actor and @concurrent contexts.
+    nonisolated static func excludeJiraTicketInPersistence(key: String, projectId: UUID, persistence: PersistenceService) {
+        var settings = persistence.loadSettings()
+        if let idx = settings.projects.firstIndex(where: { $0.id == projectId }) {
+            settings.projects[idx].jiraExcludedTicketKeys.insert(key)
+            try? persistence.saveSettings(settings)
+        }
+    }
+
+    /// Writes archive state to persistence off the main actor. PersistenceService is
+    /// non-isolated (lives in PersistenceCore) so all calls here are safe.
+    @concurrent private func persistArchiveState(
+        threadId: UUID,
+        projectId: UUID,
+        jiraTicketKey: String?,
+        archivedAt: Date
+    ) async throws {
+        let persistence = PersistenceService.shared
+
+        if let ticketKey = jiraTicketKey {
+            Self.excludeJiraTicketInPersistence(key: ticketKey, projectId: projectId, persistence: persistence)
+        }
+
+        var allThreads = persistence.loadThreads()
+        if let i = allThreads.firstIndex(where: { $0.id == threadId }) {
+            allThreads[i].isArchived = true
+            allThreads[i].archivedAt = archivedAt
+            Self.clearPersistedSessionState(for: &allThreads[i])
+        }
+        try persistence.saveThreads(allThreads)
     }
 
     private func archivedThreadBannerAttributedMessage(
@@ -989,12 +1019,7 @@ extension ThreadManager {
         }
     }
 
-    private func showArchivedThreadBanner(for thread: MagentThread, warning: String?) {
-        let projectName = persistence.loadSettings()
-            .projects
-            .first(where: { $0.id == thread.projectId })?
-            .name ?? "Unknown Project"
-
+    private func showArchivedThreadBanner(for thread: MagentThread, projectName: String, warning: String?) {
         let attributed = archivedThreadBannerAttributedMessage(for: thread, warning: warning)
         let details = archivedThreadBannerDetails(for: thread, projectName: projectName)
 

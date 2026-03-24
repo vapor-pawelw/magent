@@ -319,8 +319,8 @@ final class ThreadCell: NSTableCellView {
         return dot
     }
 
-    private func setSidebarHiddenAppearance(_ isHiddenInSidebar: Bool) {
-        alphaValue = isHiddenInSidebar ? 0.5 : 1.0
+    private func setDimmedAppearance(isHidden: Bool, isArchiving: Bool) {
+        alphaValue = (isHidden || isArchiving) ? 0.5 : 1.0
     }
 
     private func applyRenamePulse(_ active: Bool) {
@@ -455,7 +455,7 @@ final class ThreadCell: NSTableCellView {
         ensureLeadingStack()
         ensureMainAccentBar()
         setLeadingOffset(leadingOffset)
-        setSidebarHiddenAppearance(thread.isSidebarHidden)
+        setDimmedAppearance(isHidden: thread.isSidebarHidden, isArchiving: thread.isArchiving)
         mainAccentBar?.isHidden = true
 
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
@@ -707,7 +707,7 @@ final class ThreadCell: NSTableCellView {
         ensureLeadingStack()
         ensureMainAccentBar()
         setLeadingOffset(leadingOffset)
-        setSidebarHiddenAppearance(false)
+        setDimmedAppearance(isHidden: false, isArchiving: false)
         mainAccentBar?.isHidden = false
 
         textField?.stringValue = "Main worktree"
