@@ -119,6 +119,7 @@ final class ThreadListViewController: NSViewController {
     private var syncStatusContainer: NSStackView!
     private var syncStatusLabel: NSTextField!
     private var syncRefreshButton: NSButton!
+    private var addRepoButton: NSButton!
     /// Repeating timer for updating the "Synced X ago" label. Uses `[weak self]` closure.
     /// Not invalidated on deinit — this VC lives for the app's lifetime.
     private var syncStatusTimer: Timer?
@@ -426,12 +427,33 @@ final class ThreadListViewController: NSViewController {
         sidebarHeaderStack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(sidebarHeaderStack)
 
+        // Add repo button (top-right)
+        let addRepoSymbolConfig = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+        addRepoButton = NSButton()
+        addRepoButton.bezelStyle = .inline
+        addRepoButton.isBordered = false
+        addRepoButton.image = NSImage(
+            systemSymbolName: "folder.badge.plus",
+            accessibilityDescription: "Add Repository"
+        )?.withSymbolConfiguration(addRepoSymbolConfig)
+        addRepoButton.contentTintColor = .secondaryLabelColor
+        addRepoButton.target = self
+        addRepoButton.action = #selector(addRepoButtonTapped(_:))
+        addRepoButton.toolTip = "Add repository"
+        addRepoButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(addRepoButton)
+
         rebuildRateLimitStatusMenu()
 
         NSLayoutConstraint.activate([
             sidebarHeaderStack.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.rateLimitStatusTopInset),
             sidebarHeaderStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            sidebarHeaderStack.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -8),
+            sidebarHeaderStack.trailingAnchor.constraint(lessThanOrEqualTo: addRepoButton.leadingAnchor, constant: -4),
+
+            addRepoButton.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.rateLimitStatusTopInset),
+            addRepoButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+            addRepoButton.widthAnchor.constraint(equalToConstant: 22),
+            addRepoButton.heightAnchor.constraint(equalToConstant: 22),
         ])
     }
 

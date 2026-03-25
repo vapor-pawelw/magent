@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Fixed banner buttons and dismiss (X) being unresponsive — clicks were silently ignored due to a coordinate-space mismatch between the flipped split view and the unflipped banner overlay.
 
 ### Sidebar
+- New "Add repo" button (folder.badge.plus) in the top-right corner of the sidebar lets you create a new repository or import an existing one without opening Settings.
 - The changes panel in the bottom left is now always visible, even for threads with no commits or changes — shows "No commits" / "No changes in this branch" empty states instead of hiding entirely.
 - Fixed target branch in the changes panel not reflecting the base branch when creating a thread off another thread.
 - Fixed UI freezing when archiving a thread — persistence I/O now runs off the main actor so the archiving overlay stays responsive.

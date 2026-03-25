@@ -585,6 +585,162 @@ extension ThreadListViewController {
         }
     }
 
+    // MARK: - Add Repository
+
+    @objc func addRepoButtonTapped(_ sender: NSButton) {
+        let menu = NSMenu()
+        let createItem = NSMenuItem(
+            title: "Create New Repository\u{2026}",
+            action: #selector(addRepoCreateNew(_:)),
+            keyEquivalent: ""
+        )
+        createItem.target = self
+        createItem.image = NSImage(systemSymbolName: "plus.rectangle.on.folder", accessibilityDescription: nil)
+
+        let importItem = NSMenuItem(
+            title: "Import Existing Repository\u{2026}",
+            action: #selector(addRepoImportExisting(_:)),
+            keyEquivalent: ""
+        )
+        importItem.target = self
+        importItem.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+
+        menu.addItem(createItem)
+        menu.addItem(importItem)
+
+        let buttonBounds = sender.bounds
+        menu.popUp(positioning: menu.items.first, at: NSPoint(x: 0, y: buttonBounds.maxY + 4), in: sender)
+    }
+
+    @objc private func addRepoCreateNew(_ sender: NSMenuItem) {
+        guard let window = view.window else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.message = "Select or create an empty folder for the new repository"
+        panel.prompt = "Create Repository"
+
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            let path = url.path
+
+            // Reject folders that already contain a .git directory.
+            let gitDir = url.appendingPathComponent(".git")
+            if FileManager.default.fileExists(atPath: gitDir.path) {
+                let alert = NSAlert()
+                alert.messageText = "Already a Git Repository"
+                alert.informativeText = "The selected folder already contains a .git directory. Use \"Import Existing Repository\" instead."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+                alert.beginSheetModal(for: window)
+                return
+            }
+
+            Task {
+                do {
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+                    process.arguments = ["init", path]
+                    process.standardOutput = FileHandle.nullDevice
+                    process.standardError = FileHandle.nullDevice
+                    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                        process.terminationHandler = { proc in
+                            if proc.terminationStatus == 0 {
+                                cont.resume()
+                            } else {
+                                cont.resume(throwing: NSError(domain: "Magent", code: 1, userInfo: [
+                                    NSLocalizedDescriptionKey: "git init exited with status \(proc.terminationStatus)"
+                                ]))
+                            }
+                        }
+                        do {
+                            try process.run()
+                        } catch {
+                            cont.resume(throwing: error)
+                        }
+                    }
+
+                    let defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: path)
+
+                    await MainActor.run {
+                        self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
+                    }
+                } catch {
+                    await MainActor.run {
+                        let alert = NSAlert()
+                        alert.messageText = "Failed to Create Repository"
+                        alert.informativeText = error.localizedDescription
+                        alert.alertStyle = .critical
+                        alert.addButton(withTitle: "OK")
+                        alert.beginSheetModal(for: window)
+                    }
+                }
+            }
+        }
+    }
+
+    @objc private func addRepoImportExisting(_ sender: NSMenuItem) {
+        guard let window = view.window else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Select a git repository folder"
+
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            let path = url.path
+
+            Task {
+                let isRepo = await GitService.shared.isGitRepository(at: path)
+                let defaultBranch = isRepo ? await GitService.shared.detectDefaultBranch(repoPath: path) : nil
+                await MainActor.run {
+                    if isRepo {
+                        self.addProjectAtPath(url: url, defaultBranch: defaultBranch)
+                    } else {
+                        let alert = NSAlert()
+                        alert.messageText = "Not a Git Repository"
+                        alert.informativeText = "The selected folder is not a git repository."
+                        alert.alertStyle = .warning
+                        alert.addButton(withTitle: "OK")
+                        alert.beginSheetModal(for: window)
+                    }
+                }
+            }
+        }
+    }
+
+    private func addProjectAtPath(url: URL, defaultBranch: String?) {
+        var settings = persistence.loadSettings()
+
+        // Don't add a project that's already registered.
+        let path = url.standardizedFileURL.path
+        if settings.projects.contains(where: {
+            ($0.repoPath as NSString).standardizingPath == (path as NSString).standardizingPath
+        }) {
+            BannerManager.shared.show(
+                message: "Repository already added: \(url.lastPathComponent)",
+                style: .info,
+                duration: 4.0
+            )
+            return
+        }
+
+        let project = Project(
+            name: url.lastPathComponent,
+            repoPath: path,
+            worktreesBasePath: Project.suggestedWorktreesPath(for: path),
+            defaultBranch: defaultBranch
+        )
+        settings.projects.append(project)
+        try? persistence.saveSettings(settings)
+        reloadData()
+
+        Task { try? await ThreadManager.shared.createMainThread(project: project) }
+    }
+
     // MARK: - Helpers
 
 
