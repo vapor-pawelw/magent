@@ -22,6 +22,9 @@ All notable changes to this project will be documented in this file.
 - Thread rows now show how long the thread has been busy or idle (e.g. "<1m", "5m", "2h") in a subtle label at the bottom-right corner. Can be toggled off in Settings > Threads.
 - Cmd+Shift+N creates a new thread branching from the selected thread's branch, inheriting its section and inserting right below it in the sidebar.
 
+### Auto-Rename
+- Auto-rename now triggers on every first prompt, including questions — previously, prompts classified as questions were silently skipped.
+
 ### Thread
 - Fixed target branch in bottom-left not matching the base branch typed during thread creation — the project default was incorrectly overriding the user's explicit choice.
 - Fixed tab sessions restarting when switching between threads — terminal surfaces are now preserved in the reuse cache instead of being destroyed and recreated.

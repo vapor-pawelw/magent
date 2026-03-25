@@ -4,8 +4,7 @@ import MagentCore
 /// Cached result of an AI rename-payload generation for a specific (thread, prompt) pair.
 /// Avoids repeat agent calls when the same prompt is re-used for rename on the same thread.
 struct CachedRenameResult {
-    /// Generated slug. `nil` means the agent classified the prompt as a question — no rename applies.
-    let slug: String?
+    let slug: String
     let taskDescription: ThreadManager.GeneratedTaskDescription?
 }
 
@@ -97,9 +96,9 @@ extension ThreadManager {
         let line = afterPrefix.components(separatedBy: .newlines).first ?? afterPrefix
         let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Agent signals "this is a question, not a task" → return sentinel
+        // EMPTY means the model couldn't generate a slug — treat as failure
         if trimmedLine.uppercased() == "EMPTY" || trimmedLine.isEmpty {
-            return Self.slugQuestionSentinel
+            return nil
         }
 
         // Strip quotes and backticks
@@ -126,19 +125,13 @@ extension ThreadManager {
         return slug
     }
 
-    /// Sentinel returned by `generateSlugViaAgent` when the agent determines
-    /// the prompt is a plain question rather than an actionable task.
-    private static let slugQuestionSentinel = ""
-
     private enum SlugGenerationAttemptResult {
         case slug(String)
-        case question
         case failed
     }
 
     private enum FirstPromptRenameAttemptResult {
         case generated(slug: String, taskDescription: GeneratedTaskDescription?)
-        case question
         case failed
     }
 
@@ -157,7 +150,7 @@ extension ThreadManager {
         return settings.projects.first(where: { $0.id == projectId })?.repoPath
     }
 
-    private func generateSlugViaAgent(from prompt: String, agentType: AgentType?, projectId: UUID?, forceGenerate: Bool = false) async -> SlugGenerationAttemptResult {
+    private func generateSlugViaAgent(from prompt: String, agentType: AgentType?, projectId: UUID?) async -> SlugGenerationAttemptResult {
         let truncated = String(prompt.prefix(500))
         let settings = persistence.loadSettings()
         let projectSlug = projectId.flatMap { pid in
@@ -168,20 +161,11 @@ extension ThreadManager {
             ?? (globalSlug.isEmpty ? nil : globalSlug)
         let instruction = customInstruction ?? AppSettings.defaultSlugPrompt
         let aiPrompt: String
-        if forceGenerate {
-            aiPrompt = """
-                \(instruction) \
-                Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
-                Task: \(truncated)
-                """
-        } else {
-            aiPrompt = """
-                \(instruction) \
-                Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
-                Only output SLUG: EMPTY for questions or actions unrelated to the project in this worktree. \
-                Task: \(truncated)
-                """
-        }
+        aiPrompt = """
+            \(instruction) \
+            Output ONLY the prefix SLUG: followed by the slug. No quotes, no explanation. \
+            Task: \(truncated)
+            """
 
         let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
         let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
@@ -219,9 +203,6 @@ extension ThreadManager {
 
         guard let raw = result, !raw.isEmpty else { return .failed }
         guard let slug = sanitizeSlug(raw) else { return .failed }
-        if slug == Self.slugQuestionSentinel {
-            return .question
-        }
         return .slug(slug)
     }
 
@@ -229,8 +210,7 @@ extension ThreadManager {
     private func generateFirstPromptRenamePayloadViaAgent(
         from prompt: String,
         agentType: AgentType?,
-        projectId: UUID?,
-        forceGenerate: Bool = false
+        projectId: UUID?
     ) async -> FirstPromptRenameAttemptResult {
         let truncated = String(prompt.prefix(500))
         let settings = persistence.loadSettings()
@@ -250,27 +230,14 @@ extension ThreadManager {
             Output exactly three lines and nothing else:
             """
         let aiPrompt: String
-        if forceGenerate {
-            aiPrompt = """
-                \(instruction) \
-                \(commonPayloadInstructions) \
-                SLUG: <slug> \
-                DESC: <description> \
-                TYPE: <feature|fix|improvement|refactor|test|other> \
-                Task: \(truncated)
-                """
-        } else {
-            aiPrompt = """
-                \(instruction) \
-                \(commonPayloadInstructions) \
-                SLUG: <slug or EMPTY> \
-                DESC: <description or EMPTY> \
-                TYPE: <feature|fix|improvement|refactor|test|other> \
-                Use SLUG: EMPTY and DESC: EMPTY for pure knowledge questions with no implied action. \
-                Bug reports, observations about broken behavior, and feature requests are actionable — always generate a slug. \
-                Task: \(truncated)
-                """
-        }
+        aiPrompt = """
+            \(instruction) \
+            \(commonPayloadInstructions) \
+            SLUG: <slug> \
+            DESC: <description> \
+            TYPE: <feature|fix|improvement|refactor|test|other> \
+            Task: \(truncated)
+            """
 
         let escapedPrompt = ShellExecutor.shellQuote(aiPrompt)
         let workingDirectory = backgroundGenerationWorkingDirectory(projectId: projectId)
@@ -300,17 +267,12 @@ extension ThreadManager {
 
         guard let raw = result, !raw.isEmpty else { return .failed }
         guard let slug = sanitizeSlug(raw) else { return .failed }
-        if slug == Self.slugQuestionSentinel {
-            return .question
-        }
         let generatedDescription = sanitizeGeneratedTaskDescription(raw)
         return .generated(slug: slug, taskDescription: generatedDescription)
     }
 
     enum AutoRenameResult {
         case candidates([String])
-        /// The prompt was identified as a question, not a task — no rename needed.
-        case question
         /// AI slug generation failed (timeout, error, etc.).
         case failed
     }
@@ -318,21 +280,15 @@ extension ThreadManager {
     func autoRenameCandidates(
         from prompt: String,
         agentType: AgentType?,
-        projectId: UUID? = nil,
-        forceGenerate: Bool = false
+        projectId: UUID? = nil
     ) async -> AutoRenameResult {
         let agentOrder = slugGenerationAgentOrder(preferred: agentType, projectId: projectId)
 
         let normalCandidates = agentOrder.available
         for candidateAgent in normalCandidates {
-            switch await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId, forceGenerate: forceGenerate) {
+            switch await generateSlugViaAgent(from: prompt, agentType: candidateAgent, projectId: projectId) {
             case .slug(let slug):
                 return .candidates(renameCandidates(from: slug))
-            case .question:
-                if forceGenerate { continue }
-                // A question classification (SLUG: EMPTY) should short-circuit.
-                // Retry slug generation only on the next submitted user prompt.
-                return .question
             case .failed:
                 continue
             }
@@ -403,25 +359,19 @@ extension ThreadManager {
         let agentOrder = slugGenerationAgentOrder(preferred: resolvedPreferred, projectId: currentThread.projectId)
         let cKey = promptCacheKey(for: trimmedPrompt)
         var payloadResult: FirstPromptRenameAttemptResult = .failed
-        // Explicit rename: use cached slug hits, but bypass QUESTION cache results so
-        // context-setting prompts that auto-rename skipped can still be forced to a name.
-        if let cached = promptRenameResultCache[currentThread.id]?[cKey], cached.slug != nil {
-            payloadResult = .generated(slug: cached.slug!, taskDescription: cached.taskDescription)
+        if let cached = promptRenameResultCache[currentThread.id]?[cKey] {
+            payloadResult = .generated(slug: cached.slug, taskDescription: cached.taskDescription)
         } else {
             for candidateAgent in agentOrder.available {
                 let result = await generateFirstPromptRenamePayloadViaAgent(
                     from: trimmedPrompt,
                     agentType: candidateAgent,
-                    projectId: currentThread.projectId,
-                    forceGenerate: true
+                    projectId: currentThread.projectId
                 )
                 cacheRenameResult(result, threadId: currentThread.id, cacheKey: cKey)
                 switch result {
                 case .generated:
                     payloadResult = result
-                case .question:
-                    // forceGenerate should prevent QUESTION, but fall through to next agent if it slips past.
-                    continue
                 case .failed:
                     continue
                 }
@@ -435,8 +385,6 @@ extension ThreadManager {
         case .generated(let generatedSlug, let description):
             slug = generatedSlug
             generatedTaskDescription = description
-        case .question:
-            return false
         case .failed:
             throw ThreadManagerError.nameGenerationFailed
         }
@@ -678,14 +626,8 @@ extension ThreadManager {
         let cKey = promptCacheKey(for: prompt)
         if let cached = promptRenameResultCache[refreshedThread.id]?[cKey] {
             // Cache hit — reuse previous AI result without another agent call.
-            if let cachedSlug = cached.slug {
-                slug = cachedSlug
-                generatedTaskDescription = cached.taskDescription
-            } else {
-                // Previously classified as a question.
-                markFirstPromptAutoRenameHandled(threadId: refreshedThread.id)
-                return true
-            }
+            slug = cached.slug
+            generatedTaskDescription = cached.taskDescription
         } else {
             for candidateAgent in agentOrder.available {
                 let result = await generateFirstPromptRenamePayloadViaAgent(
@@ -698,9 +640,6 @@ extension ThreadManager {
                 case .generated(let generatedSlug, let description):
                     slug = generatedSlug
                     generatedTaskDescription = description
-                case .question:
-                    // Treated as handled for this prompt to avoid a second model call.
-                    return true
                 case .failed:
                     continue
                 }
@@ -767,8 +706,6 @@ extension ThreadManager {
         switch result {
         case .generated(let slug, let description):
             cache[cacheKey] = CachedRenameResult(slug: slug, taskDescription: description)
-        case .question:
-            cache[cacheKey] = CachedRenameResult(slug: nil, taskDescription: nil)
         case .failed:
             return
         }
@@ -874,9 +811,8 @@ extension ThreadManager {
             Icon types: feature (new functionality), fix (bug/regression), improvement (non-breaking polish/performance/quality), refactor (internal code restructure), test (adding/updating tests), other (none fit). \
             Evaluate all icon types, pick the highest-confidence one, and use other when no icon type is above 70% confidence. \
             Output exactly: \
-            DESC: <description or EMPTY> \
+            DESC: <description> \
             TYPE: <feature|fix|improvement|refactor|test|other> \
-            For pure knowledge questions, output DESC: EMPTY and TYPE: other.
             Task: \(truncated)
             """
 

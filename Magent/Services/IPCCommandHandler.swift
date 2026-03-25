@@ -615,14 +615,10 @@ final class IPCCommandHandler {
             return .failure("Missing required field: prompt", id: request.id)
         }
 
-        // rename-thread is an explicit user action — force slug generation even for
-        // context-setting prompts that auto-rename would classify as questions.
-        let isExplicitRename = request.command == "rename-thread"
         let renameResult = await threadManager.autoRenameCandidates(
             from: prompt,
             agentType: threadManager.effectiveAgentType(for: thread.projectId),
-            projectId: thread.projectId,
-            forceGenerate: isExplicitRename
+            projectId: thread.projectId
         )
         guard case .candidates(let candidates) = renameResult else {
             return .failure("Could not generate a branch name from the prompt", id: request.id)
