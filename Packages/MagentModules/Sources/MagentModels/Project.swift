@@ -25,6 +25,7 @@ public nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
     public var jiraAssigneeAccountId: String?
     public var jiraAcknowledgedStatuses: Set<String>?
     public var localFileSyncPaths: [String]
+    public var archiveCleanupGlobs: [String]
 
     public init(
         id: UUID = UUID(),
@@ -50,7 +51,8 @@ public nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         jiraExcludedTicketKeys: Set<String> = [],
         jiraAssigneeAccountId: String? = nil,
         jiraAcknowledgedStatuses: Set<String>? = nil,
-        localFileSyncPaths: [String] = []
+        localFileSyncPaths: [String] = [],
+        archiveCleanupGlobs: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -76,6 +78,7 @@ public nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         self.jiraAssigneeAccountId = jiraAssigneeAccountId
         self.jiraAcknowledgedStatuses = jiraAcknowledgedStatuses
         self.localFileSyncPaths = localFileSyncPaths
+        self.archiveCleanupGlobs = archiveCleanupGlobs
     }
 
     public init(from decoder: Decoder) throws {
@@ -104,6 +107,7 @@ public nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
         jiraAssigneeAccountId = try container.decodeIfPresent(String.self, forKey: .jiraAssigneeAccountId)
         jiraAcknowledgedStatuses = try container.decodeIfPresent(Set<String>.self, forKey: .jiraAcknowledgedStatuses)
         localFileSyncPaths = try container.decodeIfPresent([String].self, forKey: .localFileSyncPaths) ?? []
+        archiveCleanupGlobs = try container.decodeIfPresent([String].self, forKey: .archiveCleanupGlobs) ?? []
     }
 
     /// Resolves template variables in `worktreesBasePath` (e.g. `$MAGENT_PROJECT_NAME`).
@@ -155,5 +159,28 @@ public nonisolated struct Project: Codable, Identifiable, Hashable, Sendable {
 
     public var normalizedLocalFileSyncPaths: [String] {
         Self.normalizeLocalFileSyncPaths(localFileSyncPaths)
+    }
+
+    public static func normalizeArchiveCleanupGlobs(_ globs: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for rawGlob in globs {
+            var trimmed = rawGlob.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            // Reject absolute paths and home-dir expansion
+            guard !trimmed.hasPrefix("/"), !trimmed.hasPrefix("~") else { continue }
+            // Strip leading ./ prefixes
+            while trimmed.hasPrefix("./") { trimmed.removeFirst(2) }
+            // Reject patterns containing .. path traversal
+            let segments = trimmed.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+            guard !segments.contains(".."), !trimmed.isEmpty else { continue }
+            guard seen.insert(trimmed).inserted else { continue }
+            normalized.append(trimmed)
+        }
+        return normalized
+    }
+
+    public var normalizedArchiveCleanupGlobs: [String] {
+        Self.normalizeArchiveCleanupGlobs(archiveCleanupGlobs)
     }
 }

@@ -605,12 +605,18 @@ extension ThreadManager {
         // awaits). Acceptable trade-off to keep cleanup fully off the main thread.
         let capturedActiveWorktreeNames = worktreeActiveNames(for: thread.projectId)
         let capturedReferencedSessions = referencedMagentSessionNames()
+        let capturedWorktreePath = thread.worktreePath
+        let capturedCleanupGlobs = capturedProject?.normalizedArchiveCleanupGlobs ?? []
         Task.detached {
             // Kill sessions concurrently instead of one-by-one.
             await withTaskGroup(of: Void.self) { group in
                 for sessionName in thread.tmuxSessionNames {
                     group.addTask { try? await capturedTmux.killSession(name: sessionName) }
                 }
+            }
+            // Delete build artifacts / user-configured cleanup globs before removing the worktree.
+            if !capturedCleanupGlobs.isEmpty {
+                Self.deleteMatchingGlobs(capturedCleanupGlobs, in: capturedWorktreePath)
             }
             if let project = capturedProject {
                 try? await capturedGit.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
@@ -1072,5 +1078,45 @@ extension ThreadManager {
             detailsCollapsedTitle: "More Info",
             detailsExpandedTitle: "Less Info"
         )
+    }
+
+    // MARK: - Archive Cleanup Globs
+
+    /// Deletes files and directories matching the given glob patterns relative to `basePath`.
+    /// Uses POSIX glob(3) for pattern expansion. Runs synchronously (intended for detached tasks).
+    /// Each matched path is validated to be contained within `basePath` before deletion.
+    nonisolated static func deleteMatchingGlobs(_ globs: [String], in basePath: String) {
+        let fm = FileManager.default
+        let resolvedBase = URL(fileURLWithPath: basePath).resolvingSymlinksInPath().path + "/"
+        var totalRemoved = 0
+        for pattern in globs {
+            let fullPattern = basePath + "/" + pattern
+            var gt = glob_t()
+            let flags = GLOB_BRACE
+            guard glob(fullPattern, flags, nil, &gt) == 0 else {
+                globfree(&gt)
+                continue
+            }
+            for i in 0..<Int(gt.gl_matchc) {
+                guard let cPath = gt.gl_pathv[i] else { continue }
+                let matchedPath = String(cString: cPath)
+                // Resolve symlinks and verify the match is inside the worktree
+                let resolvedMatch = URL(fileURLWithPath: matchedPath).resolvingSymlinksInPath().path
+                guard resolvedMatch.hasPrefix(resolvedBase) else {
+                    NSLog("[ArchiveCleanup] skipping \(matchedPath) — resolves outside worktree")
+                    continue
+                }
+                do {
+                    try fm.removeItem(atPath: matchedPath)
+                    totalRemoved += 1
+                } catch {
+                    NSLog("[ArchiveCleanup] failed to remove \(matchedPath): \(error)")
+                }
+            }
+            globfree(&gt)
+        }
+        if totalRemoved > 0 {
+            NSLog("[ArchiveCleanup] removed \(totalRemoved) item(s) matching \(globs.count) glob(s) in \(basePath)")
+        }
     }
 }

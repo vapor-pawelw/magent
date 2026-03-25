@@ -58,6 +58,14 @@
 - The archiving overlay now belongs to `AlwaysEmphasizedRowView`, not `ThreadCell`, so the tint/spinner covers the full selected row bounds instead of only the cell content area.
 - `ThreadManager.archiveThread` shows the archive banner immediately after the UI state is updated, then fires remaining cleanup (tmux kills, worktree removal, symlink sweep, stale-session sweep) in a background `Task`. Tmux sessions are killed concurrently via `withTaskGroup`.
 
+## What changed in the bidoof thread (archive cleanup globs)
+
+- Per-project "Archive Cleanup Globs" setting: line-separated glob patterns for files/directories to delete from the worktree before `git worktree remove`. Configured in project settings, stored as `Project.archiveCleanupGlobs`.
+- Deletion runs inside the existing detached cleanup task (after tmux kill, before worktree remove) via `ThreadManager.deleteMatchingGlobs(_:in:)`.
+- Uses POSIX `glob(3)` with `GLOB_BRACE` only — no `GLOB_TILDE` (prevents `~` expansion outside worktree).
+- Every matched path is resolved via `URL.resolvingSymlinksInPath()` and validated to be inside the worktree base path before deletion. Paths that escape the worktree are logged and skipped.
+- Normalization (`Project.normalizeArchiveCleanupGlobs`) rejects absolute paths, `~` prefixes, and `..` traversal at save time.
+
 ## What changed in the infernape thread (stale data after suspension points)
 
 - `archiveThread`: settings are now reloaded via `persistence.loadSettings()` after the `persistArchiveState` await instead of reusing the pre-suspension capture. The stale reference was used for the banner project name and the detached cleanup task.

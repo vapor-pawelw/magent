@@ -109,6 +109,14 @@ extension SettingsProjectsViewController {
             font: .monospacedSystemFont(ofSize: 13, weight: .regular)
         )
 
+        archiveCleanupGlobsTextView = createOverrideSection(
+            in: detailsStack,
+            title: "Archive Cleanup Globs",
+            description: "Line-separated glob patterns for files/directories to delete from the worktree before archiving (e.g. .build, DerivedData, node_modules, *.o). Paths are relative to the worktree root.",
+            value: project.normalizedArchiveCleanupGlobs.joined(separator: "\n"),
+            font: .monospacedSystemFont(ofSize: 13, weight: .regular)
+        )
+
         // Default Section popup
         defaultSectionContainer = NSStackView()
         defaultSectionContainer.orientation = .vertical

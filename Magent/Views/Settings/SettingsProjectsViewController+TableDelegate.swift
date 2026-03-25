@@ -397,6 +397,9 @@ extension SettingsProjectsViewController: NSTextViewDelegate {
         } else if textView === localFileSyncPathsTextView {
             let rawPaths = textView.string.components(separatedBy: .newlines)
             settings.projects[index].localFileSyncPaths = Project.normalizeLocalFileSyncPaths(rawPaths)
+        } else if textView === archiveCleanupGlobsTextView {
+            let rawGlobs = textView.string.components(separatedBy: .newlines)
+            settings.projects[index].archiveCleanupGlobs = Project.normalizeArchiveCleanupGlobs(rawGlobs)
         } else if textView === slugPromptTextView {
             settings.projects[index].autoRenameSlugPrompt = textView.string
         }
