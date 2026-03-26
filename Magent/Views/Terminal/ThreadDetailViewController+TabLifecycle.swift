@@ -367,8 +367,10 @@ extension ThreadDetailViewController {
         loadingOverlayInjectionObservers.removeAll()
 
         guard let overlay = loadingOverlay else { return }
-        overlay.animator().alphaValue = 0
-        overlay.isHidden = true
+        overlay.removeFromSuperview()
+        loadingOverlay = nil
+        loadingLabel = nil
+        loadingDetailLabel = nil
         loadingOverlaySessionName = nil
 
         // Restore first responder to the current terminal so it can accept keyboard input.
