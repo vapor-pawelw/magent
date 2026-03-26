@@ -49,6 +49,17 @@ Optional overrides:
 MAGENT_SCHEME=Magent MAGENT_CONFIGURATION=Debug MAGENT_APP_NAME=Magent ./scripts/rebuild-and-relaunch.sh
 ```
 
+## Relaunch (No Rebuild)
+
+Use this script to kill and relaunch the existing Debug build without rebuilding.
+It only triggers a build if no binary exists in DerivedData.
+
+```bash
+./scripts/relaunch.sh
+```
+
+Accepts the same `MAGENT_SCHEME`, `MAGENT_CONFIGURATION`, and `MAGENT_APP_NAME` env overrides as `rebuild-and-relaunch.sh`.
+
 ## Archive Thread Workflow Helper
 
 Use the helper script when you want to merge the current thread branch into its base branch and then archive the thread in one flow:
