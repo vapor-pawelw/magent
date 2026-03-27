@@ -81,7 +81,8 @@ final class ThreadManager {
     var lastTmuxZombieHealthCheckAt: Date = .distantPast
     var didShowTmuxZombieWarning = false
     var isRestartingTmuxForRecovery = false
-var dirtyCheckTickCounter: Int = 0
+    var _slowTickCounter: Int = 0
+    var dirtyCheckTickCounter: Int = 0
     var _jiraSyncTickCounter: Int = 0
     var _prSyncTickCounter: Int = 0
     var isPRSyncRunning = false
