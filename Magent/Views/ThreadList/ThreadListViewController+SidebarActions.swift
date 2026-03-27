@@ -375,6 +375,7 @@ extension ThreadListViewController {
 
     /// Called from SplitViewController's Cmd+N shortcut to respect the loading guard.
     /// Picks the most relevant project context and opens that project's agent menu.
+    /// When a thread is selected, inherits its section and positions the new thread below it.
     func requestNewThread() {
         guard !isCreatingThread else { return }
 
@@ -385,11 +386,22 @@ extension ThreadListViewController {
             return
         }
         guard let project = preferredProjectForQuickCreate(from: projects) else { return }
+
+        // Use the selected thread as the source for section/position inheritance.
+        let selectedSource = selectedThreadFromState()
+        let sourceInSameProject = selectedSource?.projectId == project.id ? selectedSource : nil
+
         let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
         if isOptionPressed {
-            createThread(for: project, requestedAgentType: nil, useAgentCommand: true)
+            createThread(
+                for: project,
+                requestedAgentType: nil,
+                useAgentCommand: true,
+                requestedSectionId: sourceInSameProject?.sectionId,
+                insertAfterThreadId: sourceInSameProject?.id
+            )
         } else {
-            presentNewThreadSheet(for: project, anchorView: outlineView)
+            presentNewThreadSheet(for: project, anchorView: outlineView, sourceThread: sourceInSameProject)
         }
     }
 
