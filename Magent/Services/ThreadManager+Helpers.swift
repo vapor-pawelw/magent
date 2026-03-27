@@ -349,6 +349,53 @@ extension ThreadManager {
         clearPendingPromptInjection(for: sessionName)
     }
 
+    // MARK: - Pending Prompt Recovery (per-thread)
+
+    func addPendingPromptRecovery(for threadId: UUID, info: PendingPromptRecoveryInfo) {
+        pendingPromptRecoveriesByThread[threadId, default: []].append(info)
+        NotificationCenter.default.post(
+            name: .magentPendingPromptRecovery,
+            object: self,
+            userInfo: ["threadId": threadId]
+        )
+    }
+
+    func pendingPromptRecoveries(for threadId: UUID) -> [PendingPromptRecoveryInfo] {
+        pendingPromptRecoveriesByThread[threadId] ?? []
+    }
+
+    func removePendingPromptRecovery(for threadId: UUID, tempFileURL: URL) {
+        guard var entries = pendingPromptRecoveriesByThread[threadId] else { return }
+        entries.removeAll { $0.tempFileURL == tempFileURL }
+        if entries.isEmpty {
+            pendingPromptRecoveriesByThread.removeValue(forKey: threadId)
+        } else {
+            pendingPromptRecoveriesByThread[threadId] = entries
+        }
+        NotificationCenter.default.post(
+            name: .magentPendingPromptRecovery,
+            object: self,
+            userInfo: ["threadId": threadId]
+        )
+    }
+
+    func clearAllPendingPromptRecoveries(for threadId: UUID) {
+        guard pendingPromptRecoveriesByThread.removeValue(forKey: threadId) != nil else { return }
+        NotificationCenter.default.post(
+            name: .magentPendingPromptRecovery,
+            object: self,
+            userInfo: ["threadId": threadId]
+        )
+    }
+
+    /// Removes all pending prompt recoveries for a thread and deletes their temp files.
+    func cleanupPendingPromptRecoveries(for threadId: UUID) {
+        guard let entries = pendingPromptRecoveriesByThread.removeValue(forKey: threadId) else { return }
+        for entry in entries {
+            try? FileManager.default.removeItem(at: entry.tempFileURL)
+        }
+    }
+
     func clearTrackedInitialPromptInjection(forSessions sessionNames: some Sequence<String>) {
         for sessionName in sessionNames {
             clearTrackedInitialPromptInjection(for: sessionName)
@@ -1707,6 +1754,13 @@ extension Notification.Name {
     /// use-after-free when the tmux session (and its process) was killed via
     /// the IPC path, which doesn't call removeFromSuperview() directly.
     static let magentTabWillClose = Notification.Name("magentTabWillClose")
+    /// Posted when a pending prompt recovery is added or removed for a thread.
+    /// Carries "threadId" (UUID).
+    static let magentPendingPromptRecovery = Notification.Name("magentPendingPromptRecovery")
+    /// Posted by ThreadDetailViewController when the user clicks "Reopen as Thread"
+    /// on a per-thread recovery banner. Carries "projectId" (UUID), "tempFileURL" (URL),
+    /// and "prefill" (AgentLaunchSheetPrefill).
+    static let magentRecoveryReopenRequested = Notification.Name("magentRecoveryReopenRequested")
 }
 
 // MARK: - Errors

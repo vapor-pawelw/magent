@@ -23,6 +23,13 @@ final class ThreadManager {
         let newBase: String
     }
 
+    struct PendingPromptRecoveryInfo {
+        let tempFileURL: URL
+        let prompt: String
+        let agentType: AgentType?
+        let projectId: UUID
+    }
+
     static let shared = ThreadManager()
 
     weak var delegate: ThreadManagerDelegate?
@@ -101,6 +108,9 @@ var dirtyCheckTickCounter: Int = 0
     var _jiraProjectStatusesCacheLoaded = false
     var prCache: [String: PullRequestCacheEntry] = [:]
     var prCacheLoaded = false
+    /// Pending prompt recoveries for .newTab entries, keyed by thread ID.
+    /// Stored at launch and shown as embedded banners when the thread is selected.
+    var pendingPromptRecoveriesByThread: [UUID: [PendingPromptRecoveryInfo]] = [:]
 
     // MARK: - Lifecycle
 

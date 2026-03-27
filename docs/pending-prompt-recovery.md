@@ -56,7 +56,22 @@ This banner is scoped to the affected terminal tab only. Switching to another ta
 
 ## Recovery on Launch
 
-`ThreadListViewController.checkForPendingPromptRecovery()` runs once in `viewDidLoad`. It scans `/tmp` for leftover `magent-pending-prompt-*.json` files and shows a dismissible warning banner for each, offering "Reopen" (re-opens the sheet pre-filled) or "Discard" (deletes the file).
+`ThreadListViewController.checkForPendingPromptRecovery()` runs once in `viewDidAppear`. It scans `/tmp` for leftover `magent-pending-prompt-*.json` files and handles them by scope:
+
+- **`.newThread`** — shown as a global `BannerManager` banner with "Reopen" / "Discard" buttons. The "(N of M)" counter only counts `.newThread` entries, so `.newTab` entries that were silently stored don't inflate the count.
+- **`.newTab`** — stored on `ThreadManager.pendingPromptRecoveriesByThread` (keyed by thread ID, supports multiple recoveries per thread). No global banner is shown. Instead, `ThreadDetailViewController` shows an embedded per-thread recovery banner when the affected thread is selected.
+
+### Per-thread recovery banner
+
+When a thread with pending recoveries is selected, `ThreadDetailViewController.refreshRecoveryBanner()` shows the first recovery as an embedded warning banner in the terminal container:
+
+- **Reopen as Thread** — removes that single recovery entry, posts `.magentRecoveryReopenRequested` (observed by `ThreadListViewController` to present the recovery sheet), then shows the next recovery if any remain.
+- **Discard** — deletes the temp file, removes the entry, and shows the next.
+- **Dismiss (X)** — hides the banner without deleting data. The banner reappears on next thread selection, giving the user a "deal with it later" option.
+
+### Cleanup on archive/delete
+
+When a thread is archived or deleted, `ThreadManager.cleanupPendingPromptRecoveries(for:)` removes all pending recovery entries for that thread and deletes their temp files from `/tmp`.
 
 ## Draft Scope Clearing
 

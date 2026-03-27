@@ -462,21 +462,33 @@ extension ThreadListViewController {
         let pending = PendingInitialPromptStore.loadAll()
         guard !pending.isEmpty else { return }
 
+        // .newTab entries are stored on ThreadManager for per-thread banners;
+        // only .newThread entries show as global BannerManager banners.
+        let bannerCount = pending.filter { $0.prompt.scopeKind == .newThread }.count
+
         // Show banners sequentially — when the user acts on or dismisses one, the next appears.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-            self?.showNextRecoveryBanner(pending: pending, index: 0)
+            self?.showNextRecoveryBanner(pending: pending, index: 0, bannerTotal: bannerCount, bannerShown: 0)
         }
     }
 
-    private func showNextRecoveryBanner(pending: [(url: URL, prompt: PendingInitialPrompt)], index: Int) {
+    private func showNextRecoveryBanner(
+        pending: [(url: URL, prompt: PendingInitialPrompt)],
+        index: Int,
+        bannerTotal: Int,
+        bannerShown: Int
+    ) {
         guard index < pending.count else { return }
         let (url, record) = pending[index]
         let settings = persistence.loadSettings()
-        let remaining = pending.count - index
-        let countSuffix = remaining > 1 ? " (\(index + 1) of \(pending.count))" : ""
+        let bannerIndex = bannerShown + 1
+        let countSuffix = bannerTotal > 1 ? " (\(bannerIndex) of \(bannerTotal))" : ""
 
         let next = { [weak self] in
-            self?.showNextRecoveryBanner(pending: pending, index: index + 1)
+            self?.showNextRecoveryBanner(pending: pending, index: index + 1, bannerTotal: bannerTotal, bannerShown: bannerShown)
+        }
+        let nextAfterBanner = { [weak self] in
+            self?.showNextRecoveryBanner(pending: pending, index: index + 1, bannerTotal: bannerTotal, bannerShown: bannerIndex)
         }
 
         switch record.scopeKind {
@@ -500,14 +512,16 @@ extension ThreadListViewController {
                 isDismissible: true,
                 actions: [
                     BannerAction(title: "Reopen") { [weak self] in
+                        BannerManager.shared.dismissCurrent()
                         // File stays alive; a new pending file will be created on next submit.
                         // Delete original once the recovery sheet is closed (submitted or cancelled).
                         self?.presentRecoverySheet(for: project, originalPendingURL: url, prefill: prefill)
-                        next()
+                        nextAfterBanner()
                     },
                     BannerAction(title: "Discard") {
+                        BannerManager.shared.dismissCurrent()
                         try? FileManager.default.removeItem(at: url)
-                        next()
+                        nextAfterBanner()
                     }
                 ]
             )
@@ -520,28 +534,18 @@ extension ThreadListViewController {
                 next()
                 return
             }
-            let prefill = AgentLaunchSheetPrefill(
-                prompt: record.prompt,
-                description: nil,
-                branchName: nil,
-                agentType: record.agentType
+            // Store on ThreadManager — ThreadDetailViewController shows a per-thread banner
+            // when the user selects this thread, instead of a global BannerManager banner.
+            threadManager.addPendingPromptRecovery(
+                for: threadId,
+                info: ThreadManager.PendingPromptRecoveryInfo(
+                    tempFileURL: url,
+                    prompt: record.prompt,
+                    agentType: record.agentType,
+                    projectId: project.id
+                )
             )
-            BannerManager.shared.show(
-                message: "Unsubmitted tab prompt recovered — Thread: \(thread.name)\(countSuffix)",
-                style: .warning,
-                duration: nil,
-                isDismissible: true,
-                actions: [
-                    BannerAction(title: "Reopen as Thread") { [weak self] in
-                        self?.presentRecoverySheet(for: project, originalPendingURL: url, prefill: prefill)
-                        next()
-                    },
-                    BannerAction(title: "Discard") {
-                        try? FileManager.default.removeItem(at: url)
-                        next()
-                    }
-                ]
-            )
+            next()
         }
     }
 
@@ -583,6 +587,20 @@ extension ThreadListViewController {
                 pendingPromptFileURL: result.pendingPromptFileURL
             )
         }
+    }
+
+    // MARK: - Recovery Reopen (from ThreadDetailViewController)
+
+    @objc func handleRecoveryReopenRequested(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let projectId = userInfo["projectId"] as? UUID,
+              let tempFileURL = userInfo["tempFileURL"] as? URL,
+              let prefill = userInfo["prefill"] as? AgentLaunchSheetPrefill else {
+            return
+        }
+        let settings = persistence.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == projectId }) else { return }
+        presentRecoverySheet(for: project, originalPendingURL: tempFileURL, prefill: prefill)
     }
 
     // MARK: - Add Repository

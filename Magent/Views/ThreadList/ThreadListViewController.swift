@@ -233,6 +233,12 @@ final class ThreadListViewController: NSViewController {
             name: .magentStatusSyncCompleted,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRecoveryReopenRequested(_:)),
+            name: .magentRecoveryReopenRequested,
+            object: nil
+        )
         updateGlobalRateLimitSummary()
         updateSyncStatusLabel()
         startSyncStatusTimer()

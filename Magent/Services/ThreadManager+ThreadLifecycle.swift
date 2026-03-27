@@ -585,6 +585,7 @@ extension ThreadManager {
         delegate?.threadManager(self, didArchiveThread: thread)
 
         promptRenameResultCache.removeValue(forKey: thread.id)
+        cleanupPendingPromptRecoveries(for: thread.id)
 
         // Re-load settings after the await — the original `settings` was captured before
         // persistArchiveState and may be stale.
@@ -788,6 +789,7 @@ extension ThreadManager {
         }
 
         promptRenameResultCache.removeValue(forKey: thread.id)
+        cleanupPendingPromptRecoveries(for: thread.id)
 
         // Run slow cleanup in a detached task so it does not inherit the caller's UI context.
         // Capture everything needed so the detached task never hops back to the main actor.

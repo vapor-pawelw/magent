@@ -177,6 +177,8 @@ final class ThreadDetailViewController: NSViewController {
     var pendingPromptBanner: BannerView?
     var pendingPromptBannerSessionName: String?
     var pendingPromptBannerTopConstraint: NSLayoutConstraint?
+    var recoveryBanner: BannerView?
+    var recoveryBannerTopConstraint: NSLayoutConstraint?
     var preparedSessions: Set<String> = []
     var sessionPreparationTasks: [String: Task<Bool, Never>] = [:]
     var sessionPreparationTaskTokens: [String: UUID] = [:]
@@ -388,6 +390,14 @@ final class ThreadDetailViewController: NSViewController {
             name: .magentPendingPromptInjection,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePendingPromptRecoveryNotification(_:)),
+            name: .magentPendingPromptRecovery,
+            object: nil
+        )
+
+        refreshRecoveryBanner()
 
         Task {
             await setupTabs()
@@ -1427,6 +1437,98 @@ final class ThreadDetailViewController: NSViewController {
         initialPromptFailureBanner = nil
         initialPromptFailureBannerSessionName = nil
         initialPromptFailureBannerTopConstraint = nil
+    }
+
+    // MARK: - Pending Prompt Recovery Banner
+
+    @objc private func handlePendingPromptRecoveryNotification(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID,
+              threadId == thread.id else {
+            return
+        }
+        refreshRecoveryBanner()
+    }
+
+    func refreshRecoveryBanner() {
+        let recoveries = threadManager.pendingPromptRecoveries(for: thread.id)
+        guard let first = recoveries.first else {
+            dismissRecoveryBanner()
+            return
+        }
+        showRecoveryBanner(recovery: first, total: recoveries.count)
+    }
+
+    private func showRecoveryBanner(
+        recovery: ThreadManager.PendingPromptRecoveryInfo,
+        total: Int
+    ) {
+        // Already showing — skip (actions will refresh on next cycle).
+        guard recoveryBanner == nil else { return }
+
+        let threadId = thread.id
+        let countSuffix = total > 1 ? " (\(total) prompts)" : ""
+        let banner = BannerView(config: BannerConfig(
+            message: "Unsubmitted tab prompt recovered for this thread.\(countSuffix)",
+            style: .warning,
+            duration: nil,
+            isDismissible: true,
+            actions: [
+                BannerAction(title: "Reopen as Thread") { [weak self] in
+                    guard let self else { return }
+                    let prefill = AgentLaunchSheetPrefill(
+                        prompt: recovery.prompt,
+                        description: nil,
+                        branchName: nil,
+                        agentType: recovery.agentType
+                    )
+                    self.threadManager.removePendingPromptRecovery(for: threadId, tempFileURL: recovery.tempFileURL)
+                    self.dismissRecoveryBanner()
+                    NotificationCenter.default.post(
+                        name: .magentRecoveryReopenRequested,
+                        object: nil,
+                        userInfo: [
+                            "projectId": recovery.projectId,
+                            "tempFileURL": recovery.tempFileURL,
+                            "prefill": prefill,
+                        ]
+                    )
+                    // Show next recovery banner if any remain.
+                    self.refreshRecoveryBanner()
+                },
+                BannerAction(title: "Discard") { [weak self] in
+                    guard let self else { return }
+                    try? FileManager.default.removeItem(at: recovery.tempFileURL)
+                    self.threadManager.removePendingPromptRecovery(for: threadId, tempFileURL: recovery.tempFileURL)
+                    self.dismissRecoveryBanner()
+                    // Show next recovery banner if any remain.
+                    self.refreshRecoveryBanner()
+                },
+            ]
+        ))
+        // Dismiss just hides the banner — data stays alive and the banner reappears
+        // next time the thread is selected.
+        banner.onDismiss = { [weak self] in
+            self?.dismissRecoveryBanner()
+        }
+        banner.translatesAutoresizingMaskIntoConstraints = false
+        terminalContainer.addSubview(banner, positioned: .above, relativeTo: nil)
+        let topConstraint = banner.topAnchor.constraint(equalTo: terminalContainer.topAnchor, constant: 12)
+        NSLayoutConstraint.activate([
+            topConstraint,
+            banner.centerXAnchor.constraint(equalTo: terminalContainer.centerXAnchor),
+            banner.leadingAnchor.constraint(greaterThanOrEqualTo: terminalContainer.leadingAnchor, constant: 20),
+            banner.trailingAnchor.constraint(lessThanOrEqualTo: terminalContainer.trailingAnchor, constant: -20),
+            banner.widthAnchor.constraint(lessThanOrEqualToConstant: 640),
+        ])
+
+        recoveryBanner = banner
+        recoveryBannerTopConstraint = topConstraint
+    }
+
+    private func dismissRecoveryBanner() {
+        recoveryBanner?.removeFromSuperview()
+        recoveryBanner = nil
+        recoveryBannerTopConstraint = nil
     }
 
 }
