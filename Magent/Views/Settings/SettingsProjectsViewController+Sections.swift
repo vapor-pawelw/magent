@@ -51,10 +51,20 @@ extension SettingsProjectsViewController {
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
 
-        let name = textField.stringValue
+        let name = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
 
         var sections = settings.projects[index].threadSections ?? []
+        if sections.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            let dupAlert = NSAlert()
+            dupAlert.messageText = "Duplicate Section"
+            dupAlert.informativeText = "A section named \"\(name)\" already exists."
+            dupAlert.alertStyle = .warning
+            dupAlert.addButton(withTitle: "OK")
+            dupAlert.runModal()
+            return
+        }
+
         let maxOrder = sections.map(\.sortOrder).max() ?? -1
         let section = ThreadSection(
             name: name,

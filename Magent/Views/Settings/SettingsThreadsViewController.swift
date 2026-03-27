@@ -791,8 +791,18 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
 
-        let name = textField.stringValue
+        let name = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
+
+        if settings.threadSections.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            let alert = NSAlert()
+            alert.messageText = "Duplicate Section"
+            alert.informativeText = "A section named \"\(name)\" already exists."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
 
         let maxOrder = settings.threadSections.map(\.sortOrder).max() ?? -1
         let section = ThreadSection(
