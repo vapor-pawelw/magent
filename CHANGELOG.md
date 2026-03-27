@@ -15,9 +15,16 @@ All notable changes to this project will be documented in this file.
 ### Banner
 - Fixed banner buttons and dismiss (X) being unresponsive — clicks were silently ignored due to a coordinate-space mismatch between the flipped split view and the unflipped banner overlay.
 
+### Status Bar
+- New persistent status bar at the bottom of the window shows aggregate thread counts (busy, waiting, done, rate-limited) with colored SF Symbol indicators, global rate-limit countdowns, and sync status.
+- Rate-limit and sync status moved from the sidebar header to the status bar — right-click to lift rate limits or force-refresh sync.
+- Sync tooltip explains what is being synced (PR status, and Jira info when enabled).
+- Thread counts are clickable — show a compact popover listing up to 3 matching threads; clicking one jumps straight to that thread.
+
 ### Sidebar
 - Creating a new repository from Magent now works end-to-end — the initial commit is created automatically so threads can branch off immediately.
 - New "Add repo" button (folder.badge.plus) in the top-right corner of the sidebar lets you create a new repository or import an existing one without opening Settings.
+- The sidebar now reserves a dedicated top row for the "Add repo" button so repository rows and status content never overlap it.
 - The changes panel in the bottom left is now always visible, even for threads with no commits or changes — shows "No commits" / "No changes in this branch" empty states instead of hiding entirely.
 - Fixed target branch in the changes panel not reflecting the base branch when creating a thread off another thread.
 - Fixed UI freezing when archiving a thread — persistence I/O now runs off the main actor so the archiving overlay stays responsive.

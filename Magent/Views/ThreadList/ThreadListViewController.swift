@@ -81,9 +81,7 @@ final class ThreadListViewController: NSViewController {
     static let sectionCountBadgeLabelIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeLabel")
     static let sectionInlineRenameFieldIdentifier = NSUserInterfaceItemIdentifier("SectionInlineRenameField")
     static let sidebarHorizontalInset: CGFloat = 0
-    static let sidebarTopInset: CGFloat = 8
-    static let rateLimitStatusTopInset: CGFloat = 8
-    static let rateLimitStatusListSpacing: CGFloat = 6
+    static let sidebarToolbarRowHeight: CGFloat = 32
     static let sidebarTrailingInset: CGFloat = 20
     static let projectDisclosureTrailingInset: CGFloat = sidebarTrailingInset
     static let outlineIndentationPerLevel: CGFloat = 16
@@ -109,20 +107,11 @@ final class ThreadListViewController: NSViewController {
 
     var outlineView: NSOutlineView!
     private var scrollView: NSScrollView!
+    private var toolbarRowView: NSView!
     let threadManager = ThreadManager.shared
     let persistence = PersistenceService.shared
 
-    private var rateLimitStatusContainer: NSStackView!
-    private var rateLimitStatusIconView: NSImageView!
-    private var rateLimitStatusLabel: NSTextField!
-    private var sidebarHeaderStack: NSStackView!
-    private var syncStatusContainer: NSStackView!
-    private var syncStatusLabel: NSTextField!
-    private var syncRefreshButton: NSButton!
     private var addRepoButton: NSButton!
-    /// Repeating timer for updating the "Synced X ago" label. Uses `[weak self]` closure.
-    /// Not invalidated on deinit — this VC lives for the app's lifetime.
-    private var syncStatusTimer: Timer?
     private var scrollViewTopConstraint: NSLayoutConstraint?
     var diffPanelView: DiffPanelView!
     var branchMismatchView: BranchMismatchView!
@@ -140,7 +129,6 @@ final class ThreadListViewController: NSViewController {
     /// Project IDs that have at least one recognized git hosting remote (GitHub/GitLab/Bitbucket).
     var projectsWithValidRemotes: Set<UUID> = []
     private var lastFittedOutlineWidth: CGFloat = 0
-    private var currentScrollTopOffset: CGFloat = 0
     var currentSettings = AppSettings()
     var allowsProgrammaticOutlineDisclosureChanges = false
     /// Set to true inside acceptDrop so reloadData() is not suppressed during a live drag.
@@ -217,25 +205,10 @@ final class ThreadListViewController: NSViewController {
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(globalRateLimitSummaryDidChange),
-            name: .magentGlobalRateLimitSummaryChanged,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
             selector: #selector(settingsDidChange),
             name: .magentSettingsDidChange,
             object: nil
         )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(statusSyncCompleted),
-            name: .magentStatusSyncCompleted,
-            object: nil
-        )
-        updateGlobalRateLimitSummary()
-        updateSyncStatusLabel()
-        startSyncStatusTimer()
         checkForPendingPromptRecovery()
     }
 
@@ -290,62 +263,6 @@ final class ThreadListViewController: NSViewController {
         refreshDiffPanel(for: selected, resetPagination: false, preserveSelection: true)
     }
 
-    @objc private func globalRateLimitSummaryDidChange() {
-        updateGlobalRateLimitSummary()
-    }
-
-    @objc private func statusSyncCompleted() {
-        updateSyncStatusLabel()
-    }
-
-    @objc private func syncRefreshTapped() {
-        threadManager.forceRefreshStatuses()
-        syncStatusLabel.stringValue = "Syncing…"
-        syncStatusLabel.textColor = .tertiaryLabelColor
-    }
-
-    private func updateSyncStatusLabel() {
-        guard let lastSync = threadManager.lastStatusSyncAt else {
-            // Startup sync is in flight — show "Syncing…" if we have threads loaded.
-            if !threadManager.threads.isEmpty {
-                syncStatusLabel.stringValue = "Syncing…"
-                syncStatusLabel.textColor = .tertiaryLabelColor
-                syncRefreshButton.isHidden = true
-                syncStatusContainer.isHidden = false
-            } else {
-                syncStatusContainer.isHidden = true
-            }
-            recalculateSidebarHeaderInset()
-            return
-        }
-        if threadManager.lastStatusSyncFailed {
-            syncStatusLabel.stringValue = "Sync failed \(Self.relativeTimeString(from: lastSync))"
-            syncStatusLabel.textColor = .systemRed
-        } else {
-            syncStatusLabel.stringValue = "Synced \(Self.relativeTimeString(from: lastSync))"
-            syncStatusLabel.textColor = .tertiaryLabelColor
-        }
-        syncRefreshButton.isHidden = false
-        syncStatusContainer.isHidden = false
-        recalculateSidebarHeaderInset()
-    }
-
-    private func startSyncStatusTimer() {
-        syncStatusTimer?.invalidate()
-        syncStatusTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            self?.updateSyncStatusLabel()
-        }
-    }
-
-    private static func relativeTimeString(from date: Date) -> String {
-        let seconds = Int(Date().timeIntervalSince(date))
-        if seconds < 60 { return "just now" }
-        let minutes = seconds / 60
-        if minutes < 60 { return "\(minutes)m ago" }
-        let hours = minutes / 60
-        return "\(hours)h ago"
-    }
-
     @objc private func settingsDidChange() {
         // Debounce: settings can be saved many times in quick succession (e.g. typing in a
         // text field, or multiple observers firing back-to-back). Coalesce into one reload
@@ -362,70 +279,9 @@ final class ThreadListViewController: NSViewController {
     // MARK: - Toolbar Buttons
 
     private func setupToolbar() {
-        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
-        rateLimitStatusIconView = NSImageView()
-        rateLimitStatusIconView.image = NSImage(
-            systemSymbolName: "hourglass",
-            accessibilityDescription: "Rate limits"
-        )?.withSymbolConfiguration(symbolConfig)
-        rateLimitStatusIconView.contentTintColor = NSColor(resource: .textSecondary)
-        rateLimitStatusIconView.translatesAutoresizingMaskIntoConstraints = false
-
-        rateLimitStatusLabel = NSTextField(labelWithString: "")
-        rateLimitStatusLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        rateLimitStatusLabel.textColor = NSColor(resource: .textSecondary)
-        rateLimitStatusLabel.lineBreakMode = .byTruncatingTail
-        rateLimitStatusLabel.maximumNumberOfLines = 1
-        rateLimitStatusLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        rateLimitStatusContainer = NSStackView(views: [rateLimitStatusIconView, rateLimitStatusLabel])
-        rateLimitStatusContainer.orientation = .horizontal
-        rateLimitStatusContainer.alignment = .centerY
-        rateLimitStatusContainer.spacing = 4
-        rateLimitStatusContainer.isHidden = true
-        rateLimitStatusContainer.translatesAutoresizingMaskIntoConstraints = false
-
-        // Sync status row
-        let syncSymbolConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
-        syncStatusLabel = NSTextField(labelWithString: "")
-        syncStatusLabel.font = .systemFont(ofSize: 9, weight: .medium)
-        syncStatusLabel.textColor = .tertiaryLabelColor
-        syncStatusLabel.lineBreakMode = .byTruncatingTail
-        syncStatusLabel.maximumNumberOfLines = 1
-        syncStatusLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        syncRefreshButton = NSButton()
-        syncRefreshButton.bezelStyle = .inline
-        syncRefreshButton.isBordered = false
-        syncRefreshButton.image = NSImage(
-            systemSymbolName: "arrow.clockwise",
-            accessibilityDescription: "Refresh"
-        )?.withSymbolConfiguration(syncSymbolConfig)
-        syncRefreshButton.contentTintColor = .tertiaryLabelColor
-        syncRefreshButton.target = self
-        syncRefreshButton.action = #selector(syncRefreshTapped)
-        syncRefreshButton.toolTip = "Refresh PR and Jira statuses now"
-        syncRefreshButton.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            syncRefreshButton.widthAnchor.constraint(equalToConstant: 14),
-            syncRefreshButton.heightAnchor.constraint(equalToConstant: 14),
-        ])
-
-        syncStatusContainer = NSStackView(views: [syncStatusLabel, syncRefreshButton])
-        syncStatusContainer.orientation = .horizontal
-        syncStatusContainer.alignment = .centerY
-        syncStatusContainer.spacing = 3
-        syncStatusContainer.isHidden = true
-        syncStatusContainer.translatesAutoresizingMaskIntoConstraints = false
-
-        // Vertical header stack holding rate limit + sync status
-        sidebarHeaderStack = NSStackView(views: [rateLimitStatusContainer, syncStatusContainer])
-        sidebarHeaderStack.orientation = .vertical
-        sidebarHeaderStack.alignment = .leading
-        sidebarHeaderStack.spacing = 2
-        sidebarHeaderStack.detachesHiddenViews = true
-        sidebarHeaderStack.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(sidebarHeaderStack)
+        toolbarRowView = NSView()
+        toolbarRowView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(toolbarRowView)
 
         // Add repo button (top-right)
         let addRepoSymbolConfig = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
@@ -441,122 +297,19 @@ final class ThreadListViewController: NSViewController {
         addRepoButton.action = #selector(addRepoButtonTapped(_:))
         addRepoButton.toolTip = "Add repository"
         addRepoButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(addRepoButton)
-
-        rebuildRateLimitStatusMenu()
+        toolbarRowView.addSubview(addRepoButton)
 
         NSLayoutConstraint.activate([
-            sidebarHeaderStack.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.rateLimitStatusTopInset),
-            sidebarHeaderStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            sidebarHeaderStack.trailingAnchor.constraint(lessThanOrEqualTo: addRepoButton.leadingAnchor, constant: -4),
+            toolbarRowView.topAnchor.constraint(equalTo: view.topAnchor),
+            toolbarRowView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            toolbarRowView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            toolbarRowView.heightAnchor.constraint(equalToConstant: Self.sidebarToolbarRowHeight),
 
-            addRepoButton.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.rateLimitStatusTopInset),
-            addRepoButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+            addRepoButton.centerYAnchor.constraint(equalTo: toolbarRowView.centerYAnchor),
+            addRepoButton.trailingAnchor.constraint(equalTo: toolbarRowView.trailingAnchor, constant: -8),
             addRepoButton.widthAnchor.constraint(equalToConstant: 22),
             addRepoButton.heightAnchor.constraint(equalToConstant: 22),
         ])
-    }
-
-    private func updateGlobalRateLimitSummary() {
-        let summary = threadManager.globalRateLimitSummaryText()
-        rateLimitStatusLabel.stringValue = summary ?? ""
-        rateLimitStatusContainer.isHidden = (summary == nil)
-        rateLimitStatusLabel.toolTip = summary
-        recalculateSidebarHeaderInset()
-        rebuildRateLimitStatusMenu()
-    }
-
-    private func recalculateSidebarHeaderInset() {
-        let hasRateLimit = !rateLimitStatusContainer.isHidden
-        let hasSyncStatus = !syncStatusContainer.isHidden
-        let hasAnyHeader = hasRateLimit || hasSyncStatus
-
-        let topInset: CGFloat
-        if !hasAnyHeader {
-            topInset = Self.sidebarTopInset
-        } else {
-            view.layoutSubtreeIfNeeded()
-            let headerHeight = ceil(sidebarHeaderStack.fittingSize.height)
-            topInset = Self.sidebarTopInset
-                + Self.rateLimitStatusTopInset
-                + headerHeight
-                + Self.rateLimitStatusListSpacing
-        }
-        if abs(topInset - currentScrollTopOffset) > 0.5 {
-            currentScrollTopOffset = topInset
-            scrollViewTopConstraint?.constant = topInset
-        }
-    }
-
-    private func rebuildRateLimitStatusMenu() {
-        let menu = NSMenu(title: "Rate Limits")
-        menu.autoenablesItems = false
-        addRateLimitMenuItems(for: .claude, to: menu)
-        menu.addItem(NSMenuItem.separator())
-        addRateLimitMenuItems(for: .codex, to: menu)
-
-        rateLimitStatusContainer.menu = menu
-        rateLimitStatusLabel.menu = menu
-        rateLimitStatusIconView.menu = menu
-    }
-
-    private func addRateLimitMenuItems(for agent: AgentType, to menu: NSMenu) {
-        let hasActiveLimit = threadManager.hasActiveRateLimit(for: agent)
-        let shortName = agent == .claude ? "Claude" : "Codex"
-
-        let liftItem = NSMenuItem(
-            title: "Lift \(shortName) Limit Now",
-            action: #selector(liftRateLimitFromMenu(_:)),
-            keyEquivalent: ""
-        )
-        liftItem.target = self
-        liftItem.representedObject = agent.rawValue
-        liftItem.isEnabled = hasActiveLimit
-        menu.addItem(liftItem)
-
-        let ignoreLiftItem = NSMenuItem(
-            title: "Lift + Ignore Current \(shortName) Messages",
-            action: #selector(liftAndIgnoreRateLimitFromMenu(_:)),
-            keyEquivalent: ""
-        )
-        ignoreLiftItem.target = self
-        ignoreLiftItem.representedObject = agent.rawValue
-        ignoreLiftItem.isEnabled = hasActiveLimit
-        menu.addItem(ignoreLiftItem)
-    }
-
-    @objc private func liftRateLimitFromMenu(_ sender: NSMenuItem) {
-        guard let rawAgent = sender.representedObject as? String,
-              let agent = AgentType(rawValue: rawAgent) else { return }
-
-        Task {
-            _ = await threadManager.liftRateLimitManually(for: agent)
-            await MainActor.run {
-                let shortName = agent == .claude ? "Claude" : "Codex"
-                BannerManager.shared.show(message: "\(shortName) rate limit lifted manually.", style: .info)
-                updateGlobalRateLimitSummary()
-            }
-        }
-    }
-
-    @objc private func liftAndIgnoreRateLimitFromMenu(_ sender: NSMenuItem) {
-        guard let rawAgent = sender.representedObject as? String,
-              let agent = AgentType(rawValue: rawAgent) else { return }
-
-        Task {
-            let ignoredCount = await threadManager.liftAndIgnoreCurrentRateLimitFingerprints(for: agent)
-            await MainActor.run {
-                let shortName = agent == .claude ? "Claude" : "Codex"
-                let message: String
-                if ignoredCount > 0 {
-                    message = "\(shortName) limit lifted. Ignoring \(ignoredCount) current fingerprint\(ignoredCount == 1 ? "" : "s")."
-                } else {
-                    message = "\(shortName) limit lifted. No active fingerprints found to ignore."
-                }
-                BannerManager.shared.show(message: message, style: .info)
-                updateGlobalRateLimitSummary()
-            }
-        }
     }
 
     // MARK: - Outline View
@@ -603,9 +356,6 @@ final class ThreadListViewController: NSViewController {
         scrollView.scrollerInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 
         view.addSubview(scrollView)
-        if sidebarHeaderStack.superview === view {
-            view.addSubview(sidebarHeaderStack, positioned: .above, relativeTo: scrollView)
-        }
 
         // Diff panel at the bottom of sidebar
         diffPanelView = DiffPanelView()
@@ -630,7 +380,7 @@ final class ThreadListViewController: NSViewController {
         branchMismatchView = BranchMismatchView()
         view.addSubview(branchMismatchView)
 
-        scrollViewTopConstraint = scrollView.topAnchor.constraint(equalTo: view.topAnchor)
+        scrollViewTopConstraint = scrollView.topAnchor.constraint(equalTo: toolbarRowView.bottomAnchor)
 
         NSLayoutConstraint.activate([
             scrollViewTopConstraint!,
@@ -977,12 +727,31 @@ final class ThreadListViewController: NSViewController {
     }
 
     func selectThread(byId threadId: UUID) {
+        expandAncestorsIfNeeded(for: threadId)
         for row in 0..<outlineView.numberOfRows {
             if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
                 let isNewThread = selectedThreadID != thread.id
                 let resolved = recordSelectedThread(thread)
                 if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
                 outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                outlineView.scrollRowToVisible(row)
+                return
+            }
+        }
+    }
+
+    private func expandAncestorsIfNeeded(for threadId: UUID) {
+        for project in sidebarProjects {
+            if project.children.contains(where: { ($0 as? MagentThread)?.id == threadId }) {
+                outlineView.expandItem(project)
+                return
+            }
+
+            for child in project.children {
+                guard let section = child as? SidebarSection,
+                      section.threads.contains(where: { $0.id == threadId }) else { continue }
+                outlineView.expandItem(project)
+                outlineView.expandItem(section)
                 return
             }
         }

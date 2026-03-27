@@ -9,6 +9,7 @@ final class AppCoordinator {
     private var window: NSWindow?
     private let persistence = PersistenceService.shared
     private var pendingOffScreenRecovery: DispatchWorkItem?
+    private(set) var statusBar: StatusBarView?
 
     func start() {
         // Validate critical persistence files before showing the UI.
@@ -65,7 +66,11 @@ final class AppCoordinator {
         window.minSize = NSSize(width: 800, height: 500)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.contentViewController = splitVC
+
+        // Wrap the split VC in a container that adds the status bar at the bottom
+        let containerVC = MainContainerViewController(splitViewController: splitVC)
+        window.contentViewController = containerVC
+        self.statusBar = containerVC.statusBar
 
         // This saves/restores the window frame across launches.
         // On first launch (no saved frame), it uses the contentRect above.

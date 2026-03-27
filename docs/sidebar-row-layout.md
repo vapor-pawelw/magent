@@ -17,12 +17,14 @@ This thread refined the left-rail and spacing rules for project headers, section
 - Section headers and the main-thread labels share the same leading text rail.
 - Threads inside sections keep their extra indentation level relative to top-level rows.
 - Project separators sit closer to the following repo name, while the first repo still keeps a visible gap from the very top of the sidebar.
+- The global `Add repo` button lives in its own dedicated top row above the outline view. Sidebar content starts below that row, so project headers and thread rows never overlap the button.
 - All sidebar elements (thread status markers, section disclosure buttons, project `+` button, separators) share a consistent trailing-edge inset controlled by `sidebarTrailingInset`.
 - The archive icon (`archivebox.fill`) appears in the same right-aligned trailing area as the busy spinner, completion dot, and rate-limit icons. It is independent: it can show alongside the completion dot (e.g. work delivered and agent just finished). The archive icon is hidden while the agent is busy or waiting for input. Clicking the archive button must **not** select the row — `SidebarOutlineView.mouseDown` intercepts clicks that land on the archive button and fires the action directly without calling `super`, preventing NSOutlineView from processing the click as a row selection. `shouldSelectItem` also returns `false` for threads with `isArchiving == true` as a safety net.
 
 ## Implementation Notes
 
 - Shared rails live in `ThreadListViewController`:
+  - `sidebarToolbarRowHeight` reserves the dedicated top row that holds the global `Add repo` button.
   - `projectSpacerDividerLeadingInset` is the base left rail for separators.
   - `sidebarRowLeadingInset` reuses that rail for section dots, main-row accent bar, and top-level thread geometry.
   - `projectHeaderTitleLeadingInset` is the slightly inset text rail used by repo titles.
@@ -45,4 +47,4 @@ This thread refined the left-rail and spacing rules for project headers, section
 - The PR/ticket row (`prRow`) contains `[jiraTicketTF, jiraBadge, dotSep, prNumTF, prBadge]` with `detachesHiddenViews = true` and `spacing = 3`. Each element is independently hidden based on data availability and settings. `syncRowVisibility()` hides the entire row when both Jira and PR labels are hidden.
 - `jiraTicketLabel` and `prNumberLabel` use `.controlAccentColor` so they stand out from secondary metadata text. Status badges use `StatusBadgeView` (8pt font in sidebar) with darkened colors for white-text legibility.
 - Never merge branch/worktree and PR/ticket into one secondary line. Ticket and PR info belongs exclusively on line 3 (the PR row).
-- Top spacing before the first repo row is driven by `scrollViewTopConstraint` / `sidebarTopInset`, not by `NSScrollView.contentInsets`.
+- Do not anchor the outline scroll view directly to the sidebar root view's top edge. It must stay below the dedicated toolbar row so repo/thread content cannot overlap the global `Add repo` button again.

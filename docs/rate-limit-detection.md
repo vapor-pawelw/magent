@@ -56,9 +56,7 @@ Newer pane output such as `/status` must not auto-clear an already-anchored limi
 
 ## UI Indicators
 
-- **Sidebar toolbar**: Shows a summary like "Rate limits: Claude: 19m · Codex: 3h 5m"
-  - Uses an 8pt top inset plus measured summary height/gap, then applies that offset to the sidebar scroll view's top constraint so the first repo/thread row is always laid out below the summary.
-- **Sidebar toolbar context menu (right-click on Rate limits)**:
+- **Bottom status bar**: Shows a global rate-limit countdown (e.g. "⏳ Claude: 19m · Codex: 3h 5m") on the right side. Right-click offers:
   - Lift Claude/Codex limit now
   - Lift + ignore currently visible fingerprints for Claude/Codex (so only future/new messages are tracked)
 - **Thread list**: Red hourglass icon on threads where all agent tabs are rate-limited
