@@ -93,6 +93,87 @@ final class IPCCommandHandler {
         return .error(.failure("Missing required field: threadId or threadName", id: request.id))
     }
 
+    // MARK: - From-Thread Resolution
+
+    /// Resolves the "from-thread" context: inherits base branch and section from a source thread.
+    /// `fromThreadId` is auto-injected by the CLI from `$MAGENT_THREAD_ID`; `fromThreadName`
+    /// is set explicitly via `--from-thread`. Special name values: `"none"` suppresses
+    /// auto-detection, `"main"` resolves to the project's main worktree thread.
+    enum FromThreadResult {
+        case none
+        case resolved(MagentThread)
+        case error(IPCResponse)
+    }
+
+    func resolveFromThread(
+        fromThreadId: String?,
+        fromThreadName: String?,
+        project: Project,
+        requestId: String?
+    ) -> FromThreadResult {
+        // Explicit name takes precedence over auto-injected ID
+        if let name = fromThreadName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !name.isEmpty {
+            if name.caseInsensitiveCompare("none") == .orderedSame {
+                return .none
+            }
+            if name.caseInsensitiveCompare("main") == .orderedSame {
+                if let mainThread = threadManager.threads.first(where: {
+                    $0.projectId == project.id && $0.isMain
+                }) {
+                    return .resolved(mainThread)
+                }
+                return .error(.failure("Main thread not found for project: \(project.name)", id: requestId))
+            }
+            if let thread = threadManager.threads.first(where: {
+                $0.name.caseInsensitiveCompare(name) == .orderedSame
+            }) {
+                guard thread.projectId == project.id else {
+                    return .error(.failure("From-thread '\(name)' belongs to a different project", id: requestId))
+                }
+                return .resolved(thread)
+            }
+            return .error(.failure("From-thread not found: \(name)", id: requestId))
+        }
+
+        // Fall back to auto-injected thread ID
+        if let idStr = fromThreadId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !idStr.isEmpty,
+           let uuid = UUID(uuidString: idStr) {
+            if let thread = threadManager.threads.first(where: { $0.id == uuid }) {
+                guard thread.projectId == project.id else {
+                    // Auto-injected ID from a different project — silently ignore
+                    return .none
+                }
+                return .resolved(thread)
+            }
+            // Auto-injected ID not found — not an error, just ignore
+            return .none
+        }
+
+        return .none
+    }
+
+    /// Extracts the branch from a source thread, using the same resolution cascade as `--base-thread`.
+    func branchFromThread(_ thread: MagentThread, project: Project) -> String? {
+        if let actualBranch = thread.actualBranch?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !actualBranch.isEmpty,
+           actualBranch != "HEAD" {
+            return actualBranch
+        }
+        let explicitBranch = thread.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !explicitBranch.isEmpty {
+            return explicitBranch
+        }
+        if let expected = threadManager.resolveExpectedBranch(for: thread)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !expected.isEmpty {
+            return expected
+        }
+        return nil
+    }
+
     // MARK: - Commands
 
     private func createThread(_ request: IPCRequest) async -> IPCResponse {
@@ -148,6 +229,19 @@ final class IPCCommandHandler {
             requestedName = nil
         }
 
+        // Resolve from-thread context (auto-injected from $MAGENT_THREAD_ID or explicit --from-thread)
+        let fromThread: MagentThread?
+        switch resolveFromThread(
+            fromThreadId: request.fromThreadId,
+            fromThreadName: request.fromThreadName,
+            project: project,
+            requestId: request.id
+        ) {
+        case .none: fromThread = nil
+        case .resolved(let t): fromThread = t
+        case .error(let err): return err
+        }
+
         // Resolve optional base branch (explicit branch or from an existing thread)
         let normalizedBaseThreadName = request.baseThreadName?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -157,6 +251,9 @@ final class IPCCommandHandler {
            let normalizedBaseBranch, !normalizedBaseBranch.isEmpty {
             return .failure("Use either baseThreadName or baseBranch, not both", id: request.id)
         }
+
+        let hasExplicitBase = (normalizedBaseThreadName != nil && !normalizedBaseThreadName!.isEmpty) ||
+            (normalizedBaseBranch != nil && !normalizedBaseBranch!.isEmpty)
 
         let requestedBaseBranch: String?
         if let normalizedBaseBranch, !normalizedBaseBranch.isEmpty {
@@ -193,11 +290,15 @@ final class IPCCommandHandler {
                     return .failure("Could not determine base branch from thread: \(normalizedBaseThreadName)", id: request.id)
                 }
             }
+        } else if !hasExplicitBase, let fromThread, let inheritedBranch = branchFromThread(fromThread, project: project) {
+            // Inherit base branch from from-thread when no explicit base was provided
+            requestedBaseBranch = inheritedBranch
         } else {
             requestedBaseBranch = nil
         }
 
         // Resolve requested section
+        let hasExplicitSection = request.sectionName != nil && !request.sectionName!.isEmpty
         let requestedSectionId: UUID?
         if let sectionName = request.sectionName, !sectionName.isEmpty {
             let sections = settings.sections(for: project.id)
@@ -205,6 +306,9 @@ final class IPCCommandHandler {
                 return .failure("Section not found: \(sectionName)", id: request.id)
             }
             requestedSectionId = section.id
+        } else if !hasExplicitSection, let fromThread, let fromSectionId = fromThread.sectionId {
+            // Inherit section from from-thread when no explicit section was provided
+            requestedSectionId = fromSectionId
         } else {
             requestedSectionId = nil
         }
@@ -224,6 +328,12 @@ final class IPCCommandHandler {
             )
         } catch {
             return .failure("Failed to create thread: \(error.localizedDescription)", id: request.id)
+        }
+
+        // Position the new thread directly below the from-thread in the sidebar
+        if let fromThread {
+            threadManager.placeThreadAfterSibling(threadId: thread.id, afterThreadId: fromThread.id)
+            try? threadManager.persistence.saveActiveThreads(threadManager.threads)
         }
 
         // Set task description from --description (slug generation consumed it for the name,
@@ -259,6 +369,19 @@ final class IPCCommandHandler {
             return .failure("Project not found: \(projectName)", id: request.id)
         }
 
+        // Resolve request-level from-thread (auto-injected from $MAGENT_THREAD_ID or explicit --from-thread)
+        let requestFromThread: MagentThread?
+        switch resolveFromThread(
+            fromThreadId: request.fromThreadId,
+            fromThreadName: request.fromThreadName,
+            project: project,
+            requestId: request.id
+        ) {
+        case .none: requestFromThread = nil
+        case .resolved(let t): requestFromThread = t
+        case .error(let err): return err
+        }
+
         // Phase 1: Resolve all names upfront (may involve AI slug generation).
         // This is sequential but lets us validate everything before creating anything.
         struct ResolvedSpec {
@@ -270,6 +393,7 @@ final class IPCCommandHandler {
             let description: String?
             let requestedBaseBranch: String?
             let requestedSectionId: UUID?
+            let fromThread: MagentThread?
         }
 
         var resolved: [ResolvedSpec] = []
@@ -290,6 +414,24 @@ final class IPCCommandHandler {
             } else {
                 agentType = nil
                 useAgentCommand = true
+            }
+
+            // Resolve per-spec from-thread (falls back to request-level)
+            let specFromThread: MagentThread?
+            if let specFromName = spec.fromThreadName?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !specFromName.isEmpty {
+                switch resolveFromThread(
+                    fromThreadId: nil,
+                    fromThreadName: specFromName,
+                    project: project,
+                    requestId: request.id
+                ) {
+                case .none: specFromThread = nil
+                case .resolved(let t): specFromThread = t
+                case .error(let err): return err
+                }
+            } else {
+                specFromThread = requestFromThread
             }
 
             // Resolve name from --name or --description
@@ -315,6 +457,9 @@ final class IPCCommandHandler {
             }
 
             // Resolve base branch
+            let hasExplicitBase = (spec.baseBranch != nil && !spec.baseBranch!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ||
+                (spec.baseThreadName != nil && !spec.baseThreadName!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
             let baseBranch: String?
             if let bb = spec.baseBranch?.trimmingCharacters(in: .whitespacesAndNewlines),
                !bb.isEmpty {
@@ -327,11 +472,16 @@ final class IPCCommandHandler {
                     return .failure("Thread \(i): base thread not found: \(bt)", id: request.id)
                 }
                 baseBranch = baseThread.actualBranch ?? baseThread.branchName
+            } else if !hasExplicitBase, let ft = specFromThread, let inherited = branchFromThread(ft, project: project) {
+                baseBranch = inherited
             } else {
                 baseBranch = nil
             }
 
             // Resolve section
+            let hasExplicitSection = spec.sectionName != nil &&
+                !spec.sectionName!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
             let sectionId: UUID?
             if let sectionName = spec.sectionName?.trimmingCharacters(in: .whitespacesAndNewlines),
                !sectionName.isEmpty {
@@ -340,6 +490,8 @@ final class IPCCommandHandler {
                     return .failure("Thread \(i): section not found: \(sectionName)", id: request.id)
                 }
                 sectionId = section.id
+            } else if !hasExplicitSection, let ft = specFromThread, let ftSection = ft.sectionId {
+                sectionId = ftSection
             } else {
                 sectionId = nil
             }
@@ -352,7 +504,8 @@ final class IPCCommandHandler {
                 requestedName: requestedName,
                 description: spec.description,
                 requestedBaseBranch: baseBranch,
-                requestedSectionId: sectionId
+                requestedSectionId: sectionId,
+                fromThread: specFromThread
             ))
         }
 
@@ -387,13 +540,22 @@ final class IPCCommandHandler {
             return collected.sorted(by: { $0.0 < $1.0 })
         }
 
-        // Set task descriptions after creation (outside task group for main-actor safety).
+        // Position new threads after their from-thread and set descriptions
+        // (outside task group for main-actor safety).
         for (i, result) in results {
-            if case .success(let thread) = result,
-               let desc = resolved[i].description?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !desc.isEmpty {
-                try? threadManager.setTaskDescription(threadId: thread.id, description: desc)
+            if case .success(let thread) = result {
+                if let ft = resolved[i].fromThread {
+                    threadManager.placeThreadAfterSibling(threadId: thread.id, afterThreadId: ft.id)
+                }
+                if let desc = resolved[i].description?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !desc.isEmpty {
+                    try? threadManager.setTaskDescription(threadId: thread.id, description: desc)
+                }
             }
+        }
+        if results.contains(where: { if case .success = $0.1 { return true }; return false }),
+           resolved.contains(where: { $0.fromThread != nil }) {
+            try? threadManager.persistence.saveActiveThreads(threadManager.threads)
         }
 
         // Build response with all created threads

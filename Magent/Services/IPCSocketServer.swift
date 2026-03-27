@@ -676,23 +676,24 @@ actor IPCSocketServer {
 
         case "$cmd" in
         create-thread)
-            project=""; agent=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""; no_select=""; no_submit=""
+            project=""; agent=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""; no_select=""; no_submit=""; from_thread=""
             while [ $# -gt 0 ]; do
                 case "$1" in
-                    --project)     project="$2"; shift 2 ;;
-                    --agent)       agent="$2"; shift 2 ;;
-                    --prompt)      prompt="$2"; shift 2 ;;
-                    --name)        name="$2"; shift 2 ;;
-                    --description) desc="$2"; shift 2 ;;
-                    --section)     section="$2"; shift 2 ;;
-                    --base-thread) base_thread="$2"; shift 2 ;;
-                    --base-branch) base_branch="$2"; shift 2 ;;
-                    --no-select)   no_select=1; shift ;;
-                    --no-submit)   no_submit=1; shift ;;
+                    --project)      project="$2"; shift 2 ;;
+                    --agent)        agent="$2"; shift 2 ;;
+                    --prompt)       prompt="$2"; shift 2 ;;
+                    --name)         name="$2"; shift 2 ;;
+                    --description)  desc="$2"; shift 2 ;;
+                    --section)      section="$2"; shift 2 ;;
+                    --base-thread)  base_thread="$2"; shift 2 ;;
+                    --base-branch)  base_branch="$2"; shift 2 ;;
+                    --from-thread)  from_thread="$2"; shift 2 ;;
+                    --no-select)    no_select=1; shift ;;
+                    --no-submit)    no_submit=1; shift ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--no-select] [--no-submit]"
+            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--no-select] [--no-submit]"
             [ -z "$base_thread" ] || [ -z "$base_branch" ] || die "Use either --base-thread or --base-branch, not both"
             json="{$(json_kv command create-thread),$(json_kv project "$project")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
@@ -702,6 +703,13 @@ actor IPCSocketServer {
             [ -n "$section" ] && json="$json,$(json_kv sectionName "$section")"
             [ -n "$base_thread" ] && json="$json,$(json_kv baseThreadName "$base_thread")"
             [ -n "$base_branch" ] && json="$json,$(json_kv baseBranch "$base_branch")"
+            # --from-thread: explicit name ("main", "none", or thread name)
+            if [ -n "$from_thread" ]; then
+                json="$json,$(json_kv fromThreadName "$from_thread")"
+            elif [ -n "$MAGENT_THREAD_ID" ]; then
+                # Auto-inject current thread context when running inside a Magent session
+                json="$json,$(json_kv fromThreadId "$MAGENT_THREAD_ID")"
+            fi
             [ "$no_select" = "1" ] && json="$json,\"noSelect\":true"
             [ "$no_submit" = "1" ] && json="$json,\"noSubmit\":true"
             json="$json}"
@@ -709,17 +717,18 @@ actor IPCSocketServer {
             ;;
         batch-create)
             require_jq
-            project=""; no_submit=""; bc_file=""
+            project=""; no_submit=""; bc_file=""; from_thread=""
             specs="[]"
             while [ $# -gt 0 ]; do
                 case "$1" in
-                    --project)     project="$2"; shift 2 ;;
-                    --no-submit)   no_submit=1; shift ;;
-                    --file)        bc_file="$2"; shift 2 ;;
+                    --project)      project="$2"; shift 2 ;;
+                    --no-submit)    no_submit=1; shift ;;
+                    --file)         bc_file="$2"; shift 2 ;;
+                    --from-thread)  from_thread="$2"; shift 2 ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli batch-create --project <name> --file <specs.json> [--no-submit]"
+            [ -n "$project" ] || die "Usage: magent-cli batch-create --project <name> --file <specs.json> [--from-thread <name|main|none>] [--no-submit]"
             [ -n "$bc_file" ] || die "Missing --file <specs.json>. File must contain a JSON array of thread specs."
             [ -f "$bc_file" ] || die "File not found: $bc_file"
             specs=$(cat "$bc_file") || die "Failed to read: $bc_file"
@@ -727,6 +736,12 @@ actor IPCSocketServer {
             printf '%s' "$specs" | jq -e 'type == "array"' >/dev/null 2>&1 || die "File must contain a JSON array of thread specs"
             json="{$(json_kv command batch-create),$(json_kv project "$project"),\"threads\":$specs"
             [ "$no_submit" = "1" ] && json="$json,\"noSubmit\":true"
+            # --from-thread: explicit name applies to all specs without per-spec fromThreadName
+            if [ -n "$from_thread" ]; then
+                json="$json,$(json_kv fromThreadName "$from_thread")"
+            elif [ -n "$MAGENT_THREAD_ID" ]; then
+                json="$json,$(json_kv fromThreadId "$MAGENT_THREAD_ID")"
+            fi
             json="$json}"
             send_request "$json" 300
             ;;

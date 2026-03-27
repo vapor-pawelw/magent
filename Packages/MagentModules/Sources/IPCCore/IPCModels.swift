@@ -26,6 +26,12 @@ public nonisolated struct IPCRequest: Codable, Sendable {
     public var noSelect: Bool?
     public var noSubmit: Bool?
     public var threads: [IPCBatchThreadSpec]?
+    /// Thread ID to inherit base branch and section from. Injected automatically by
+    /// the CLI from `$MAGENT_THREAD_ID` unless `--from-thread none` is passed.
+    public var fromThreadId: String?
+    /// Thread name to inherit from (alternative to `fromThreadId`). Special values:
+    /// `"main"` → project's main worktree thread; `"none"` → suppress auto-detection.
+    public var fromThreadName: String?
 }
 
 /// Spec for a single thread inside a `batch-create` request.
@@ -38,6 +44,9 @@ public nonisolated struct IPCBatchThreadSpec: Codable, Sendable {
     public var baseThreadName: String?
     public var baseBranch: String?
     public var noSubmit: Bool?
+    /// Per-spec override: thread name to inherit base branch and section from.
+    /// `"main"` → project's main thread; `"none"` → suppress auto-detection.
+    public var fromThreadName: String?
 }
 
 // MARK: - Response
