@@ -29,6 +29,7 @@ All notable changes to this project will be documented in this file.
 
 ### Local Sync
 - Local file sync now targets the base branch's worktree instead of always syncing with the main repo. When the base branch belongs to an active thread, sync goes to/from that worktree; otherwise falls back to the project root.
+- Fixed sync target resolution falling back to the project root when the base branch was stored with an `origin/` prefix (e.g. from auto-detection) — the prefix is now stripped so it correctly matches the sibling worktree's local branch.
 - Sync menu items now show explicit worktree names (e.g. "feature-login → primeape") instead of generic "Project → Worktree" labels.
 - Hold Option when clicking sync to force syncing with the main repo regardless of base branch.
 

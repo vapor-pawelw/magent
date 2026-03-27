@@ -38,12 +38,12 @@ extension ThreadManager {
             if let meta = cache.worktrees[thread.worktreeKey],
                let override = meta.detectedBaseBranch,
                !override.isEmpty {
-                return override
+                return Self.stripRemotePrefix(override)
             }
         }
         // 2. Thread's stored base branch from creation time.
         if let base = thread.baseBranch, !base.isEmpty {
-            return base
+            return Self.stripRemotePrefix(base)
         }
         // 3. Project default branch.
         if let project = settings.projects.first(where: { $0.id == thread.projectId }),
@@ -51,6 +51,16 @@ extension ThreadManager {
             return defaultBranch
         }
         return "main"
+    }
+
+    /// Strips a leading "origin/" prefix from a branch name so it can be compared against
+    /// local branch names (thread.currentBranch). The detectedBaseBranch cache can store
+    /// remote-tracking refs like "origin/feature-branch" from git fork-point detection.
+    private static func stripRemotePrefix(_ branch: String) -> String {
+        if branch.hasPrefix("origin/") {
+            return String(branch.dropFirst("origin/".count))
+        }
+        return branch
     }
 
     // MARK: - Dirty State
@@ -542,7 +552,7 @@ extension ThreadManager {
         let basePath = project.resolvedWorktreesBasePath()
         var cache = persistence.loadWorktreeCache(worktreesBasePath: basePath)
         var meta = cache.worktrees[thread.worktreeKey] ?? WorktreeMetadata()
-        meta.detectedBaseBranch = baseBranch
+        meta.detectedBaseBranch = Self.stripRemotePrefix(baseBranch)
         cache.worktrees[thread.worktreeKey] = meta
         persistence.saveWorktreeCache(cache, worktreesBasePath: basePath)
         delegate?.threadManager(self, didUpdateThreads: threads)

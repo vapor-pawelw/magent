@@ -37,6 +37,8 @@ Base branch is **never auto-detected** from git history. It is set during thread
 3. **Project default** — `project.defaultBranch`.
 4. **Hardcoded fallback** — `"main"`.
 
+Steps 1 and 2 strip the `origin/` prefix via `stripRemotePrefix(_:)` before returning, since callers compare the result against local branch names (e.g. `thread.currentBranch`). `setBaseBranch(_:for:)` also normalizes on write.
+
 ### Missing base branch recovery
 
 During the delivery polling cycle, the resolved base branch is validated via `git rev-parse --verify`. If the ref does not exist (both bare name and `origin/`-prefixed form are checked), the base branch is reset to the project default. The old base branch name is persisted in `WorktreeMetadata.baseBranchResetFrom` so a warning banner can be shown when the user selects the thread — even across app restarts. The banner is shown once per reset; acknowledging it (or dismissing it) clears `baseBranchResetFrom` from both memory and disk.
