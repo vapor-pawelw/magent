@@ -148,12 +148,20 @@ extension ThreadManager {
             )
 
             let localFileSyncPathsSnapshot = project.normalizedLocalFileSyncPaths
+            let (syncSourcePath, _) = resolveBaseBranchSyncTarget(
+                baseBranch: baseBranch,
+                excludingThreadId: threadID,
+                projectId: project.id,
+                project: project
+            )
+            let sourceOverride = syncSourcePath != project.repoPath ? syncSourcePath : nil
             let missingLocalSyncPaths: [String]
             do {
                 missingLocalSyncPaths = try await syncConfiguredLocalPathsIntoWorktree(
                     project: project,
                     worktreePath: worktreePath,
-                    syncPaths: localFileSyncPathsSnapshot
+                    syncPaths: localFileSyncPathsSnapshot,
+                    sourceRootOverride: sourceOverride
                 )
             } catch {
                 try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: worktreePath)
@@ -528,19 +536,22 @@ extension ThreadManager {
         if shouldSyncLocalPathsBackToRepo, let project = settings.projects.first(where: { $0.id == thread.projectId }) {
             do {
                 let syncPaths = effectiveLocalSyncPaths(for: thread, project: project)
+                let (syncTargetPath, _) = resolveBaseBranchSyncTarget(for: thread, project: project)
+                let destOverride = syncTargetPath != project.repoPath ? syncTargetPath : nil
                 if promptForLocalSyncConflicts {
                     try await syncConfiguredLocalPathsFromWorktree(
                         project: project,
                         worktreePath: thread.worktreePath,
                         syncPaths: syncPaths,
-                        promptForConflicts: true
+                        promptForConflicts: true,
+                        destinationRootOverride: destOverride
                     )
                 } else {
-                    let projectRepoPath = project.repoPath
+                    let destinationPath = syncTargetPath
                     let worktreePath = thread.worktreePath
                     try await Task.detached(priority: .userInitiated) {
                         try await BackgroundLocalSyncWorker.syncConfiguredLocalPathsFromWorktree(
-                            projectRepoPath: projectRepoPath,
+                            projectRepoPath: destinationPath,
                             worktreePath: worktreePath,
                             syncPaths: syncPaths
                         )

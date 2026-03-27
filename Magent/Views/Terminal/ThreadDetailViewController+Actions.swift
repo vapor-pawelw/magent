@@ -83,70 +83,53 @@ extension ThreadDetailViewController {
         guard !thread.isMain else { return }
         guard let event = NSApp.currentEvent else { return }
 
-        let isOptionPressed = event.modifierFlags.contains(.option)
-        let baseWorktreePath: String? = isOptionPressed ? resolveBaseWorktreePath() : nil
+        let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let settings = PersistenceService.shared.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else { return }
 
-        // Option held but no sibling thread owns the base branch — show the normal
-        // menu but tell the user why the base-worktree option isn't available.
-        if isOptionPressed, baseWorktreePath == nil {
-            let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
-            let baseBranch = threadManager.resolveBaseBranch(for: currentThread)
-            BannerManager.shared.show(
-                message: "No worktree found for base branch \"\(baseBranch)\".",
-                style: .warning
-            )
+        let isOptionPressed = event.modifierFlags.contains(.option)
+        let thisName = (currentThread.worktreePath as NSString).lastPathComponent
+
+        let syncPath: String?
+        let syncLabel: String
+        if isOptionPressed {
+            // Option held: always sync with main repo
+            syncPath = nil
+            syncLabel = "Project"
+        } else {
+            // Default: sync with base branch worktree (falls back to project repo)
+            let (resolvedPath, resolvedLabel) = threadManager.resolveBaseBranchSyncTarget(for: currentThread, project: project)
+            if resolvedPath != project.repoPath {
+                syncPath = resolvedPath
+                syncLabel = resolvedLabel
+            } else {
+                syncPath = nil
+                syncLabel = "Project"
+            }
         }
 
         let menu = NSMenu()
 
-        if let basePath = baseWorktreePath {
-            let intoWorktreeItem = NSMenuItem(
-                title: "Base Worktree → Worktree",
-                action: #selector(resyncIntoWorktreeTapped(_:)),
-                keyEquivalent: ""
-            )
-            intoWorktreeItem.target = self
-            intoWorktreeItem.representedObject = basePath
-            let intoBaseItem = NSMenuItem(
-                title: "Worktree → Base Worktree",
-                action: #selector(resyncFromWorktreeTapped(_:)),
-                keyEquivalent: ""
-            )
-            intoBaseItem.target = self
-            intoBaseItem.representedObject = basePath
-            menu.addItem(intoWorktreeItem)
-            menu.addItem(intoBaseItem)
-        } else {
-            let intoWorktreeItem = NSMenuItem(
-                title: "Project → Worktree",
-                action: #selector(resyncIntoWorktreeTapped(_:)),
-                keyEquivalent: ""
-            )
-            intoWorktreeItem.target = self
-            let intoRepoItem = NSMenuItem(
-                title: "Worktree → Project",
-                action: #selector(resyncFromWorktreeTapped(_:)),
-                keyEquivalent: ""
-            )
-            intoRepoItem.target = self
-            menu.addItem(intoWorktreeItem)
-            menu.addItem(intoRepoItem)
-        }
+        let intoWorktreeItem = NSMenuItem(
+            title: "\(syncLabel) \u{2192} \(thisName)",
+            action: #selector(resyncIntoWorktreeTapped(_:)),
+            keyEquivalent: ""
+        )
+        intoWorktreeItem.target = self
+        intoWorktreeItem.representedObject = syncPath
+
+        let fromWorktreeItem = NSMenuItem(
+            title: "\(thisName) \u{2192} \(syncLabel)",
+            action: #selector(resyncFromWorktreeTapped(_:)),
+            keyEquivalent: ""
+        )
+        fromWorktreeItem.target = self
+        fromWorktreeItem.representedObject = syncPath
+
+        menu.addItem(intoWorktreeItem)
+        menu.addItem(fromWorktreeItem)
 
         NSMenu.popUpContextMenu(menu, with: event, for: resyncLocalPathsButton)
-    }
-
-    /// Finds the worktree path of a sibling thread that owns the current thread's base branch.
-    /// Returns nil if no sibling thread is checked out on the base branch.
-    private func resolveBaseWorktreePath() -> String? {
-        let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
-        let baseBranch = threadManager.resolveBaseBranch(for: currentThread)
-        return threadManager.threads.first(where: {
-            !$0.isArchived
-            && $0.id != currentThread.id
-            && $0.projectId == currentThread.projectId
-            && $0.currentBranch == baseBranch
-        })?.worktreePath
     }
 
     // MARK: - Local Sync Actions

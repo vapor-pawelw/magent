@@ -1,6 +1,6 @@
 # Local File Sync Paths
 
-Per-project `Local Sync Paths` let users keep selected local-only files/directories synchronized between the main repo worktree and thread worktrees.
+Per-project `Local Sync Paths` let users keep selected local-only files/directories synchronized between thread worktrees. By default, sync targets the worktree that owns the thread's base branch (enabling stacked worktree chains). When no sibling thread owns the base branch, sync falls back to the project repo root.
 
 Typical use cases:
 
@@ -18,35 +18,48 @@ Typical use cases:
   - rejects empty, `..`, or `~` paths
   - deduplicates entries
 
+## Sync Target Resolution
+
+The sync target is resolved via `ThreadManager.resolveBaseBranchSyncTarget(for:project:)`:
+
+1. Resolve the thread's base branch (detected override → stored baseBranch → project default → "main")
+2. Find the first active (non-archived) sibling thread in the same project whose `currentBranch` matches the base branch
+3. If found → sync with that sibling's worktree path
+4. If not found → fall back to `project.repoPath`
+
+A second overload `resolveBaseBranchSyncTarget(baseBranch:excludingThreadId:projectId:project:)` is used during thread creation when the thread model is not yet fully formed.
+
 ## Thread Creation Behavior
 
-After `git worktree add`, Magent copies each configured path from the project repo root into the new worktree.
+After `git worktree add`, Magent copies each configured path from the resolved sync target (base branch worktree or project root) into the new worktree.
 
 The thread also stores a snapshot of that normalized path list at creation time. Later project setting changes only affect newly created threads.
 
-- Missing source path in repo root: skipped
-- After thread creation, Magent shows a warning banner listing any configured sync paths that were missing in the source repo
+- Missing source path in sync target: skipped
+- After thread creation, Magent shows a warning banner listing any configured sync paths that were missing in the source
 - Existing destination in new worktree: overwritten for configured path contents
 - Directory entries are materialized as directories during sync-in, including empty folders and trees that only contain empty subdirectories
 - If sync-in fails, thread creation rolls back by removing the newly created worktree
 
 ## Manual Resync
 
-Non-main threads expose a top-bar resync button (↺) that, when clicked, shows a direction menu:
+Non-main threads expose a top-bar resync button (↺) that, when clicked, shows a direction menu with dynamic labels showing the actual worktree names:
 
-- **Project → Worktree**: copies the thread's eligible local sync paths from the main repo worktree into the thread
-- **Worktree → Project**: pushes local sync paths from the thread worktree back to the main repo (same merge logic as archive sync-back, but on demand)
+**Default click** — syncs with the base branch's worktree (or project root as fallback):
 
-**Option-click** changes the menu to sync against the base branch's worktree instead of the project root:
+- **`<base-worktree> → <this-worktree>`**: copies from the resolved sync target into this thread
+- **`<this-worktree> → <base-worktree>`**: pushes from this worktree into the resolved sync target
 
-- **Base Worktree → Worktree**: copies from the sibling thread whose `currentBranch` matches this thread's resolved base branch
-- **Worktree → Base Worktree**: pushes from this worktree into the base branch's worktree
+When no sibling thread owns the base branch, labels show "Project" (e.g. `Project → primeape`).
 
-Base branch resolution uses the same priority as the changes panel footer (`⤷ <base>`): detected remote branch → stored baseBranch → project default → "main". If no sibling thread is checked out on the resolved base branch, a warning banner is shown and the normal Project menu appears instead.
+**Option-click** — always syncs with the main repo regardless of base branch:
+
+- **`Project → <this-worktree>`**: copies from the project repo root into this thread
+- **`<this-worktree> → Project`**: pushes from this worktree to the project repo root
 
 The button is hidden when the project has no Local Sync Paths configured (re-evaluates when settings change, so it appears automatically after paths are added). While sync is running the button is replaced by a spinner and a persistent non-dismissible banner with a spinner is shown (e.g. "Syncing Local Paths from main repo…"). The banner is replaced by the success/warning/error result banner when the operation completes, or dismissed on cancellation. Both directions run filesystem work (recursive copy, hashing) via `@concurrent` methods on the concurrent thread pool so the UI stays responsive during large syncs. Only conflict alert presentation hops back to the main actor.
 
-### Project → Worktree
+### Sync Target → Worktree
 
 - Uses the thread's snapshotted path list, filtered to paths still configured on the project
 - Prompts before overwriting conflicting files/directories already present in the thread worktree
@@ -55,16 +68,16 @@ The button is hidden when the project has no Local Sync Paths configured (re-eva
 - Materializes directory entries in the thread worktree, including empty directories
 - Holding Option changes `Override` to `Override All` and `Ignore` to `Ignore All` for the rest of that run
 
-### Worktree → Project
+### Worktree → Sync Target
 
-- Uses the same snapshotted+filtered path list as the Project → Worktree direction
-- Files unchanged in the thread since the last baseline (set at creation or last Project → Worktree sync) are skipped
-- Prompts before overwriting conflicting files/directories in the main repo (same conflict UX as archive)
+- Uses the same snapshotted+filtered path list as the Sync Target → Worktree direction
+- Files unchanged in the thread since the last baseline (set at creation or last inbound sync) are skipped
+- Prompts before overwriting conflicting files/directories in the target (same conflict UX as archive)
 - Additive and non-destructive: intermediate directories created only when a file is actually copied; never deletes destination files absent in the thread
 
 ## Archive Behavior
 
-Before removing a thread worktree, Magent can merge configured paths for that thread back into the project repo root.
+Before removing a thread worktree, Magent can merge configured paths for that thread back into the resolved sync target (base branch worktree or project root).
 
 - Merge-back is enabled by default.
 - It can be disabled globally in Settings -> General -> Archive (`Sync Local Sync Paths back to main worktree on archive`).

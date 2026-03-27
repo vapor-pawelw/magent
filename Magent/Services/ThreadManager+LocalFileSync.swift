@@ -272,6 +272,43 @@ extension ThreadManager {
         case intoRepo
     }
 
+    // MARK: - Base Branch Sync Target Resolution
+
+    /// Resolves the sync target for a thread based on its base branch.
+    /// If an active sibling thread in the same project is checked out on the base branch,
+    /// returns that worktree path and its display name. Otherwise falls back to project.repoPath.
+    func resolveBaseBranchSyncTarget(for thread: MagentThread, project: Project) -> (path: String, label: String) {
+        let baseBranch = resolveBaseBranch(for: thread)
+        if let sibling = threads.first(where: {
+            !$0.isArchived
+            && $0.id != thread.id
+            && $0.projectId == thread.projectId
+            && $0.currentBranch == baseBranch
+        }) {
+            let label = (sibling.worktreePath as NSString).lastPathComponent
+            return (sibling.worktreePath, label)
+        }
+        return (project.repoPath, "Project")
+    }
+
+    /// Overload that takes an explicit base branch string and excludes a thread by ID.
+    /// Useful during thread creation when the thread is not yet fully formed.
+    func resolveBaseBranchSyncTarget(baseBranch: String?, excludingThreadId: UUID, projectId: UUID, project: Project) -> (path: String, label: String) {
+        guard let baseBranch, !baseBranch.isEmpty else {
+            return (project.repoPath, "Project")
+        }
+        if let sibling = threads.first(where: {
+            !$0.isArchived
+            && $0.id != excludingThreadId
+            && $0.projectId == projectId
+            && $0.currentBranch == baseBranch
+        }) {
+            let label = (sibling.worktreePath as NSString).lastPathComponent
+            return (sibling.worktreePath, label)
+        }
+        return (project.repoPath, "Project")
+    }
+
     // MARK: - Local Sync In (Repo -> Worktree)
 
     @concurrent func syncConfiguredLocalPathsIntoWorktree(

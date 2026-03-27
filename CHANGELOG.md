@@ -27,6 +27,11 @@ All notable changes to this project will be documented in this file.
 - Sync tooltip explains what is being synced (PR status, and Jira info when enabled).
 - Thread counts are clickable — show a compact popover listing up to 3 matching threads; clicking one jumps straight to that thread.
 
+### Local Sync
+- Local file sync now targets the base branch's worktree instead of always syncing with the main repo. When the base branch belongs to an active thread, sync goes to/from that worktree; otherwise falls back to the project root.
+- Sync menu items now show explicit worktree names (e.g. "feature-login → primeape") instead of generic "Project → Worktree" labels.
+- Hold Option when clicking sync to force syncing with the main repo regardless of base branch.
+
 ### Sidebar
 - Fixed new threads created from another thread (Cmd+N, Cmd+Shift+N, context menu, CLI) landing one position too low instead of directly below the source thread.
 - New threads created via CLI or Cmd+N now automatically inherit the current thread's branch, section, and sidebar position — no manual flags needed. CLI supports `--from-thread` for explicit control (`main`, `none`, or any thread name).
