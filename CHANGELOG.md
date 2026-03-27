@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Agents
+- Fixed agent session resume when a tmux session is killed — previously always launched a fresh agent instead of resuming the existing conversation via `--resume`.
+
 ### Tabs
 - Switching threads now restores the last-selected tab, including web and draft tabs — previously only terminal tabs were remembered.
 
