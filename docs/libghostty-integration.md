@@ -256,6 +256,12 @@ Beyond the manual settings toggle, terminals must also react when macOS switches
 
 Without this hook, the terminal stays in the old scheme until the user manually re-toggles the Appearance setting.
 
+## Implicit Animation Suppression on Tab Switch
+
+`TerminalSurfaceView` is backed by `CAMetalLayer`. Toggling `isHidden` or adding/removing layer-backed views from the hierarchy can trigger implicit Core Animation transitions (bounds, position, opacity) that visually manifest as content slowly scrolling down from the top of the terminal.
+
+**Rule**: Wrap visibility toggling and subview insertion/removal of `TerminalSurfaceView` instances in `CATransaction.begin()` / `CATransaction.setDisableActions(true)` / `CATransaction.commit()`. This is done in `selectPreparedTab()` in `ThreadDetailViewController+TabBar.swift`.
+
 ## Overlay Z-Order Contract (mAgent)
 
 When terminal overlays are enabled (for example, the prompt Table of Contents or the scroll controls pill), they must remain visible above terminal content during tab switches and session view recreation.

@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Terminal
+- Fixed unwanted slow scroll animation when switching to an agent tab — the CAMetalLayer-backed terminal surface could trigger implicit Core Animation transitions on visibility toggle, causing content to visually slide down from the top.
+
 ### Agents
 - Codex sessions inside tmux now keep their full color palette more reliably instead of appearing bland when Magent inherits color-disabling shell environment from the parent terminal.
 - Fixed agent session resume when a tmux session is killed — previously always launched a fresh agent instead of resuming the existing conversation via `--resume`.

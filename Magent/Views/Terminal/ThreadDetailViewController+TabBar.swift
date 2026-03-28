@@ -130,6 +130,12 @@ extension ThreadDetailViewController {
             item.isSelected = (i == index)
         }
 
+        // Suppress implicit Core Animation on the CAMetalLayer-backed terminal views.
+        // Without this, toggling isHidden / adding subviews can trigger a slow
+        // bounds/position animation that visually scrolls the content from the top.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+
         // Lazily add the view to the container on first selection (creates the surface).
         if tv.superview == nil {
             tv.translatesAutoresizingMaskIntoConstraints = false
@@ -148,6 +154,8 @@ extension ThreadDetailViewController {
         for termView in terminalViews {
             termView.isHidden = (termView !== tv)
         }
+
+        CATransaction.commit()
         view.window?.makeFirstResponder(tv)
         currentTabIndex = index
         updateTerminalScrollControlsState()
