@@ -319,8 +319,14 @@ final class ThreadCell: NSTableCellView {
         return dot
     }
 
-    private func setDimmedAppearance(isHidden: Bool, isArchiving: Bool) {
-        alphaValue = (isHidden || isArchiving) ? 0.5 : 1.0
+    private func setDimmedAppearance(isHidden: Bool, isArchiving: Bool, allSessionsDead: Bool = false) {
+        if isHidden || isArchiving {
+            alphaValue = 0.5
+        } else if allSessionsDead {
+            alphaValue = 0.55
+        } else {
+            alphaValue = 1.0
+        }
     }
 
     private func applyRenamePulse(_ active: Bool) {
@@ -455,7 +461,7 @@ final class ThreadCell: NSTableCellView {
         ensureLeadingStack()
         ensureMainAccentBar()
         setLeadingOffset(leadingOffset)
-        setDimmedAppearance(isHidden: thread.isSidebarHidden, isArchiving: thread.isArchiving)
+        setDimmedAppearance(isHidden: thread.isSidebarHidden, isArchiving: thread.isArchiving, allSessionsDead: thread.hasAllSessionsDead)
         mainAccentBar?.isHidden = true
 
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent

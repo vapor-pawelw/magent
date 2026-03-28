@@ -1,0 +1,93 @@
+import Foundation
+import MagentCore
+
+extension ThreadManager {
+
+    /// Total number of tmux sessions tracked across all non-archived threads.
+    var totalSessionCount: Int {
+        threads.filter { !$0.isArchived }.reduce(0) { $0 + $1.tmuxSessionNames.count }
+    }
+
+    /// Number of sessions with a live tmux process (not dead).
+    var liveSessionCount: Int {
+        threads.filter { !$0.isArchived }.reduce(0) { total, thread in
+            total + thread.tmuxSessionNames.filter { !thread.deadSessions.contains($0) }.count
+        }
+    }
+
+    /// Number of sessions that are currently protected (busy, waiting, rate-limited,
+    /// magent-busy, or currently visible to the user).
+    var protectedSessionCount: Int {
+        threads.filter { !$0.isArchived }.reduce(0) { total, thread in
+            total + thread.tmuxSessionNames.filter { sessionName in
+                isSessionProtected(sessionName, in: thread)
+            }.count
+        }
+    }
+
+    /// Returns true if a session should not be closed during cleanup.
+    func isSessionProtected(_ sessionName: String, in thread: MagentThread) -> Bool {
+        // Never close the session the user is currently looking at.
+        if thread.id == activeThreadId && thread.lastSelectedTabIdentifier == sessionName {
+            return true
+        }
+        return thread.busySessions.contains(sessionName)
+            || thread.magentBusySessions.contains(sessionName)
+            || thread.waitingForInputSessions.contains(sessionName)
+            || thread.rateLimitedSessions[sessionName] != nil
+    }
+
+    /// Kills all idle tmux sessions across all threads, freeing system resources.
+    /// Tab metadata is preserved — sessions are recreated on demand when the user selects them.
+    /// Protected sessions (busy, waiting, rate-limited, currently visible) are never killed.
+    /// Returns the number of sessions killed.
+    @discardableResult
+    func cleanupIdleSessions() async -> Int {
+        let nonArchived = threads.filter { !$0.isArchived }
+
+        // Collect all idle, alive sessions.
+        var toKill: [(threadId: UUID, sessionName: String)] = []
+        for thread in nonArchived {
+            for sessionName in thread.tmuxSessionNames {
+                guard !isSessionProtected(sessionName, in: thread) else { continue }
+                // Skip sessions already dead — nothing to kill.
+                guard !thread.deadSessions.contains(sessionName) else { continue }
+                toKill.append((threadId: thread.id, sessionName: sessionName))
+            }
+        }
+
+        guard !toKill.isEmpty else { return 0 }
+
+        var killedCount = 0
+        for (threadId, sessionName) in toKill {
+            // Notify Ghostty to tear down the surface before the tmux process exits,
+            // preventing use-after-free crashes in ghostty_app_tick.
+            NotificationCenter.default.post(
+                name: .magentTabWillClose,
+                object: nil,
+                userInfo: ["threadId": threadId, "sessionName": sessionName]
+            )
+
+            do {
+                try await tmux.killSession(name: sessionName)
+                knownGoodSessionContexts.removeValue(forKey: sessionName)
+                // Mark as dead so UI dims and checkForDeadSessions doesn't race.
+                if let idx = threads.firstIndex(where: { $0.id == threadId }) {
+                    threads[idx].deadSessions.insert(sessionName)
+                }
+                killedCount += 1
+            } catch {
+                NSLog("[SessionCleanup] Failed to kill session \(sessionName): \(error)")
+            }
+        }
+
+        if killedCount > 0 {
+            delegate?.threadManager(self, didUpdateThreads: threads)
+            NotificationCenter.default.post(name: .magentSessionCleanupCompleted, object: nil, userInfo: [
+                "closedCount": killedCount,
+            ])
+        }
+
+        return killedCount
+    }
+}

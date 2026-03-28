@@ -47,6 +47,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         didSet { updateIndicator() }
     }
 
+    var isSessionDead: Bool = false {
+        didSet { updateAppearance() }
+    }
+
     private func updateIndicator() {
         if hasWaitingForInput {
             busySpinner.stopAnimation(nil)
@@ -279,6 +283,7 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     private func updateAppearance() {
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let deadDimAlpha: CGFloat = isSessionDead ? 0.45 : 1.0
 
         let titleColor: NSColor
         if isSelected {
@@ -307,9 +312,11 @@ final class TabItemView: NSView, NSMenuDelegate {
             }
         }
         titleLabel.textColor = titleColor
+        titleLabel.alphaValue = deadDimAlpha
         pinIcon.contentTintColor = secondaryColor
+        pinIcon.alphaValue = deadDimAlpha
         closeButton.contentTintColor = secondaryColor
-        closeButton.alphaValue = 1.0
+        closeButton.alphaValue = deadDimAlpha
     }
 
     // MARK: NSMenuDelegate

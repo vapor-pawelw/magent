@@ -283,6 +283,11 @@ extension ThreadManager {
             isAgentSession: isAgentSession
         )
 
+        // Clear dead-session tracking now that the session is alive again.
+        if let idx = threads.firstIndex(where: { $0.id == thread.id }) {
+            threads[idx].deadSessions.remove(sessionName)
+        }
+
         // Run normal injection (terminal command + agent context)
         let injection = effectiveInjection(for: thread.projectId)
         injectAfterStart(

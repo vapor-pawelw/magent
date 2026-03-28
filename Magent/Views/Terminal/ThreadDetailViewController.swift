@@ -756,6 +756,7 @@ final class ThreadDetailViewController: NSViewController {
                     tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
                     tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
                     tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
+                    tabItems[i].isSessionDead = thread.deadSessions.contains(sessionName)
                 }
             }
 
@@ -1084,23 +1085,11 @@ final class ThreadDetailViewController: NSViewController {
               threadId == thread.id,
               let deadSessions = userInfo["deadSessions"] as? [String] else { return }
 
-        // The monitor already recreated the tmux sessions.
-        // Replace the terminal views that were attached to the old (dead) sessions.
+        // Update tab dim state for newly dead sessions.
+        // Sessions are recreated lazily when the user selects the tab.
         for sessionName in deadSessions {
-            guard let termIdx = thread.tmuxSessionNames.firstIndex(of: sessionName),
-                  termIdx < terminalViews.count else { continue }
-
-            let displayIdx = displayIndex(forSession: sessionName)
-            let wasSelected = displayIdx == currentTabIndex
-            let oldView = terminalViews[termIdx]
-            oldView.removeFromSuperview()
-            ReusableTerminalViewCache.shared.remove(sessionName: sessionName)
-
-            let newView = makeTerminalView(for: sessionName)
-            terminalViews[termIdx] = newView
-
-            if wasSelected, let displayIdx {
-                selectTab(at: displayIdx)
+            if let displayIdx = displayIndex(forSession: sessionName), displayIdx < tabItems.count {
+                tabItems[displayIdx].isSessionDead = true
             }
         }
     }

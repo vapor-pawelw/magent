@@ -16,32 +16,36 @@ extension ThreadManager {
             liveSessions = []
         }
 
-        for thread in threads {
+        var changed = false
+        for (index, thread) in threads.enumerated() {
             guard !thread.isArchived else { continue }
 
-            let deadSessions = thread.tmuxSessionNames.filter { !liveSessions.contains($0) }
-            guard !deadSessions.isEmpty else { continue }
+            let currentDead = Set(thread.tmuxSessionNames.filter { !liveSessions.contains($0) })
+            guard currentDead != thread.deadSessions else { continue }
 
-            for sessionName in deadSessions {
-                _ = await recreateSessionIfNeeded(
-                    sessionName: sessionName,
-                    thread: thread
-                )
+            let newlyDead = currentDead.subtracting(thread.deadSessions)
+            threads[index].deadSessions = currentDead
+            changed = true
+
+            if !newlyDead.isEmpty {
+                let newlyDeadCopy = Array(newlyDead)
+                let threadId = thread.id
+                await MainActor.run {
+                    NotificationCenter.default.post(
+                        name: .magentDeadSessionsDetected,
+                        object: self,
+                        userInfo: [
+                            "deadSessions": newlyDeadCopy,
+                            "threadId": threadId
+                        ]
+                    )
+                }
             }
+        }
 
-            // Notify UI so terminal views can be replaced.
-            // Must post on MainActor: the observer accesses terminalViews/tabItems (UI state).
-            let deadSessionsCopy = deadSessions
-            let threadId = thread.id
+        if changed {
             await MainActor.run {
-                NotificationCenter.default.post(
-                    name: .magentDeadSessionsDetected,
-                    object: self,
-                    userInfo: [
-                        "deadSessions": deadSessionsCopy,
-                        "threadId": threadId
-                    ]
-                )
+                delegate?.threadManager(self, didUpdateThreads: threads)
             }
         }
     }

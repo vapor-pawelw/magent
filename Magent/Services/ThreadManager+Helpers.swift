@@ -1792,6 +1792,8 @@ extension Notification.Name {
     /// on a per-thread recovery banner. Carries "projectId" (UUID), "tempFileURL" (URL),
     /// and "prefill" (AgentLaunchSheetPrefill).
     static let magentRecoveryReopenRequested = Notification.Name("magentRecoveryReopenRequested")
+    /// Posted after `cleanupIdleSessions` finishes. Carries "closedCount" (Int).
+    static let magentSessionCleanupCompleted = Notification.Name("magentSessionCleanupCompleted")
 }
 
 // MARK: - Errors

@@ -372,6 +372,114 @@ private final class ThreadStatusPopoverViewController: NSViewController {
     }
 }
 
+// MARK: - Session Cleanup Popover
+
+private final class SessionCleanupPopoverViewController: NSViewController {
+    private static let popoverWidth: CGFloat = 260
+
+    private let totalSessions: Int
+    private let liveSessions: Int
+    private let protectedSessions: Int
+    private let idleSessions: Int
+    private let onCleanup: () -> Void
+
+    init(
+        totalSessions: Int,
+        liveSessions: Int,
+        protectedSessions: Int,
+        idleSessions: Int,
+        onCleanup: @escaping () -> Void
+    ) {
+        self.totalSessions = totalSessions
+        self.liveSessions = liveSessions
+        self.protectedSessions = protectedSessions
+        self.idleSessions = idleSessions
+        self.onCleanup = onCleanup
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func loadView() {
+        view = NSView(frame: NSRect(x: 0, y: 0, width: Self.popoverWidth, height: 10))
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stack)
+
+        // Header
+        let headerLabel = NSTextField(labelWithString: "Active Sessions")
+        headerLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        headerLabel.textColor = NSColor(resource: .textPrimary)
+        stack.addArrangedSubview(headerLabel)
+
+        // Session breakdown
+        let deadCount = totalSessions - liveSessions
+        let liveLabel = NSTextField(labelWithString: "\(liveSessions) live · \(deadCount) suspended · \(totalSessions) total")
+        liveLabel.font = .systemFont(ofSize: 11)
+        liveLabel.textColor = NSColor(resource: .textSecondary)
+        stack.addArrangedSubview(liveLabel)
+
+        if protectedSessions > 0 {
+            let protectedLabel = NSTextField(labelWithString: "\(protectedSessions) busy/waiting (protected)")
+            protectedLabel.font = .systemFont(ofSize: 11)
+            protectedLabel.textColor = NSColor(resource: .textSecondary)
+            stack.addArrangedSubview(protectedLabel)
+        }
+
+        // Cleanup button
+        let separator = NSBox()
+        separator.boxType = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(separator)
+
+        let cleanupButton = NSButton()
+        cleanupButton.bezelStyle = .inline
+        cleanupButton.isBordered = true
+        cleanupButton.target = self
+        cleanupButton.action = #selector(cleanupTapped)
+        cleanupButton.translatesAutoresizingMaskIntoConstraints = false
+
+        if idleSessions > 0 {
+            cleanupButton.title = "Close \(idleSessions) idle session\(idleSessions == 1 ? "" : "s")"
+            cleanupButton.isEnabled = true
+        } else {
+            cleanupButton.title = "All sessions are busy"
+            cleanupButton.isEnabled = false
+        }
+
+        stack.addArrangedSubview(cleanupButton)
+
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: view.topAnchor, constant: 12),
+            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+            stack.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
+            view.widthAnchor.constraint(equalToConstant: Self.popoverWidth),
+            separator.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+
+        view.layoutSubtreeIfNeeded()
+        let height = stack.fittingSize.height + 24
+        preferredContentSize = NSSize(width: Self.popoverWidth, height: height)
+        view.setFrameSize(NSSize(width: Self.popoverWidth, height: height))
+    }
+
+    @objc private func cleanupTapped() {
+        onCleanup()
+    }
+}
+
 /// Persistent status bar at the bottom of the main window showing aggregate thread
 /// status counts, rate-limit summary, and sync info.
 final class StatusBarView: NSView, NSPopoverDelegate {
@@ -385,6 +493,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     // MARK: - Subviews
 
     private let threadStatusStack = NSStackView()
+    private let sessionCountButton = NSButton()
     private let rateLimitLabel = NSTextField(labelWithString: "")
     private let syncStatusLabel = NSTextField(labelWithString: "")
     private let syncRefreshButton = NSButton()
@@ -400,6 +509,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private var transientStatusAddedAt: [ThreadStatusSummaryKind: [UUID: Date]] = [:]
     private var activePopoverStatus: ThreadStatusSummaryKind?
     private var activePopover: NSPopover?
+    private var sessionCleanupPopover: NSPopover?
+    private var lastRenderedSessionCount: Int = -1
+    private var lastRenderedLiveSessionCount: Int = -1
 
     // MARK: - Init
 
@@ -463,6 +575,16 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         threadStatusStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
         threadStatusStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
+        sessionCountButton.isBordered = false
+        sessionCountButton.bezelStyle = .inline
+        sessionCountButton.focusRingType = .none
+        sessionCountButton.setButtonType(.momentaryChange)
+        sessionCountButton.target = self
+        sessionCountButton.action = #selector(sessionCountTapped)
+        sessionCountButton.toolTip = "Active tmux sessions — click to manage"
+        sessionCountButton.translatesAutoresizingMaskIntoConstraints = false
+        updateSessionCountButton(total: 0, live: 0)
+
         configureLabel(rateLimitLabel, size: 11)
         rateLimitLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
 
@@ -482,7 +604,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         syncRefreshButton.toolTip = "Refresh PR and Jira statuses"
         syncRefreshButton.translatesAutoresizingMaskIntoConstraints = false
 
-        let rightStack = NSStackView(views: [rateLimitLabel, syncStatusLabel, syncRefreshButton])
+        let rightStack = NSStackView(views: [sessionCountButton, rateLimitLabel, syncStatusLabel, syncRefreshButton])
         rightStack.orientation = .horizontal
         rightStack.alignment = .centerY
         rightStack.spacing = 12
@@ -530,6 +652,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         nc.addObserver(self, selector: sel, name: .magentAgentRateLimitChanged, object: nil)
         nc.addObserver(self, selector: sel, name: .magentAgentBusySessionsChanged, object: nil)
         nc.addObserver(self, selector: sel, name: .magentAgentWaitingForInput, object: nil)
+        nc.addObserver(self, selector: sel, name: .magentThreadCreationFinished, object: nil)
+        nc.addObserver(self, selector: sel, name: .magentSessionCleanupCompleted, object: nil)
+        nc.addObserver(self, selector: sel, name: .magentDeadSessionsDetected, object: nil)
 
         statusTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
@@ -548,6 +673,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
     func refresh() {
         updateThreadStatus()
+        updateSessionCount()
         updateRateLimitStatus()
         updateSyncStatus()
         rebuildRateLimitMenu()
@@ -770,6 +896,88 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         syncRefreshButton.isHidden = false
     }
 
+    // MARK: - Session Count
+
+    private func updateSessionCount() {
+        let tm = ThreadManager.shared
+        let total = tm.totalSessionCount
+        let live = tm.liveSessionCount
+        guard total != lastRenderedSessionCount || live != lastRenderedLiveSessionCount else { return }
+        lastRenderedSessionCount = total
+        lastRenderedLiveSessionCount = live
+        updateSessionCountButton(total: total, live: live)
+    }
+
+    private func updateSessionCountButton(total: Int, live: Int) {
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+        sessionCountButton.image = NSImage(
+            systemSymbolName: "terminal",
+            accessibilityDescription: "Sessions"
+        )?.withSymbolConfiguration(symbolConfig)
+        sessionCountButton.imagePosition = .imageLeading
+        sessionCountButton.imageHugsTitle = true
+        sessionCountButton.contentTintColor = .tertiaryLabelColor
+
+        let displayText = live < total ? "\(live)/\(total)" : "\(total)"
+        sessionCountButton.attributedTitle = NSAttributedString(
+            string: displayText,
+            attributes: [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
+                .foregroundColor: NSColor.tertiaryLabelColor,
+            ]
+        )
+        sessionCountButton.setAccessibilityLabel("\(live) live, \(total) total sessions")
+        sessionCountButton.isHidden = total == 0
+    }
+
+    @objc private func sessionCountTapped() {
+        if sessionCleanupPopover?.isShown == true {
+            sessionCleanupPopover?.close()
+            return
+        }
+
+        let tm = ThreadManager.shared
+        let total = tm.totalSessionCount
+        let live = tm.liveSessionCount
+        let protectedCount = tm.protectedSessionCount
+        let idleCount = live - protectedCount
+
+        let vc = SessionCleanupPopoverViewController(
+            totalSessions: total,
+            liveSessions: live,
+            protectedSessions: protectedCount,
+            idleSessions: max(0, idleCount),
+            onCleanup: { [weak self] in
+                self?.sessionCleanupPopover?.close()
+                Task {
+                    let closed = await ThreadManager.shared.cleanupIdleSessions()
+                    await MainActor.run {
+                        if closed > 0 {
+                            BannerManager.shared.show(
+                                message: "Closed \(closed) idle session\(closed == 1 ? "" : "s").",
+                                style: .info
+                            )
+                        } else {
+                            BannerManager.shared.show(
+                                message: "No idle sessions to clean up.",
+                                style: .info
+                            )
+                        }
+                    }
+                }
+            }
+        )
+
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        popover.delegate = self
+        popover.contentViewController = vc
+
+        sessionCleanupPopover = popover
+        popover.show(relativeTo: sessionCountButton.bounds, of: sessionCountButton, preferredEdge: .maxY)
+    }
+
     // MARK: - Context Menus
 
     private func rebuildRateLimitMenu() {
@@ -881,8 +1089,19 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
-        activePopover = nil
-        activePopoverStatus = nil
+        if let popover = notification.object as? NSPopover {
+            if popover === activePopover {
+                activePopover = nil
+                activePopoverStatus = nil
+            }
+            if popover === sessionCleanupPopover {
+                sessionCleanupPopover = nil
+            }
+        } else {
+            activePopover = nil
+            activePopoverStatus = nil
+            sessionCleanupPopover = nil
+        }
     }
 
     @objc private func syncRefreshTapped() {

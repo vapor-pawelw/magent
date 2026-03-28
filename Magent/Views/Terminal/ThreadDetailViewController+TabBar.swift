@@ -130,6 +130,11 @@ extension ThreadDetailViewController {
             item.isSelected = (i == index)
         }
 
+        // Session was recreated — clear dead styling.
+        if index < tabItems.count {
+            tabItems[index].isSessionDead = false
+        }
+
         // Lazily add the view to the container on first selection (creates the surface).
         if tv.superview == nil {
             tv.translatesAutoresizingMaskIntoConstraints = false

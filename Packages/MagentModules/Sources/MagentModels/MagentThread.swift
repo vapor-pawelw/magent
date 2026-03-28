@@ -344,6 +344,14 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var isArchiving: Bool = false
     // Transient (not persisted) — cached verification of the detected Jira ticket key.
     public var verifiedJiraTicket: JiraTicketCacheEntry? = nil
+    // Transient (not persisted) — sessions whose tmux process is not running.
+    // Updated by the session monitor; cleared when recreation succeeds.
+    public var deadSessions: Set<String> = []
+
+    /// True when all terminal sessions in this thread are dead (tmux process not running).
+    public var hasAllSessionsDead: Bool {
+        !tmuxSessionNames.isEmpty && tmuxSessionNames.allSatisfy { deadSessions.contains($0) }
+    }
 
     /// Resolves the effective section ID for this thread given a set of known section IDs.
     /// If the thread's sectionId is recognized, returns it; otherwise returns the fallback.
