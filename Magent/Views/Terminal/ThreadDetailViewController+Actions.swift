@@ -2,6 +2,16 @@ import Cocoa
 import GhosttyBridge
 import MagentCore
 
+private struct ManualLocalSyncTarget {
+    let path: String
+    let label: String
+}
+
+private enum ManualLocalSyncDirection: Int {
+    case intoCurrentWorktree = 0
+    case fromCurrentWorktree = 1
+}
+
 extension ThreadDetailViewController {
 
     private enum TerminalScrollAction {
@@ -80,12 +90,16 @@ extension ThreadDetailViewController {
     }
 
     @objc func resyncLocalPathsTapped() {
-        guard !thread.isMain else { return }
-        guard let event = NSApp.currentEvent else { return }
-
         let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
         let settings = PersistenceService.shared.loadSettings()
         guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else { return }
+
+        if currentThread.isMain {
+            presentManualLocalSyncPicker(for: currentThread, project: project)
+            return
+        }
+
+        guard let event = NSApp.currentEvent else { return }
 
         let isOptionPressed = event.modifierFlags.contains(.option)
         let thisName = (currentThread.worktreePath as NSString).lastPathComponent
@@ -128,6 +142,16 @@ extension ThreadDetailViewController {
 
         menu.addItem(intoWorktreeItem)
         menu.addItem(fromWorktreeItem)
+        menu.addItem(.separator())
+
+        let otherItem = NSMenuItem(
+            title: "Other…",
+            action: #selector(resyncOtherLocalPathsTapped(_:)),
+            keyEquivalent: ""
+        )
+        otherItem.target = self
+        otherItem.representedObject = currentThread.id
+        menu.addItem(otherItem)
 
         NSMenu.popUpContextMenu(menu, with: event, for: resyncLocalPathsButton)
     }
@@ -152,9 +176,140 @@ extension ThreadDetailViewController {
         performResyncFromWorktree(destLabel: destLabel, destinationRootOverride: destinationRootOverride)
     }
 
-    private func performResyncIntoWorktree(sourceLabel: String, sourceRootOverride: String? = nil) {
-        guard !thread.isMain else { return }
+    @objc private func resyncOtherLocalPathsTapped(_ sender: NSMenuItem) {
+        guard let threadId = sender.representedObject as? UUID,
+              let currentThread = threadManager.threads.first(where: { $0.id == threadId }) else { return }
 
+        let settings = PersistenceService.shared.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else {
+            BannerManager.shared.show(message: "Could not find the project for this thread.", style: .error)
+            return
+        }
+
+        presentManualLocalSyncPicker(for: currentThread, project: project)
+    }
+
+    private func presentManualLocalSyncPicker(for currentThread: MagentThread, project: Project) {
+        Task {
+            do {
+                let targets = try await manualLocalSyncTargets(for: currentThread, project: project)
+                guard !targets.isEmpty else {
+                    await MainActor.run {
+                        BannerManager.shared.show(
+                            message: "No other worktrees are available for Local Sync.",
+                            style: .warning
+                        )
+                    }
+                    return
+                }
+
+                await MainActor.run {
+                    self.presentManualLocalSyncAlert(for: currentThread, project: project, targets: targets)
+                }
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: "Failed to load worktrees for Local Sync: \(error.localizedDescription)",
+                        style: .error
+                    )
+                }
+            }
+        }
+    }
+
+    private func presentManualLocalSyncAlert(
+        for currentThread: MagentThread,
+        project: Project,
+        targets: [ManualLocalSyncTarget]
+    ) {
+        let alert = NSAlert()
+        alert.messageText = "Manual Local Sync"
+        alert.informativeText = "Choose whether to sync into or out of this worktree, then pick the target worktree."
+        alert.addButton(withTitle: "Sync")
+        alert.addButton(withTitle: "Cancel")
+
+        let directionPopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 280, height: 26), pullsDown: false)
+        directionPopup.addItems(withTitles: [
+            "Sync into this worktree",
+            "Sync from this worktree"
+        ])
+        directionPopup.selectItem(at: ManualLocalSyncDirection.intoCurrentWorktree.rawValue)
+
+        let targetComboBox = NSComboBox(frame: NSRect(x: 0, y: 0, width: 280, height: 26))
+        targetComboBox.isEditable = false
+        targetComboBox.completes = true
+        targetComboBox.numberOfVisibleItems = min(12, targets.count)
+        targetComboBox.addItems(withObjectValues: targets.map(\.label))
+
+        let (defaultPath, _) = threadManager.resolveBaseBranchSyncTarget(for: currentThread, project: project)
+        let defaultIndex = targets.firstIndex(where: { $0.path == defaultPath }) ?? 0
+        targetComboBox.selectItem(at: defaultIndex)
+
+        let directionRow = NSStackView(views: [
+            NSTextField(labelWithString: "Direction"),
+            directionPopup
+        ])
+        directionRow.orientation = .vertical
+        directionRow.alignment = .leading
+        directionRow.spacing = 4
+
+        let targetRow = NSStackView(views: [
+            NSTextField(labelWithString: "Target Worktree"),
+            targetComboBox
+        ])
+        targetRow.orientation = .vertical
+        targetRow.alignment = .leading
+        targetRow.spacing = 4
+
+        let accessoryStack = NSStackView(views: [directionRow, targetRow])
+        accessoryStack.orientation = .vertical
+        accessoryStack.alignment = .leading
+        accessoryStack.spacing = 10
+        alert.accessoryView = accessoryStack
+        alert.window.initialFirstResponder = targetComboBox
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        let targetIndex = targetComboBox.indexOfSelectedItem
+        guard targets.indices.contains(targetIndex) else {
+            BannerManager.shared.show(message: "Select a target worktree for Local Sync.", style: .warning)
+            return
+        }
+
+        let target = targets[targetIndex]
+        let direction = ManualLocalSyncDirection(rawValue: directionPopup.indexOfSelectedItem) ?? .intoCurrentWorktree
+
+        switch direction {
+        case .intoCurrentWorktree:
+            performResyncIntoWorktree(sourceLabel: target.label, sourceRootOverride: target.path)
+        case .fromCurrentWorktree:
+            performResyncFromWorktree(destLabel: target.label, destinationRootOverride: target.path)
+        }
+    }
+
+    private func manualLocalSyncTargets(
+        for currentThread: MagentThread,
+        project: Project
+    ) async throws -> [ManualLocalSyncTarget] {
+        let worktrees = try await GitService.shared.listWorktrees(repoPath: project.repoPath)
+        var targets: [ManualLocalSyncTarget] = []
+        var seenPaths = Set<String>()
+
+        for worktree in worktrees {
+            guard !worktree.isBareStem, worktree.path != currentThread.worktreePath else { continue }
+            guard seenPaths.insert(worktree.path).inserted else { continue }
+
+            let worktreeName = (worktree.path as NSString).lastPathComponent
+            let branch = worktree.branch.trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = branch.isEmpty ? worktreeName : "\(worktreeName) (\(branch))"
+            targets.append(ManualLocalSyncTarget(path: worktree.path, label: label))
+        }
+
+        return targets
+    }
+
+    private func performResyncIntoWorktree(sourceLabel: String, sourceRootOverride: String? = nil) {
         let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
         let settings = PersistenceService.shared.loadSettings()
         guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else {
@@ -225,8 +380,6 @@ extension ThreadDetailViewController {
     }
 
     private func performResyncFromWorktree(destLabel: String, destinationRootOverride: String? = nil) {
-        guard !thread.isMain else { return }
-
         let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
         let settings = PersistenceService.shared.loadSettings()
         guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else {

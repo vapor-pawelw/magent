@@ -43,7 +43,9 @@ The thread also stores a snapshot of that normalized path list at creation time.
 
 ## Manual Resync
 
-Non-main threads expose a top-bar resync button (↺) that, when clicked, shows a direction menu with dynamic labels showing the actual worktree names:
+When a project has configured `Local Sync Paths` and at least one other active worktree in that project, Magent shows a top-bar resync button (↺). The current worktree is never offered as a target.
+
+Non-main threads use a quick-action menu first:
 
 **Default click** — syncs with the base branch's worktree (or project root as fallback):
 
@@ -57,7 +59,15 @@ When no sibling thread owns the base branch, labels show "Project" (e.g. `Projec
 - **`Project → <this-worktree>`**: copies from the project repo root into this thread
 - **`<this-worktree> → Project`**: pushes from this worktree to the project repo root
 
-The button is hidden when the project has no Local Sync Paths configured (re-evaluates when settings change, so it appears automatically after paths are added). While sync is running the button is replaced by a spinner and a persistent non-dismissible banner with a spinner is shown (e.g. "Syncing Local Paths from main repo…"). The banner is replaced by the success/warning/error result banner when the operation completes, or dismissed on cancellation. Both directions run filesystem work (recursive copy, hashing) via `@concurrent` methods on the concurrent thread pool so the UI stays responsive during large syncs. Only conflict alert presentation hops back to the main actor.
+The quick-action menu also includes **`Other…`**, which opens a manual picker:
+
+- Direction selector: `Sync into this worktree` or `Sync from this worktree`
+- Target selector: `NSComboBox` listing every other non-bare git worktree in the repo, including the main worktree when the current thread is not main
+- Default target: the same resolved base-branch sync target used by the quick menu when present; otherwise the first available other worktree
+
+The main worktree skips the quick-action menu entirely and opens this manual picker directly, so manual sync behavior is consistent across all worktrees.
+
+The button stays hidden when the project has no Local Sync Paths configured, or when there is no second active worktree in the project to sync against. Visibility is re-evaluated when settings or thread lists change, so it appears automatically once both conditions are true. While sync is running the button is replaced by a spinner and a persistent non-dismissible banner with a spinner is shown (e.g. "Syncing Local Paths from main repo…"). The banner is replaced by the success/warning/error result banner when the operation completes, or dismissed on cancellation. Both directions run filesystem work (recursive copy, hashing) via `@concurrent` methods on the concurrent thread pool so the UI stays responsive during large syncs. Only conflict alert presentation hops back to the main actor.
 
 ### Sync Target → Worktree
 
