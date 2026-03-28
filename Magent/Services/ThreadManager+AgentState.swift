@@ -29,6 +29,17 @@ extension ThreadManager {
             threads[index].deadSessions = currentDead
             changed = true
 
+            // Auto-recreate the currently visible session so the user isn't
+            // stuck on a dead terminal. Other dead sessions stay dead until selected.
+            if let visibleSession = thread.lastSelectedTabIdentifier,
+               thread.id == activeThreadId,
+               newlyDead.contains(visibleSession) {
+                _ = await recreateSessionIfNeeded(
+                    sessionName: visibleSession,
+                    thread: thread
+                )
+            }
+
             if !newlyDead.isEmpty {
                 let newlyDeadCopy = Array(newlyDead)
                 let threadId = thread.id

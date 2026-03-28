@@ -8,10 +8,12 @@ extension ThreadManager {
         threads.filter { !$0.isArchived }.reduce(0) { $0 + $1.tmuxSessionNames.count }
     }
 
-    /// Number of sessions with a live tmux process (not dead).
+    /// Number of sessions with a live tmux process (not dead/evicted).
     var liveSessionCount: Int {
         threads.filter { !$0.isArchived }.reduce(0) { total, thread in
-            total + thread.tmuxSessionNames.filter { !thread.deadSessions.contains($0) }.count
+            total + thread.tmuxSessionNames.filter {
+                !thread.deadSessions.contains($0) && !evictedIdleSessions.contains($0)
+            }.count
         }
     }
 
@@ -40,6 +42,9 @@ extension ThreadManager {
     /// Kills all idle tmux sessions across all threads, freeing system resources.
     /// Tab metadata is preserved — sessions are recreated on demand when the user selects them.
     /// Protected sessions (busy, waiting, rate-limited, currently visible) are never killed.
+    /// Uses the same eviction model as `evictIdleSessionsIfNeeded`: marks sessions in
+    /// `evictedIdleSessions` so `checkForDeadSessions` skips them, and evicts cached
+    /// Ghostty surfaces via `ReusableTerminalViewCache`.
     /// Returns the number of sessions killed.
     @discardableResult
     func cleanupIdleSessions() async -> Int {
@@ -50,33 +55,36 @@ extension ThreadManager {
         for thread in nonArchived {
             for sessionName in thread.tmuxSessionNames {
                 guard !isSessionProtected(sessionName, in: thread) else { continue }
-                // Skip sessions already dead — nothing to kill.
                 guard !thread.deadSessions.contains(sessionName) else { continue }
+                guard !evictedIdleSessions.contains(sessionName) else { continue }
                 toKill.append((threadId: thread.id, sessionName: sessionName))
             }
         }
 
         guard !toKill.isEmpty else { return 0 }
 
+        // Evict cached Ghostty surfaces before killing tmux sessions to prevent
+        // stale surface references in the cache.
+        let sessionNames = toKill.map(\.sessionName)
+        await MainActor.run {
+            ReusableTerminalViewCache.shared.evictSessions(sessionNames)
+        }
+
         var killedCount = 0
         for (threadId, sessionName) in toKill {
-            // Notify Ghostty to tear down the surface before the tmux process exits,
-            // preventing use-after-free crashes in ghostty_app_tick.
-            NotificationCenter.default.post(
-                name: .magentTabWillClose,
-                object: nil,
-                userInfo: ["threadId": threadId, "sessionName": sessionName]
-            )
+            // Mark as evicted so checkForDeadSessions doesn't recreate.
+            evictedIdleSessions.insert(sessionName)
 
             do {
                 try await tmux.killSession(name: sessionName)
                 knownGoodSessionContexts.removeValue(forKey: sessionName)
-                // Mark as dead so UI dims and checkForDeadSessions doesn't race.
                 if let idx = threads.firstIndex(where: { $0.id == threadId }) {
                     threads[idx].deadSessions.insert(sessionName)
                 }
                 killedCount += 1
             } catch {
+                // If kill failed, remove from evicted set so it can be retried.
+                evictedIdleSessions.remove(sessionName)
                 NSLog("[SessionCleanup] Failed to kill session \(sessionName): \(error)")
             }
         }

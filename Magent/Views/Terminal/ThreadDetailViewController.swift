@@ -1085,10 +1085,26 @@ final class ThreadDetailViewController: NSViewController {
               threadId == thread.id,
               let deadSessions = userInfo["deadSessions"] as? [String] else { return }
 
-        // Update tab dim state for newly dead sessions.
-        // Sessions are recreated lazily when the user selects the tab.
         for sessionName in deadSessions {
-            if let displayIdx = displayIndex(forSession: sessionName), displayIdx < tabItems.count {
+            guard let displayIdx = displayIndex(forSession: sessionName),
+                  displayIdx < tabItems.count else { continue }
+
+            if displayIdx == currentTabIndex {
+                // The visible session was auto-recreated by checkForDeadSessions.
+                // Replace the terminal view so the user sees the fresh session.
+                if let termIdx = thread.tmuxSessionNames.firstIndex(of: sessionName),
+                   termIdx < terminalViews.count {
+                    let oldView = terminalViews[termIdx]
+                    oldView.removeFromSuperview()
+                    ReusableTerminalViewCache.shared.remove(sessionName: sessionName)
+
+                    let newView = makeTerminalView(for: sessionName)
+                    terminalViews[termIdx] = newView
+                    selectTab(at: displayIdx)
+                }
+                tabItems[displayIdx].isSessionDead = false
+            } else {
+                // Background dead sessions — just dim the tab.
                 tabItems[displayIdx].isSessionDead = true
             }
         }
