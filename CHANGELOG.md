@@ -26,6 +26,9 @@ All notable changes to this project will be documented in this file.
 - Sync tooltip explains what is being synced (PR status, and Jira info when enabled).
 - Thread counts are clickable — show a compact popover listing up to 3 matching threads; clicking one jumps straight to that thread.
 
+### Local Sync
+- Text file conflicts during interactive sync (resync and archive) now offer a "Resolve in Merge Tool" button that opens FileMerge (opendiff) for side-by-side resolution. If the tool resolves the conflict the alert is dismissed; otherwise it re-appears with the existing Override/Ignore options.
+
 ### Sidebar
 - New threads created via CLI or Cmd+N now automatically inherit the current thread's branch, section, and sidebar position — no manual flags needed. CLI supports `--from-thread` for explicit control (`main`, `none`, or any thread name).
 - Cmd+N now places the new thread directly below the selected thread in the same section, instead of at the bottom of the default section.
