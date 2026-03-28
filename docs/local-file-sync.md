@@ -111,12 +111,15 @@ Conflicts are detected when merge-back would overwrite existing destination data
 - destination file blocks a directory that must exist
 - destination directory blocks a file that must exist
 
-Interactive archive (UI) offers:
+### Conflict Prompt
 
+Interactive archive/resync (UI) shows a conflict alert with the following buttons:
+
+- `Resolve in Merge Tool` (primary, text file conflicts only, only when opendiff is available) — opens FileMerge with the two file versions. If the user saves a resolution and quits, the result is applied and the alert is dismissed. If the user quits without resolving, the alert re-appears. Only `opendiff` (FileMerge, ships with Xcode command line tools) is supported — other merge tools require git's backend-specific launch logic which cannot be replicated outside a real git merge context
 - `Override` (current conflict only)
 - `Ignore` (skip current conflict)
-- `Show Diff` (for "different file" conflicts on non-binary text files only) — opens a modal panel with a unified diff color-coded with green/red foreground text and subtle tinted backgrounds (matching `InlineDiffViewController` colors), labeled with "Worktree:" / "Project:" prefixes so the origin of each side is clear. Context lines use `labelColor` for dark mode readability. After closing the diff panel the conflict alert re-presents for the user to choose.
-- `Cancel Archive` (abort archive)
+- `Show Diff` (text file conflicts only) — opens a modal panel with a unified diff color-coded with green/red foreground text and subtle tinted backgrounds (matching `InlineDiffViewController` colors), labeled with "Worktree:" / "Project:" prefixes so the origin of each side is clear. Context lines use `labelColor` for dark mode readability. After closing the diff panel the conflict alert re-presents for the user to choose.
+- `Cancel Archive` / `Cancel` (abort entire operation)
 - Holding Option changes `Override` to `Override All` and `Ignore` to `Ignore All` for the rest of that sync run
 
 Binary detection: files are considered binary if the first 8 KB contain a null byte; the Show Diff button is hidden for binary files and for non-file conflicts (file-blocks-directory, directory-blocks-file).

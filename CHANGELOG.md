@@ -42,10 +42,10 @@ All notable changes to this project will be documented in this file.
 - Fixed sync target resolution falling back to the project root when the base branch was stored with an `origin/` prefix (e.g. from auto-detection) — the prefix is now stripped so it correctly matches the sibling worktree's local branch.
 - Sync menu items now show explicit worktree names (e.g. "feature-login → primeape") instead of generic "Project → Worktree" labels.
 - Hold Option when clicking sync to force syncing with the main repo regardless of base branch.
+- Text file conflicts during interactive sync (resync and archive) now offer a "Resolve in Merge Tool" button that opens FileMerge (opendiff) for side-by-side resolution. If the tool resolves the conflict the alert is dismissed; otherwise it re-appears with the existing Override/Ignore options.
 
 ### Thread
 - Archiving a thread no longer blocks the UI — the thread disappears from the sidebar immediately while local sync, persistence, and cleanup run in the background.
-
 ### Sidebar
 - New threads created from a pinned thread now land at the top of the visible group (right below pinned threads) instead of at the bottom of the section.
 - Unpinning a thread now places it at the top of the visible group instead of at the bottom.
