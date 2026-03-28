@@ -70,6 +70,14 @@ extension ThreadDetailViewController {
     }
 
     private func selectTerminalTab(at index: Int, sessionName: String) {
+        // If this session was evicted by idle eviction, clear the eviction marker
+        // and force through the slow path so the session is recreated.
+        let wasEvicted = threadManager.evictedIdleSessions.contains(sessionName)
+        if wasEvicted {
+            threadManager.evictedIdleSessions.remove(sessionName)
+            preparedSessions.remove(sessionName)
+        }
+
         let needsLazyAttachRevalidation = preparedSessions.contains(sessionName)
             && terminalView(forSession: sessionName)?.superview == nil
 
