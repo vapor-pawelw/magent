@@ -67,6 +67,9 @@ extension ThreadManager {
                 // Waiting for user input — don't evict.
                 if thread.waitingForInputSessions.contains(session) { continue }
 
+                // Has unsubmitted typed input at the prompt — don't evict.
+                if thread.hasUnsubmittedInputSessions.contains(session) { continue }
+
                 idleCandidates.append((session, lastVisited))
             }
         }

@@ -1072,6 +1072,7 @@ final class ThreadDetailViewController: NSViewController {
         thread.unreadCompletionSessions.remove(sessionName)
         thread.busySessions.remove(sessionName)
         thread.waitingForInputSessions.remove(sessionName)
+        thread.hasUnsubmittedInputSessions.remove(sessionName)
         threadManager.clearInitialPromptInjectionFailure(for: sessionName)
         startupOverlayRequiredSessions.remove(sessionName)
         ReusableTerminalViewCache.shared.remove(sessionName: sessionName)

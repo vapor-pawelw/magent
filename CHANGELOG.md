@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - IPC system prompt now mentions "threads" so agents better associate the term with Magent management commands.
 
 ### Sessions
+- Sessions with unsubmitted typed input at the agent prompt are now protected from idle eviction, manual cleanup, and archive suggestion — typed-but-unsent text is no longer silently lost.
 - New "Keep Alive" (shield) toggle in thread and tab right-click menus — shielded sessions are never killed by auto-eviction or manual cleanup. A blue shield icon appears on protected tabs.
 - New "Protect pinned threads and tabs from eviction" setting (Settings > Threads, enabled by default) — pinned threads and pinned tabs are automatically protected from cleanup.
 - Closing idle sessions from the status bar now shows a confirmation alert listing which threads/tabs will be killed, with a scrollable breakdown.

@@ -211,7 +211,7 @@ extension ThreadManager {
     /// by a dim escape (`\e[2m`) is considered user-typed input.
     /// If the line has no ANSI escapes at all (plain capture), falls back to
     /// treating any text after the marker as placeholder (safe for injection).
-    private static func isPromptLineEmpty(_ line: String, marker: String) -> Bool {
+    static func isPromptLineEmpty(_ line: String, marker: String) -> Bool {
         let hasAnsi = line.contains("\u{1b}[")
         guard hasAnsi else {
             // Plain capture (no ANSI) — can't distinguish placeholder from input.
@@ -1209,6 +1209,16 @@ extension ThreadManager {
             changed = true
         }
 
+        let remappedUnsubmitted = Set(
+            threads[index].hasUnsubmittedInputSessions
+                .map { sessionRenameMap[$0] ?? $0 }
+                .filter { validAgentSessions.contains($0) }
+        )
+        if remappedUnsubmitted != threads[index].hasUnsubmittedInputSessions {
+            threads[index].hasUnsubmittedInputSessions = remappedUnsubmitted
+            changed = true
+        }
+
         // Keep notification dedup state aligned with waiting sessions after rename.
         let renamedTargets = Set(sessionRenameMap.values)
         for (oldName, newName) in sessionRenameMap where notifiedWaitingSessions.remove(oldName) != nil {
@@ -1295,6 +1305,12 @@ extension ThreadManager {
         let prunedMagentBusy = threads[index].magentBusySessions.intersection(validMagentTargets)
         if prunedMagentBusy != threads[index].magentBusySessions {
             threads[index].magentBusySessions = prunedMagentBusy
+            changed = true
+        }
+
+        let prunedUnsubmitted = threads[index].hasUnsubmittedInputSessions.intersection(validAgentSessions)
+        if prunedUnsubmitted != threads[index].hasUnsubmittedInputSessions {
+            threads[index].hasUnsubmittedInputSessions = prunedUnsubmitted
             changed = true
         }
 
