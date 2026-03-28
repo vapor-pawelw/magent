@@ -62,6 +62,8 @@ Draft tabs let users save a prompt idea for later without executing it immediate
 - Draft content (agent type + prompt) persists across app restarts via `persistedDraftTabs` on `MagentThread`
 - Draft tabs can only be created through the launch sheet checkbox — there is no other way to create them
 - Terminal overlays (scroll controls, scroll-to-bottom FAB, prompt TOC) are hidden while a draft tab is active
+- **Auto-rename with DRAFT prefix**: When a thread has active draft tabs and auto-rename/description generation triggers, the generated task description is prefixed with "DRAFT: ". The prefix is derived from live draft-tab state (`hasDraftTabs`), so it disappears naturally once the draft is consumed via "Start Agent"
+- **"Rename with prompt" submenu**: Draft tab prompts appear in the context menu's "Rename with prompt" submenu, prefixed with "DRAFT:", with a doc.text icon. Selecting one triggers a rename and prefixes the generated description with "DRAFT: " via the explicit `prefixDraft` parameter
 - Display order is decoupled from content arrays via a `TabSlot` indirection layer, allowing free mixing of terminal and web tabs without breaking terminal view indexing
 
 ## Configuration (First Run / Settings)

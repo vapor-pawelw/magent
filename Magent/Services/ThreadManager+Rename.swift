@@ -84,6 +84,9 @@ extension ThreadManager {
         return (allTrackable: ordered, available: available)
     }
 
+    /// Prefix applied to auto-generated task descriptions when the thread has active draft tabs.
+    static let draftDescriptionPrefix = "DRAFT: "
+
     private static let slugPrefix = "SLUG:"
 
     private func sanitizeSlug(_ raw: String) -> String? {
@@ -308,13 +311,18 @@ extension ThreadManager {
     @discardableResult
     private func applyGeneratedRenameMetadataIfNeeded(
         threadId: UUID,
-        generatedTaskDescription: GeneratedTaskDescription?
+        generatedTaskDescription: GeneratedTaskDescription?,
+        prefixDraft: Bool = false
     ) async -> Bool {
         guard let generatedTaskDescription else { return false }
         guard let currentIndex = threads.firstIndex(where: { $0.id == threadId }) else { return false }
         guard threads[currentIndex].taskDescription == nil else { return false }
 
-        threads[currentIndex].taskDescription = generatedTaskDescription.description
+        let shouldPrefixDraft = prefixDraft || threads[currentIndex].hasDraftTabs
+        let description = shouldPrefixDraft
+            ? Self.draftDescriptionPrefix + generatedTaskDescription.description
+            : generatedTaskDescription.description
+        threads[currentIndex].taskDescription = description
         let settings = persistence.loadSettings()
         if settings.autoSetThreadIconFromWorkType,
            !threads[currentIndex].isThreadIconManuallySet {
@@ -334,7 +342,8 @@ extension ThreadManager {
     func renameThreadFromPrompt(
         _ thread: MagentThread,
         prompt: String,
-        preferredAgent: AgentType? = nil
+        preferredAgent: AgentType? = nil,
+        prefixDraft: Bool = false
     ) async throws -> Bool {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
             throw ThreadManagerError.threadNotFound
@@ -395,7 +404,8 @@ extension ThreadManager {
                 try await renameThread(currentThread, to: candidate, markFirstPromptRenameHandled: false)
                 _ = await applyGeneratedRenameMetadataIfNeeded(
                     threadId: currentThread.id,
-                    generatedTaskDescription: generatedTaskDescription
+                    generatedTaskDescription: generatedTaskDescription,
+                    prefixDraft: prefixDraft
                 )
                 return true
             } catch ThreadManagerError.duplicateName {
@@ -793,7 +803,10 @@ extension ThreadManager {
             if let generated = await generateTaskDescription(from: prompt, agentType: candidateAgent, projectId: thread.projectId) {
                 // Re-check index — thread array may have changed during async work
                 guard let currentIndex = threads.firstIndex(where: { $0.id == threadId }) else { return nil }
-                threads[currentIndex].taskDescription = generated.description
+                let description = threads[currentIndex].hasDraftTabs
+                    ? Self.draftDescriptionPrefix + generated.description
+                    : generated.description
+                threads[currentIndex].taskDescription = description
                 if shouldAutoSetIcon, !threads[currentIndex].isThreadIconManuallySet {
                     threads[currentIndex].threadIcon = generated.suggestedIcon
                 }

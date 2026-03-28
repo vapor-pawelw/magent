@@ -262,6 +262,11 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     // MARK: - Computed
 
+    /// Whether the thread currently has active (unconsumed) draft tabs.
+    public var hasDraftTabs: Bool {
+        !persistedDraftTabs.isEmpty
+    }
+
     /// The last path component of `worktreePath`, used as the key in per-project worktree caches.
     public var worktreeKey: String {
         (worktreePath as NSString).lastPathComponent

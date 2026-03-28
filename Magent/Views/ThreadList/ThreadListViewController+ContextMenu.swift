@@ -158,6 +158,21 @@ extension ThreadListViewController {
     private func buildRenameWithPromptSubmenu(for thread: MagentThread) -> NSMenu {
         let submenu = NSMenu()
 
+        // Draft tab prompts (shown first, prefixed with "DRAFT:")
+        let draftPrompts: [(String, String)] = thread.persistedDraftTabs.compactMap { draft in
+            let trimmed = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return (draft.identifier, trimmed)
+        }
+        for (identifier, prompt) in draftPrompts {
+            let display = prompt.count > 54 ? String(prompt.prefix(51)) + "…" : prompt
+            let item = NSMenuItem(title: "\(ThreadManager.draftDescriptionPrefix)\(display)", action: #selector(renameWithDraftPrompt(_:)), keyEquivalent: "")
+            item.target = self
+            item.image = NSImage(systemSymbolName: "doc.text", accessibilityDescription: "Draft")
+            item.representedObject = ["thread": thread, "prompt": prompt, "draftId": identifier] as [String: Any]
+            submenu.addItem(item)
+        }
+
         // Collect recent prompts across all sessions (newest last), deduplicate, take last 3
         let recentPrompts: [String] = {
             var seen = Set<String>()
@@ -171,6 +186,10 @@ extension ThreadListViewController {
             return result.reversed() // oldest-first for menu order
         }()
 
+        if !draftPrompts.isEmpty, !recentPrompts.isEmpty {
+            submenu.addItem(.separator())
+        }
+
         for prompt in recentPrompts {
             let truncated = prompt.count > 60 ? String(prompt.prefix(57)) + "…" : prompt
             let item = NSMenuItem(title: truncated, action: #selector(renameWithRecentPrompt(_:)), keyEquivalent: "")
@@ -179,7 +198,7 @@ extension ThreadListViewController {
             submenu.addItem(item)
         }
 
-        if !recentPrompts.isEmpty {
+        if !recentPrompts.isEmpty || !draftPrompts.isEmpty {
             submenu.addItem(.separator())
         }
 
@@ -1009,6 +1028,33 @@ extension ThreadListViewController {
         Task {
             do {
                 let didRename = try await threadManager.renameThreadFromPrompt(thread, prompt: prompt)
+                guard didRename else { return }
+                await MainActor.run {
+                    if let updated = self.threadManager.threads.first(where: { $0.id == thread.id }) {
+                        self.delegate?.threadList(self, didRenameThread: updated)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    let errorAlert = NSAlert()
+                    errorAlert.messageText = String(localized: .CommonStrings.commonRenameFailed)
+                    errorAlert.informativeText = error.localizedDescription
+                    errorAlert.alertStyle = .warning
+                    errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
+                    errorAlert.runModal()
+                }
+            }
+        }
+    }
+
+    @objc private func renameWithDraftPrompt(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let thread = info["thread"] as? MagentThread,
+              let prompt = info["prompt"] as? String else { return }
+
+        Task {
+            do {
+                let didRename = try await threadManager.renameThreadFromPrompt(thread, prompt: prompt, prefixDraft: true)
                 guard didRename else { return }
                 await MainActor.run {
                     if let updated = self.threadManager.threads.first(where: { $0.id == thread.id }) {

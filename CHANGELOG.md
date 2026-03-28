@@ -9,6 +9,8 @@ All notable changes to this project will be documented in this file.
 - About panel now displays build number (git commit count) and commit hash.
 
 ### Thread
+- Draft-originated threads now auto-rename and generate a "DRAFT: " prefixed description; the prefix is derived from live draft-tab state so it disappears once the draft is consumed.
+- "Rename with prompt" context menu now includes draft tab prompts (prefixed with "DRAFT:") as rename options.
 - Fixed false-positive "Base branch X no longer exists" banner when the base branch and project default are the same (e.g. `develop`), and fixed stale reset banners persisting across refreshes even after the missing branch became available again.
 
 ### Sessions
