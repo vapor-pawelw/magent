@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - Draft-originated threads now auto-rename and generate a "DRAFT: " prefixed description; the prefix is derived from live draft-tab state so it disappears once the draft is consumed.
 - "Rename with prompt" context menu now includes draft tab prompts (prefixed with "DRAFT:") as rename options.
 - Fixed false-positive "Base branch X no longer exists" banner when the base branch and project default are the same (e.g. `develop`), and fixed stale reset banners persisting across refreshes even after the missing branch became available again.
+- Fixed Manual Local Sync popup having overlapping UI elements by using proper Auto Layout constraints and pre-computing the accessory view size.
 
 ### Agents
 - IPC system prompt now mentions "threads" so agents better associate the term with Magent management commands.
