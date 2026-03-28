@@ -16,6 +16,9 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
     private var showPRStatusBadgesCheckbox: NSButton!
     private var showJiraStatusBadgesCheckbox: NSButton!
     private var showBusyStateDurationCheckbox: NSButton!
+    private var maxIdleSessionsCheckbox: NSButton!
+    private var maxIdleSessionsStepper: NSStepper!
+    private var maxIdleSessionsValueLabel: NSTextField!
     private var autoReorderOnCompletionCheckbox: NSButton!
     var slugPromptTextView: NSTextView!
     var terminalInjectionTextView: NSTextView!
@@ -300,6 +303,49 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
         resetReviewButton.controlSize = .small
         reviewSection.addArrangedSubview(resetReviewButton)
 
+        // Session Management
+        let (sessionCard, sessionSection) = createSectionCard(
+            title: "Session Management",
+            description: "Controls how tmux sessions are managed across threads."
+        )
+        stackView.addArrangedSubview(sessionCard)
+
+        let maxIdleRow = NSStackView()
+        maxIdleRow.orientation = .horizontal
+        maxIdleRow.alignment = .centerY
+        maxIdleRow.spacing = 8
+
+        let isLimited = settings.maxIdleSessions != nil
+        maxIdleSessionsCheckbox = NSButton(
+            checkboxWithTitle: "Limit concurrent idle sessions",
+            target: self,
+            action: #selector(maxIdleSessionsToggled)
+        )
+        maxIdleSessionsCheckbox.state = isLimited ? .on : .off
+        maxIdleRow.addArrangedSubview(maxIdleSessionsCheckbox)
+
+        maxIdleSessionsStepper = NSStepper()
+        maxIdleSessionsStepper.minValue = 1
+        maxIdleSessionsStepper.maxValue = 100
+        maxIdleSessionsStepper.increment = 1
+        maxIdleSessionsStepper.integerValue = settings.maxIdleSessions ?? 10
+        maxIdleSessionsStepper.isEnabled = isLimited
+        maxIdleSessionsStepper.target = self
+        maxIdleSessionsStepper.action = #selector(maxIdleSessionsStepperChanged)
+        maxIdleRow.addArrangedSubview(maxIdleSessionsStepper)
+
+        maxIdleSessionsValueLabel = NSTextField(labelWithString: "\(settings.maxIdleSessions ?? 10)")
+        maxIdleSessionsValueLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        maxIdleSessionsValueLabel.textColor = isLimited ? .labelColor : .tertiaryLabelColor
+        maxIdleRow.addArrangedSubview(maxIdleSessionsValueLabel)
+
+        sessionSection.addArrangedSubview(maxIdleRow)
+
+        let maxIdleDesc = NSTextField(wrappingLabelWithString: "Automatically kills tmux sessions that haven't been viewed in over an hour when the total exceeds the limit. Sessions are recreated on demand when you revisit the thread.")
+        maxIdleDesc.font = .systemFont(ofSize: 11)
+        maxIdleDesc.textColor = NSColor(resource: .textSecondary)
+        sessionSection.addArrangedSubview(maxIdleDesc)
+
         let (recentArchivedCard, recentArchivedSection) = createSectionCard(
             title: "Recently Archived",
             description: "Shows up to 10 archived threads. Restore uses the same flow as the archive banner."
@@ -341,6 +387,7 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
             sidebarCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             injectionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             reviewCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            sessionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             recentArchivedCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
 
@@ -716,6 +763,24 @@ final class SettingsThreadsViewController: NSViewController, NSTextViewDelegate,
 
     @objc private func showBusyStateDurationToggled() {
         settings.showBusyStateDuration = showBusyStateDurationCheckbox.state == .on
+        persistSettings(notify: true)
+    }
+
+    @objc private func maxIdleSessionsToggled() {
+        let isLimited = maxIdleSessionsCheckbox.state == .on
+        if isLimited {
+            settings.maxIdleSessions = maxIdleSessionsStepper.integerValue
+        } else {
+            settings.maxIdleSessions = nil
+        }
+        maxIdleSessionsStepper.isEnabled = isLimited
+        maxIdleSessionsValueLabel.textColor = isLimited ? .labelColor : .tertiaryLabelColor
+        persistSettings(notify: true)
+    }
+
+    @objc private func maxIdleSessionsStepperChanged() {
+        settings.maxIdleSessions = maxIdleSessionsStepper.integerValue
+        maxIdleSessionsValueLabel.stringValue = "\(maxIdleSessionsStepper.integerValue)"
         persistSettings(notify: true)
     }
 

@@ -45,7 +45,7 @@ public final class TmuxService: Sendable {
         // tmux may have been auto-started by new-session; re-apply global terminal
         // capabilities so lazy server startup gets the same feature set as app launch.
         await ensureRequiredTerminalFeatures()
-        await configureBellMonitoring(resetEventLog: false)
+        await configureBellMonitoring()
     }
 
     /// Configures tmux settings needed by Magent (mouse selection behavior, etc.).
@@ -62,7 +62,7 @@ public final class TmuxService: Sendable {
         _ = try? await ShellExecutor.run("tmux set-option -g pane-scrollbars off")
         await ensureRequiredTerminalFeatures()
         await configureMouseOpenableURLTracking()
-        await configureBellMonitoring(resetEventLog: true)
+        await configureBellMonitoring()
     }
 
     public static func ensureTerminalFeaturesShellCommand() -> String {
@@ -107,12 +107,11 @@ public final class TmuxService: Sendable {
         }
     }
 
-    private func configureBellMonitoring(resetEventLog: Bool) async {
-        if resetEventLog {
-            _ = try? await ShellExecutor.run(": > \(shellQuote(agentCompletionEventsPath))")
-        } else {
-            _ = try? await ShellExecutor.run("touch \(shellQuote(agentCompletionEventsPath))")
-        }
+    private func configureBellMonitoring() async {
+        // Ensure the event log file exists so pipe-pane can append to it.
+        // Never truncate on startup — accumulated events are consumed by
+        // ThreadManager at launch via consumeAgentCompletionSessions().
+        _ = try? await ShellExecutor.run("touch \(shellQuote(agentCompletionEventsPath))")
         // Install the bell-watcher script used by pipe-pane on agent sessions.
         installBellWatcherScript()
     }
@@ -457,7 +456,11 @@ public final class TmuxService: Sendable {
     }
 
     public func consumeAgentCompletionSessions() async -> [String] {
-        let command = "if [ -f \(shellQuote(agentCompletionEventsPath)) ]; then cat \(shellQuote(agentCompletionEventsPath)); : > \(shellQuote(agentCompletionEventsPath)); fi"
+        // Atomically move the event log to a temp path, then read it.
+        // mv is atomic on the same filesystem, so no events are lost between
+        // read and truncation (the old cat-then-truncate had that race).
+        let tmpPath = agentCompletionEventsPath + ".consuming"
+        let command = "mv \(shellQuote(agentCompletionEventsPath)) \(shellQuote(tmpPath)) 2>/dev/null && cat \(shellQuote(tmpPath)) && rm -f \(shellQuote(tmpPath))"
         guard let output = try? await ShellExecutor.run(command), !output.isEmpty else {
             return []
         }

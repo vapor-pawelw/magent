@@ -21,6 +21,14 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 - The Dock completion setting is persisted as `AppSettings.showDockBadgeAndBounceForUnreadCompletions`.
 - Toggling the setting in Notifications refreshes the Dock badge immediately instead of waiting for the next completion event.
 
+## Bell event consumption
+
+Bell events are written by per-session Perl pipe-pane scripts to `/tmp/magent-agent-completion-events.log`. The app consumes them via `TmuxService.consumeAgentCompletionSessions()`.
+
+- **Atomic consume**: The consume path uses `mv` (atomic on same filesystem) to move the log to a `.consuming` temp path, then reads and deletes it. This avoids the race condition where `cat file; : > file` could lose events appended between read and truncation.
+- **No startup truncation**: `configureBellMonitoring()` only `touch`es the event log — it never truncates. Events accumulated while the app was closed are consumed by `ThreadManager` at launch via `consumeAgentCompletionSessions()` → `applyStartupCompletionSessions()`.
+- **1-second per-session cooldown**: `recentBellBySession` deduplicates rapid bells on the same session (within 1 second). This is intentional — Claude's Stop hook can also append completion events, so without this cooldown, a single completion could produce duplicate notifications.
+
 ## Gotchas
 
 - Do not re-expand the Dock badge count to include `waitingForInputSessions`; the Dock badge is intentionally scoped to finished unread work only.
@@ -30,7 +38,6 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 
 ## What changed in this thread
 
-- Added a Notifications setting for Dock bounce and unread completion badge behavior.
-- Updated completion handling so background completions can bounce the Dock icon.
-- Changed the Dock badge to count only unread completed threads.
-- Updated release notes to mention the new behavior.
+- Fixed non-atomic event log consumption: replaced `cat file; : > file` with `mv` + read + delete to prevent race-condition event loss.
+- Fixed startup-reset race: `applyGlobalSettings()` no longer truncates the event log before `ThreadManager` can consume accumulated events.
+- Removed the now-unused `resetEventLog` parameter from `configureBellMonitoring()`.

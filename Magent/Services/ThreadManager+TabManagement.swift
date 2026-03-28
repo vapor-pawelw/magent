@@ -177,6 +177,7 @@ extension ThreadManager {
         )
 
         threads[index].tmuxSessionNames.append(tmuxSessionName)
+        sessionLastVisitedAt[tmuxSessionName] = Date()
         threads[index].customTabNames[tmuxSessionName] = tabDisplayName
         let shouldMarkAsAgentTab = (currentThread.isMain || useAgentCommand) && selectedAgentType != nil
         if shouldMarkAsAgentTab {
@@ -291,6 +292,10 @@ extension ThreadManager {
 
     func updateLastSelectedTab(for threadId: UUID, identifier: String?) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        if let identifier {
+            sessionLastVisitedAt[identifier] = Date()
+            evictedIdleSessions.remove(identifier)
+        }
         if threads[index].lastSelectedTabIdentifier == identifier { return }
         threads[index].lastSelectedTabIdentifier = identifier
         try? persistence.saveActiveThreads(threads)
@@ -299,6 +304,14 @@ extension ThreadManager {
     @MainActor
     func setActiveThread(_ threadId: UUID?) {
         activeThreadId = threadId
+        if let threadId,
+           let thread = threads.first(where: { $0.id == threadId }) {
+            let now = Date()
+            for session in thread.tmuxSessionNames {
+                sessionLastVisitedAt[session] = now
+                evictedIdleSessions.remove(session)
+            }
+        }
     }
 
     // MARK: - Close Tab
@@ -366,6 +379,9 @@ extension ThreadManager {
         threads[idx].waitingForInputSessions.remove(sessionName)
         threads[idx].rateLimitedSessions.removeValue(forKey: sessionName)
         notifiedWaitingSessions.remove(sessionName)
+        sessionLastVisitedAt.removeValue(forKey: sessionName)
+        sessionLastBusyAt.removeValue(forKey: sessionName)
+        evictedIdleSessions.remove(sessionName)
         clearTrackedInitialPromptInjection(for: sessionName)
         threads[idx].customTabNames.removeValue(forKey: sessionName)
         threads[idx].submittedPromptsBySession.removeValue(forKey: sessionName)

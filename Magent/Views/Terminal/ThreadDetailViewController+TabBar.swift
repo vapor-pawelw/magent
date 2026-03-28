@@ -70,6 +70,14 @@ extension ThreadDetailViewController {
     }
 
     private func selectTerminalTab(at index: Int, sessionName: String) {
+        // If this session was evicted by idle eviction, clear the eviction marker
+        // and force through the slow path so the session is recreated.
+        let wasEvicted = threadManager.evictedIdleSessions.contains(sessionName)
+        if wasEvicted {
+            threadManager.evictedIdleSessions.remove(sessionName)
+            preparedSessions.remove(sessionName)
+        }
+
         let needsLazyAttachRevalidation = preparedSessions.contains(sessionName)
             && terminalView(forSession: sessionName)?.superview == nil
 
@@ -135,6 +143,12 @@ extension ThreadDetailViewController {
             tabItems[index].isSessionDead = false
         }
 
+        // Suppress implicit Core Animation on the CAMetalLayer-backed terminal views.
+        // Without this, toggling isHidden / adding subviews can trigger a slow
+        // bounds/position animation that visually scrolls the content from the top.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+
         // Lazily add the view to the container on first selection (creates the surface).
         if tv.superview == nil {
             tv.translatesAutoresizingMaskIntoConstraints = false
@@ -153,6 +167,8 @@ extension ThreadDetailViewController {
         for termView in terminalViews {
             termView.isHidden = (termView !== tv)
         }
+
+        CATransaction.commit()
         view.window?.makeFirstResponder(tv)
         currentTabIndex = index
         updateTerminalScrollControlsState()

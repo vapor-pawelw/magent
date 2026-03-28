@@ -19,7 +19,7 @@ extension ThreadManager {
                 self?.runSessionMonitorTick()
             }
         }
-        // Fire once immediately so we don't wait 3 seconds for the first sync.
+        // Fire once immediately so we don't wait 5 seconds for the first sync.
         runSessionMonitorTick()
     }
 
@@ -34,22 +34,31 @@ extension ThreadManager {
         let shouldRunStaleCleanup = shouldRunStaleSessionCleanupTick()
         Task {
             defer { self.isSessionMonitorTickRunning = false }
-            await self.checkForMissingWorktrees()
-            await self.checkForDeadSessions()
-            if shouldRunStaleCleanup {
-                _ = await self.cleanupStaleMagentSessions(minimumStaleAge: 30)
-            }
+
+            // Fast checks — every tick (5s)
             await self.checkForAgentCompletions()
             await self.checkForWaitingForInput()
             await self.checkForRateLimitedSessions()
             await self.syncBusySessionsFromProcessState()
             await self.ensureBellPipes()
-            await self.checkTmuxZombieHealth()
+            await self.checkForDeadSessions()
+
+            // Slow checks — every 12th tick (~1 minute)
+            _slowTickCounter += 1
+            if _slowTickCounter >= 12 {
+                _slowTickCounter = 0
+                await self.checkForMissingWorktrees()
+                await self.evictIdleSessionsIfNeeded()
+                if shouldRunStaleCleanup {
+                    _ = await self.cleanupStaleMagentSessions(minimumStaleAge: 30)
+                }
+                await self.checkTmuxZombieHealth()
+            }
 
             var didRunStatusSync = false
             var syncHadErrors = false
 
-            // Refresh dirty and delivered states every 10th tick (~30 seconds)
+            // Refresh dirty and delivered states every 10th tick (~50 seconds)
             dirtyCheckTickCounter += 1
             if dirtyCheckTickCounter >= 10 {
                 dirtyCheckTickCounter = 0
@@ -151,7 +160,7 @@ extension ThreadManager {
 
     func checkTmuxZombieHealth() async {
         let now = Date()
-        guard now.timeIntervalSince(lastTmuxZombieHealthCheckAt) >= 15 else { return }
+        guard now.timeIntervalSince(lastTmuxZombieHealthCheckAt) >= 60 else { return }
         lastTmuxZombieHealthCheckAt = now
         guard !isRestartingTmuxForRecovery else { return }
 

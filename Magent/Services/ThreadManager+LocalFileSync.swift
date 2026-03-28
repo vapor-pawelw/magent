@@ -3,7 +3,7 @@ import CryptoKit
 import Foundation
 import MagentCore
 
-enum BackgroundLocalSyncWorker {
+nonisolated enum BackgroundLocalSyncWorker {
     private enum ItemKind {
         case file
         case directory
@@ -233,6 +233,7 @@ extension ThreadManager {
     }
 
     private nonisolated enum LocalSyncConflictChoice {
+        case resolve
         case overwrite
         case overwriteAll
         case skip
@@ -339,6 +340,7 @@ extension ThreadManager {
                     destinationPath: destinationPath,
                     relativePath: relativePath,
                     destinationRootPath: worktreePath,
+                    repoPath: project.repoPath,
                     conflictMode: conflictMode,
                     overwriteAll: &overwriteAll,
                     ignoreAll: &ignoreAll,
@@ -393,6 +395,7 @@ extension ThreadManager {
                     destinationPath: destinationPath,
                     relativePath: relativePath,
                     destinationRootPath: destinationRoot,
+                    repoPath: project.repoPath,
                     conflictMode: conflictMode,
                     overwriteAll: &overwriteAll,
                     ignoreAll: &ignoreAll,
@@ -429,6 +432,7 @@ extension ThreadManager {
         destinationPath: String,
         relativePath: String,
         destinationRootPath: String,
+        repoPath: String,
         conflictMode: LocalSyncConflictMode,
         overwriteAll: inout Bool,
         ignoreAll: inout Bool,
@@ -449,7 +453,8 @@ extension ThreadManager {
                         conflictMode: conflictMode,
                         overwriteAll: &overwriteAll,
                         ignoreAll: &ignoreAll,
-                        conflictDirection: conflictDirection
+                        conflictDirection: conflictDirection,
+                        repoPath: repoPath
                     )
                     guard ready else { return }
                 }
@@ -468,6 +473,7 @@ extension ThreadManager {
                         destinationPath: childDestinationPath,
                         relativePath: childRelativePath,
                         destinationRootPath: destinationRootPath,
+                        repoPath: repoPath,
                         conflictMode: conflictMode,
                         overwriteAll: &overwriteAll,
                         ignoreAll: &ignoreAll,
@@ -494,7 +500,8 @@ extension ThreadManager {
                         conflictMode: conflictMode,
                         overwriteAll: &overwriteAll,
                         ignoreAll: &ignoreAll,
-                        conflictDirection: conflictDirection
+                        conflictDirection: conflictDirection,
+                        repoPath: repoPath
                     )
                     guard parentReady else { return }
                 }
@@ -512,7 +519,8 @@ extension ThreadManager {
                             conflictMode: conflictMode,
                             overwriteAll: &overwriteAll,
                             ignoreAll: &ignoreAll,
-                            conflictDirection: conflictDirection
+                            conflictDirection: conflictDirection,
+                            repoPath: repoPath
                         )
                         guard shouldOverwrite else { return }
                         try fm.removeItem(atPath: destinationPath)
@@ -534,7 +542,8 @@ extension ThreadManager {
                             conflictMode: conflictMode,
                             overwriteAll: &overwriteAll,
                             ignoreAll: &ignoreAll,
-                            conflictDirection: conflictDirection
+                            conflictDirection: conflictDirection,
+                            repoPath: repoPath
                         )
                         guard shouldOverwrite else { return }
                         try fm.removeItem(atPath: destinationPath)
@@ -558,7 +567,8 @@ extension ThreadManager {
         conflictMode: LocalSyncConflictMode,
         overwriteAll: inout Bool,
         ignoreAll: inout Bool,
-        conflictDirection: LocalSyncConflictDirection
+        conflictDirection: LocalSyncConflictDirection,
+        repoPath: String
     ) async throws -> Bool {
         let components = relativeDirectoryPath.split(separator: "/").map(String.init)
         guard !components.isEmpty else { return true }
@@ -576,7 +586,8 @@ extension ThreadManager {
                 conflictMode: conflictMode,
                 overwriteAll: &overwriteAll,
                 ignoreAll: &ignoreAll,
-                conflictDirection: conflictDirection
+                conflictDirection: conflictDirection,
+                repoPath: repoPath
             )
             guard ready else { return false }
         }
@@ -590,7 +601,8 @@ extension ThreadManager {
         conflictMode: LocalSyncConflictMode,
         overwriteAll: inout Bool,
         ignoreAll: inout Bool,
-        conflictDirection: LocalSyncConflictDirection
+        conflictDirection: LocalSyncConflictDirection,
+        repoPath: String
     ) async throws -> Bool {
         let fm = FileManager.default
         if let existingKind = localSyncItemKind(atPath: destinationPath) {
@@ -608,7 +620,8 @@ extension ThreadManager {
                     conflictMode: conflictMode,
                     overwriteAll: &overwriteAll,
                     ignoreAll: &ignoreAll,
-                    conflictDirection: conflictDirection
+                    conflictDirection: conflictDirection,
+                    repoPath: repoPath
                 )
                 guard shouldOverwrite else { return false }
                 try fm.removeItem(atPath: destinationPath)
@@ -748,6 +761,68 @@ extension ThreadManager {
         return (worktreePath as NSString).appendingPathComponent(path)
     }
 
+    // MARK: - Merge Tool
+
+    /// Attempts to resolve a file conflict by launching opendiff (FileMerge).
+    /// Other merge tools are not supported because they require git's backend-specific
+    /// launch logic which we can't replicate outside a real git merge context.
+    @concurrent private func openMergeToolForConflict(
+        sourcePath: String,
+        destinationPath: String,
+        relativePath: String,
+        repoPath: String
+    ) async -> Bool {
+        guard localSyncIsTextFile(atPath: sourcePath),
+              localSyncIsTextFile(atPath: destinationPath) else {
+            return false
+        }
+
+        // Create temp copies for LOCAL / BASE / REMOTE / MERGED
+        let tempDir = (NSTemporaryDirectory() as NSString).appendingPathComponent("magent-merge-\(UUID().uuidString)")
+        let fm = FileManager.default
+        do {
+            try fm.createDirectory(atPath: tempDir, withIntermediateDirectories: true)
+        } catch {
+            return false
+        }
+        defer { try? fm.removeItem(atPath: tempDir) }
+
+        let localFile = (tempDir as NSString).appendingPathComponent("LOCAL")
+        let baseFile = (tempDir as NSString).appendingPathComponent("BASE")
+        let remoteFile = (tempDir as NSString).appendingPathComponent("REMOTE")
+        let mergedFile = (tempDir as NSString).appendingPathComponent("MERGED")
+
+        do {
+            try fm.copyItem(atPath: destinationPath, toPath: localFile)
+            try Data().write(to: URL(fileURLWithPath: baseFile))
+            try fm.copyItem(atPath: sourcePath, toPath: remoteFile)
+            try fm.copyItem(atPath: destinationPath, toPath: mergedFile)
+        } catch {
+            return false
+        }
+
+        let mergeCommand = "opendiff \(shellEscaped(localFile)) \(shellEscaped(remoteFile)) -ancestor \(shellEscaped(baseFile)) -merge \(shellEscaped(mergedFile))"
+
+        let toolRunResult = await ShellExecutor.execute(mergeCommand)
+        guard toolRunResult.exitCode == 0 else { return false }
+
+        // Tool exited successfully — apply the MERGED result to the destination.
+        // We trust exit 0 as resolution even if the user chose to keep the local
+        // version unchanged (a valid "keep mine" resolution).
+        guard fm.fileExists(atPath: mergedFile) else { return false }
+        do {
+            let mergedData = try Data(contentsOf: URL(fileURLWithPath: mergedFile))
+            try mergedData.write(to: URL(fileURLWithPath: destinationPath), options: .atomic)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    nonisolated private func shellEscaped(_ path: String) -> String {
+        "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     // MARK: - Conflict Resolution
 
     @concurrent private func shouldOverwriteLocalSyncConflict(
@@ -755,7 +830,8 @@ extension ThreadManager {
         conflictMode: LocalSyncConflictMode,
         overwriteAll: inout Bool,
         ignoreAll: inout Bool,
-        conflictDirection: LocalSyncConflictDirection
+        conflictDirection: LocalSyncConflictDirection,
+        repoPath: String
     ) async throws -> Bool {
         switch conflictMode {
         case .overwrite:
@@ -765,20 +841,36 @@ extension ThreadManager {
         case .prompt:
             if overwriteAll { return true }
             if ignoreAll { return false }
-            let choice = await presentLocalSyncConflictAlert(conflict, direction: conflictDirection)
-            switch choice {
-            case .overwrite:
-                return true
-            case .overwriteAll:
-                overwriteAll = true
-                return true
-            case .skip:
-                return false
-            case .skipAll:
-                ignoreAll = true
-                return false
-            case .cancel:
-                throw ThreadManagerError.archiveCancelled
+            while true {
+                let choice = await presentLocalSyncConflictAlert(
+                    conflict,
+                    direction: conflictDirection,
+                    repoPath: repoPath
+                )
+                switch choice {
+                case .resolve:
+                    let resolved = await openMergeToolForConflict(
+                        sourcePath: conflict.sourcePath,
+                        destinationPath: conflict.destinationPath,
+                        relativePath: conflict.relativePath,
+                        repoPath: repoPath
+                    )
+                    if resolved { return false }
+                    // Merge tool failed or user quit — re-present the alert
+                    continue
+                case .overwrite:
+                    return true
+                case .overwriteAll:
+                    overwriteAll = true
+                    return true
+                case .skip:
+                    return false
+                case .skipAll:
+                    ignoreAll = true
+                    return false
+                case .cancel:
+                    throw ThreadManagerError.archiveCancelled
+                }
             }
         }
     }
@@ -786,11 +878,14 @@ extension ThreadManager {
     @MainActor
     private func presentLocalSyncConflictAlert(
         _ conflict: LocalSyncConflict,
-        direction: LocalSyncConflictDirection
+        direction: LocalSyncConflictDirection,
+        repoPath: String
     ) -> LocalSyncConflictChoice {
-        let canShowDiff = conflict.kind == .fileDifferent
+        let isTextConflict = conflict.kind == .fileDifferent
             && localSyncIsTextFile(atPath: conflict.sourcePath)
             && localSyncIsTextFile(atPath: conflict.destinationPath)
+        let canShowDiff = isTextConflict
+        let canResolve = isTextConflict && hasMergeTool(repoPath: repoPath)
 
         while true {
             let alert = NSAlert()
@@ -828,6 +923,11 @@ extension ThreadManager {
             let optionHint = "\n\nHold Option for \"Override All\" or \"Ignore All\"."
             alert.informativeText += optionHint
 
+            // Button order: [Resolve (primary)], Override, Ignore, [Show Diff], Cancel
+            // "Resolve" is the primary action when a merge tool is available.
+            if canResolve {
+                alert.addButton(withTitle: "Resolve in Merge Tool")
+            }
             let overrideButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictOverride))
             let ignoreButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictIgnore))
             if canShowDiff {
@@ -865,19 +965,43 @@ extension ThreadManager {
 
             let useAllChoice = optionHeld || (NSApp.currentEvent?.modifierFlags.contains(.option) == true)
 
-            // Button order: Override (first), Ignore (second), [Show Diff (third)], Cancel (third or fourth)
+            // Map response to button index, accounting for optional Resolve button
+            let buttonIndex: Int
             switch response {
-            case .alertFirstButtonReturn:
+            case .alertFirstButtonReturn: buttonIndex = 0
+            case .alertSecondButtonReturn: buttonIndex = 1
+            case .alertThirdButtonReturn: buttonIndex = 2
+            case NSApplication.ModalResponse(rawValue: 1003): buttonIndex = 3
+            case NSApplication.ModalResponse(rawValue: 1004): buttonIndex = 4
+            default: return .cancel
+            }
+
+            // Decode which logical button was pressed
+            var idx = buttonIndex
+            if canResolve {
+                if idx == 0 { return .resolve }
+                idx -= 1
+            }
+            // idx 0 = Override, 1 = Ignore, 2 = Show Diff (if present), last = Cancel
+            switch idx {
+            case 0:
                 return useAllChoice ? .overwriteAll : .overwrite
-            case .alertSecondButtonReturn:
+            case 1:
                 return useAllChoice ? .skipAll : .skip
-            case .alertThirdButtonReturn where canShowDiff:
+            case 2 where canShowDiff:
                 presentLocalSyncDiffPanel(conflict, direction: direction)
                 continue // re-present the conflict alert after closing diff
             default:
                 return .cancel
             }
         }
+    }
+
+    /// Checks whether opendiff (FileMerge) is available as a merge tool.
+    /// Other merge tools are not supported — they require git's backend-specific launch logic.
+    nonisolated private func hasMergeTool(repoPath: String) -> Bool {
+        // Check if opendiff is available on the system (ships with Xcode command line tools)
+        return FileManager.default.fileExists(atPath: "/usr/bin/opendiff")
     }
 
     // MARK: - Diff
@@ -1023,7 +1147,7 @@ extension ThreadManager {
     }
 
     /// Returns `true` if the file at the given path appears to be a text file (not binary).
-    private func localSyncIsTextFile(atPath path: String) -> Bool {
+    nonisolated private func localSyncIsTextFile(atPath path: String) -> Bool {
         guard let handle = FileHandle(forReadingAtPath: path) else { return false }
         defer { handle.closeFile() }
         // Check first 8 KB for null bytes — a common binary indicator.

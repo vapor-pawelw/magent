@@ -7,7 +7,7 @@
 - Thread-focused preferences now live in `Settings > Threads`.
 - `General` currently owns update controls, archive defaults, the keyboard shortcuts reference card, and the environment-variable reference used by startup injection settings.
 - `Terminal` owns app/terminal light-dark appearance, the "Don't override agent color theme" toggle, Ghostty mouse-wheel override behavior, and terminal overlay visibility toggles.
-- `Threads` owns thread naming defaults, thread sections, recently archived thread restore history, startup injection fields, the review prompt, and sidebar display options (narrow threads, PR/Jira status badge toggles, busy/idle duration toggle).
+- `Threads` owns thread naming defaults, thread sections, recently archived thread restore history, startup injection fields, the review prompt, sidebar display options (narrow threads, PR/Jira status badge toggles, busy/idle duration toggle), and session management (idle session eviction limit).
 - Section color editing now reuses a single system color picker per settings screen, so switching to another section keeps the earlier section's custom dot color intact instead of resetting it.
 - Debug-only features may still appear in Settings during local development, but they should be clearly annotated with `Debug builds only` and fully hidden from release builds.
 - A dedicated `Debug` sidebar category exists in debug builds only (`#if DEBUG`). It currently exposes "Reset Onboarding State" (clears `isConfigured` and offers to relaunch) and "Relaunch App". Add new developer utilities here rather than sprinkling ad-hoc debug actions into other panes.

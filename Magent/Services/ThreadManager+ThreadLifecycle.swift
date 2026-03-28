@@ -515,11 +515,19 @@ extension ThreadManager {
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
+    /// - Parameters:
+    ///   - awaitLocalSync: When `true`, local-file sync runs eagerly (off the main actor
+    ///     but awaited) so the result/warning can be returned to the caller. When `false`
+    ///     and `force` is `true`, the sync is deferred to a fire-and-forget background
+    ///     task and the method returns immediately after UI teardown. IPC callers pass
+    ///     `true` so the CLI can report sync warnings; UI callers leave it `false` for
+    ///     snappy interaction.
     func archiveThread(
         _ thread: MagentThread,
         promptForLocalSyncConflicts: Bool = false,
         force: Bool = false,
-        syncLocalPathsBackToRepo: Bool? = nil
+        syncLocalPathsBackToRepo: Bool? = nil,
+        awaitLocalSync: Bool = false
     ) async throws -> String? {
         guard !thread.isMain else {
             throw ThreadManagerError.cannotDeleteMainThread
@@ -536,12 +544,23 @@ extension ThreadManager {
         var archiveWarning: String?
         let settings = persistence.loadSettings()
         let shouldSyncLocalPathsBackToRepo = syncLocalPathsBackToRepo ?? settings.syncLocalPathsOnArchive
-        if shouldSyncLocalPathsBackToRepo, let project = settings.projects.first(where: { $0.id == thread.projectId }) {
-            do {
-                let syncPaths = effectiveLocalSyncPaths(for: thread, project: project)
-                let (syncTargetPath, _) = resolveBaseBranchSyncTarget(for: thread, project: project)
-                let destOverride = syncTargetPath != project.repoPath ? syncTargetPath : nil
-                if promptForLocalSyncConflicts {
+
+        // ── Pre-archive sync (blocking paths only). ────────────────────────
+        // Interactive conflict prompting and force:false both require the sync to
+        // complete before the archive proceeds — the user might cancel, or the caller
+        // expects a failure to abort the archive.
+        // force:true + awaitLocalSync:true also syncs eagerly so the warning can be
+        // returned (used by the IPC/CLI path).
+        let shouldSyncEagerly = promptForLocalSyncConflicts || !force || awaitLocalSync
+        if shouldSyncLocalPathsBackToRepo, shouldSyncEagerly,
+           let project = settings.projects.first(where: { $0.id == thread.projectId }) {
+            let syncPaths = effectiveLocalSyncPaths(for: thread, project: project)
+            // Resolve the sync destination: base-branch sibling worktree if available,
+            // otherwise the main repo path.
+            let (syncTargetPath, _) = resolveBaseBranchSyncTarget(for: thread, project: project)
+            let destOverride = syncTargetPath != project.repoPath ? syncTargetPath : nil
+            if promptForLocalSyncConflicts {
+                do {
                     try await syncConfiguredLocalPathsFromWorktree(
                         project: project,
                         worktreePath: thread.worktreePath,
@@ -549,38 +568,49 @@ extension ThreadManager {
                         promptForConflicts: true,
                         destinationRootOverride: destOverride
                     )
-                } else {
-                    let destinationPath = syncTargetPath
-                    let worktreePath = thread.worktreePath
-                    try await Task.detached(priority: .userInitiated) {
-                        try await BackgroundLocalSyncWorker.syncConfiguredLocalPathsFromWorktree(
-                            projectRepoPath: destinationPath,
-                            worktreePath: worktreePath,
-                            syncPaths: syncPaths
-                        )
-                    }.value
+                } catch ThreadManagerError.archiveCancelled {
+                    throw ThreadManagerError.archiveCancelled
+                } catch ThreadManagerError.localFileSyncFailed(let message) {
+                    guard force else {
+                        throw ThreadManagerError.localFileSyncFailed(message)
+                    }
+                    archiveWarning = "Archived without completing local sync: \(message)"
                 }
-            } catch ThreadManagerError.archiveCancelled {
-                throw ThreadManagerError.archiveCancelled
-            } catch ThreadManagerError.localFileSyncFailed(let message) {
-                guard force else {
-                    throw ThreadManagerError.localFileSyncFailed(message)
+            } else {
+                // Non-interactive: @concurrent runs off the main actor so the UI stays responsive.
+                do {
+                    try await Self.runLocalSync(
+                        projectRepoPath: syncTargetPath,
+                        worktreePath: thread.worktreePath,
+                        syncPaths: syncPaths
+                    )
+                } catch {
+                    guard force else {
+                        throw ThreadManagerError.localFileSyncFailed(error.localizedDescription)
+                    }
+                    archiveWarning = "Archived without completing local sync: \(error.localizedDescription)"
                 }
-                archiveWarning = "Archived without completing local sync: \(message)"
             }
         }
 
+        // Resolve deferred sync state while the thread is still in `threads` —
+        // resolveBaseBranchSyncTarget reads the active thread list.
+        let deferredSyncPaths: [String]?
+        let deferredSyncDestination: String?
+        if !shouldSyncEagerly, shouldSyncLocalPathsBackToRepo,
+           let project = settings.projects.first(where: { $0.id == thread.projectId }) {
+            deferredSyncPaths = effectiveLocalSyncPaths(for: thread, project: project)
+            let (syncTargetPath, _) = resolveBaseBranchSyncTarget(for: thread, project: project)
+            deferredSyncDestination = syncTargetPath
+        } else {
+            deferredSyncPaths = nil
+            deferredSyncDestination = nil
+        }
+
+        // ── Persist archive state before touching in-memory state. ─────────
+        // This ensures restoreArchivedThread can always find the record on disk,
+        // and saveActiveThreads (which merges isArchived records) cannot drop it.
         let archivedAt = Date()
-
-        // Prompt-injection bookkeeping is global to ThreadManager rather than persisted on
-        // the thread, so archive/delete must clear it explicitly when a thread disappears.
-        clearTrackedInitialPromptInjection(forSessions: thread.tmuxSessionNames)
-
-        // Remove from active list
-        threads.removeAll { $0.id == thread.id }
-
-        // Run persistence I/O off the main actor so the sidebar stays responsive while the
-        // archiving overlay is visible.
         try await persistArchiveState(
             threadId: thread.id,
             projectId: thread.projectId,
@@ -588,12 +618,19 @@ extension ThreadManager {
             archivedAt: archivedAt
         )
 
-        // Safe to call directly — archiveThread is @MainActor (implicit via build settings),
-        // so execution resumes on the main actor after the @concurrent persistArchiveState await.
+        // ── UI teardown — all synchronous on main actor, no awaits. ────────
+
+        // Prompt-injection bookkeeping is global to ThreadManager rather than persisted on
+        // the thread, so archive/delete must clear it explicitly when a thread disappears.
+        clearTrackedInitialPromptInjection(forSessions: thread.tmuxSessionNames)
+
         // Evict any cached ghostty terminal views for this thread's sessions BEFORE the
         // cleanup task kills the tmux sessions. Ghostty calls _exit() when the PTY fd closes
         // on a live surface, which silently terminates the entire process.
         ReusableTerminalViewCache.shared.evictSessions(thread.tmuxSessionNames)
+
+        // Remove from active list
+        threads.removeAll { $0.id == thread.id }
 
         NotificationCenter.default.post(name: .magentArchivedThreadsDidChange, object: nil)
         delegate?.threadManager(self, didArchiveThread: thread)
@@ -601,47 +638,32 @@ extension ThreadManager {
         promptRenameResultCache.removeValue(forKey: thread.id)
         cleanupPendingPromptRecoveries(for: thread.id)
 
-        // Re-load settings after the await — the original `settings` was captured before
-        // persistArchiveState and may be stale.
-        let freshSettings = persistence.loadSettings()
-
-        // Show the banner immediately — the archive is logically complete from the user's perspective.
-        let projectName = freshSettings.projects.first(where: { $0.id == thread.projectId })?.name ?? "Unknown Project"
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "Unknown Project"
         showArchivedThreadBanner(for: thread, projectName: projectName, warning: archiveWarning)
 
-        // Run the slow cleanup (tmux kills, worktree removal, symlink/stale-session sweeps) in a
-        // detached task so it does NOT inherit the caller's UI actor/executor context.
-        // Without Task.detached, a Task started from AppKit-driven archive flows can keep
-        // synchronous code between awaits (file-system walks, persistence I/O, task-group
-        // coordination) on the UI path and make the app feel hung.
-        // Capture everything needed so the detached task never hops back to the main actor.
-        let capturedProject = freshSettings.projects.first(where: { $0.id == thread.projectId })
+        // ── Fire-and-forget cleanup (local sync for deferred path, tmux     ──
+        // ── kills, worktree removal, symlink/stale-session sweeps).         ──
+        let capturedProject = settings.projects.first(where: { $0.id == thread.projectId })
         let capturedTmux = tmux
         let capturedGit = git
-        let capturedSettings = freshSettings
-        // Snapshot thread/session state before the detached task. These can go stale if new
-        // threads are created between capture and execution, but the window is sub-millisecond
-        // and the previous non-detached version had the same race (threads could change between
-        // awaits). Acceptable trade-off to keep cleanup fully off the main thread.
+        let capturedSettings = settings
         let capturedActiveWorktreeNames = worktreeActiveNames(for: thread.projectId)
         let capturedReferencedSessions = referencedMagentSessionNames()
-        Task.detached {
-            // Kill sessions concurrently instead of one-by-one.
-            await withTaskGroup(of: Void.self) { group in
-                for sessionName in thread.tmuxSessionNames {
-                    group.addTask { try? await capturedTmux.killSession(name: sessionName) }
-                }
-            }
-            if let project = capturedProject {
-                try? await capturedGit.removeWorktree(repoPath: project.repoPath, worktreePath: thread.worktreePath)
-                BackgroundWorktreeCachePruner.prune(
-                    worktreesBasePath: project.resolvedWorktreesBasePath(),
-                    activeNames: capturedActiveWorktreeNames
-                )
-            }
-            SymlinkManager.cleanupAll(settings: capturedSettings)
-            await Self.cleanupStaleSessions(
+        let capturedThreadName = thread.name
+        let capturedTmuxSessionNames = thread.tmuxSessionNames
+        let capturedWorktreePath = thread.worktreePath
+        Task {
+            await Self.performArchiveCleanup(
+                deferredSyncDestination: deferredSyncDestination,
+                deferredSyncPaths: deferredSyncPaths,
+                project: capturedProject,
+                worktreePath: capturedWorktreePath,
+                threadName: capturedThreadName,
+                tmuxSessionNames: capturedTmuxSessionNames,
                 tmux: capturedTmux,
+                git: capturedGit,
+                settings: capturedSettings,
+                activeWorktreeNames: capturedActiveWorktreeNames,
                 referencedSessions: capturedReferencedSessions
             )
         }
@@ -923,7 +945,7 @@ extension ThreadManager {
     }
 
     /// Clears transient session state from a thread. Nonisolated so it can be called
-    /// from both main-actor and @concurrent contexts (e.g. `persistArchiveState`).
+    /// from both main-actor and nonisolated contexts.
     nonisolated private static func clearPersistedSessionState(for thread: inout MagentThread) {
         thread.tmuxSessionNames = []
         thread.agentTmuxSessions = []
@@ -945,8 +967,8 @@ extension ThreadManager {
         }
     }
 
-    /// Writes archive state to persistence off the main actor. PersistenceService is
-    /// non-isolated (lives in PersistenceCore) so all calls here are safe.
+    /// Writes archive state to persistence off the main actor so the sidebar stays
+    /// responsive. PersistenceService is non-isolated so all calls here are safe.
     @concurrent private func persistArchiveState(
         threadId: UUID,
         projectId: UUID,
@@ -966,6 +988,75 @@ extension ThreadManager {
             Self.clearPersistedSessionState(for: &allThreads[i])
         }
         try persistence.saveThreads(allThreads)
+    }
+
+    // MARK: - Archive Helpers (@concurrent)
+
+    /// Runs local-file sync off the main actor. Structured replacement for `Task.detached { ... }.value`.
+    @concurrent private static func runLocalSync(
+        projectRepoPath: String,
+        worktreePath: String,
+        syncPaths: [String]
+    ) async throws {
+        try await BackgroundLocalSyncWorker.syncConfiguredLocalPathsFromWorktree(
+            projectRepoPath: projectRepoPath,
+            worktreePath: worktreePath,
+            syncPaths: syncPaths
+        )
+    }
+
+    /// Performs post-archive cleanup entirely off the main actor: deferred local sync,
+    /// tmux session kills, worktree removal, symlink/stale-session sweeps.
+    @concurrent private static func performArchiveCleanup(
+        deferredSyncDestination: String?,
+        deferredSyncPaths: [String]?,
+        project: Project?,
+        worktreePath: String,
+        threadName: String,
+        tmuxSessionNames: [String],
+        tmux: TmuxService,
+        git: GitService,
+        settings: AppSettings,
+        activeWorktreeNames: Set<String>,
+        referencedSessions: Set<String>
+    ) async {
+        // Deferred local sync for fire-and-forget path — best-effort, warning on failure.
+        if let syncPaths = deferredSyncPaths, !syncPaths.isEmpty,
+           let deferredSyncDestination {
+            do {
+                try await BackgroundLocalSyncWorker.syncConfiguredLocalPathsFromWorktree(
+                    projectRepoPath: deferredSyncDestination,
+                    worktreePath: worktreePath,
+                    syncPaths: syncPaths
+                )
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: "Thread '\(threadName)': local sync failed after archive — \(error.localizedDescription)",
+                        style: .warning,
+                        duration: archivedThreadBannerDuration
+                    )
+                }
+            }
+        }
+        // Kill sessions concurrently.
+        await withTaskGroup(of: Void.self) { group in
+            for sessionName in tmuxSessionNames {
+                group.addTask { try? await tmux.killSession(name: sessionName) }
+            }
+        }
+        if let project {
+            try? await git.removeWorktree(repoPath: project.repoPath, worktreePath: worktreePath)
+            BackgroundWorktreeCachePruner.prune(
+                worktreesBasePath: project.resolvedWorktreesBasePath(),
+                activeNames: activeWorktreeNames
+            )
+        }
+        SymlinkManager.cleanupAll(settings: settings)
+        await cleanupStaleSessions(
+            tmux: tmux,
+            referencedSessions: referencedSessions
+        )
     }
 
     private func archivedThreadBannerAttributedMessage(

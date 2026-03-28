@@ -665,7 +665,8 @@ final class IPCCommandHandler {
             let warning = try await threadManager.archiveThread(
                 thread,
                 force: request.force ?? false,
-                syncLocalPathsBackToRepo: syncOverride
+                syncLocalPathsBackToRepo: syncOverride,
+                awaitLocalSync: true
             )
             return .success(id: request.id, warning: warning)
         } catch {

@@ -91,6 +91,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var preserveAgentColorTheme: Bool
     public var rememberLastTypeSelection: Bool
     public var switchToNewlyCreatedThread: Bool
+    public var maxIdleSessions: Int?
     public var keyBindings: KeyBindingSettings
 
     public init(
@@ -142,6 +143,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         preserveAgentColorTheme: Bool = false,
         rememberLastTypeSelection: Bool = true,
         switchToNewlyCreatedThread: Bool = true,
+        maxIdleSessions: Int? = nil,
         keyBindings: KeyBindingSettings = KeyBindingSettings()
     ) {
         self.projects = projects
@@ -192,6 +194,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.preserveAgentColorTheme = preserveAgentColorTheme
         self.rememberLastTypeSelection = rememberLastTypeSelection
         self.switchToNewlyCreatedThread = switchToNewlyCreatedThread
+        self.maxIdleSessions = maxIdleSessions
         self.keyBindings = keyBindings
     }
 
@@ -248,6 +251,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         preserveAgentColorTheme = try container.decodeIfPresent(Bool.self, forKey: .preserveAgentColorTheme) ?? false
         rememberLastTypeSelection = try container.decodeIfPresent(Bool.self, forKey: .rememberLastTypeSelection) ?? true
         switchToNewlyCreatedThread = try container.decodeIfPresent(Bool.self, forKey: .switchToNewlyCreatedThread) ?? true
+        maxIdleSessions = try container.decodeIfPresent(Int.self, forKey: .maxIdleSessions)
         keyBindings = try container.decodeIfPresent(KeyBindingSettings.self, forKey: .keyBindings) ?? KeyBindingSettings()
     }
 
@@ -302,6 +306,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(preserveAgentColorTheme, forKey: .preserveAgentColorTheme)
         try container.encode(rememberLastTypeSelection, forKey: .rememberLastTypeSelection)
         try container.encode(switchToNewlyCreatedThread, forKey: .switchToNewlyCreatedThread)
+        try container.encodeIfPresent(maxIdleSessions, forKey: .maxIdleSessions)
         try container.encode(keyBindings, forKey: .keyBindings)
     }
 
@@ -467,6 +472,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case preserveAgentColorTheme
         case rememberLastTypeSelection
         case switchToNewlyCreatedThread
+        case maxIdleSessions
         case keyBindings
 
         // Legacy keys kept for migration.

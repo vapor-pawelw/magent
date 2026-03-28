@@ -4,11 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Sessions
+- New "Limit concurrent idle sessions" setting (Settings > Threads > Session Management) automatically kills tmux sessions that haven't been viewed in over an hour when idle count exceeds the configured limit. Sessions are transparently recreated when you revisit the thread. Defaults to unlimited.
+
+### Performance
+- Session monitor polling is now split into fast (5s) and slow (~1 min) cadences — agent completions, busy state, and dead session recovery stay responsive while heavier checks (worktree scans, zombie detection, idle eviction) run less frequently.
+
+### Terminal
+- Fixed unwanted slow scroll animation when switching to an agent tab — the CAMetalLayer-backed terminal surface could trigger implicit Core Animation transitions on visibility toggle, causing content to visually slide down from the top.
+
 ### Agents
+- Fixed agent completion notifications sometimes not appearing — bell events could be lost during the read-then-truncate of the event log, and accumulated events were wiped on app relaunch before they could be consumed.
 - Codex sessions inside tmux now keep their full color palette more reliably instead of appearing bland when Magent inherits color-disabling shell environment from the parent terminal.
 - Fixed agent session resume when a tmux session is killed — previously always launched a fresh agent instead of resuming the existing conversation via `--resume`.
 - Restoring an archived thread now resumes the agent conversation instead of starting fresh — previously, conversation history was lost because Claude Code doesn't always write a `sessions-index.json` file.
-
 ### Tabs
 - Switching threads now restores the last-selected tab, including web and draft tabs — previously only terminal tabs were remembered.
 
@@ -33,7 +42,10 @@ All notable changes to this project will be documented in this file.
 - Fixed sync target resolution falling back to the project root when the base branch was stored with an `origin/` prefix (e.g. from auto-detection) — the prefix is now stripped so it correctly matches the sibling worktree's local branch.
 - Sync menu items now show explicit worktree names (e.g. "feature-login → primeape") instead of generic "Project → Worktree" labels.
 - Hold Option when clicking sync to force syncing with the main repo regardless of base branch.
+- Text file conflicts during interactive sync (resync and archive) now offer a "Resolve in Merge Tool" button that opens FileMerge (opendiff) for side-by-side resolution. If the tool resolves the conflict the alert is dismissed; otherwise it re-appears with the existing Override/Ignore options.
 
+### Thread
+- Archiving a thread no longer blocks the UI — the thread disappears from the sidebar immediately while local sync, persistence, and cleanup run in the background.
 ### Sidebar
 - New threads created from a pinned thread now land at the top of the visible group (right below pinned threads) instead of at the bottom of the section.
 - Unpinning a thread now places it at the top of the visible group instead of at the bottom.
