@@ -604,13 +604,19 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         syncRefreshButton.toolTip = "Refresh PR and Jira statuses"
         syncRefreshButton.translatesAutoresizingMaskIntoConstraints = false
 
-        let rightStack = NSStackView(views: [sessionCountButton, rateLimitLabel, syncStatusLabel, syncRefreshButton])
+        let leftStack = NSStackView(views: [sessionCountButton, threadStatusStack])
+        leftStack.orientation = .horizontal
+        leftStack.alignment = .centerY
+        leftStack.spacing = 12
+        leftStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let rightStack = NSStackView(views: [rateLimitLabel, syncStatusLabel, syncRefreshButton])
         rightStack.orientation = .horizontal
         rightStack.alignment = .centerY
         rightStack.spacing = 12
         rightStack.translatesAutoresizingMaskIntoConstraints = false
 
-        addSubview(threadStatusStack)
+        addSubview(leftStack)
         addSubview(rightStack)
 
         NSLayoutConstraint.activate([
@@ -618,9 +624,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             separator.leadingAnchor.constraint(equalTo: leadingAnchor),
             separator.trailingAnchor.constraint(equalTo: trailingAnchor),
 
-            threadStatusStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.horizontalPadding),
-            threadStatusStack.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -2),
-            threadStatusStack.trailingAnchor.constraint(lessThanOrEqualTo: rightStack.leadingAnchor, constant: -12),
+            leftStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.horizontalPadding),
+            leftStack.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -2),
+            leftStack.trailingAnchor.constraint(lessThanOrEqualTo: rightStack.leadingAnchor, constant: -12),
 
             rightStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.horizontalPadding),
             rightStack.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -2),
@@ -916,14 +922,14 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         )?.withSymbolConfiguration(symbolConfig)
         sessionCountButton.imagePosition = .imageLeading
         sessionCountButton.imageHugsTitle = true
-        sessionCountButton.contentTintColor = .tertiaryLabelColor
+        sessionCountButton.contentTintColor = .secondaryLabelColor
 
         let displayText = live < total ? "\(live)/\(total)" : "\(total)"
         sessionCountButton.attributedTitle = NSAttributedString(
             string: displayText,
             attributes: [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: NSColor.tertiaryLabelColor,
+                .foregroundColor: NSColor.secondaryLabelColor,
             ]
         )
         sessionCountButton.setAccessibilityLabel("\(live) live, \(total) total sessions")
