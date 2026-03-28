@@ -1016,6 +1016,30 @@ extension ThreadManager {
                 return id
             }
         }
+
+        // Fallback: sessions-index.json may not exist (Claude Code doesn't always create it).
+        // Scan for .jsonl session files directly and pick the most recently modified one.
+        let fm = FileManager.default
+        let candidateDirs = candidatePaths.map { (path: String) -> String in
+            (path as NSString).deletingLastPathComponent
+        }
+        for dir in candidateDirs {
+            guard let contents = try? fm.contentsOfDirectory(atPath: dir) else { continue }
+            let jsonlFiles = contents
+                .filter { $0.hasSuffix(".jsonl") }
+                .compactMap { filename -> (sessionId: String, mtime: Date)? in
+                    let sessionId = (filename as NSString).deletingPathExtension
+                    guard isUUID(sessionId) else { return nil }
+                    let fullPath = (dir as NSString).appendingPathComponent(filename)
+                    guard let attrs = try? fm.attributesOfItem(atPath: fullPath),
+                          let mtime = attrs[.modificationDate] as? Date else { return nil }
+                    return (sessionId, mtime)
+                }
+                .sorted { $0.mtime > $1.mtime }
+            if let best = jsonlFiles.first {
+                return best.sessionId
+            }
+        }
         return nil
     }
 
