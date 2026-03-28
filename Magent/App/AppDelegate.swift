@@ -185,6 +185,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         )
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: String(localized: .AppStrings.appMenuSettings), action: #selector(openSettings(_:)), keyEquivalent: ",")
+        appMenu.addItem(withTitle: "Changelog…", action: #selector(openChangelog(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(
             withTitle: String(localized: .AppStrings.appMenuQuit(appDisplayName)),
@@ -291,6 +292,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     @objc private func openSettings(_ sender: Any?) {
         NotificationCenter.default.post(name: .magentOpenSettings, object: nil)
+    }
+
+    @objc private func openChangelog(_ sender: Any?) {
+        ChangelogWindowController.showChangelog()
     }
 
     func userNotificationCenter(

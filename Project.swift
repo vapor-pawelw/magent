@@ -46,6 +46,15 @@ let project = Project(
                 "Magent/Resources/**/*.xcstrings",
             ],
             entitlements: .file(path: "Magent/Magent.entitlements"),
+            scripts: [
+                .post(
+                    script: """
+                    "${SRCROOT}/scripts/embed-changelog.sh"
+                    """,
+                    name: "Embed Changelog",
+                    basedOnDependencyAnalysis: false
+                ),
+            ],
             dependencies: [
                 .external(name: "GhosttyBridge"),
                 .external(name: "MagentCore"),

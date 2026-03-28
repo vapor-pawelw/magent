@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Menu
+- New "Changelog…" menu item (mAgent > Changelog…) shows the bundled changelog with build number and commit hash.
+
+### Build
+- Build number is now incremental, derived from git commit count at compile time.
+
 ### Thread
 - Fixed false-positive "Base branch X no longer exists" banner when the base branch and project default are the same (e.g. `develop`), and fixed stale reset banners persisting across refreshes even after the missing branch became available again.
 
