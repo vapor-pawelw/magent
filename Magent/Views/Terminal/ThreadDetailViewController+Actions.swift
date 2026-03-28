@@ -228,14 +228,24 @@ extension ThreadDetailViewController {
         alert.addButton(withTitle: "Sync")
         alert.addButton(withTitle: "Cancel")
 
-        let directionPopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 280, height: 26), pullsDown: false)
+        let controlWidth: CGFloat = 280
+
+        let directionLabel = NSTextField(labelWithString: "Direction:")
+        directionLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        directionLabel.textColor = .secondaryLabelColor
+
+        let directionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         directionPopup.addItems(withTitles: [
             "Sync into this worktree",
             "Sync from this worktree"
         ])
         directionPopup.selectItem(at: ManualLocalSyncDirection.intoCurrentWorktree.rawValue)
 
-        let targetComboBox = NSComboBox(frame: NSRect(x: 0, y: 0, width: 280, height: 26))
+        let targetLabel = NSTextField(labelWithString: "Target Worktree:")
+        targetLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        targetLabel.textColor = .secondaryLabelColor
+
+        let targetComboBox = NSComboBox(frame: .zero)
         targetComboBox.isEditable = false
         targetComboBox.completes = true
         targetComboBox.numberOfVisibleItems = min(12, targets.count)
@@ -245,26 +255,28 @@ extension ThreadDetailViewController {
         let defaultIndex = targets.firstIndex(where: { $0.path == defaultPath }) ?? 0
         targetComboBox.selectItem(at: defaultIndex)
 
-        let directionRow = NSStackView(views: [
-            NSTextField(labelWithString: "Direction"),
-            directionPopup
-        ])
-        directionRow.orientation = .vertical
-        directionRow.alignment = .leading
-        directionRow.spacing = 4
-
-        let targetRow = NSStackView(views: [
-            NSTextField(labelWithString: "Target Worktree"),
-            targetComboBox
-        ])
-        targetRow.orientation = .vertical
-        targetRow.alignment = .leading
-        targetRow.spacing = 4
-
-        let accessoryStack = NSStackView(views: [directionRow, targetRow])
+        let accessoryStack = NSStackView()
         accessoryStack.orientation = .vertical
         accessoryStack.alignment = .leading
-        accessoryStack.spacing = 10
+        accessoryStack.spacing = 4
+        accessoryStack.translatesAutoresizingMaskIntoConstraints = false
+        accessoryStack.addArrangedSubview(directionLabel)
+        accessoryStack.addArrangedSubview(directionPopup)
+        accessoryStack.setCustomSpacing(12, after: directionPopup)
+        accessoryStack.addArrangedSubview(targetLabel)
+        accessoryStack.addArrangedSubview(targetComboBox)
+
+        NSLayoutConstraint.activate([
+            accessoryStack.widthAnchor.constraint(equalToConstant: controlWidth),
+            directionPopup.widthAnchor.constraint(equalTo: accessoryStack.widthAnchor),
+            targetComboBox.widthAnchor.constraint(equalTo: accessoryStack.widthAnchor),
+        ])
+
+        // Force layout so the alert gets the correct intrinsic size
+        accessoryStack.layoutSubtreeIfNeeded()
+        let fittingSize = accessoryStack.fittingSize
+        accessoryStack.setFrameSize(fittingSize)
+
         alert.accessoryView = accessoryStack
         alert.window.initialFirstResponder = targetComboBox
 
