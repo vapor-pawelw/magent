@@ -378,6 +378,7 @@ extension ThreadManager {
         threads[idx].busySessions.remove(sessionName)
         threads[idx].magentBusySessions.remove(sessionName)
         threads[idx].waitingForInputSessions.remove(sessionName)
+        threads[idx].hasUnsubmittedInputSessions.remove(sessionName)
         threads[idx].rateLimitedSessions.removeValue(forKey: sessionName)
         notifiedWaitingSessions.remove(sessionName)
         sessionLastVisitedAt.removeValue(forKey: sessionName)

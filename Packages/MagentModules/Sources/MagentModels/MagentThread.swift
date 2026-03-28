@@ -291,6 +291,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var magentBusySessions: Set<String> = []
     // Transient (not persisted) — tracks which agent sessions are waiting for user input
     public var waitingForInputSessions: Set<String> = []
+    // Transient (not persisted) — tracks agent sessions with unsubmitted typed input at the prompt
+    public var hasUnsubmittedInputSessions: Set<String> = []
 
     // MARK: - Busy state duration tracking (transient, debounced)
 
@@ -462,8 +464,12 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         !waitingForInputSessions.isEmpty
     }
 
+    public var hasUnsubmittedInput: Bool {
+        !hasUnsubmittedInputSessions.isEmpty
+    }
+
     public var showArchiveSuggestion: Bool {
-        return hasEverDoneWork && isFullyDelivered && !isDirty && !isAnyBusy && !hasWaitingForInput
+        return hasEverDoneWork && isFullyDelivered && !isDirty && !isAnyBusy && !hasWaitingForInput && !hasUnsubmittedInput
     }
 
     /// True only when every tab in the thread currently reports an active rate-limit message.

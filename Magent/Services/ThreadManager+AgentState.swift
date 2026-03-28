@@ -100,6 +100,7 @@ extension ThreadManager {
             }
             threads[index].busySessions.remove(session)
             threads[index].waitingForInputSessions.remove(session)
+            threads[index].hasUnsubmittedInputSessions.remove(session)
             notifiedWaitingSessions.remove(session)
 
             let isActiveThread = threads[index].id == activeThreadId
@@ -323,6 +324,21 @@ extension ThreadManager {
                         changed = true
                         busyChangedThreadIds.insert(threads[i].id)
                     }
+                    // When Codex is idle, check for unsubmitted typed input.
+                    if !isBusy {
+                        if await syncUnsubmittedInputState(threadId: threadId, sessionName: session, agentType: .codex) {
+                            changed = true
+                            busyChangedThreadIds.insert(threadId)
+                        }
+                    } else {
+                        // Agent is busy — clear any stale unsubmitted-input flag.
+                        if let ci = threads.firstIndex(where: { $0.id == threadId }),
+                           threads[ci].hasUnsubmittedInputSessions.contains(session) {
+                            threads[ci].hasUnsubmittedInputSessions.remove(session)
+                            changed = true
+                            busyChangedThreadIds.insert(threadId)
+                        }
+                    }
 
                 case .claude?:
                     // Claude: skip if a completion bell was received recently — the bell fires
@@ -345,6 +361,11 @@ extension ThreadManager {
                             changed = true
                             busyChangedThreadIds.insert(threads[i].id)
                         }
+                        if threads[i].hasUnsubmittedInputSessions.contains(session) {
+                            threads[i].hasUnsubmittedInputSessions.remove(session)
+                            changed = true
+                            busyChangedThreadIds.insert(threads[i].id)
+                        }
                     } else if let content, isAgentIdleAtPrompt(content) {
                         guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                         if threads[i].busySessions.contains(session) {
@@ -356,11 +377,22 @@ extension ThreadManager {
                             changed = true
                             rateLimitChangedThreadIds.insert(threadId)
                         }
+                        // Check for unsubmitted typed input at the idle prompt.
+                        if await syncUnsubmittedInputState(threadId: threadId, sessionName: session, agentType: .claude) {
+                            changed = true
+                            busyChangedThreadIds.insert(threadId)
+                        }
                     } else {
                         // Claude is running but not idle at prompt — treat as busy
                         guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                         if !threads[i].busySessions.contains(session) {
                             threads[i].busySessions.insert(session)
+                            changed = true
+                            busyChangedThreadIds.insert(threads[i].id)
+                        }
+                        // Clear unsubmitted-input flag — user submitted or agent took over.
+                        if threads[i].hasUnsubmittedInputSessions.contains(session) {
+                            threads[i].hasUnsubmittedInputSessions.remove(session)
                             changed = true
                             busyChangedThreadIds.insert(threads[i].id)
                         }
@@ -381,7 +413,7 @@ extension ThreadManager {
 
                 case .custom?, nil:
                     // No known agent detected — terminal session or agent has exited.
-                    // Clear any stale busy/waiting/rate-limit state.
+                    // Clear any stale busy/waiting/rate-limit/unsubmitted-input state.
                     guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                     if threads[i].busySessions.contains(session) {
                         threads[i].busySessions.remove(session)
@@ -391,6 +423,11 @@ extension ThreadManager {
                     if threads[i].waitingForInputSessions.contains(session) {
                         threads[i].waitingForInputSessions.remove(session)
                         notifiedWaitingSessions.remove(session)
+                        changed = true
+                        busyChangedThreadIds.insert(threads[i].id)
+                    }
+                    if threads[i].hasUnsubmittedInputSessions.contains(session) {
+                        threads[i].hasUnsubmittedInputSessions.remove(session)
                         changed = true
                         busyChangedThreadIds.insert(threads[i].id)
                     }
@@ -554,6 +591,90 @@ extension ThreadManager {
         }
     }
 
+    // MARK: - Unsubmitted Input Detection
+
+    /// Checks whether the agent prompt has user-typed (non-placeholder) text that
+    /// hasn't been submitted. Uses ANSI-aware pane capture to distinguish real
+    /// input from dim placeholder text.
+    /// Number of lines to capture for unsubmitted-input detection. Matches the
+    /// prompt-readiness capture depth so tall panes don't cause false negatives.
+    private static let unsubmittedInputCaptureLines = 120
+
+    /// Checks whether the agent prompt has user-typed (non-placeholder) text.
+    /// Uses a two-phase approach to avoid a full ANSI tmux capture on every tick:
+    /// 1. Quick check: if the already-cached plain-text capture shows the prompt
+    ///    line is bare (marker only, no trailing text), skip the ANSI capture.
+    /// 2. Full check: ANSI-aware capture to distinguish dim placeholder from real input.
+    private func checkForUnsubmittedInput(sessionName: String, agentType: AgentType) async -> Bool {
+        let marker: String
+        switch agentType {
+        case .claude: marker = "\u{276F}"  // ❯
+        case .codex:  marker = "\u{203A}"  // ›
+        case .custom: return false
+        }
+
+        // Phase 1: quick pre-filter using the already-cached plain-text capture.
+        // If the prompt line has no text after the marker, there's nothing to protect.
+        if let plainContent = await tmux.cachedCapturePane(
+            sessionName: sessionName,
+            lastLines: Self.unsubmittedInputCaptureLines
+        ) {
+            let plainLines = plainContent
+                .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            if let lastPrompt = plainLines.last(where: { $0.hasPrefix(marker) }) {
+                let afterMarker = lastPrompt.dropFirst(marker.count)
+                    .trimmingCharacters(in: .whitespaces)
+                if afterMarker.isEmpty {
+                    return false  // bare prompt — no input to protect
+                }
+            }
+        }
+
+        // Phase 2: ANSI-aware capture to distinguish placeholder from real input.
+        guard let ansiContent = await tmux.capturePaneWithEscapes(
+            sessionName: sessionName,
+            lastLines: Self.unsubmittedInputCaptureLines
+        ) else {
+            return false
+        }
+
+        let lines = ansiContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
+        guard let promptLine = lines.last(where: {
+            Self.stripAnsiEscapes($0).trimmingCharacters(in: .whitespaces).hasPrefix(marker)
+        }) else {
+            return false
+        }
+
+        // isPromptLineEmpty returns true when text after marker is absent or placeholder (dim).
+        // If it returns false, the user has typed real input.
+        return !Self.isPromptLineEmpty(promptLine, marker: marker)
+    }
+
+    /// Updates the `hasUnsubmittedInputSessions` set for a thread+session based on
+    /// ANSI-aware prompt inspection. Returns true if the set changed.
+    @discardableResult
+    private func syncUnsubmittedInputState(
+        threadId: UUID,
+        sessionName: String,
+        agentType: AgentType
+    ) async -> Bool {
+        let hasInput = await checkForUnsubmittedInput(sessionName: sessionName, agentType: agentType)
+        guard let i = threads.firstIndex(where: { $0.id == threadId }) else { return false }
+        if hasInput {
+            if !threads[i].hasUnsubmittedInputSessions.contains(sessionName) {
+                threads[i].hasUnsubmittedInputSessions.insert(sessionName)
+                return true
+            }
+        } else {
+            if threads[i].hasUnsubmittedInputSessions.contains(sessionName) {
+                threads[i].hasUnsubmittedInputSessions.remove(sessionName)
+                return true
+            }
+        }
+        return false
+    }
+
     // MARK: - Mark Completion / Waiting / Busy
 
     @MainActor
@@ -590,8 +711,9 @@ extension ThreadManager {
     func markSessionBusy(threadId: UUID, sessionName: String) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[index].agentTmuxSessions.contains(sessionName) else { return }
-        // Clear waiting state — user submitted a prompt
+        // Clear waiting/unsubmitted state — user submitted a prompt
         threads[index].waitingForInputSessions.remove(sessionName)
+        threads[index].hasUnsubmittedInputSessions.remove(sessionName)
         notifiedWaitingSessions.remove(sessionName)
         guard !threads[index].busySessions.contains(sessionName) else { return }
         threads[index].busySessions.insert(sessionName)

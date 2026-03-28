@@ -134,7 +134,7 @@ The response includes a `status` object with all UI-visible indicators:
 | `hasUnreadCompletion` | bool | Agent finished, not yet viewed (green dot) |
 | `isDirty` | bool | Uncommitted changes in worktree (orange dot) |
 | `isFullyDelivered` | bool | All commits merged to base branch |
-| `showArchiveSuggestion` | bool | Thread is fully delivered and idle |
+| `showArchiveSuggestion` | bool | Thread is fully delivered, idle, and has no unsubmitted input |
 | `isPinned` | bool | Thread is pinned to top |
 | `isSidebarHidden` | bool | Thread is hidden to the bottom of the list and shown dimmed |
 | `isArchived` | bool | Thread has been archived |

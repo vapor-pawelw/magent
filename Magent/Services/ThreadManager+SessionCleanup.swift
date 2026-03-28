@@ -18,7 +18,7 @@ extension ThreadManager {
     }
 
     /// Number of live sessions that are currently protected (busy, waiting, rate-limited,
-    /// magent-busy, shielded, pinned, or currently visible to the user).
+    /// magent-busy, shielded, pinned, has unsubmitted input, or currently visible to the user).
     /// Computed from the same live-session subset as `liveSessionCount` so that
     /// `live - protected` accurately reflects killable sessions.
     var protectedSessionCount: Int {
@@ -51,6 +51,7 @@ extension ThreadManager {
         return thread.busySessions.contains(sessionName)
             || thread.magentBusySessions.contains(sessionName)
             || thread.waitingForInputSessions.contains(sessionName)
+            || thread.hasUnsubmittedInputSessions.contains(sessionName)
             || thread.rateLimitedSessions[sessionName] != nil
     }
 
