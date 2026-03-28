@@ -48,35 +48,12 @@ final class ChangelogWindowController: NSWindowController {
         scrollView.documentView = textView
         contentView.addSubview(scrollView)
 
-        let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        let commitHash = Self.loadBundleFile("BUILD_COMMIT")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let buildInfo = Self.buildInfoString(buildNumber: buildNumber, commitHash: commitHash)
-
-        if let buildInfo {
-            let headerLabel = NSTextField(labelWithString: buildInfo)
-            headerLabel.translatesAutoresizingMaskIntoConstraints = false
-            headerLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-            headerLabel.textColor = .secondaryLabelColor
-            contentView.addSubview(headerLabel)
-
-            NSLayoutConstraint.activate([
-                headerLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
-                headerLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-                headerLabel.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -16),
-
-                scrollView.topAnchor.constraint(equalTo: headerLabel.bottomAnchor, constant: 8),
-                scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-                scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-                scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            ])
-        } else {
-            NSLayoutConstraint.activate([
-                scrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
-                scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-                scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-                scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            ])
-        }
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+        ])
 
         if let changelog = Self.loadBundleFile("CHANGELOG.md") {
             textView.string = changelog
@@ -95,18 +72,6 @@ final class ChangelogWindowController: NSWindowController {
     override func close() {
         super.close()
         Self.shared = nil
-    }
-
-    private static func buildInfoString(buildNumber: String?, commitHash: String?) -> String? {
-        let hasCommit = commitHash != nil && commitHash != "unknown" && commitHash?.isEmpty == false
-        switch (buildNumber, hasCommit) {
-        case (let bn?, true):
-            return "Build number: \(bn) (\(commitHash!))"
-        case (let bn?, false):
-            return "Build number: \(bn)"
-        default:
-            return nil
-        }
     }
 
     private static func loadBundleFile(_ name: String) -> String? {

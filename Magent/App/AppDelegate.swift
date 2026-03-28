@@ -180,7 +180,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let appMenu = NSMenu()
         appMenu.addItem(
             withTitle: String(localized: .AppStrings.appMenuAbout(appDisplayName)),
-            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            action: #selector(showAboutPanel(_:)),
             keyEquivalent: ""
         )
         appMenu.addItem(.separator())
@@ -292,6 +292,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     @objc private func openSettings(_ sender: Any?) {
         NotificationCenter.default.post(name: .magentOpenSettings, object: nil)
+    }
+
+    @objc private func showAboutPanel(_ sender: Any?) {
+        var options: [NSApplication.AboutPanelOptionKey: Any] = [:]
+
+        let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        let commitHash = Self.loadBundleFile("BUILD_COMMIT")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasCommit = commitHash != nil && commitHash != "unknown" && commitHash?.isEmpty == false
+
+        let versionSuffix = hasCommit ? " (\(commitHash!))" : ""
+        options[.version] = "Build \(buildNumber)\(versionSuffix)"
+
+        NSApp.orderFrontStandardAboutPanel(options: options)
+    }
+
+    private static func loadBundleFile(_ name: String) -> String? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: nil)
+                ?? Bundle.main.url(forResource: name, withExtension: "md") else {
+            return nil
+        }
+        return try? String(contentsOf: url, encoding: .utf8)
     }
 
     @objc private func openChangelog(_ sender: Any?) {
