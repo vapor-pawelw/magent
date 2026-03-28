@@ -431,7 +431,7 @@ private final class SessionCleanupPopoverViewController: NSViewController {
         stack.addArrangedSubview(liveLabel)
 
         if protectedSessions > 0 {
-            let protectedLabel = NSTextField(labelWithString: "\(protectedSessions) busy/waiting (protected)")
+            let protectedLabel = NSTextField(labelWithString: "\(protectedSessions) protected (busy/waiting/shielded/pinned)")
             protectedLabel.font = .systemFont(ofSize: 11)
             protectedLabel.textColor = NSColor(resource: .textSecondary)
             stack.addArrangedSubview(protectedLabel)
@@ -955,22 +955,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             idleSessions: max(0, idleCount),
             onCleanup: { [weak self] in
                 self?.sessionCleanupPopover?.close()
-                Task {
-                    let closed = await ThreadManager.shared.cleanupIdleSessions()
-                    await MainActor.run {
-                        if closed > 0 {
-                            BannerManager.shared.show(
-                                message: "Closed \(closed) idle session\(closed == 1 ? "" : "s").",
-                                style: .info
-                            )
-                        } else {
-                            BannerManager.shared.show(
-                                message: "No idle sessions to clean up.",
-                                style: .info
-                            )
-                        }
-                    }
-                }
+                self?.showCleanupConfirmation()
             }
         )
 
@@ -982,6 +967,82 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
         sessionCleanupPopover = popover
         popover.show(relativeTo: sessionCountButton.bounds, of: sessionCountButton, preferredEdge: .maxY)
+    }
+
+    private func showCleanupConfirmation() {
+        let candidates = ThreadManager.shared.collectCleanupCandidates()
+        guard !candidates.isEmpty else {
+            BannerManager.shared.show(message: "No idle sessions to clean up.", style: .info)
+            return
+        }
+
+        // Group candidates by thread.
+        var threadOrder: [UUID] = []
+        var threadGroups: [UUID: (name: String, isEntire: Bool, tabs: [String])] = [:]
+        for c in candidates {
+            if threadGroups[c.threadId] == nil {
+                threadOrder.append(c.threadId)
+                threadGroups[c.threadId] = (name: c.threadName, isEntire: c.isEntireThread, tabs: [])
+            }
+            if !c.isEntireThread {
+                let tabLabel = c.tabDisplayName ?? c.sessionName
+                threadGroups[c.threadId]?.tabs.append(tabLabel)
+            }
+        }
+
+        // Build summary lines.
+        var lines: [String] = []
+        for tid in threadOrder {
+            guard let group = threadGroups[tid] else { continue }
+            if group.isEntire {
+                lines.append("• \(group.name) (all tabs)")
+            } else {
+                let tabList = group.tabs.joined(separator: ", ")
+                lines.append("• \(group.name): \(tabList)")
+            }
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Close \(candidates.count) idle session\(candidates.count == 1 ? "" : "s")?"
+        alert.informativeText = "The following sessions will be killed. They will be recreated on demand when you revisit the tab. Protected (shielded/pinned) sessions are excluded.\n\nConfigure in Settings → Threads."
+
+        // Scrollable list of sessions.
+        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 360, height: min(CGFloat(lines.count) * 18 + 8, 200)))
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .bezelBorder
+
+        let textView = NSTextView(frame: scrollView.contentView.bounds)
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.font = .systemFont(ofSize: 12)
+        textView.textColor = .labelColor
+        textView.backgroundColor = .textBackgroundColor
+        textView.textContainerInset = NSSize(width: 4, height: 4)
+        textView.string = lines.joined(separator: "\n")
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainer?.widthTracksTextView = true
+        scrollView.documentView = textView
+
+        alert.accessoryView = scrollView
+        alert.addButton(withTitle: "Close Sessions")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        Task {
+            let closed = await ThreadManager.shared.cleanupIdleSessions()
+            await MainActor.run {
+                if closed > 0 {
+                    BannerManager.shared.show(
+                        message: "Closed \(closed) idle session\(closed == 1 ? "" : "s").",
+                        style: .info
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - Context Menus
