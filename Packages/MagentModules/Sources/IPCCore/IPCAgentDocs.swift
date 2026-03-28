@@ -64,7 +64,7 @@ public enum IPCAgentDocs {
     /// Lightweight prompt hint used for Claude's `--append-system-prompt`.
     public static let claudeSystemPrompt: String = """
     Magent IPC is available via `/tmp/magent-cli` when needed.
-    Use it only for thread/tab/section management tasks.
+    Use it only for thread/tab/section management tasks. In Magent, "threads" are managed worktrees with embedded terminals.
     For details on demand, run `/tmp/magent-cli docs` (full reference) or `/tmp/magent-cli help` (quick usage).
     """
 
@@ -72,7 +72,7 @@ public enum IPCAgentDocs {
 
     public static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     public static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    public static let codexIPCVersion = "<!-- magent-ipc-v15 -->"
+    public static let codexIPCVersion = "<!-- magent-ipc-v16 -->"
 
     /// Lightweight Codex `AGENTS.md` hint that points to on-demand docs.
     public static let codexAgentsMdBlock: String = """
@@ -82,8 +82,9 @@ public enum IPCAgentDocs {
 
     When the `MAGENT_SOCKET` environment variable is set, you are running inside
     a Magent-managed terminal. Magent IPC is available via `/tmp/magent-cli`.
+    In Magent, "threads" are managed worktrees with embedded terminals.
 
-    Use it only for Magent management tasks.
+    Use it only for Magent management tasks (threads, tabs, sections).
     Load details on demand with:
     - `/tmp/magent-cli docs` (full command reference + usage guidance)
     - `/tmp/magent-cli help` (quick usage)
