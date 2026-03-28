@@ -14,6 +14,9 @@ All notable changes to this project will be documented in this file.
 - Fixed false-positive "Base branch X no longer exists" banner when the base branch and project default are the same (e.g. `develop`), and fixed stale reset banners persisting across refreshes even after the missing branch became available again.
 - Fixed Manual Local Sync popup having overlapping UI elements by using proper Auto Layout constraints and pre-computing the accessory view size.
 
+### CLI
+- `create-tab` and `batch-create` now reject disabled agents with an explicit error, matching `create-thread` behavior.
+
 ### Agents
 - IPC system prompt now mentions "threads" so agents better associate the term with Magent management commands.
 

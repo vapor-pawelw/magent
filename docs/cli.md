@@ -36,7 +36,7 @@ magent-cli create-thread --project <name> [options]
 | Option | Description |
 |--------|-------------|
 | `--project <name>` | **Required.** Project to create the thread in. |
-| `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`. Defaults to project/global setting. |
+| `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`. Defaults to project/global setting. Errors if the requested agent is disabled in Settings. |
 | `--prompt <text>` | Initial prompt to send to the agent after creation. |
 | `--name <slug>` | Exact thread name (must be unique). |
 | `--description <text>` | Natural-language description — AI generates a slug from it. |
@@ -76,7 +76,7 @@ Each element in the specs array is an object with optional keys:
 | `prompt` | Initial prompt for the agent. |
 | `description` | Natural-language description (AI generates slug). |
 | `name` | Exact thread name. |
-| `agentType` | `claude`, `codex`, `custom`, or `terminal`. |
+| `agentType` | `claude`, `codex`, `custom`, or `terminal`. Errors if the agent is disabled in Settings. |
 | `sectionName` | Place thread in this section (case-insensitive). |
 | `baseThreadName` | Branch from an existing thread. |
 | `baseBranch` | Branch from an explicit branch. |
@@ -256,7 +256,7 @@ Add a tab to an existing thread.
 magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
 ```
 
-Use `--agent terminal` for a plain shell tab. If `--agent` is omitted, defaults to the project/global default agent from Settings.
+Use `--agent terminal` for a plain shell tab. If `--agent` is omitted, defaults to the project/global default agent from Settings. Errors if the requested agent is disabled in Settings.
 
 ### list-tabs
 

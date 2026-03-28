@@ -405,6 +405,9 @@ final class IPCCommandHandler {
                     guard let at = AgentType(rawValue: agentStr) else {
                         return .failure("Thread \(i): unknown agent type: \(agentStr)", id: request.id)
                     }
+                    if !settings.availableActiveAgents.contains(at) {
+                        return .failure("Thread \(i): agent type is not enabled: \(agentStr)", id: request.id)
+                    }
                     agentType = at
                     useAgentCommand = true
                 }
@@ -737,6 +740,9 @@ final class IPCCommandHandler {
             // Default to project/global default agent
             useAgent = !thread.agentTmuxSessions.isEmpty
             requestedAgent = nil
+        }
+        if let requestedAgent, !persistence.loadSettings().availableActiveAgents.contains(requestedAgent) {
+            return .failure("Agent type is not enabled: \(requestedAgent.rawValue)", id: request.id)
         }
 
         do {
