@@ -1093,6 +1093,8 @@ final class ThreadDetailViewController: NSViewController {
               threadId == thread.id else { return }
         // Refresh from the manager's fresh state.
         if let freshThread = threadManager.threads.first(where: { $0.id == thread.id }) {
+            thread.isKeepAlive = freshThread.isKeepAlive
+            thread.didOfferKeepAlivePromotion = freshThread.didOfferKeepAlivePromotion
             thread.protectedTmuxSessions = freshThread.protectedTmuxSessions
         }
         refreshTabStatusIndicators()

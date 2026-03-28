@@ -37,8 +37,8 @@ extension ThreadManager {
         if thread.id == activeThreadId && thread.lastSelectedTabIdentifier == sessionName {
             return true
         }
-        // Never close sessions the user marked as "Keep Alive".
-        if thread.protectedTmuxSessions.contains(sessionName) {
+        // Thread-level or session-level "Keep Alive" — never close.
+        if thread.isKeepAlive || thread.protectedTmuxSessions.contains(sessionName) {
             return true
         }
         // Pinned tabs/threads are protected when the setting is enabled.
@@ -172,20 +172,43 @@ extension ThreadManager {
         try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
         NotificationCenter.default.post(name: .magentKeepAliveChanged, object: nil, userInfo: ["threadId": threadId])
+
+        // Offer to promote to thread-level Keep Alive when all tabs are individually protected.
+        let thread = threads[idx]
+        if !thread.isKeepAlive
+            && !thread.didOfferKeepAlivePromotion
+            && thread.tmuxSessionNames.count > 1
+            && thread.tmuxSessionNames.allSatisfy({ thread.protectedTmuxSessions.contains($0) })
+        {
+            threads[idx].didOfferKeepAlivePromotion = true
+            try? persistence.saveActiveThreads(threads)
+            BannerManager.shared.show(
+                message: "All tabs are Keep Alive — mark the whole thread as Keep Alive?",
+                style: .info,
+                duration: 8.0,
+                actions: [BannerAction(title: "Keep Alive Thread") { [weak self] in
+                    self?.promoteToThreadKeepAlive(threadId: threadId)
+                }]
+            )
+        }
     }
 
-    /// Toggles "Keep Alive" on all terminal sessions in a thread.
-    /// If any session is unprotected, protects all. If all are protected, unprotects all.
+    /// Promotes per-tab keep alive markers to thread-level keep alive,
+    /// clearing the individual session markers since they're now redundant.
+    private func promoteToThreadKeepAlive(threadId: UUID) {
+        guard let idx = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        threads[idx].isKeepAlive = true
+        threads[idx].protectedTmuxSessions.removeAll()
+        try? persistence.saveActiveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+        NotificationCenter.default.post(name: .magentKeepAliveChanged, object: nil, userInfo: ["threadId": threadId])
+    }
+
+    /// Toggles thread-level "Keep Alive". When enabled, all sessions in the thread are
+    /// protected from eviction regardless of per-session markers.
     func toggleThreadKeepAlive(threadId: UUID) {
         guard let idx = threads.firstIndex(where: { $0.id == threadId }) else { return }
-        let thread = threads[idx]
-        let allProtected = !thread.tmuxSessionNames.isEmpty
-            && thread.tmuxSessionNames.allSatisfy { thread.protectedTmuxSessions.contains($0) }
-        if allProtected {
-            threads[idx].protectedTmuxSessions.removeAll()
-        } else {
-            threads[idx].protectedTmuxSessions = Set(thread.tmuxSessionNames)
-        }
+        threads[idx].isKeepAlive.toggle()
         try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
         NotificationCenter.default.post(name: .magentKeepAliveChanged, object: nil, userInfo: ["threadId": threadId])

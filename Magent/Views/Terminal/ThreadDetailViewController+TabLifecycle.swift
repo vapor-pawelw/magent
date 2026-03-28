@@ -491,7 +491,8 @@ extension ThreadDetailViewController {
         if index < tabItems.count,
            let freshThread = threadManager.threads.first(where: { $0.id == thread.id }) {
             thread.protectedTmuxSessions = freshThread.protectedTmuxSessions
-            tabItems[index].showKeepAliveIcon = freshThread.protectedTmuxSessions.contains(sessionName)
+            tabItems[index].showKeepAliveIcon = !freshThread.isKeepAlive
+                && freshThread.protectedTmuxSessions.contains(sessionName)
         }
     }
 }

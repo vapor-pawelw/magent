@@ -732,7 +732,8 @@ extension ThreadDetailViewController {
                 tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
                 tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
                 tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
-                tabItems[i].showKeepAliveIcon = thread.protectedTmuxSessions.contains(sessionName)
+                tabItems[i].showKeepAliveIcon = !thread.isKeepAlive
+                    && thread.protectedTmuxSessions.contains(sessionName)
             } else {
                 tabItems[i].hasUnreadCompletion = false
                 tabItems[i].hasWaitingForInput = false

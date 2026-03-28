@@ -20,7 +20,10 @@ All notable changes to this project will be documented in this file.
 - Dead-session threads now show a gray icon and dimmed description text, making them visually distinct from hidden threads (which dim the entire row).
 
 ### Sessions
-- New "Keep Alive" (shield) toggle in thread and tab right-click menus — shielded sessions are never killed by auto-eviction or manual cleanup. A blue shield icon appears on protected tabs.
+- Keep Alive now has two independent levels: thread-level (protects all tabs) and tab-level (protects individual sessions). A light-blue half-shield icon appears in the sidebar for thread-level keep alive.
+- When all tabs in a thread are individually marked Keep Alive, a one-time banner offers to promote to thread-level keep alive.
+- Thread-level keep alive hides per-tab shield icons and per-tab keep alive menu items (redundant).
+- Sidebar keep alive shield is hidden on pinned threads when "Protect pinned from eviction" is enabled (protection still active, just no visual clutter).
 - New "Protect pinned threads and tabs from eviction" setting (Settings > Threads, enabled by default) — pinned threads and pinned tabs are automatically protected from cleanup.
 - Closing idle sessions from the status bar now shows a confirmation alert listing which threads/tabs will be killed, with a scrollable breakdown.
 - Idle session auto-eviction now enabled by default (limit: 30 sessions), with a more conservative 10-minute non-busy threshold (previously 1 minute).

@@ -47,8 +47,8 @@ extension ThreadManager {
                 // Already evicted — not live for our purposes.
                 if evictedIdleSessions.contains(session) { continue }
 
-                // User marked as "Keep Alive" — never evict.
-                if thread.protectedTmuxSessions.contains(session) { continue }
+                // Thread-level or session-level "Keep Alive" — never evict.
+                if thread.isKeepAlive || thread.protectedTmuxSessions.contains(session) { continue }
 
                 // Pinned threads/tabs are protected when the setting is enabled.
                 if protectPinned && (thread.isPinned || thread.pinnedTmuxSessions.contains(session)) { continue }

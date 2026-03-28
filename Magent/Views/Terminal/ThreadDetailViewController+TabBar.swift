@@ -290,9 +290,11 @@ extension ThreadDetailViewController {
                 item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
                 item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: i, targetAgent: agent) }
                 item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
-                item.onKeepAlive = { [weak self] in self?.toggleKeepAlive(at: i) }
+                // Hide per-tab Keep Alive controls when the thread itself is keep-alive.
+                item.onKeepAlive = thread.isKeepAlive ? nil : { [weak self] in self?.toggleKeepAlive(at: i) }
                 item.availableAgentsForContinue = settings.availableActiveAgents
-                item.showKeepAliveIcon = thread.protectedTmuxSessions.contains(sessionName)
+                item.showKeepAliveIcon = !thread.isKeepAlive
+                    && thread.protectedTmuxSessions.contains(sessionName)
             case .web:
                 item.onRename = { [weak self] in self?.showWebTabRenameDialog(at: i) }
                 item.onContinueIn = nil

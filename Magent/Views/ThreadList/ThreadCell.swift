@@ -55,6 +55,7 @@ final class ThreadCell: NSTableCellView {
     private var primaryDirtyDot: NSImageView?
     private var secondaryDirtyDot: NSImageView?
     private var pinImageView: NSImageView?
+    private var keepAliveImageView: NSImageView?
     private(set) var archiveButton: NSButton?
     private var completionImageView: NSImageView?
     private var rateLimitImageView: NSImageView?
@@ -367,6 +368,11 @@ final class ThreadCell: NSTableCellView {
         pinIV.translatesAutoresizingMaskIntoConstraints = false
         pinIV.setContentHuggingPriority(.required, for: .horizontal)
 
+        let keepAliveIV = NSImageView()
+        keepAliveIV.translatesAutoresizingMaskIntoConstraints = false
+        keepAliveIV.setContentHuggingPriority(.required, for: .horizontal)
+        keepAliveIV.isHidden = true
+
         let completionIV = NSImageView()
         completionIV.translatesAutoresizingMaskIntoConstraints = false
         completionIV.setContentHuggingPriority(.required, for: .horizontal)
@@ -399,7 +405,7 @@ final class ThreadCell: NSTableCellView {
         // All trailing markers live directly in this stack. detachesHiddenViews = true means
         // hidden items take no space, so multiple icons (e.g. archive + completion) can appear
         // side-by-side without a fixed-size slot container.
-        let stack = NSStackView(views: [prTF, jiraIV, archiveBtn, spinner, rateLimitIV, completionIV, pinIV])
+        let stack = NSStackView(views: [prTF, jiraIV, archiveBtn, spinner, rateLimitIV, completionIV, keepAliveIV, pinIV])
         stack.orientation = .horizontal
         stack.spacing = Self.trailingMarkerSpacing
         stack.distribution = .fill
@@ -428,11 +434,14 @@ final class ThreadCell: NSTableCellView {
             rateLimitIV.heightAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
             completionIV.widthAnchor.constraint(equalToConstant: completionIndicatorSize),
             completionIV.heightAnchor.constraint(equalToConstant: completionIndicatorSize),
+            keepAliveIV.widthAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
+            keepAliveIV.heightAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
         ])
         trailingStackView = stack
         prLabel = prTF
         jiraImageView = jiraIV
         pinImageView = pinIV
+        keepAliveImageView = keepAliveIV
         archiveButton = archiveBtn
         completionImageView = completionIV
         rateLimitImageView = rateLimitIV
@@ -623,6 +632,21 @@ final class ThreadCell: NSTableCellView {
             pinImageView?.isHidden = true
         }
 
+        // Show shield when thread has Keep Alive, but hide it when pinned threads
+        // are already implicitly protected via the protectPinnedFromEviction setting.
+        let showKeepAliveShield = thread.isKeepAlive
+            && !(cellSettings.protectPinnedFromEviction && thread.isPinned)
+        if showKeepAliveShield {
+            keepAliveImageView?.image = Self.cachedSymbolImage("shield.righthalf.filled")
+            keepAliveImageView?.contentTintColor = .systemCyan
+            keepAliveImageView?.toolTip = "Keep Alive — protected from idle eviction"
+            keepAliveImageView?.isHidden = false
+        } else {
+            keepAliveImageView?.image = nil
+            keepAliveImageView?.toolTip = nil
+            keepAliveImageView?.isHidden = true
+        }
+
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
         if thread.isRateLimitExpiredAndResumable {
@@ -730,6 +754,7 @@ final class ThreadCell: NSTableCellView {
         textField?.maximumNumberOfLines = 1
 
         pinImageView?.isHidden = true
+        keepAliveImageView?.isHidden = true
         archiveButton?.isHidden = true
 
         let resolvedBranch = currentBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -981,6 +1006,10 @@ final class ThreadCell: NSTableCellView {
             statuses.append(thread.hasMagentBusy && !thread.hasAgentBusy ? "Setting up" : "Agent busy")
         } else if thread.hasUnreadAgentCompletion {
             statuses.append("Agent completed")
+        }
+
+        if thread.isKeepAlive {
+            statuses.append("Keep Alive")
         }
 
         if thread.showArchiveSuggestion {

@@ -136,8 +136,8 @@ final class TabItemView: NSView, NSMenuDelegate {
         pinIcon.setContentHuggingPriority(.required, for: .horizontal)
 
         // Keep alive (shield) icon
-        keepAliveIcon.image = NSImage(systemSymbolName: "shield.fill", accessibilityDescription: "Keep Alive")
-        keepAliveIcon.contentTintColor = .controlAccentColor
+        keepAliveIcon.image = NSImage(systemSymbolName: "shield.righthalf.filled", accessibilityDescription: "Keep Alive")
+        keepAliveIcon.contentTintColor = .systemCyan
         keepAliveIcon.translatesAutoresizingMaskIntoConstraints = false
         keepAliveIcon.isHidden = true
         keepAliveIcon.setContentHuggingPriority(.required, for: .horizontal)
@@ -354,7 +354,7 @@ final class TabItemView: NSView, NSMenuDelegate {
             let keepAliveTitle = showKeepAliveIcon ? "Remove Keep Alive" : "Keep Alive"
             let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(keepAliveTapped), keyEquivalent: "")
             keepAliveItem.target = self
-            keepAliveItem.image = NSImage(systemSymbolName: showKeepAliveIcon ? "shield.slash" : "shield.fill", accessibilityDescription: nil)
+            keepAliveItem.image = NSImage(systemSymbolName: showKeepAliveIcon ? "shield.slash" : "shield.righthalf.filled", accessibilityDescription: nil)
             menu.addItem(keepAliveItem)
         }
 

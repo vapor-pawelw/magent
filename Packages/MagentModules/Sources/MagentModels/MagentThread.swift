@@ -224,6 +224,10 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var pinnedTmuxSessions: [String]
     /// Sessions marked as "Keep Alive" — protected from idle eviction and manual cleanup.
     public var protectedTmuxSessions: Set<String>
+    /// Thread-level Keep Alive — when true, all sessions in this thread are protected.
+    public var isKeepAlive: Bool
+    /// True after we've offered to promote per-tab keep alive to thread-level (one-time).
+    public var didOfferKeepAlivePromotion: Bool
     public let createdAt: Date
     public var isArchived: Bool
     public var archivedAt: Date?
@@ -501,7 +505,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     public enum CodingKeys: String, CodingKey {
         case id, projectId, name, worktreePath, branchName
-        case tmuxSessionNames, agentTmuxSessions, sessionConversationIDs, sessionAgentTypes, pinnedTmuxSessions, protectedTmuxSessions
+        case tmuxSessionNames, agentTmuxSessions, sessionConversationIDs, sessionAgentTypes, pinnedTmuxSessions, protectedTmuxSessions, isKeepAlive, didOfferKeepAlivePromotion
         case createdAt, isArchived, archivedAt, sectionId, isMain
         case lastSelectedTabIdentifier = "lastSelectedTmuxSessionName"
         case agentHasRun, isPinned, isSidebarHidden, lastAgentCompletionAt
@@ -536,6 +540,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         sessionAgentTypes: [String: AgentType] = [:],
         pinnedTmuxSessions: [String] = [],
         protectedTmuxSessions: Set<String> = [],
+        isKeepAlive: Bool = false,
+        didOfferKeepAlivePromotion: Bool = false,
         createdAt: Date = Date(),
         isArchived: Bool = false,
         archivedAt: Date? = nil,
@@ -573,6 +579,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.sessionAgentTypes = sessionAgentTypes
         self.pinnedTmuxSessions = pinnedTmuxSessions
         self.protectedTmuxSessions = protectedTmuxSessions
+        self.isKeepAlive = isKeepAlive
+        self.didOfferKeepAlivePromotion = didOfferKeepAlivePromotion
         self.createdAt = createdAt
         self.isArchived = isArchived
         self.archivedAt = archivedAt
@@ -629,6 +637,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         sessionAgentTypes = try container.decodeIfPresent([String: AgentType].self, forKey: .sessionAgentTypes) ?? [:]
         pinnedTmuxSessions = try container.decodeIfPresent([String].self, forKey: .pinnedTmuxSessions) ?? []
         protectedTmuxSessions = try container.decodeIfPresent(Set<String>.self, forKey: .protectedTmuxSessions) ?? []
+        isKeepAlive = try container.decodeIfPresent(Bool.self, forKey: .isKeepAlive) ?? false
+        didOfferKeepAlivePromotion = try container.decodeIfPresent(Bool.self, forKey: .didOfferKeepAlivePromotion) ?? false
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         isArchived = try container.decode(Bool.self, forKey: .isArchived)
         archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
@@ -688,6 +698,12 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(pinnedTmuxSessions, forKey: .pinnedTmuxSessions)
         if !protectedTmuxSessions.isEmpty {
             try container.encode(protectedTmuxSessions, forKey: .protectedTmuxSessions)
+        }
+        if isKeepAlive {
+            try container.encode(isKeepAlive, forKey: .isKeepAlive)
+        }
+        if didOfferKeepAlivePromotion {
+            try container.encode(didOfferKeepAlivePromotion, forKey: .didOfferKeepAlivePromotion)
         }
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(isArchived, forKey: .isArchived)
