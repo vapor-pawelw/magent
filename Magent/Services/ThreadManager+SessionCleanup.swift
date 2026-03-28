@@ -165,14 +165,23 @@ extension ThreadManager {
     /// Protected sessions are exempt from both manual cleanup and auto idle eviction.
     func toggleSessionKeepAlive(threadId: UUID, sessionName: String) {
         guard let idx = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        let enabling: Bool
         if threads[idx].protectedTmuxSessions.contains(sessionName) {
             threads[idx].protectedTmuxSessions.remove(sessionName)
+            enabling = false
         } else {
             threads[idx].protectedTmuxSessions.insert(sessionName)
+            enabling = true
         }
         try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
         NotificationCenter.default.post(name: .magentKeepAliveChanged, object: nil, userInfo: ["threadId": threadId])
+
+        // Immediately recover the session if it was dead/evicted.
+        if enabling {
+            let thread = threads[idx]
+            recoverDeadSessions([sessionName], in: thread)
+        }
 
         // Offer to promote to thread-level Keep Alive when all tabs are individually protected.
         let thread = threads[idx]
@@ -203,6 +212,13 @@ extension ThreadManager {
         try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
         NotificationCenter.default.post(name: .magentKeepAliveChanged, object: nil, userInfo: ["threadId": threadId])
+
+        // Recover any dead/evicted sessions now that the whole thread is protected.
+        let thread = threads[idx]
+        let deadSessionNames = Array(thread.deadSessions)
+        if !deadSessionNames.isEmpty {
+            recoverDeadSessions(deadSessionNames, in: thread)
+        }
     }
 
     /// Toggles thread-level "Keep Alive". When enabled, all sessions in the thread are
@@ -210,8 +226,48 @@ extension ThreadManager {
     func toggleThreadKeepAlive(threadId: UUID) {
         guard let idx = threads.firstIndex(where: { $0.id == threadId }) else { return }
         threads[idx].isKeepAlive.toggle()
+        let enabling = threads[idx].isKeepAlive
         try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
         NotificationCenter.default.post(name: .magentKeepAliveChanged, object: nil, userInfo: ["threadId": threadId])
+
+        // Immediately recover all dead/evicted sessions in the thread.
+        if enabling {
+            let thread = threads[idx]
+            let deadSessionNames = Array(thread.deadSessions)
+            if !deadSessionNames.isEmpty {
+                recoverDeadSessions(deadSessionNames, in: thread)
+            }
+        }
+    }
+
+    // MARK: - Keep Alive Recovery
+
+    /// Removes sessions from the evicted set and triggers async recreation for
+    /// any that are currently dead. Called when keep-alive is enabled.
+    private func recoverDeadSessions(_ sessionNames: [String], in thread: MagentThread) {
+        for name in sessionNames {
+            evictedIdleSessions.remove(name)
+        }
+        let deadNames = sessionNames.filter { thread.deadSessions.contains($0) }
+        guard !deadNames.isEmpty else { return }
+
+        let threadId = thread.id
+        Task { [weak self] in
+            guard let self else { return }
+            var anyRecovered = false
+            for name in deadNames {
+                // Re-fetch the thread to avoid recreating sessions for
+                // a thread/tab that was deleted/archived in the meantime.
+                guard let freshThread = self.threads.first(where: { $0.id == threadId }),
+                      !freshThread.isArchived else { break }
+                if await self.recreateSessionIfNeeded(sessionName: name, thread: freshThread) {
+                    anyRecovered = true
+                }
+            }
+            if anyRecovered {
+                self.delegate?.threadManager(self, didUpdateThreads: self.threads)
+            }
+        }
     }
 }
