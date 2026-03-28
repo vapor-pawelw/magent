@@ -796,7 +796,7 @@ final class IPCCommandHandler {
         }
 
         var didRename = false
-        let renameCandidates = candidates.filter { $0 != thread.name }
+        let renameCandidates = candidates.filter { $0 != thread.branchName }
         for candidate in renameCandidates {
             do {
                 try await threadManager.renameThread(thread, to: candidate, markFirstPromptRenameHandled: false)

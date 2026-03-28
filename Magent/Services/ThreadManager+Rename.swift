@@ -389,7 +389,7 @@ extension ThreadManager {
             throw ThreadManagerError.nameGenerationFailed
         }
 
-        let candidates = renameCandidates(from: slug).filter { $0 != currentThread.name }
+        let candidates = renameCandidates(from: slug).filter { $0 != currentThread.branchName }
         for candidate in candidates {
             do {
                 try await renameThread(currentThread, to: candidate, markFirstPromptRenameHandled: false)
@@ -406,6 +406,9 @@ extension ThreadManager {
         throw ThreadManagerError.duplicateName
     }
 
+    /// Renames only the git branch for a thread. The thread name (= worktree directory
+    /// basename) is never changed — it stays as the original auto-generated name forever.
+    /// Tmux sessions and worktree paths are unaffected.
     func renameThread(
         _ thread: MagentThread,
         to newName: String,
@@ -420,30 +423,15 @@ extension ThreadManager {
             throw ThreadManagerError.invalidName
         }
         let currentThread = threads[index]
-        guard !threads.contains(where: { $0.name == trimmed && $0.id != currentThread.id }) else {
-            throw ThreadManagerError.duplicateName
-        }
-
-        let oldName = currentThread.name
         let newBranchName = trimmed
-        let worktreePath = currentThread.worktreePath
-        let parentDir = (worktreePath as NSString).deletingLastPathComponent
-        let symlinkPath = (parentDir as NSString).appendingPathComponent(trimmed)
 
-        // Look up project for repo path and repo slug
+        // Look up project for repo path
         let settings = persistence.loadSettings()
         guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else {
             throw ThreadManagerError.threadNotFound
         }
-        let slug = Self.repoSlug(from: project.name)
 
-        let sessionRenameMap = Dictionary(uniqueKeysWithValues: currentThread.tmuxSessionNames.map { sessionName in
-            (sessionName, renamedSessionName(sessionName, fromThreadName: oldName, toThreadName: trimmed, repoSlug: slug))
-        })
-        let oldSessionNames = Set(currentThread.tmuxSessionNames)
-        let newSessionNames = currentThread.tmuxSessionNames.map { sessionRenameMap[$0] ?? $0 }
-
-        // Check for conflicts with git branch and tmux sessions.
+        // Check for conflicts with git branch.
         // Allow if the target branch is the thread's own branch (renaming back to a previous name,
         // or stored branchName is out of sync with the actual worktree branch).
         let actualWorktreeBranch = await git.getCurrentBranch(workingDirectory: currentThread.worktreePath)
@@ -452,103 +440,16 @@ extension ThreadManager {
         if !branchAlreadyOwned, await git.branchExists(repoPath: project.repoPath, branchName: newBranchName) {
             throw ThreadManagerError.duplicateName
         }
-        if Set(newSessionNames).count != newSessionNames.count {
-            throw ThreadManagerError.duplicateName
-        }
-        for (oldSessionName, newSessionName) in zip(currentThread.tmuxSessionNames, newSessionNames)
-        where oldSessionName != newSessionName {
-            if !oldSessionNames.contains(newSessionName), await tmux.hasSession(name: newSessionName) {
-                throw ThreadManagerError.duplicateName
-            }
-        }
 
-        // 1. Rename git branch (skip if already on the target branch)
+        // Rename git branch (skip if already on the target branch)
         let oldBranch = actualWorktreeBranch ?? currentThread.branchName
         if !branchAlreadyOwned {
-            // Use the actual worktree branch if stored branchName is stale
             try await git.renameBranch(repoPath: project.repoPath, oldName: oldBranch, newName: newBranchName)
         }
 
-        // Steps 2–3 must be atomic with step 1: roll back git rename and symlink if anything fails.
-        do {
-            // 2. Create a symlink from the new name to the actual worktree directory.
-            // The worktree itself is NOT moved — running agents keep their cwd intact.
-            if symlinkPath != worktreePath {
-                createCompatibilitySymlink(from: symlinkPath, to: worktreePath)
-            }
-
-            // 3. Rename each tmux session
-            try await renameTmuxSessions(from: currentThread.tmuxSessionNames, to: newSessionNames)
-        } catch {
-            // Roll back git branch rename
-            if !branchAlreadyOwned {
-                try? await git.renameBranch(repoPath: project.repoPath, oldName: newBranchName, newName: oldBranch)
-            }
-            // Roll back symlink
-            if symlinkPath != worktreePath {
-                try? FileManager.default.removeItem(atPath: symlinkPath)
-            }
-            throw error
-        }
-
-        // 4. Update pinned and agent sessions to reflect new names
-        let newPinnedSessions = currentThread.pinnedTmuxSessions.map { sessionRenameMap[$0] ?? $0 }
-        let newAgentSessions = currentThread.agentTmuxSessions.map { sessionRenameMap[$0] ?? $0 }
-
-        // Re-setup bell pipe with new session names for agent sessions.
-        // Use forceSetupBellPipe: the old pipe survives the tmux session rename and keeps
-        // writing the pre-rename name to the event log. Stopping it first ensures subsequent
-        // bell events are attributed to the new session name.
-        for agentSession in newAgentSessions {
-            await tmux.forceSetupBellPipe(for: agentSession)
-        }
-
-        // 5. Update thread name env var on each session (worktree path unchanged)
-        for sessionName in newSessionNames {
-            try? await tmux.setEnvironment(sessionName: sessionName, key: "MAGENT_WORKTREE_NAME", value: trimmed)
-        }
-
-        // 6. Update model fields and persist (worktreePath stays the same)
-        threads[index].name = trimmed
+        // Update branch fields only — thread name, tmux sessions, and worktree path are unchanged.
         threads[index].branchName = newBranchName
         threads[index].actualBranch = newBranchName
-        threads[index].tmuxSessionNames = newSessionNames
-        threads[index].agentTmuxSessions = newAgentSessions
-        threads[index].pinnedTmuxSessions = newPinnedSessions
-        _ = remapTransientSessionState(threadIndex: index, sessionRenameMap: sessionRenameMap)
-        _ = remapInitialPromptInjectionState(sessionRenameMap: sessionRenameMap)
-        // Re-key known-good session context cache so renamed sessions
-        // aren't re-validated (and potentially killed) on next tab switch.
-        for (oldName, newName) in sessionRenameMap where oldName != newName {
-            if let cached = knownGoodSessionContexts.removeValue(forKey: oldName) {
-                knownGoodSessionContexts[newName] = cached
-            }
-        }
-        threads[index].unreadCompletionSessions = Set(
-            threads[index].unreadCompletionSessions.map { sessionRenameMap[$0] ?? $0 }
-        )
-        threads[index].rateLimitedSessions = Dictionary(
-            uniqueKeysWithValues: threads[index].rateLimitedSessions.map { key, value in
-                (sessionRenameMap[key] ?? key, value)
-            }
-        )
-        _ = remapSessionAgentTypes(threadIndex: index, sessionRenameMap: sessionRenameMap)
-        threads[index].sessionConversationIDs = Dictionary(
-            uniqueKeysWithValues: threads[index].sessionConversationIDs.map { key, value in
-                (sessionRenameMap[key] ?? key, value)
-            }
-        )
-        // Re-key custom tab names to reflect new session names
-        var newCustomTabNames: [String: String] = [:]
-        for (oldKey, value) in threads[index].customTabNames {
-            let newKey = sessionRenameMap[oldKey] ?? oldKey
-            newCustomTabNames[newKey] = value
-        }
-        threads[index].customTabNames = newCustomTabNames
-        _ = remapSubmittedPromptHistory(threadIndex: index, sessionRenameMap: sessionRenameMap)
-        if let selectedName = threads[index].lastSelectedTabIdentifier {
-            threads[index].lastSelectedTabIdentifier = sessionRenameMap[selectedName] ?? selectedName
-        }
         if markFirstPromptRenameHandled {
             threads[index].didAutoRenameFromFirstPrompt = true
         }
@@ -613,12 +514,9 @@ extension ThreadManager {
         guard !thread.isMain else { return false }
         guard !thread.didAutoRenameFromFirstPrompt else { return false }
 
-        // If the thread name no longer matches the worktree directory basename,
-        // it was already renamed (manually or otherwise) — skip auto-rename.
-        guard thread.name == (thread.worktreePath as NSString).lastPathComponent else { return false }
-        // Only auto-rename threads that still have an auto-generated name.
-        // Threads created via CLI with an explicit name/description should keep it.
-        guard NameGenerator.isAutoGenerated(thread.name) else { return false }
+        // Only auto-rename branches that still have an auto-generated name.
+        // Threads created via CLI with an explicit name/description should keep their branch.
+        guard NameGenerator.isAutoGenerated(thread.branchName) else { return false }
         guard thread.agentTmuxSessions.contains(sessionName) else { return false }
         guard !autoRenameInProgress.contains(thread.id) else { return false }
 
@@ -637,20 +535,11 @@ extension ThreadManager {
             return false
         }
 
-        // `injectAfterStart` talks to tmux by session name. If auto-rename wins the race
-        // and renames the session first, the in-flight prompt injection keeps polling the
-        // old name and the rebuilt UI can no longer find the pending/failure state.
-        if hasTrackedInitialPromptInjection(for: sessionName) {
-            let injected = await waitForInitialPromptInjectionSettlement(sessionName: sessionName)
-            guard injected else { return false }
-        }
-
         guard let refreshedIndex = threads.firstIndex(where: { $0.id == threadId }) else { return false }
         let refreshedThread = threads[refreshedIndex]
         guard !refreshedThread.isMain else { return false }
         guard !refreshedThread.didAutoRenameFromFirstPrompt else { return false }
-        guard refreshedThread.name == (refreshedThread.worktreePath as NSString).lastPathComponent else { return false }
-        guard NameGenerator.isAutoGenerated(refreshedThread.name) else { return false }
+        guard NameGenerator.isAutoGenerated(refreshedThread.branchName) else { return false }
         guard refreshedThread.agentTmuxSessions.contains(sessionName) else { return false }
 
         // Try agents in preferred-first order; fall back to other built-in generators
@@ -692,7 +581,7 @@ extension ThreadManager {
 
         let candidates = renameCandidates(from: resolvedSlug)
 
-        for candidate in candidates where candidate != refreshedThread.name {
+        for candidate in candidates where candidate != refreshedThread.branchName {
             do {
                 try await renameThread(refreshedThread, to: candidate, markFirstPromptRenameHandled: true)
                 _ = await applyGeneratedRenameMetadataIfNeeded(

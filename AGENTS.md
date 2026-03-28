@@ -31,7 +31,7 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 ## Decisions
 
 - **Agent**: Configurable via `AppSettings.activeAgents`, `defaultAgentType`, and `customAgentCommand`.
-- **Thread naming**: Auto-generated (random names)
+- **Thread naming**: Auto-generated (random names). Thread/worktree names are permanent — renames only change the git branch, never the thread name or worktree directory.
 - **Archive**: Remove worktree, keep git branch
 - **Terminal**: libghostty (Zig→C→Swift bridge)
 
@@ -49,7 +49,7 @@ Manages git worktrees as "threads," each with embedded terminal (libghostty) run
 - **Prompt-readiness scans must ignore bottom filler lines before taking a recent-window suffix**: In tall tmux panes, the live agent prompt can sit above a large block of trailing blank lines. If readiness detection clips to the last N raw lines first, it can miss a visibly ready `❯`/`›` prompt and time out injection incorrectly. Filter blank trailing lines out before applying any "recent lines" window used for prompt detection.
 - **Shell startup CWD must use managed `ZDOTDIR`, not `tmux send-keys cd`**: Build shell session commands through `terminalStartCommand(...)` / `agentStartCommand(...)`, which ensure `/tmp/magent-zdotdir` exists (recreate if `/tmp` was cleared) and set `MAGENT_START_CWD` so cwd is fixed after user rc/profile load. Avoid reintroducing post-start `send-keys` cwd enforcement.
 - **Agent binaries must be invoked with `command <agent>` to bypass shell wrappers**: Always prefix agent invocations with the `command` shell built-in (e.g. `command claude`, `command codex`) in `AppSettings.command(for:)` and `resumableAgentCommand`. The managed ZDOTDIR deliberately loads user shell config for correct PATH, but user-defined shell functions for `claude`/`codex` can inject conflicting flags. `command` resolves the binary directly, skipping functions and aliases.
-- **Auto-rename-on-first-prompt**: For all non-main worktrees, auto-rename after the first submitted agent prompt. Keep it one-time via persisted state (`didAutoRenameFromFirstPrompt`) and route rename decisions through `ThreadManager.autoRenameThreadAfterFirstPromptIfNeeded(...)`.
+- **Auto-rename-on-first-prompt**: For all non-main worktrees, auto-rename the git branch (not the thread/worktree name) after the first submitted agent prompt. Keep it one-time via persisted state (`didAutoRenameFromFirstPrompt`) and route rename decisions through `ThreadManager.autoRenameThreadAfterFirstPromptIfNeeded(...)`.
 - **Auto-rename/task-description agent fallback**: Slug/description generation must prefer the active session/default agent first, then fall back to other built-in generators (Claude/Codex) if the preferred agent fails, instead of skipping rename immediately.
 - **First-prompt auto-rename should skip custom branches**: If the current git branch is already custom (not auto-generated), skip auto-rename quietly and mark first-prompt auto-rename handled to avoid repeated retries/banners.
 - **Branch rename must retarget dependent threads' base branches**: When a thread branch is renamed through Magent, update sibling threads in the same project whose stored `baseBranch` or cached `detectedBaseBranch` still points at the old branch. Otherwise stacked threads fall back to the project default once the old branch disappears, breaking diffs and archive readiness.

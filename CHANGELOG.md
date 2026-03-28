@@ -70,6 +70,7 @@ All notable changes to this project will be documented in this file.
 - Branch mismatch banner now appears for non-main threads too — if the worktree is on a different branch than expected, the user can accept or switch back.
 
 ### Auto-Rename
+- Thread/worktree names are now permanent — rename commands (auto-rename, CLI, context menu) only change the git branch name, never the thread name or worktree directory. The original auto-generated name stays visible in the sidebar forever.
 - Auto-rename now triggers on every first prompt, including questions — previously, prompts classified as questions were silently skipped.
 
 ### Thread

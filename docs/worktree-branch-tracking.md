@@ -23,7 +23,7 @@
 
 ## Gotchas
 
-- Thread name, worktree directory basename, and git branch are no longer interchangeable. Rename symlinks intentionally let the thread name differ from the real worktree path, and manual branch switches can make the branch differ from both.
+- Thread name and worktree directory basename are always identical (names are permanent). The git branch can differ after rename operations or manual `git checkout` / `git switch`.
 - When refreshing UI after rename or branch changes, resolve the current thread again from `ThreadManager.threads` by `id` before reading `branchName` or `actualBranch`. Using the pre-refresh `MagentThread` snapshot can leave footer/tooltips one update behind.
 - `WorktreeMetadata.detectedFor` is a legacy field — no longer written or consumed. Retained only for Codable backward compatibility with existing cache files on disk.
 

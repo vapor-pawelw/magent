@@ -167,8 +167,8 @@ magent-cli send-prompt --thread <name> --prompt <text>
 
 ### auto-rename-thread
 
-Rename a thread from a single prompt. This generates both:
-- branch slug
+Rename a thread's git branch from a single prompt. This generates both:
+- branch slug (only the git branch is renamed; the thread/worktree name stays the same)
 - thread description (2-8 words)
 
 ```bash
@@ -179,7 +179,7 @@ magent-cli auto-rename-thread --thread <name> --prompt <text>
 
 ### rename-branch
 
-Rename a thread branch to an exact name.
+Rename a thread's git branch to an exact name. The thread/worktree name is never changed.
 
 ```bash
 magent-cli rename-branch --thread <name> --name <text>
