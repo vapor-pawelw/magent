@@ -216,17 +216,16 @@ extension ThreadManager {
         var rateLimitChangedThreadIds = Set<UUID>()
 
         func publishBusySyncChangesIfNeeded() async {
-            guard changed else {
-                // Even when no busy state flipped, tick the debounce timers so
-                // pending transitions can commit after their 1-second window.
-                for i in threads.indices {
-                    threads[i].updateBusyStateDuration()
+            // Tick debounce timers for ALL threads every pass so pending
+            // transitions commit as soon as their 1-second window expires,
+            // regardless of whether a different thread triggered `changed`.
+            var debounceCommitted = false
+            for i in threads.indices {
+                if threads[i].updateBusyStateDuration() {
+                    debounceCommitted = true
                 }
-                return
             }
-            for i in threads.indices where busyChangedThreadIds.contains(threads[i].id) {
-                threads[i].updateBusyStateDuration()
-            }
+            guard changed || debounceCommitted else { return }
             await MainActor.run {
                 delegate?.threadManager(self, didUpdateThreads: threads)
                 for threadId in busyChangedThreadIds {

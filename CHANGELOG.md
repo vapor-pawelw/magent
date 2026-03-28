@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - IPC system prompt now mentions "threads" so agents better associate the term with Magent management commands.
 
 ### Sidebar
+- Fixed busy-state duration label showing stale elapsed time (e.g. "35m" instead of "<1m") after busy/idle transitions — debounce commits now always propagate to the sidebar.
 - Dead-session threads now show a gray icon and dimmed description text, making them visually distinct from hidden threads (which dim the entire row).
 
 ### Sessions

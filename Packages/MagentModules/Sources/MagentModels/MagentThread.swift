@@ -300,19 +300,21 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     /// Call after any mutation to `busySessions` / `magentBusySessions`.
     /// Applies a 1-second debounce: the state change is only committed once
     /// `isAnyBusy` has been stable for ≥ 1 s.
-    public mutating func updateBusyStateDuration() {
+    /// Returns `true` when `busyStateSince` was actually updated (debounce committed).
+    @discardableResult
+    public mutating func updateBusyStateDuration() -> Bool {
         let currentBusy = isAnyBusy
         if _debouncedBusyState == nil {
             // First observation — seed immediately.
             _debouncedBusyState = currentBusy
             busyStateSince = Date()
             _rawStateChangeTime = nil
-            return
+            return true
         }
         if currentBusy == _debouncedBusyState {
             // State matches debounced — cancel any pending transition.
             _rawStateChangeTime = nil
-            return
+            return false
         }
         // State differs from debounced.
         let now = Date()
@@ -322,12 +324,14 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
                 _debouncedBusyState = currentBusy
                 busyStateSince = now
                 _rawStateChangeTime = nil
+                return true
             }
             // else: not yet stable, keep waiting.
         } else {
             // Record the start of a potential transition.
             _rawStateChangeTime = now
         }
+        return false
     }
     // Transient (not persisted) — tracks whether worktree has uncommitted/untracked changes
     public var isDirty: Bool = false
