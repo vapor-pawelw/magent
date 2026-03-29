@@ -59,10 +59,10 @@ When no sibling thread owns the base branch, labels show "Project" (e.g. `Projec
 - **`Project → <this-worktree>`**: copies from the project repo root into this thread
 - **`<this-worktree> → Project`**: pushes from this worktree to the project repo root
 
-The quick-action menu also includes **`Other…`**, which opens a manual picker:
+When there are more than two active worktrees in the project, the quick-action menu also includes **`Other…`**, which opens a manual picker. When only one other worktree exists, `Other…` is hidden since the direct menu items already cover it.
 
 - Direction selector: `Sync into this worktree` or `Sync from this worktree`
-- Target selector: `NSComboBox` listing every other non-bare git worktree in the repo, including the main worktree when the current thread is not main
+- Worktree selector: `NSComboBox` listing every other non-bare git worktree in the repo, including the main worktree when the current thread is not main
 - Default target: the same resolved base-branch sync target used by the quick menu when present; otherwise the first available other worktree
 
 The main worktree skips the quick-action menu entirely and opens this manual picker directly, so manual sync behavior is consistent across all worktrees.

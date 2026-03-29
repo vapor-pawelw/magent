@@ -142,16 +142,24 @@ extension ThreadDetailViewController {
 
         menu.addItem(intoWorktreeItem)
         menu.addItem(fromWorktreeItem)
-        menu.addItem(.separator())
 
-        let otherItem = NSMenuItem(
-            title: "Other…",
-            action: #selector(resyncOtherLocalPathsTapped(_:)),
-            keyEquivalent: ""
-        )
-        otherItem.target = self
-        otherItem.representedObject = currentThread.id
-        menu.addItem(otherItem)
+        // Only show "Other…" if there are additional worktrees beyond the default sync target
+        let otherWorktreeCount = threadManager.threads.filter { thread in
+            thread.projectId == currentThread.projectId
+            && thread.id != currentThread.id
+            && !thread.isArchived
+        }.count
+        if otherWorktreeCount > 1 {
+            menu.addItem(.separator())
+            let otherItem = NSMenuItem(
+                title: "Other…",
+                action: #selector(resyncOtherLocalPathsTapped(_:)),
+                keyEquivalent: ""
+            )
+            otherItem.target = self
+            otherItem.representedObject = currentThread.id
+            menu.addItem(otherItem)
+        }
 
         NSMenu.popUpContextMenu(menu, with: event, for: resyncLocalPathsButton)
     }
@@ -241,7 +249,7 @@ extension ThreadDetailViewController {
         ])
         directionPopup.selectItem(at: ManualLocalSyncDirection.intoCurrentWorktree.rawValue)
 
-        let targetLabel = NSTextField(labelWithString: "Target Worktree:")
+        let targetLabel = NSTextField(labelWithString: "Worktree:")
         targetLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         targetLabel.textColor = .secondaryLabelColor
 
