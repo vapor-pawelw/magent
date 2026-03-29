@@ -249,14 +249,27 @@ extension ThreadListViewController {
         // When nil, the field stays empty and uses the default branch placeholder.
         let resolvedBaseBranchPrefill: String? = baseBranch
 
+        let isFork = sourceThread != nil && baseBranch != nil
+        let sheetTitle = isFork ? "Fork Thread" : "New Thread"
+        let sheetSubtitle: String? = {
+            guard isFork, let src = sourceThread else { return nil }
+            if src.isMain {
+                return "Thread: Main"
+            }
+            if let desc = src.taskDescription {
+                return "Thread: \(desc) (\(src.branchName))"
+            }
+            return "Thread: \(src.branchName)"
+        }()
+
         let config = AgentLaunchSheetConfig(
-            title: "New Thread",
+            title: sheetTitle,
             acceptButtonTitle: "Create Thread",
             draftScope: .newThread(projectId: project.id),
             availableAgents: settings.availableActiveAgents,
             defaultAgentType: threadManager.effectiveAgentType(for: project.id),
-            subtitle: nil,
-            availableProjects: settings.projects,
+            subtitle: sheetSubtitle,
+            availableProjects: isFork ? [project] : settings.projects,
             showDescriptionAndBranchFields: true,
             autoGenerateHint: autoGenerateHint,
             terminalInjectionPrefill: injection.terminalCommand.isEmpty ? nil : injection.terminalCommand,
@@ -312,7 +325,8 @@ extension ThreadListViewController {
                 insertAfterThreadId: effectiveInsertAfter,
                 insertAtTopOfVisibleGroup: insertAtTop,
                 initialWebURL: result.initialWebURL,
-                draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "") } : nil
+                draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "") } : nil,
+                localFileSyncPathsOverride: isFork ? capturedSourceThread?.localFileSyncPathsSnapshot : nil
             )
         }
     }
@@ -430,7 +444,8 @@ extension ThreadListViewController {
         insertAfterThreadId: UUID? = nil,
         insertAtTopOfVisibleGroup: Bool = false,
         initialWebURL: URL? = nil,
-        draftPrompt: (AgentType, String)? = nil
+        draftPrompt: (AgentType, String)? = nil,
+        localFileSyncPathsOverride: [String]? = nil
     ) {
         isCreatingThread = true
         reloadData()
@@ -448,7 +463,8 @@ extension ThreadListViewController {
                     requestedSectionId: requestedSectionId,
                     insertAfterThreadId: insertAfterThreadId,
                     insertAtTopOfVisibleGroup: insertAtTopOfVisibleGroup,
-                    initialWebURL: initialWebURL
+                    initialWebURL: initialWebURL,
+                    localFileSyncPathsOverride: localFileSyncPathsOverride
                 )
                 if let desc = taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !desc.isEmpty {

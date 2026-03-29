@@ -11,7 +11,7 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
     public var displayName: String {
         switch self {
         case .newThread: "New Thread"
-        case .newThreadFromBranch: "New Thread from Branch"
+        case .newThreadFromBranch: "Fork Thread"
         case .newTab: "New Tab"
         case .closeTab: "Close Tab"
         case .refreshWebTab: "Refresh Web Tab"

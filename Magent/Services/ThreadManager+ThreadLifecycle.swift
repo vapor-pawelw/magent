@@ -21,7 +21,8 @@ extension ThreadManager {
         insertAfterThreadId: UUID? = nil,
         insertAtTopOfVisibleGroup: Bool = false,
         skipAutoSelect: Bool = false,
-        initialWebURL: URL? = nil
+        initialWebURL: URL? = nil,
+        localFileSyncPathsOverride: [String]? = nil
     ) async throws -> MagentThread {
         var name = ""
         var foundUnique = false
@@ -150,7 +151,24 @@ extension ThreadManager {
                 baseBranch: baseBranch
             )
 
-            let localFileSyncPathsSnapshot = project.normalizedLocalFileSyncPaths
+            let localFileSyncPathsSnapshot: [String] = {
+                guard let override = localFileSyncPathsOverride else {
+                    return project.normalizedLocalFileSyncPaths
+                }
+                // Merge source thread snapshot with current project paths:
+                // - keep source paths that are still configured in the project
+                // - append any new project paths not in the source snapshot
+                // This matches the effectiveLocalSyncPaths contract (never sync
+                // paths removed from project config).
+                let currentPaths = project.normalizedLocalFileSyncPaths
+                let currentSet = Set(currentPaths)
+                var merged = override.filter { currentSet.contains($0) }
+                let mergedSet = Set(merged)
+                for path in currentPaths where !mergedSet.contains(path) {
+                    merged.append(path)
+                }
+                return merged
+            }()
             let (syncSourcePath, _) = resolveBaseBranchSyncTarget(
                 baseBranch: baseBranch,
                 excludingThreadId: threadID,

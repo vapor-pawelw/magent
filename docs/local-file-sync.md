@@ -35,6 +35,8 @@ After `git worktree add`, Magent copies each configured path from the resolved s
 
 The thread also stores a snapshot of that normalized path list at creation time. Later project setting changes only affect newly created threads.
 
+When forking a thread (Fork Thread), the new thread's sync snapshot is built by merging the source thread's snapshot with the current project paths: source paths still present in the project config are kept, removed paths are filtered out, and any new project paths are appended. This ensures the fork inherits the source thread's sync state while staying consistent with the current project configuration.
+
 - Missing source path in sync target: skipped
 - After thread creation, Magent shows a warning banner listing any configured sync paths that were missing in the source
 - Existing destination in new worktree: overwritten for configured path contents
