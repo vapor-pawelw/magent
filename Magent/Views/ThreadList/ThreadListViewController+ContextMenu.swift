@@ -41,6 +41,18 @@ extension ThreadListViewController {
         keepAliveItem.representedObject = thread.id
         menu.addItem(keepAliveItem)
 
+        // Kill All Sessions
+        let hasLiveSessions = thread.tmuxSessionNames.contains {
+            !thread.deadSessions.contains($0)
+        }
+        if hasLiveSessions {
+            let killItem = NSMenuItem(title: "Kill All Sessions", action: #selector(killAllThreadSessions(_:)), keyEquivalent: "")
+            killItem.target = self
+            killItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
+            killItem.representedObject = thread.id
+            menu.addItem(killItem)
+        }
+
         // Jira (below pin)
         if let jiraItem = buildJiraMenuItem(for: thread, settings: settings) {
             menu.addItem(jiraItem)
@@ -800,6 +812,13 @@ extension ThreadListViewController {
     @objc private func toggleThreadKeepAlive(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
         threadManager.toggleThreadKeepAlive(threadId: threadId)
+    }
+
+    @objc private func killAllThreadSessions(_ sender: NSMenuItem) {
+        guard let threadId = sender.representedObject as? UUID else { return }
+        Task {
+            await threadManager.killAllSessions(threadId: threadId)
+        }
     }
 
     @objc private func markThreadAsRead(_ sender: NSMenuItem) {

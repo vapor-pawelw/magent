@@ -246,6 +246,59 @@ extension ThreadManager {
         }
     }
 
+    // MARK: - Manual Session Kill
+
+    /// Manually kills a single tmux session, preserving tab metadata.
+    /// Uses the same eviction model as idle cleanup: evict from cache, mark evicted, kill tmux.
+    func killSession(threadId: UUID, sessionName: String) async {
+        guard let idx = threads.firstIndex(where: { $0.id == threadId }) else { return }
+
+        await MainActor.run {
+            ReusableTerminalViewCache.shared.evictSessions([sessionName])
+        }
+
+        evictedIdleSessions.insert(sessionName)
+
+        do {
+            try await tmux.killSession(name: sessionName)
+            knownGoodSessionContexts.removeValue(forKey: sessionName)
+            threads[idx].deadSessions.insert(sessionName)
+            delegate?.threadManager(self, didUpdateThreads: threads)
+        } catch {
+            evictedIdleSessions.remove(sessionName)
+            NSLog("[SessionCleanup] Manual kill failed for \(sessionName): \(error)")
+        }
+    }
+
+    /// Manually kills all live tmux sessions for a thread, preserving tab metadata.
+    func killAllSessions(threadId: UUID) async {
+        guard let idx = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        let thread = threads[idx]
+
+        let liveNames = thread.tmuxSessionNames.filter {
+            !thread.deadSessions.contains($0) && !evictedIdleSessions.contains($0)
+        }
+        guard !liveNames.isEmpty else { return }
+
+        await MainActor.run {
+            ReusableTerminalViewCache.shared.evictSessions(liveNames)
+        }
+
+        for sessionName in liveNames {
+            evictedIdleSessions.insert(sessionName)
+            do {
+                try await tmux.killSession(name: sessionName)
+                knownGoodSessionContexts.removeValue(forKey: sessionName)
+                threads[idx].deadSessions.insert(sessionName)
+            } catch {
+                evictedIdleSessions.remove(sessionName)
+                NSLog("[SessionCleanup] Manual kill failed for \(sessionName): \(error)")
+            }
+        }
+
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
     // MARK: - Keep Alive Recovery
 
     /// Removes sessions from the evicted set and triggers async recreation for

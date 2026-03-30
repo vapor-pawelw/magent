@@ -103,6 +103,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onKeepAlive: (() -> Void)?
     var onContinueIn: ((AgentType) -> Void)?
     var onExportContext: (() -> Void)?
+    var onKillSession: (() -> Void)?
     var onCloseTabsToTheRight: (() -> Void)?
     var onCloseTabsToTheLeft: (() -> Void)?
     var availableAgentsForContinue: [AgentType] = []
@@ -302,6 +303,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         onCloseTabsToTheLeft?()
     }
 
+    @objc private func killSessionTapped() {
+        onKillSession?()
+    }
+
     private func updateAppearance() {
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let deadDimAlpha: CGFloat = isSessionDead ? 0.45 : 1.0
@@ -437,6 +442,15 @@ final class TabItemView: NSView, NSMenuDelegate {
                 closeLeftItem.target = self
                 menu.addItem(closeLeftItem)
             }
+        }
+
+        // Kill tmux session (terminal tabs only, when session is alive)
+        if let onKillSession, !isSessionDead {
+            menu.addItem(.separator())
+            let killItem = NSMenuItem(title: "Kill Session", action: #selector(killSessionTapped), keyEquivalent: "")
+            killItem.target = self
+            killItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
+            menu.addItem(killItem)
         }
 
         // "Close this tab" — always at the bottom

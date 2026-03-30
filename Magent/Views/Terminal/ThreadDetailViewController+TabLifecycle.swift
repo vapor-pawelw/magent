@@ -481,6 +481,20 @@ extension ThreadDetailViewController {
         persistTabOrder()
     }
 
+    // MARK: - Kill Session
+
+    func killSession(at index: Int) {
+        guard index < tabSlots.count,
+              case .terminal(let sessionName) = tabSlots[index] else { return }
+        Task {
+            await threadManager.killSession(threadId: thread.id, sessionName: sessionName)
+            if let freshThread = threadManager.threads.first(where: { $0.id == thread.id }) {
+                thread = freshThread
+            }
+            rebuildTabBar()
+        }
+    }
+
     // MARK: - Keep Alive
 
     func toggleKeepAlive(at index: Int) {

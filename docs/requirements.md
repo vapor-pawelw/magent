@@ -190,7 +190,7 @@ For the main thread, the sidebar uses these rules:
 ### Non-Main Thread Rename Actions
 
 - Hidden threads stay at the bottom of their section/list and render with dimmed row content so they read as deprioritized rather than archived.
-- Context menu order for non-main threads starts with `Pin/Unpin`, then `Hide/Unhide`, then `Rename...`, then a separator.
+- Context menu order for non-main threads starts with `Pin/Unpin`, `Keep Alive`, `Kill All Sessions` (when live sessions exist), then Jira, then a separator, then rename/description/icon actions.
 - `Rename...` is prompt-based: user enters a natural-language task prompt, and Magent generates:
   - branch slug candidate(s)
   - short task description
