@@ -48,6 +48,21 @@ public enum IPCAgentDocs {
     Use hide-thread / unhide-thread to deprioritize a thread in the sidebar without archiving it.
     Use archive-thread --skip-local-sync to avoid writing local sync path changes into the main worktree during archive.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
+
+    Common user intents and how to handle them:
+
+    "review thread" / "review this thread" / "review magent thread":
+    The user wants a code review of the current thread's changes. Create a new agent tab in the current thread to perform the review:
+    1. Use `thread-info` to check which agents are enabled (activeAgents field) and which is the default.
+    2. Create a review tab: `/tmp/magent-cli create-tab --thread <name> --prompt "Review the changes on this branch compared to the base branch. Provide feedback on code quality, correctness, and potential issues."` — use the default agent (omit --agent) unless you have reason to prefer another.
+    3. After creating the tab, check its status via `thread-info`. If the new tab shows isBlockedByRateLimit, close it and retry with a different enabled agent: `/tmp/magent-cli close-tab --thread <name> --session <session> && /tmp/magent-cli create-tab --thread <name> --agent <fallback-agent> --prompt "..."`.
+    4. Try each enabled agent in activeAgents until one is not rate-limited, or inform the user if all agents are rate-limited.
+
+    "archive thread" / "archive this thread" / "archive magent thread":
+    The user wants to archive the current thread (same as the Archive button in the GUI). This removes the worktree and hides the thread from the sidebar while keeping the git branch. Before archiving:
+    1. Ensure all work is committed and pushed if needed.
+    2. Run: `/tmp/magent-cli archive-thread --thread <name> --skip-local-sync`
+    Use --skip-local-sync by default to avoid modifying the main worktree. Use --force if the thread has uncommitted changes and the user has confirmed they want to discard them.
     """
 
     /// On-demand CLI reference returned by `magent-cli docs`.
@@ -72,7 +87,7 @@ public enum IPCAgentDocs {
 
     public static let codexIPCMarkerStart = "<!-- magent-ipc-start -->"
     public static let codexIPCMarkerEnd = "<!-- magent-ipc-end -->"
-    public static let codexIPCVersion = "<!-- magent-ipc-v17 -->"
+    public static let codexIPCVersion = "<!-- magent-ipc-v18 -->"
 
     /// Lightweight Codex `AGENTS.md` hint that points to on-demand docs.
     public static let codexAgentsMdBlock: String = """
