@@ -19,6 +19,8 @@ All notable changes to this project will be documented in this file.
 - Local Sync context menu hides the "Other…" option when only one other worktree exists, since the direct menu items already cover it.
 
 ### CLI
+- `create-thread` and `send-prompt` now support `--prompt-file <path>` for multi-line prompts, avoiding shell escaping issues.
+- Fixed `--prompt` failing with "Invalid JSON" when the prompt text contains newlines, carriage returns, or other control characters.
 - `create-tab` and `batch-create` now reject disabled agents with an explicit error, matching `create-thread` behavior.
 
 ### Agents

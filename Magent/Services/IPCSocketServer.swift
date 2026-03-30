@@ -346,9 +346,10 @@ actor IPCSocketServer {
             printf '%s' "$ls_badges" | sed 's/\[//g; s/\]//g; s/ /,/g'
         }
 
-        # Escape a value for JSON string embedding
+        # Escape a value for JSON string embedding (handles newlines, CR, tabs, quotes, backslashes)
         json_escape() {
-            printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g'
+            printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' | \
+                awk 'BEGIN{ORS=""} NR>1{printf "\\n"} {gsub(/\r/,"\\r"); print}'
         }
 
         json_kv() {
@@ -682,6 +683,7 @@ actor IPCSocketServer {
                     --project)      project="$2"; shift 2 ;;
                     --agent)        agent="$2"; shift 2 ;;
                     --prompt)       prompt="$2"; shift 2 ;;
+                    --prompt-file)  [ -f "$2" ] || die "Prompt file not found: $2"; prompt="$(cat "$2")"; shift 2 ;;
                     --name)         name="$2"; shift 2 ;;
                     --description)  desc="$2"; shift 2 ;;
                     --section)      section="$2"; shift 2 ;;
@@ -831,10 +833,11 @@ actor IPCSocketServer {
                 case "$1" in
                     --thread) thread="$2"; shift 2 ;;
                     --prompt) prompt="$2"; shift 2 ;;
+                    --prompt-file) [ -f "$2" ] || die "Prompt file not found: $2"; prompt="$(cat "$2")"; shift 2 ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] && [ -n "$prompt" ] || die "Usage: magent-cli send-prompt --thread <name> --prompt <text>"
+            [ -n "$thread" ] && [ -n "$prompt" ] || die "Usage: magent-cli send-prompt --thread <name> --prompt <text|--prompt-file path>"
             send_request "{$(json_kv command send-prompt),$(json_kv threadName "$thread"),$(json_kv prompt "$prompt")}"
             ;;
         archive-thread)
@@ -1160,11 +1163,11 @@ actor IPCSocketServer {
             echo "  magent-cli docs                      (full IPC command reference + usage guidance)"
             echo ""
             echo "Thread commands:"
-            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--no-select] [--no-submit]"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--no-select] [--no-submit]"
             echo "  batch-create         --project <name> --file <specs.json> [--no-submit]  (parallel thread creation)"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
-            echo "  send-prompt          --thread <name> --prompt <text>"
+            echo "  send-prompt          --thread <name> (--prompt <text> | --prompt-file <path>)"
             echo "  archive-thread       --thread <name> [--force] [--skip-local-sync]  (removes worktree, keeps branch)"
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
             echo "  list-tabs            (--thread <name> | --thread-id <id>)"
