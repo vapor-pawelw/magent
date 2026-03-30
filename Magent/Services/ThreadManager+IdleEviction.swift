@@ -56,7 +56,13 @@ extension ThreadManager {
                 // Currently busy — not idle.
                 if thread.busySessions.contains(session) { continue }
 
-                // Was busy within the last minute — not idle yet.
+                // Magent setup/injection is still in progress — not idle.
+                if thread.magentBusySessions.contains(session) { continue }
+
+                // Active rate limit state is protective — don't evict blocked tabs.
+                if thread.rateLimitedSessions[session] != nil { continue }
+
+                // Was busy within the last 10 minutes — not idle yet.
                 if let lastBusy = sessionLastBusyAt[session],
                    now.timeIntervalSince(lastBusy) < minIdleDuration { continue }
 
