@@ -18,6 +18,9 @@ All notable changes to this project will be documented in this file.
 - Fixed Manual Local Sync popup having overlapping UI elements by using proper Auto Layout constraints and pre-computing the accessory view size.
 - Manual Local Sync popup now labels the worktree picker as "Worktree:" instead of "Target Worktree:" since it serves as both source and target depending on direction.
 - Local Sync context menu hides the "Other…" option when only one other worktree exists, since the direct menu items already cover it.
+- Local Sync merge tool now uses the user's configured `git mergetool` instead of hardcoded opendiff — supports vimdiff, meld, custom commands, and any tool git recognizes.
+- New "Agentic Merge" option in Local Sync conflict dialogs delegates the entire sync to an agent tab for intelligent conflict resolution.
+- Removed "Show Diff" panel from conflict dialogs — conflicts are now handled by the merge tool or agent instead.
 
 ### CLI
 - `create-tab` and `batch-create` now reject disabled agents with an explicit error, matching `create-thread` behavior.

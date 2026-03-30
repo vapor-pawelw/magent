@@ -238,6 +238,7 @@ extension ThreadManager {
         case overwriteAll
         case skip
         case skipAll
+        case agenticMerge
         case cancel
     }
 
@@ -347,6 +348,16 @@ extension ThreadManager {
                     conflictDirection: .intoWorktree,
                     directoryMaterialization: .always
                 )
+            } catch ThreadManagerError.agenticMergeSignal {
+                let sourceLabel = sourceRootOverride.map { ($0 as NSString).lastPathComponent } ?? "Project"
+                let destLabel = (worktreePath as NSString).lastPathComponent
+                throw ThreadManagerError.agenticMergeReady(LocalSyncAgenticMergeContext(
+                    sourceRoot: sourceRoot,
+                    destinationRoot: worktreePath,
+                    syncPaths: syncPaths,
+                    sourceLabel: sourceLabel,
+                    destinationLabel: destLabel
+                ))
             } catch let error as ThreadManagerError {
                 throw error
             } catch {
@@ -403,6 +414,16 @@ extension ThreadManager {
                     baselineFileHashes: baselineHashes,
                     directoryMaterialization: .onDemand
                 )
+            } catch ThreadManagerError.agenticMergeSignal {
+                let sourceLabel = (worktreePath as NSString).lastPathComponent
+                let destLabel = destinationRootOverride.map { ($0 as NSString).lastPathComponent } ?? "Project"
+                throw ThreadManagerError.agenticMergeReady(LocalSyncAgenticMergeContext(
+                    sourceRoot: worktreePath,
+                    destinationRoot: destinationRoot,
+                    syncPaths: syncPaths,
+                    sourceLabel: sourceLabel,
+                    destinationLabel: destLabel
+                ))
             } catch let error as ThreadManagerError {
                 throw error
             } catch {
@@ -763,9 +784,10 @@ extension ThreadManager {
 
     // MARK: - Merge Tool
 
-    /// Attempts to resolve a file conflict by launching opendiff (FileMerge).
-    /// Other merge tools are not supported because they require git's backend-specific
-    /// launch logic which we can't replicate outside a real git merge context.
+    /// Resolves a file conflict by creating a temporary git repo with a staged merge
+    /// conflict and invoking `git mergetool`. This correctly uses the user's configured
+    /// merge tool (from `git config merge.tool`) regardless of tool type — GUI tools
+    /// like opendiff/mvimdiff, terminal tools like vimdiff, or custom commands.
     @concurrent private func openMergeToolForConflict(
         sourcePath: String,
         destinationPath: String,
@@ -777,9 +799,8 @@ extension ThreadManager {
             return false
         }
 
-        // Create temp copies for LOCAL / BASE / REMOTE / MERGED
-        let tempDir = (NSTemporaryDirectory() as NSString).appendingPathComponent("magent-merge-\(UUID().uuidString)")
         let fm = FileManager.default
+        let tempDir = (NSTemporaryDirectory() as NSString).appendingPathComponent("magent-merge-\(UUID().uuidString)")
         do {
             try fm.createDirectory(atPath: tempDir, withIntermediateDirectories: true)
         } catch {
@@ -787,32 +808,113 @@ extension ThreadManager {
         }
         defer { try? fm.removeItem(atPath: tempDir) }
 
-        let localFile = (tempDir as NSString).appendingPathComponent("LOCAL")
-        let baseFile = (tempDir as NSString).appendingPathComponent("BASE")
-        let remoteFile = (tempDir as NSString).appendingPathComponent("REMOTE")
-        let mergedFile = (tempDir as NSString).appendingPathComponent("MERGED")
+        let fileName = "conflict-file"
+        let filePath = (tempDir as NSString).appendingPathComponent(fileName)
 
-        do {
-            try fm.copyItem(atPath: destinationPath, toPath: localFile)
-            try Data().write(to: URL(fileURLWithPath: baseFile))
-            try fm.copyItem(atPath: sourcePath, toPath: remoteFile)
-            try fm.copyItem(atPath: destinationPath, toPath: mergedFile)
-        } catch {
-            return false
+        // Read the user's configured merge tool from the project repo
+        let toolResult = await ShellExecutor.execute(
+            "git config --get merge.tool",
+            workingDirectory: repoPath
+        )
+        let toolName = toolResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !toolName.isEmpty else { return false }
+
+        // Validate tool name to prevent injection into git config key paths
+        let validToolName = toolName.range(of: #"^[a-zA-Z0-9_\-]+$"#, options: .regularExpression) != nil
+        guard validToolName else { return false }
+
+        // Also propagate any custom mergetool command
+        let customCmdResult = await ShellExecutor.execute(
+            "git config --get mergetool.\(toolName).cmd",
+            workingDirectory: repoPath
+        )
+        let customCmd = customCmdResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Build a temporary git repo with a real merge conflict so git mergetool
+        // handles all tool-specific invocation logic.
+        // Base = empty file, branch "ours" = destination content, branch "theirs" = source content.
+        let setupCommands = [
+            "git init -b magent-base",
+            "git config user.email 'merge@magent.local'",
+            "git config user.name 'Magent'",
+            "git config merge.tool \(toolName)",
+        ]
+        let setupResult = await ShellExecutor.execute(
+            setupCommands.joined(separator: " && "),
+            workingDirectory: tempDir
+        )
+        guard setupResult.exitCode == 0 else { return false }
+
+        // Set custom mergetool command if configured
+        if !customCmd.isEmpty {
+            let cmdResult = await ShellExecutor.execute(
+                "git config mergetool.\(toolName).cmd \(shellEscaped(customCmd))",
+                workingDirectory: tempDir
+            )
+            guard cmdResult.exitCode == 0 else { return false }
         }
 
-        let mergeCommand = "opendiff \(shellEscaped(localFile)) \(shellEscaped(remoteFile)) -ancestor \(shellEscaped(baseFile)) -merge \(shellEscaped(mergedFile))"
-
-        let toolRunResult = await ShellExecutor.execute(mergeCommand)
-        guard toolRunResult.exitCode == 0 else { return false }
-
-        // Tool exited successfully — apply the MERGED result to the destination.
-        // We trust exit 0 as resolution even if the user chose to keep the local
-        // version unchanged (a valid "keep mine" resolution).
-        guard fm.fileExists(atPath: mergedFile) else { return false }
+        // Create base commit with a placeholder file (single newline so both sides diff against it)
         do {
-            let mergedData = try Data(contentsOf: URL(fileURLWithPath: mergedFile))
-            try mergedData.write(to: URL(fileURLWithPath: destinationPath), options: .atomic)
+            try "\n".write(toFile: filePath, atomically: true, encoding: .utf8)
+        } catch { return false }
+
+        let baseCommit = await ShellExecutor.execute(
+            "git add \(shellEscaped(fileName)) && git commit -m 'base'",
+            workingDirectory: tempDir
+        )
+        guard baseCommit.exitCode == 0 else { return false }
+
+        // Create "theirs" branch with source content
+        do {
+            let sourceData = try Data(contentsOf: URL(fileURLWithPath: sourcePath))
+            try sourceData.write(to: URL(fileURLWithPath: filePath), options: .atomic)
+        } catch { return false }
+
+        let theirsCommit = await ShellExecutor.execute(
+            "git checkout -b theirs && git add \(shellEscaped(fileName)) && git commit -m 'theirs'",
+            workingDirectory: tempDir
+        )
+        guard theirsCommit.exitCode == 0 else { return false }
+
+        // Go back to base, create "ours" branch with destination content
+        do {
+            let destData = try Data(contentsOf: URL(fileURLWithPath: destinationPath))
+            try destData.write(to: URL(fileURLWithPath: filePath), options: .atomic)
+        } catch { return false }
+
+        let oursCommit = await ShellExecutor.execute(
+            "git checkout magent-base && git checkout -b ours && git add \(shellEscaped(fileName)) && git commit -m 'ours'",
+            workingDirectory: tempDir
+        )
+        guard oursCommit.exitCode == 0 else { return false }
+
+        // Merge to create the conflict — we expect exit code 1 (conflict)
+        await ShellExecutor.execute(
+            "git merge theirs --no-commit || true",
+            workingDirectory: tempDir
+        )
+
+        // Verify the file is actually conflicted before launching the tool
+        let statusResult = await ShellExecutor.execute(
+            "git status --porcelain \(shellEscaped(fileName))",
+            workingDirectory: tempDir
+        )
+        let porcelain = statusResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard porcelain.hasPrefix("UU") || porcelain.hasPrefix("AA") else { return false }
+
+        // Run git mergetool — this launches the user's configured tool and waits for it
+        let mergetoolResult = await ShellExecutor.execute(
+            "git mergetool --no-prompt \(shellEscaped(fileName))",
+            workingDirectory: tempDir
+        )
+        guard mergetoolResult.exitCode == 0 else { return false }
+
+        // Read the resolved file and apply to destination
+        guard fm.fileExists(atPath: filePath) else { return false }
+        do {
+            let resolvedData = try Data(contentsOf: URL(fileURLWithPath: filePath))
+            try resolvedData.write(to: URL(fileURLWithPath: destinationPath), options: .atomic)
             return true
         } catch {
             return false
@@ -868,6 +970,8 @@ extension ThreadManager {
                 case .skipAll:
                     ignoreAll = true
                     return false
+                case .agenticMerge:
+                    throw ThreadManagerError.agenticMergeSignal
                 case .cancel:
                     throw ThreadManagerError.archiveCancelled
                 }
@@ -880,12 +984,18 @@ extension ThreadManager {
         _ conflict: LocalSyncConflict,
         direction: LocalSyncConflictDirection,
         repoPath: String
-    ) -> LocalSyncConflictChoice {
+    ) async -> LocalSyncConflictChoice {
         let isTextConflict = conflict.kind == .fileDifferent
             && localSyncIsTextFile(atPath: conflict.sourcePath)
             && localSyncIsTextFile(atPath: conflict.destinationPath)
-        let canShowDiff = isTextConflict
-        let canResolve = isTextConflict && hasMergeTool(repoPath: repoPath)
+        // Binary/structural conflicts get override/ignore; text conflicts use merge tool only
+        let isBinaryOrStructural = !isTextConflict
+        let canResolve: Bool
+        if isTextConflict {
+            canResolve = await hasMergeTool(repoPath: repoPath)
+        } else {
+            canResolve = false
+        }
 
         while true {
             let alert = NSAlert()
@@ -920,19 +1030,27 @@ extension ThreadManager {
                 }
             }
 
-            let optionHint = "\n\nHold Option for \"Override All\" or \"Ignore All\"."
-            alert.informativeText += optionHint
+            // Build buttons based on conflict type.
+            // Text file conflicts: [Resolve in Merge Tool], Agentic Merge, Cancel
+            // Binary/structural conflicts: Override/Ignore (Option for All), Agentic Merge, Cancel
 
-            // Button order: [Resolve (primary)], Override, Ignore, [Show Diff], Cancel
-            // "Resolve" is the primary action when a merge tool is available.
+            var overrideButton: NSButton?
+            var ignoreButton: NSButton?
+
             if canResolve {
                 alert.addButton(withTitle: "Resolve in Merge Tool")
             }
-            let overrideButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictOverride))
-            let ignoreButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictIgnore))
-            if canShowDiff {
-                alert.addButton(withTitle: "Show Diff")
+
+            if isBinaryOrStructural {
+                let optionHint = "\n\nHold Option for \"Override All\" or \"Ignore All\"."
+                alert.informativeText += optionHint
+
+                overrideButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictOverride))
+                ignoreButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictIgnore))
             }
+
+            alert.addButton(withTitle: "Agentic Merge")
+
             let cancelTitle: String = switch direction {
             case .intoRepo:
                 String(localized: .ThreadStrings.threadArchiveConflictCancelArchive)
@@ -942,208 +1060,90 @@ extension ThreadManager {
             alert.addButton(withTitle: cancelTitle)
 
             var optionHeld = NSEvent.modifierFlags.contains(.option)
-            func updateButtonTitles() {
-                overrideButton.title = optionHeld
-                    ? String(localized: .ThreadStrings.threadArchiveConflictOverrideAll)
-                    : String(localized: .ThreadStrings.threadArchiveConflictOverride)
-                ignoreButton.title = optionHeld
-                    ? "Ignore All"
-                    : String(localized: .ThreadStrings.threadArchiveConflictIgnore)
-            }
-            updateButtonTitles()
-
-            let monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-                optionHeld = event.modifierFlags.contains(.option)
+            if isBinaryOrStructural {
+                func updateButtonTitles() {
+                    overrideButton?.title = optionHeld
+                        ? String(localized: .ThreadStrings.threadArchiveConflictOverrideAll)
+                        : String(localized: .ThreadStrings.threadArchiveConflictOverride)
+                    ignoreButton?.title = optionHeld
+                        ? "Ignore All"
+                        : String(localized: .ThreadStrings.threadArchiveConflictIgnore)
+                }
                 updateButtonTitles()
-                return event
-            }
 
-            let response = alert.runModal()
-            if let monitor {
-                NSEvent.removeMonitor(monitor)
-            }
+                let monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+                    optionHeld = event.modifierFlags.contains(.option)
+                    updateButtonTitles()
+                    return event
+                }
 
-            let useAllChoice = optionHeld || (NSApp.currentEvent?.modifierFlags.contains(.option) == true)
+                let response = alert.runModal()
+                if let monitor {
+                    NSEvent.removeMonitor(monitor)
+                }
 
-            // Map response to button index, accounting for optional Resolve button
-            let buttonIndex: Int
-            switch response {
-            case .alertFirstButtonReturn: buttonIndex = 0
-            case .alertSecondButtonReturn: buttonIndex = 1
-            case .alertThirdButtonReturn: buttonIndex = 2
-            case NSApplication.ModalResponse(rawValue: 1003): buttonIndex = 3
-            case NSApplication.ModalResponse(rawValue: 1004): buttonIndex = 4
-            default: return .cancel
-            }
+                let useAllChoice = optionHeld || (NSApp.currentEvent?.modifierFlags.contains(.option) == true)
 
-            // Decode which logical button was pressed
-            var idx = buttonIndex
-            if canResolve {
-                if idx == 0 { return .resolve }
-                idx -= 1
-            }
-            // idx 0 = Override, 1 = Ignore, 2 = Show Diff (if present), last = Cancel
-            switch idx {
-            case 0:
-                return useAllChoice ? .overwriteAll : .overwrite
-            case 1:
-                return useAllChoice ? .skipAll : .skip
-            case 2 where canShowDiff:
-                presentLocalSyncDiffPanel(conflict, direction: direction)
-                continue // re-present the conflict alert after closing diff
-            default:
-                return .cancel
+                // Button index mapping for binary/structural:
+                // [0: Resolve?], Override, Ignore, Agentic Merge, Cancel
+                let buttonIndex: Int
+                switch response {
+                case .alertFirstButtonReturn: buttonIndex = 0
+                case .alertSecondButtonReturn: buttonIndex = 1
+                case .alertThirdButtonReturn: buttonIndex = 2
+                case NSApplication.ModalResponse(rawValue: 1003): buttonIndex = 3
+                case NSApplication.ModalResponse(rawValue: 1004): buttonIndex = 4
+                default: return .cancel
+                }
+
+                var idx = buttonIndex
+                if canResolve {
+                    if idx == 0 { return .resolve }
+                    idx -= 1
+                }
+                // idx 0 = Override, 1 = Ignore, 2 = Agentic Merge, 3 = Cancel
+                switch idx {
+                case 0: return useAllChoice ? .overwriteAll : .overwrite
+                case 1: return useAllChoice ? .skipAll : .skip
+                case 2: return .agenticMerge
+                default: return .cancel
+                }
+            } else {
+                // Text conflict — no Option key monitoring needed
+                let response = alert.runModal()
+
+                // Button index mapping for text:
+                // [0: Resolve?], Agentic Merge, Cancel
+                let buttonIndex: Int
+                switch response {
+                case .alertFirstButtonReturn: buttonIndex = 0
+                case .alertSecondButtonReturn: buttonIndex = 1
+                case .alertThirdButtonReturn: buttonIndex = 2
+                default: return .cancel
+                }
+
+                var idx = buttonIndex
+                if canResolve {
+                    if idx == 0 { return .resolve }
+                    idx -= 1
+                }
+                // idx 0 = Agentic Merge, 1 = Cancel
+                switch idx {
+                case 0: return .agenticMerge
+                default: return .cancel
+                }
             }
         }
     }
 
-    /// Checks whether opendiff (FileMerge) is available as a merge tool.
-    /// Other merge tools are not supported — they require git's backend-specific launch logic.
-    nonisolated private func hasMergeTool(repoPath: String) -> Bool {
-        // Check if opendiff is available on the system (ships with Xcode command line tools)
-        return FileManager.default.fileExists(atPath: "/usr/bin/opendiff")
-    }
-
-    // MARK: - Diff
-
-    @MainActor
-    private func presentLocalSyncDiffPanel(_ conflict: LocalSyncConflict, direction: LocalSyncConflictDirection) {
-        let sourceContent = (try? String(contentsOfFile: conflict.sourcePath, encoding: .utf8)) ?? "(unreadable)"
-        let destContent = (try? String(contentsOfFile: conflict.destinationPath, encoding: .utf8)) ?? "(unreadable)"
-
-        // source = where the file is being copied FROM, destination = where it would land.
-        // For intoWorktree: source is project, destination is worktree.
-        // For intoRepo: source is worktree, destination is project repo.
-        let sourceLabel: String
-        let destLabel: String
-        let shortSource = conflict.sourcePath.replacingOccurrences(of: NSHomeDirectory(), with: "~")
-        let shortDest = conflict.destinationPath.replacingOccurrences(of: NSHomeDirectory(), with: "~")
-        switch direction {
-        case .intoWorktree:
-            destLabel = "Worktree: \(shortDest)"
-            sourceLabel = "Project: \(shortSource)"
-        case .intoRepo:
-            destLabel = "Project: \(shortDest)"
-            sourceLabel = "Worktree: \(shortSource)"
-        }
-
-        let diff = localSyncUnifiedDiff(
-            oldText: destContent,
-            newText: sourceContent,
-            oldLabel: destLabel,
-            newLabel: sourceLabel
+    /// Checks whether the user has a merge tool configured via `git config merge.tool`.
+    @concurrent private func hasMergeTool(repoPath: String) async -> Bool {
+        let result = await ShellExecutor.execute(
+            "git config --get merge.tool",
+            workingDirectory: repoPath
         )
-
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 700, height: 500),
-            styleMask: [.titled, .closable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        panel.title = "Diff: \(conflict.relativePath)"
-        panel.isFloatingPanel = true
-        panel.becomesKeyOnlyIfNeeded = false
-
-        let scrollView = NSScrollView(frame: panel.contentView!.bounds)
-        scrollView.autoresizingMask = [.width, .height]
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
-
-        let textView = NSTextView(frame: scrollView.contentView.bounds)
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.autoresizingMask = [.width]
-        textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        textView.isHorizontallyResizable = true
-        textView.textContainer?.widthTracksTextView = false
-        textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-
-        applyLocalSyncDiffColoring(to: textView, diff: diff)
-
-        scrollView.documentView = textView
-        panel.contentView = scrollView
-        panel.center()
-
-        // Stop modal run loop when the panel is closed.
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: panel,
-            queue: .main
-        ) { _ in
-            NSApp.stopModal()
-        }
-        NSApp.runModal(for: panel)
-    }
-
-    private func applyLocalSyncDiffColoring(to textView: NSTextView, diff: String) {
-        let storage = NSMutableAttributedString()
-        let baseFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        let baseColor = NSColor.labelColor
-
-        let addedFg = NSColor(calibratedRed: 0.35, green: 0.75, blue: 0.35, alpha: 1.0)
-        let addedBg = NSColor.systemGreen.withAlphaComponent(0.08)
-        let removedFg = NSColor(calibratedRed: 0.9, green: 0.35, blue: 0.35, alpha: 1.0)
-        let removedBg = NSColor.systemRed.withAlphaComponent(0.08)
-        let headerColor = NSColor.secondaryLabelColor
-
-        for line in diff.components(separatedBy: "\n") {
-            var attrs: [NSAttributedString.Key: Any] = [.font: baseFont, .foregroundColor: baseColor]
-            if line.hasPrefix("+++") || line.hasPrefix("---") || line.hasPrefix("@@") {
-                attrs[.foregroundColor] = headerColor
-            } else if line.hasPrefix("+") {
-                attrs[.foregroundColor] = addedFg
-                attrs[.backgroundColor] = addedBg
-            } else if line.hasPrefix("-") {
-                attrs[.foregroundColor] = removedFg
-                attrs[.backgroundColor] = removedBg
-            }
-            storage.append(NSAttributedString(string: line + "\n", attributes: attrs))
-        }
-
-        textView.textStorage?.setAttributedString(storage)
-    }
-
-    /// Produces a basic unified diff between two strings.
-    private func localSyncUnifiedDiff(oldText: String, newText: String, oldLabel: String, newLabel: String) -> String {
-        // Use the system `diff` command for a proper unified diff.
-        let tempDir = NSTemporaryDirectory()
-        let oldFile = (tempDir as NSString).appendingPathComponent("magent-diff-old-\(UUID().uuidString)")
-        let newFile = (tempDir as NSString).appendingPathComponent("magent-diff-new-\(UUID().uuidString)")
-
-        defer {
-            try? FileManager.default.removeItem(atPath: oldFile)
-            try? FileManager.default.removeItem(atPath: newFile)
-        }
-
-        do {
-            try oldText.write(toFile: oldFile, atomically: true, encoding: .utf8)
-            try newText.write(toFile: newFile, atomically: true, encoding: .utf8)
-
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/diff")
-            process.arguments = ["-u", "--label", oldLabel, "--label", newLabel, oldFile, newFile]
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = FileHandle.nullDevice
-            try process.run()
-            process.waitUntilExit()
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8), !output.isEmpty {
-                return output
-            }
-        } catch {
-            // Fall through to simple diff
-        }
-
-        // Fallback: simple line-by-line comparison
-        let oldFallbackLines = oldText.components(separatedBy: "\n")
-        let newFallbackLines = newText.components(separatedBy: "\n")
-        var result = "--- \(oldLabel)\n+++ \(newLabel)\n"
-        result += "@@ -1,\(oldFallbackLines.count) +1,\(newFallbackLines.count) @@\n"
-        for line in oldFallbackLines { result += "-\(line)\n" }
-        for line in newFallbackLines { result += "+\(line)\n" }
-        return result
+        let tool = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return result.exitCode == 0 && !tool.isEmpty
     }
 
     /// Returns `true` if the file at the given path appears to be a text file (not binary).

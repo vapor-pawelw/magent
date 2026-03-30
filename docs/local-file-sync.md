@@ -125,16 +125,33 @@ Conflicts are detected when merge-back would overwrite existing destination data
 
 ### Conflict Prompt
 
-Interactive archive/resync (UI) shows a conflict alert with the following buttons:
+Interactive archive/resync (UI) shows a conflict alert. The button layout differs by conflict type:
 
-- `Resolve in Merge Tool` (primary, text file conflicts only, only when opendiff is available) — opens FileMerge with the two file versions. If the user saves a resolution and quits, the result is applied and the alert is dismissed. If the user quits without resolving, the alert re-appears. Only `opendiff` (FileMerge, ships with Xcode command line tools) is supported — other merge tools require git's backend-specific launch logic which cannot be replicated outside a real git merge context
+**Text file conflicts** (both sides are text files):
+
+- `Resolve in Merge Tool` (primary, only when `git config merge.tool` is set) — creates a temporary git repo with a real staged merge conflict and runs `git mergetool`, which correctly invokes whatever tool the user has configured (opendiff, vimdiff, meld, custom commands, etc.). If the user resolves and quits, the result is applied and the alert is dismissed. If the user quits without resolving, the alert re-appears.
+- `Agentic Merge` — aborts the file-by-file sync loop and opens a new agent tab with a structured prompt that delegates the entire sync operation to the agent for intelligent conflict resolution.
+- `Cancel Archive` / `Cancel` (abort entire operation)
+
+**Binary/structural conflicts** (binary files, file-blocks-directory, directory-blocks-file):
+
 - `Override` (current conflict only)
 - `Ignore` (skip current conflict)
-- `Show Diff` (text file conflicts only) — opens a modal panel with a unified diff color-coded with green/red foreground text and subtle tinted backgrounds (matching `InlineDiffViewController` colors), labeled with "Worktree:" / "Project:" prefixes so the origin of each side is clear. Context lines use `labelColor` for dark mode readability. After closing the diff panel the conflict alert re-presents for the user to choose.
+- `Agentic Merge` — same as above, delegates to agent.
 - `Cancel Archive` / `Cancel` (abort entire operation)
 - Holding Option changes `Override` to `Override All` and `Ignore` to `Ignore All` for the rest of that sync run
 
-Binary detection: files are considered binary if the first 8 KB contain a null byte; the Show Diff button is hidden for binary files and for non-file conflicts (file-blocks-directory, directory-blocks-file).
+Binary detection: files are considered binary if the first 8 KB contain a null byte.
+
+### Merge Tool Implementation
+
+The merge tool integration creates a throwaway git repository in `/tmp/magent-merge-*` with:
+- A base commit containing a placeholder file
+- An "ours" branch with the destination file content
+- A "theirs" branch with the source file content
+- A real `git merge` that produces a conflict
+
+This allows `git mergetool` to handle all tool-specific invocation logic (environment variables, temp file naming conventions, exit code handling) regardless of tool type. The user's `merge.tool` and any custom `mergetool.<name>.cmd` are read from the project repo's git config and propagated to the temp repo. Tool names are validated against `[a-zA-Z0-9_-]+` to prevent config key injection.
 
 Non-interactive archive flows skip conflicting targets by default (no destructive overwrite prompt).
 

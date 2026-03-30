@@ -1830,6 +1830,10 @@ enum ThreadManagerError: LocalizedError {
     case noExpectedBranch
     case archiveCancelled
     case localFileSyncFailed(String)
+    /// Signal case thrown by the inner conflict handler; carries no data.
+    /// The sync entry points catch this and rethrow `.agenticMergeReady` with full context.
+    case agenticMergeSignal
+    case agenticMergeReady(LocalSyncAgenticMergeContext)
 
     var errorDescription: String? {
         switch self {
@@ -1860,6 +1864,22 @@ enum ThreadManagerError: LocalizedError {
             return "Archive cancelled."
         case .localFileSyncFailed(let message):
             return message
+        case .agenticMergeSignal:
+            return "Agentic merge requested."
+        case .agenticMergeReady:
+            return "Agentic merge requested."
         }
     }
+}
+
+/// Context passed when the user chooses "Agentic Merge" during local sync conflict resolution.
+/// Carries all the information needed to construct an agent prompt for the sync operation.
+struct LocalSyncAgenticMergeContext: Sendable {
+    let sourceRoot: String
+    let destinationRoot: String
+    let syncPaths: [String]
+    /// Human-readable label for the source (e.g. "Project" or worktree name)
+    let sourceLabel: String
+    /// Human-readable label for the destination
+    let destinationLabel: String
 }

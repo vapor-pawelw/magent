@@ -388,6 +388,12 @@ extension ThreadDetailViewController {
                     BannerManager.shared.dismissCurrent()
                 }
                 return
+            } catch ThreadManagerError.agenticMergeReady(let context) {
+                await MainActor.run {
+                    BannerManager.shared.dismissCurrent()
+                    self.openAgenticMergeTab(context: context)
+                }
+                return
             } catch {
                 await MainActor.run {
                     BannerManager.shared.show(
@@ -445,6 +451,12 @@ extension ThreadDetailViewController {
                     BannerManager.shared.dismissCurrent()
                 }
                 return
+            } catch ThreadManagerError.agenticMergeReady(let context) {
+                await MainActor.run {
+                    BannerManager.shared.dismissCurrent()
+                    self.openAgenticMergeTab(context: context)
+                }
+                return
             } catch {
                 await MainActor.run {
                     BannerManager.shared.show(
@@ -454,6 +466,37 @@ extension ThreadDetailViewController {
                 }
             }
         }
+    }
+
+    // MARK: - Agentic Merge
+
+    private func openAgenticMergeTab(context: LocalSyncAgenticMergeContext) {
+        let pathsList = context.syncPaths.map { "  - \($0)" }.joined(separator: "\n")
+        let prompt = """
+        I need you to sync local files between two directories and resolve any conflicts.
+
+        **Source:** \(context.sourceRoot) (\(context.sourceLabel))
+        **Destination:** \(context.destinationRoot) (\(context.destinationLabel))
+
+        **Paths to sync:**
+        \(pathsList)
+
+        For each path listed above, copy the file or directory from Source to Destination. If a file already exists at the destination and differs from the source:
+        1. Read both versions
+        2. Merge them intelligently, preserving meaningful changes from both sides
+        3. If you're not sure which change to keep, ask me before proceeding
+
+        After syncing, confirm what was done and list any files where you merged changes or chose one version over another.
+        """
+
+        addTab(
+            using: nil,
+            useAgentCommand: true,
+            initialPrompt: prompt,
+            shouldSubmitInitialPrompt: true,
+            customTitle: "Local Sync Merge",
+            tabNameSuffix: "sync"
+        )
     }
 
     private func startResyncSpinner() {
