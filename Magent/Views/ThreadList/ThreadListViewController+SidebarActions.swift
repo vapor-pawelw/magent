@@ -314,7 +314,7 @@ extension ThreadListViewController {
             self.createThread(
                 for: targetProject,
                 requestedAgentType: result.agentType,
-                useAgentCommand: result.useAgentCommand,
+                useAgentCommand: result.isDraft ? false : result.useAgentCommand,
                 baseBranch: result.baseBranch,
                 initialPrompt: result.isDraft ? nil : result.prompt,
                 shouldSubmitInitialPrompt: !result.isDraft,

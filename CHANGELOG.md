@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - About panel now displays build number (git commit count) and commit hash.
 
 ### Thread
+- Fixed draft threads incorrectly spawning an agent tab alongside the draft tab — new draft threads now start with only the draft tab.
 - Prompt injection failure banner now includes a "Copy Prompt" button so users can paste the prompt manually when automatic injection fails.
 - "New Thread from This Branch" renamed to "Fork Thread" — the prompt sheet now shows "Fork Thread" as the title with source thread info displayed below, and the project picker is locked to the source thread's project.
 - Forking a thread now copies local sync paths from the source thread, merged with current project paths (new paths added, removed paths filtered out).
