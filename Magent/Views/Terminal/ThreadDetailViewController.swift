@@ -1438,6 +1438,13 @@ final class ThreadDetailViewController: NSViewController {
                         agentType: failure.agentType
                     )
                 },
+                BannerAction(title: "Copy Prompt") { [weak self] in
+                    guard let self else { return }
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(failure.prompt, forType: .string)
+                    self.threadManager.clearInitialPromptInjectionFailure(for: sessionName)
+                    self.refreshInitialPromptFailureBanner()
+                },
                 BannerAction(title: "Already Injected") { [weak self] in
                     guard let self else { return }
                     self.threadManager.clearInitialPromptInjectionFailure(for: sessionName)
