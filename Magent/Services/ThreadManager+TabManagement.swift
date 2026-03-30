@@ -258,6 +258,7 @@ extension ThreadManager {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard !threads[index].tmuxSessionNames.contains(sessionName) else { return }
         threads[index].tmuxSessionNames.append(sessionName)
+        sessionLastVisitedAt[sessionName] = Date()
         if agentType != nil {
             threads[index].agentTmuxSessions.append(sessionName)
             if let agentType {

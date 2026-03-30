@@ -29,6 +29,8 @@ All notable changes to this project will be documented in this file.
 - Dead-session threads now show a gray icon and dimmed description text, making them visually distinct from hidden threads (which dim the entire row).
 
 ### Sessions
+- Idle eviction now protects sessions during Magent setup/injection and while rate-limited, preventing premature kills of sessions that are still initializing or waiting on API limits.
+- New tmux sessions are now stamped with a visit timestamp at creation time, preventing idle eviction from treating freshly created sessions as ancient when the user switches away.
 - Enabling Keep Alive on a thread or tab now instantly recovers any dead or evicted sessions, instead of waiting for the next monitor tick or manual tab selection.
 - Sessions with unsubmitted typed input at the agent prompt are now protected from idle eviction, manual cleanup, and archive suggestion — typed-but-unsent text is no longer silently lost.
 - Keep Alive now has two independent levels: thread-level (protects all tabs) and tab-level (protects individual sessions). A light-blue half-shield icon appears in the sidebar for thread-level keep alive.

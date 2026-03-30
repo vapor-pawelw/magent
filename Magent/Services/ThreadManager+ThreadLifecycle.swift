@@ -357,6 +357,7 @@ extension ThreadManager {
                 // injection or agent-readiness detection for non-prompt threads).
                 threads[idx].magentBusySessions = [tmuxSessionName]
             }
+            sessionLastVisitedAt[tmuxSessionName] = Date()
 
             try persistence.saveActiveThreads(threads)
             await MainActor.run {
@@ -495,6 +496,7 @@ extension ThreadManager {
         var busyThread = thread
         busyThread.magentBusySessions.insert(tmuxSessionName)
         threads.insert(busyThread, at: 0)
+        sessionLastVisitedAt[tmuxSessionName] = Date()
         try persistence.saveActiveThreads(threads)
         await MainActor.run {
             delegate?.threadManager(self, didCreateThread: busyThread)
