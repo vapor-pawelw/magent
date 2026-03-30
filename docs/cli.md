@@ -38,6 +38,7 @@ magent-cli create-thread --project <name> [options]
 | `--project <name>` | **Required.** Project to create the thread in. |
 | `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`. Defaults to project/global setting. Errors if the requested agent is disabled in Settings. |
 | `--prompt <text>` | Initial prompt to send to the agent after creation. |
+| `--prompt-file <path>` | Read the initial prompt from a file. Useful for multi-line prompts with special characters. |
 | `--name <slug>` | Exact thread name (must be unique). |
 | `--description <text>` | Natural-language description — AI generates a slug from it. |
 | `--section <name>` | Place the thread in this section (case-insensitive). |
@@ -163,7 +164,10 @@ Send a prompt to a thread's agent.
 
 ```bash
 magent-cli send-prompt --thread <name> --prompt <text>
+magent-cli send-prompt --thread <name> --prompt-file <path>
 ```
+
+Use `--prompt-file` for multi-line prompts or text with special characters (quotes, dashes, newlines) to avoid shell escaping issues.
 
 ### auto-rename-thread
 
