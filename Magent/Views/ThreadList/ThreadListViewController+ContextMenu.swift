@@ -778,6 +778,13 @@ extension ThreadListViewController {
         colorItem.representedObject = sectionInfo
         menu.addItem(colorItem)
 
+        let keepAliveTitle = section.isKeepAlive ? "Remove Keep Alive" : "Keep Alive"
+        let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(toggleSectionKeepAlive(_:)), keyEquivalent: "")
+        keepAliveItem.target = self
+        keepAliveItem.image = NSImage(systemSymbolName: section.isKeepAlive ? "shield.slash" : "shield.righthalf.filled", accessibilityDescription: nil)
+        keepAliveItem.representedObject = sectionInfo
+        menu.addItem(keepAliveItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let addItem = NSMenuItem(title: "Add Section…", action: #selector(addSectionFromMenu(_:)), keyEquivalent: "")
@@ -837,6 +844,15 @@ extension ThreadListViewController {
               let sectionId = info["sectionId"] as? UUID else { return }
         threadManager.moveThread(thread, toSection: sectionId)
         reloadData()
+    }
+
+    @objc private func toggleSectionKeepAlive(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: String],
+              let projectIdRaw = info["projectId"],
+              let sectionIdRaw = info["sectionId"],
+              let projectId = UUID(uuidString: projectIdRaw),
+              let sectionId = UUID(uuidString: sectionIdRaw) else { return }
+        threadManager.toggleSectionKeepAlive(projectId: projectId, sectionId: sectionId)
     }
 
     @objc private func renameSectionFromMenu(_ sender: NSMenuItem) {

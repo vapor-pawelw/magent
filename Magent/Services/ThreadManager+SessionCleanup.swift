@@ -22,17 +22,26 @@ extension ThreadManager {
     /// Computed from the same live-session subset as `liveSessionCount` so that
     /// `live - protected` accurately reflects killable sessions.
     var protectedSessionCount: Int {
-        threads.filter { !$0.isArchived }.reduce(0) { total, thread in
+        let settings = persistence.loadSettings()
+        return threads.filter { !$0.isArchived }.reduce(0) { total, thread in
             total + thread.tmuxSessionNames.filter { sessionName in
                 !thread.deadSessions.contains(sessionName)
                     && !evictedIdleSessions.contains(sessionName)
-                    && isSessionProtected(sessionName, in: thread)
+                    && isSessionProtected(sessionName, in: thread, settings: settings)
             }.count
         }
     }
 
     /// Returns true if a session should not be closed during cleanup.
+    /// Overload that loads settings once — prefer the variant that takes pre-loaded settings
+    /// when calling in a loop.
     func isSessionProtected(_ sessionName: String, in thread: MagentThread) -> Bool {
+        let settings = persistence.loadSettings()
+        return isSessionProtected(sessionName, in: thread, settings: settings)
+    }
+
+    /// Returns true if a session should not be closed during cleanup.
+    func isSessionProtected(_ sessionName: String, in thread: MagentThread, settings: AppSettings) -> Bool {
         // Never close the session the user is currently looking at.
         if thread.id == activeThreadId && thread.lastSelectedTabIdentifier == sessionName {
             return true
@@ -41,8 +50,14 @@ extension ThreadManager {
         if thread.isKeepAlive || thread.protectedTmuxSessions.contains(sessionName) {
             return true
         }
+        // Section-level "Keep Alive" — never close.
+        if let sectionId = thread.sectionId {
+            let sections = settings.sections(for: thread.projectId)
+            if let section = sections.first(where: { $0.id == sectionId }), section.isKeepAlive {
+                return true
+            }
+        }
         // Pinned tabs/threads are protected when the setting is enabled.
-        let settings = persistence.loadSettings()
         if settings.protectPinnedFromEviction {
             if thread.isPinned || thread.pinnedTmuxSessions.contains(sessionName) {
                 return true
@@ -72,13 +87,14 @@ extension ThreadManager {
     /// Returns the list of sessions that would be killed by `cleanupIdleSessions`,
     /// grouped by thread with metadata for a user-facing confirmation dialog.
     func collectCleanupCandidates() -> [CleanupCandidate] {
+        let settings = persistence.loadSettings()
         let nonArchived = threads.filter { !$0.isArchived }
         var result: [CleanupCandidate] = []
 
         for thread in nonArchived {
             var killableInThread: [String] = []
             for sessionName in thread.tmuxSessionNames {
-                guard !isSessionProtected(sessionName, in: thread) else { continue }
+                guard !isSessionProtected(sessionName, in: thread, settings: settings) else { continue }
                 guard !thread.deadSessions.contains(sessionName) else { continue }
                 guard !evictedIdleSessions.contains(sessionName) else { continue }
                 killableInThread.append(sessionName)
@@ -113,13 +129,14 @@ extension ThreadManager {
     /// Returns the number of sessions killed.
     @discardableResult
     func cleanupIdleSessions() async -> Int {
+        let settings = persistence.loadSettings()
         let nonArchived = threads.filter { !$0.isArchived }
 
         // Collect all idle, alive sessions.
         var toKill: [(threadId: UUID, sessionName: String)] = []
         for thread in nonArchived {
             for sessionName in thread.tmuxSessionNames {
-                guard !isSessionProtected(sessionName, in: thread) else { continue }
+                guard !isSessionProtected(sessionName, in: thread, settings: settings) else { continue }
                 guard !thread.deadSessions.contains(sessionName) else { continue }
                 guard !evictedIdleSessions.contains(sessionName) else { continue }
                 toKill.append((threadId: thread.id, sessionName: sessionName))
@@ -223,6 +240,41 @@ extension ThreadManager {
         let deadSessionNames = Array(thread.deadSessions)
         if !deadSessionNames.isEmpty {
             recoverDeadSessions(deadSessionNames, in: thread)
+        }
+    }
+
+    /// Toggles "Keep Alive" on a whole section. When enabled, all threads in that section
+    /// are protected from eviction regardless of per-thread markers.
+    func toggleSectionKeepAlive(projectId: UUID, sectionId: UUID) {
+        var settings = persistence.loadSettings()
+        let enabling: Bool
+
+        // Project-level overrides take precedence: if the project has its own section list,
+        // only mutate there. A global section ID passed for a project with overrides is a
+        // no-op — the project's section list is the authoritative source.
+        if let projectIdx = settings.projects.firstIndex(where: { $0.id == projectId }),
+           var overrides = settings.projects[projectIdx].threadSections {
+            guard let idx = overrides.firstIndex(where: { $0.id == sectionId }) else { return }
+            overrides[idx].isKeepAlive.toggle()
+            enabling = overrides[idx].isKeepAlive
+            settings.projects[projectIdx].threadSections = overrides
+        } else if let idx = settings.threadSections.firstIndex(where: { $0.id == sectionId }) {
+            settings.threadSections[idx].isKeepAlive.toggle()
+            enabling = settings.threadSections[idx].isKeepAlive
+        } else { return }
+
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+        NotificationCenter.default.post(name: .magentKeepAliveChanged, object: nil, userInfo: ["sectionId": sectionId])
+
+        // Recover dead sessions in all threads belonging to this section.
+        if enabling {
+            for thread in threads where !thread.isArchived && thread.sectionId == sectionId {
+                let deadSessionNames = Array(thread.deadSessions)
+                if !deadSessionNames.isEmpty {
+                    recoverDeadSessions(deadSessionNames, in: thread)
+                }
+            }
         }
     }
 

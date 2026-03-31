@@ -38,6 +38,7 @@ All notable changes to this project will be documented in this file.
 - Dead-session threads now show a gray icon and dimmed description text, making them visually distinct from hidden threads (which dim the entire row).
 
 ### Sessions
+- Sections can now be marked as Keep Alive — right-click a section header to toggle. All threads in a shielded section are protected from idle eviction and manual cleanup, and a cyan shield icon appears on the section header.
 - New "Kill Session" option in the tab right-click menu lets you manually kill a single tmux session without closing the tab.
 - New "Kill All Sessions" option in the thread right-click menu kills all live tmux sessions in a thread at once.
 - Idle eviction now protects sessions during Magent setup/injection and while rate-limited, preventing premature kills of sessions that are still initializing or waiting on API limits.

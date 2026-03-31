@@ -14,6 +14,22 @@ extension ThreadManager {
         guard let maxIdle = settings.maxIdleSessions else { return }
         let protectPinned = settings.protectPinnedFromEviction
 
+        // Build a lookup of section keep-alive state per project.
+        let keepAliveSectionIds: Set<UUID> = {
+            var ids = Set<UUID>()
+            for section in settings.threadSections where section.isKeepAlive {
+                ids.insert(section.id)
+            }
+            for project in settings.projects {
+                if let overrides = project.threadSections {
+                    for section in overrides where section.isKeepAlive {
+                        ids.insert(section.id)
+                    }
+                }
+            }
+            return ids
+        }()
+
         // Gather all live tmux sessions referenced by non-archived threads.
         let liveSessions: Set<String>
         do {
@@ -49,6 +65,9 @@ extension ThreadManager {
 
                 // Thread-level or session-level "Keep Alive" — never evict.
                 if thread.isKeepAlive || thread.protectedTmuxSessions.contains(session) { continue }
+
+                // Section-level "Keep Alive" — never evict.
+                if let sid = thread.sectionId, keepAliveSectionIds.contains(sid) { continue }
 
                 // Pinned threads/tabs are protected when the setting is enabled.
                 if protectPinned && (thread.isPinned || thread.pinnedTmuxSessions.contains(session)) { continue }

@@ -740,7 +740,19 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     badgeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
                     badgeContainer.addSubview(badgeLabel)
 
-                    let nameStack = NSStackView(views: [tf, badgeContainer])
+                    let shieldView = NSImageView()
+                    shieldView.identifier = Self.sectionKeepAliveShieldIdentifier
+                    shieldView.translatesAutoresizingMaskIntoConstraints = false
+                    shieldView.image = NSImage(systemSymbolName: "shield.righthalf.filled", accessibilityDescription: "Keep Alive")
+                    shieldView.contentTintColor = .systemCyan
+                    shieldView.setContentHuggingPriority(.required, for: .horizontal)
+                    shieldView.setContentCompressionResistancePriority(.required, for: .horizontal)
+                    NSLayoutConstraint.activate([
+                        shieldView.widthAnchor.constraint(equalToConstant: 12),
+                        shieldView.heightAnchor.constraint(equalToConstant: 12),
+                    ])
+
+                    let nameStack = NSStackView(views: [tf, shieldView, badgeContainer])
                     nameStack.identifier = Self.sectionNameStackIdentifier
                     nameStack.translatesAutoresizingMaskIntoConstraints = false
                     nameStack.orientation = .horizontal
@@ -817,6 +829,13 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 .first(where: { $0.identifier == Self.sectionCountBadgeLabelIdentifier }) as? NSTextField {
                 badgeLabel.stringValue = "\(threadCount)"
                 badgeLabel.textColor = NSColor.controlAccentColor
+            }
+            if let shieldView = cell.subviews
+                .first(where: { $0.identifier == Self.sectionNameStackIdentifier })?
+                .subviews
+                .first(where: { $0.identifier == Self.sectionKeepAliveShieldIdentifier }) {
+                shieldView.isHidden = !section.isKeepAlive
+                shieldView.toolTip = section.isKeepAlive ? "Keep Alive — all threads in this section are protected" : nil
             }
             if let disclosureButton = cell.subviews.first(where: { $0.identifier == Self.sectionDisclosureButtonIdentifier }) as? NSButton {
                 disclosureButton.objectValue = sectionCollapseStorageKey(section)

@@ -118,3 +118,31 @@
 - The single-click toggle debouce key (`sectionToggleKey(projectId:sectionId:)`) must be cancelled before starting a rename so the section doesn't collapse immediately after the rename field appears.
 - Keep drag-session gating at the outline-view layer as well as the section-name toggle path. Project headers can still auto-disclose through AppKit unless `shouldExpandItem` / `shouldCollapseItem` are blocked during drag.
 - Rename persistence reads fresh settings from disk (`persistence.loadSettings()`) rather than the in-memory copy to avoid clobbering concurrent mutations.
+
+---
+
+## Keep Alive (Shield)
+
+### User-Facing Behavior
+
+- Right-click a section header → "Keep Alive" / "Remove Keep Alive" toggles section-level eviction protection.
+- When enabled, a cyan shield icon (`shield.righthalf.filled`, 12×12) appears in the section header between the name/badge and the disclosure button.
+- All threads in a keep-alive section are protected from idle auto-eviction and manual session cleanup, regardless of per-thread or per-session keep-alive markers.
+- Enabling keep-alive on a section immediately recovers any dead or evicted sessions in that section's threads.
+
+### Implementation Notes
+
+- `ThreadSection.isKeepAlive: Bool` is persisted in settings JSON, backward-compatible (defaults to `false` via `decodeIfPresent`).
+- `SidebarSection.isKeepAlive` mirrors the model value and is set when building sidebar data in `ThreadListViewController`.
+- `ThreadManager.toggleSectionKeepAlive(projectId:sectionId:)` in `ThreadManager+SessionCleanup.swift` handles the toggle, respecting project-override vs global section routing.
+- Eviction protection is checked in two places:
+  - `ThreadManager+IdleEviction.swift` pre-computes a flat `Set<UUID>` of keep-alive section IDs from both global and project-level sections for efficient per-session lookup.
+  - `ThreadManager+SessionCleanup.isSessionProtected(_:in:settings:)` uses `settings.sections(for:)` per-thread for manual cleanup protection.
+- `IPCSectionInfo.isKeepAlive` exposes the flag in CLI `list-sections` output.
+- Posts both `.magentSectionsDidChange` (triggers sidebar `reloadData()`) and `.magentKeepAliveChanged` (with `sectionId` in userInfo).
+
+### Gotchas
+
+- `isSessionProtected` has two overloads: a convenience one that loads settings internally (for single-call sites) and a `settings:`-parameterized one (for loops). Always use the parameterized version in tight loops (`collectCleanupCandidates`, `cleanupIdleSessions`, `protectedSessionCount`) to avoid N×M JSON deserialization.
+- Section-level keep-alive is independent of thread-level keep-alive. A thread can have its own keep-alive toggled off while still being protected by section-level keep-alive. The thread cell shield icon only reflects thread-level state; section-level protection is indicated by the section header shield.
+- `toggleSectionKeepAlive` routes writes to project override or global sections using the same pattern as section deletion/rename: check `settings.projects[i].threadSections != nil`. A global section ID passed for a project with overrides is a silent no-op — the project's section list is authoritative.

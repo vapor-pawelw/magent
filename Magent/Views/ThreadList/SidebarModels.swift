@@ -20,13 +20,15 @@ class SidebarSection {
     let sectionId: UUID
     let name: String
     let color: NSColor
+    var isKeepAlive: Bool
     var threads: [MagentThread]
 
-    init(projectId: UUID, sectionId: UUID, name: String, color: NSColor, threads: [MagentThread]) {
+    init(projectId: UUID, sectionId: UUID, name: String, color: NSColor, isKeepAlive: Bool = false, threads: [MagentThread]) {
         self.projectId = projectId
         self.sectionId = sectionId
         self.name = name
         self.color = color
+        self.isKeepAlive = isKeepAlive
         self.threads = threads
     }
 }

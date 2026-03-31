@@ -80,6 +80,7 @@ final class ThreadListViewController: NSViewController {
     static let sectionCountBadgeContainerIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeContainer")
     static let sectionCountBadgeLabelIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeLabel")
     static let sectionInlineRenameFieldIdentifier = NSUserInterfaceItemIdentifier("SectionInlineRenameField")
+    static let sectionKeepAliveShieldIdentifier = NSUserInterfaceItemIdentifier("SectionKeepAliveShield")
     static let sidebarHorizontalInset: CGFloat = 0
     static let sidebarToolbarRowHeight: CGFloat = 32
     static let sidebarTrailingInset: CGFloat = 20
@@ -482,6 +483,7 @@ final class ThreadListViewController: NSViewController {
                         sectionId: section.id,
                         name: section.name,
                         color: section.color,
+                        isKeepAlive: section.isKeepAlive,
                         threads: sortedThreads
                     ))
                 }

@@ -7,6 +7,7 @@ public nonisolated struct ThreadSection: Codable, Identifiable, Hashable, Sendab
     public var sortOrder: Int
     public var isDefault: Bool
     public var isVisible: Bool
+    public var isKeepAlive: Bool
 
     public init(
         id: UUID = UUID(),
@@ -14,7 +15,8 @@ public nonisolated struct ThreadSection: Codable, Identifiable, Hashable, Sendab
         colorHex: String,
         sortOrder: Int,
         isDefault: Bool = false,
-        isVisible: Bool = true
+        isVisible: Bool = true,
+        isKeepAlive: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -22,6 +24,22 @@ public nonisolated struct ThreadSection: Codable, Identifiable, Hashable, Sendab
         self.sortOrder = sortOrder
         self.isDefault = isDefault
         self.isVisible = isVisible
+        self.isKeepAlive = isKeepAlive
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, colorHex, sortOrder, isDefault, isVisible, isKeepAlive
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        colorHex = try container.decode(String.self, forKey: .colorHex)
+        sortOrder = try container.decode(Int.self, forKey: .sortOrder)
+        isDefault = try container.decode(Bool.self, forKey: .isDefault)
+        isVisible = try container.decodeIfPresent(Bool.self, forKey: .isVisible) ?? true
+        isKeepAlive = try container.decodeIfPresent(Bool.self, forKey: .isKeepAlive) ?? false
     }
 
     @MainActor

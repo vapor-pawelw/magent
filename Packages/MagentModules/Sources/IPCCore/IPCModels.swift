@@ -235,6 +235,7 @@ public nonisolated struct IPCSectionInfo: Encodable, Sendable {
     public let sortOrder: Int
     public let isDefault: Bool
     public let isVisible: Bool
+    public let isKeepAlive: Bool
     public let isProjectOverride: Bool
     public var threads: [IPCThreadInfo]?
 
@@ -245,6 +246,7 @@ public nonisolated struct IPCSectionInfo: Encodable, Sendable {
         self.sortOrder = section.sortOrder
         self.isDefault = section.isDefault
         self.isVisible = section.isVisible
+        self.isKeepAlive = section.isKeepAlive
         self.isProjectOverride = isProjectOverride
         self.threads = threads
     }
