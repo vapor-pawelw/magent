@@ -277,6 +277,7 @@ extension ThreadDetailViewController {
             let item = tabItems[i]
             item.onSelect = { [weak self] in self?.selectTab(at: i) }
             item.onClose = { [weak self] in self?.closeTab(at: i) }
+            item.onForceClose = { [weak self] in self?.forceCloseTab(at: i) }
             item.onPin = { [weak self] in self?.togglePin(at: i) }
             item.onCloseTabsToTheRight = { [weak self] in self?.closeTabsToTheRight(of: i) }
             item.onCloseTabsToTheLeft = { [weak self] in self?.closeTabsToTheLeft(of: i) }

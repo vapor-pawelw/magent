@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 
 ### Tab
 - New "Switch to new tab" checkbox in the New Tab prompt sheet — works like the existing "Switch to new thread" option, remembers the last selection, and defaults to on.
+- Option+middle-click on a tab now closes it immediately without a confirmation alert.
 
 ## 1.4.0 - 2026-03-31
 

@@ -98,6 +98,7 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     var onSelect: (() -> Void)?
     var onClose: (() -> Void)?
+    var onForceClose: (() -> Void)?
     var onRename: (() -> Void)?
     var onPin: (() -> Void)?
     var onKeepAlive: (() -> Void)?
@@ -264,7 +265,11 @@ final class TabItemView: NSView, NSMenuDelegate {
     override func otherMouseDown(with event: NSEvent) {
         // Middle mouse button (button 2) closes the tab
         if event.buttonNumber == 2 {
-            onClose?()
+            if event.modifierFlags.contains(.option) {
+                onForceClose?()
+            } else {
+                onClose?()
+            }
         } else {
             super.otherMouseDown(with: event)
         }

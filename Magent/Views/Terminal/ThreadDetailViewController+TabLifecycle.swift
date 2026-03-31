@@ -61,6 +61,37 @@ extension ThreadDetailViewController {
         }
     }
 
+    /// Close a tab without showing a confirmation alert (Option+middle-click).
+    func forceCloseTab(at index: Int) {
+        guard index < tabSlots.count else { return }
+
+        switch tabSlots[index] {
+        case .terminal(let sessionName):
+            GhosttyAppManager.log("forceCloseTab: terminal session=\(sessionName) displayIndex=\(index)")
+            Task {
+                do {
+                    try await threadManager.removeTab(from: thread, sessionName: sessionName)
+                    if let updated = threadManager.threads.first(where: { $0.id == thread.id }) {
+                        thread = updated
+                    }
+                } catch {
+                    let alert = NSAlert()
+                    alert.messageText = String(localized: .CommonStrings.commonError)
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
+                    alert.runModal()
+                }
+            }
+
+        case .web(let identifier):
+            closeWebTab(identifier: identifier)
+
+        case .draft(let identifier):
+            closeDraftTab(identifier: identifier)
+        }
+    }
+
     // MARK: - Close Multiple Tabs
 
     func closeTabsToTheRight(of index: Int) {
