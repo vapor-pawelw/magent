@@ -309,6 +309,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private var draftCheckboxRow: NSView?
     private let rememberCheckbox = NSButton(checkboxWithTitle: "Remember type selection", target: nil, action: nil)
     private let switchToNewThreadCheckbox = NSButton(checkboxWithTitle: "Switch to new thread", target: nil, action: nil)
+    private let switchToNewTabCheckbox = NSButton(checkboxWithTitle: "Switch to new tab", target: nil, action: nil)
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
     private let acceptButton: NSButton
     private var promptScrollView: NSScrollView!
@@ -698,14 +699,22 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         stack.addArrangedSubview(rememberCheckbox)
         stack.setCustomSpacing(4, after: rememberCheckbox)
 
-        // Switch to new thread checkbox — only relevant when creating a new thread, not a tab
-        if case .newThread = config.draftScope {
+        // Switch to new thread/tab checkbox
+        switch config.draftScope {
+        case .newThread:
             switchToNewThreadCheckbox.target = self
             switchToNewThreadCheckbox.action = #selector(switchToNewThreadCheckboxToggled)
             switchToNewThreadCheckbox.state = PersistenceService.shared.loadSettings().switchToNewlyCreatedThread ? .on : .off
             switchToNewThreadCheckbox.font = .systemFont(ofSize: 11)
             switchToNewThreadCheckbox.contentTintColor = .controlAccentColor
             stack.addArrangedSubview(switchToNewThreadCheckbox)
+        case .newTab:
+            switchToNewTabCheckbox.target = self
+            switchToNewTabCheckbox.action = #selector(switchToNewTabCheckboxToggled)
+            switchToNewTabCheckbox.state = PersistenceService.shared.loadSettings().switchToNewlyCreatedTab ? .on : .off
+            switchToNewTabCheckbox.font = .systemFont(ofSize: 11)
+            switchToNewTabCheckbox.contentTintColor = .controlAccentColor
+            stack.addArrangedSubview(switchToNewTabCheckbox)
         }
 
         // Button row
@@ -1211,6 +1220,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     @objc private func switchToNewThreadCheckboxToggled() {
         var settings = PersistenceService.shared.loadSettings()
         settings.switchToNewlyCreatedThread = switchToNewThreadCheckbox.state == .on
+        try? PersistenceService.shared.saveSettings(settings)
+    }
+
+    @objc private func switchToNewTabCheckboxToggled() {
+        var settings = PersistenceService.shared.loadSettings()
+        settings.switchToNewlyCreatedTab = switchToNewTabCheckbox.state == .on
         try? PersistenceService.shared.saveSettings(settings)
     }
 

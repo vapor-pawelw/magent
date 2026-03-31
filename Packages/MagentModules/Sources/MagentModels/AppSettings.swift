@@ -91,6 +91,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var preserveAgentColorTheme: Bool
     public var rememberLastTypeSelection: Bool
     public var switchToNewlyCreatedThread: Bool
+    public var switchToNewlyCreatedTab: Bool
     public var protectPinnedFromEviction: Bool
     public var maxIdleSessions: Int?
     public var keyBindings: KeyBindingSettings
@@ -144,6 +145,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         preserveAgentColorTheme: Bool = false,
         rememberLastTypeSelection: Bool = true,
         switchToNewlyCreatedThread: Bool = true,
+        switchToNewlyCreatedTab: Bool = true,
         protectPinnedFromEviction: Bool = true,
         maxIdleSessions: Int? = 30,
         keyBindings: KeyBindingSettings = KeyBindingSettings()
@@ -196,6 +198,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.preserveAgentColorTheme = preserveAgentColorTheme
         self.rememberLastTypeSelection = rememberLastTypeSelection
         self.switchToNewlyCreatedThread = switchToNewlyCreatedThread
+        self.switchToNewlyCreatedTab = switchToNewlyCreatedTab
         self.protectPinnedFromEviction = protectPinnedFromEviction
         self.maxIdleSessions = maxIdleSessions
         self.keyBindings = keyBindings
@@ -254,6 +257,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         preserveAgentColorTheme = try container.decodeIfPresent(Bool.self, forKey: .preserveAgentColorTheme) ?? false
         rememberLastTypeSelection = try container.decodeIfPresent(Bool.self, forKey: .rememberLastTypeSelection) ?? true
         switchToNewlyCreatedThread = try container.decodeIfPresent(Bool.self, forKey: .switchToNewlyCreatedThread) ?? true
+        switchToNewlyCreatedTab = try container.decodeIfPresent(Bool.self, forKey: .switchToNewlyCreatedTab) ?? true
         protectPinnedFromEviction = try container.decodeIfPresent(Bool.self, forKey: .protectPinnedFromEviction) ?? true
         maxIdleSessions = try container.decodeIfPresent(Int.self, forKey: .maxIdleSessions)
         keyBindings = try container.decodeIfPresent(KeyBindingSettings.self, forKey: .keyBindings) ?? KeyBindingSettings()
@@ -310,6 +314,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(preserveAgentColorTheme, forKey: .preserveAgentColorTheme)
         try container.encode(rememberLastTypeSelection, forKey: .rememberLastTypeSelection)
         try container.encode(switchToNewlyCreatedThread, forKey: .switchToNewlyCreatedThread)
+        try container.encode(switchToNewlyCreatedTab, forKey: .switchToNewlyCreatedTab)
         try container.encode(protectPinnedFromEviction, forKey: .protectPinnedFromEviction)
         try container.encodeIfPresent(maxIdleSessions, forKey: .maxIdleSessions)
         try container.encode(keyBindings, forKey: .keyBindings)
@@ -477,6 +482,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case preserveAgentColorTheme
         case rememberLastTypeSelection
         case switchToNewlyCreatedThread
+        case switchToNewlyCreatedTab
         case protectPinnedFromEviction
         case maxIdleSessions
         case keyBindings

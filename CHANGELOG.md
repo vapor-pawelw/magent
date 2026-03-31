@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- _No notable changes yet._
+### Tab
+- New "Switch to new tab" checkbox in the New Tab prompt sheet — works like the existing "Switch to new thread" option, remembers the last selection, and defaults to on.
 
 ## 1.4.0 - 2026-03-31
 

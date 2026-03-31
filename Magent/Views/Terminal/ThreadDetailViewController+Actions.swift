@@ -557,13 +557,15 @@ extension ThreadDetailViewController {
                 let title = result.tabTitle ?? webURL.host ?? "Web"
                 self.openWebTab(url: webURL, identifier: "web:\(UUID().uuidString)", title: title, iconType: .web)
             } else {
+                let switchToTab = PersistenceService.shared.loadSettings().switchToNewlyCreatedTab
                 self.addTab(
                     using: result.agentType,
                     useAgentCommand: result.useAgentCommand,
                     initialPrompt: result.prompt,
                     shouldSubmitInitialPrompt: true,
                     customTitle: result.tabTitle,
-                    pendingPromptFileURL: result.pendingPromptFileURL
+                    pendingPromptFileURL: result.pendingPromptFileURL,
+                    switchToTab: switchToTab
                 )
             }
         }
@@ -576,7 +578,8 @@ extension ThreadDetailViewController {
         shouldSubmitInitialPrompt: Bool = true,
         customTitle: String? = nil,
         pendingPromptFileURL: URL? = nil,
-        tabNameSuffix: String? = nil
+        tabNameSuffix: String? = nil,
+        switchToTab: Bool = true
     ) {
         // Phase 1: Immediately add a tab item and show "Creating tab..." overlay so
         // the tab appears in the bar without waiting for tmux session creation.
@@ -590,19 +593,21 @@ extension ThreadDetailViewController {
         rebindAllTabActions()
         rebuildTabBar()
 
-        // Mark the new tab as selected in the tab bar.
-        for (i, item) in tabItems.enumerated() { item.isSelected = (i == pendingIndex) }
+        if switchToTab {
+            // Mark the new tab as selected in the tab bar.
+            for (i, item) in tabItems.enumerated() { item.isSelected = (i == pendingIndex) }
 
-        // Hide current terminal/web content so the old tab doesn't show through.
-        for termView in terminalViews { termView.isHidden = true }
-        hideActiveWebTab()
+            // Hide current terminal/web content so the old tab doesn't show through.
+            for termView in terminalViews { termView.isHidden = true }
+            hideActiveWebTab()
 
-        // Show "Creating tab..." overlay immediately.
-        ensureLoadingOverlay()
-        loadingLabel?.stringValue = String(localized: .ThreadStrings.tabCreatingSession)
-        loadingOverlay?.alphaValue = 1
-        loadingOverlay?.isHidden = false
-        loadingDetailLabel?.isHidden = true
+            // Show "Creating tab..." overlay immediately.
+            ensureLoadingOverlay()
+            loadingLabel?.stringValue = String(localized: .ThreadStrings.tabCreatingSession)
+            loadingOverlay?.alphaValue = 1
+            loadingOverlay?.isHidden = false
+            loadingDetailLabel?.isHidden = true
+        }
 
         // Phase 2: Run tmux setup in the background; overlay stays visible throughout.
         Task {
@@ -643,12 +648,14 @@ extension ThreadDetailViewController {
                     }
                     self.rebindAllTabActions()
 
-                    // Dismiss the "Creating tab..." overlay before handing off to selectTab,
-                    // which will show its own "Starting agent..." overlay if needed.
-                    self.dismissLoadingOverlay()
+                    if switchToTab {
+                        // Dismiss the "Creating tab..." overlay before handing off to selectTab,
+                        // which will show its own "Starting agent..." overlay if needed.
+                        self.dismissLoadingOverlay()
 
-                    // Hand off to normal selectTab flow, which shows "Starting agent..." overlay.
-                    self.selectTab(at: pendingIndex)
+                        // Hand off to normal selectTab flow, which shows "Starting agent..." overlay.
+                        self.selectTab(at: pendingIndex)
+                    }
                 }
             } catch {
                 await MainActor.run {
