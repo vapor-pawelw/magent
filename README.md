@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/icon.png" alt="mAgent" width="128" height="128">
+  <img src="[docs/icon.png](https://github.com/user-attachments/assets/9f6309e2-102a-4070-9076-3eec6b7d6505)" alt="mAgent icon" width="128" height="128">
 </p>
 
 <h1 align="center">mAgent</h1>
