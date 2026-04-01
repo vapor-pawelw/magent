@@ -30,6 +30,17 @@ extension ThreadManager {
         var changed = false
         let existingPaths = Set(threads.filter { $0.projectId == project.id }.map(\.worktreePath))
 
+        // Load persisted threads once — used for archived-path exclusion and later merge/save.
+        var allPersistedThreads = persistence.loadThreads()
+
+        // Collect paths of archived threads so we don't re-discover them
+        // when the worktree directory wasn't fully cleaned up.
+        let archivedPaths = Set(
+            allPersistedThreads
+                .filter { $0.projectId == project.id && $0.isArchived }
+                .map(\.worktreePath)
+        )
+
         for dirName in contents {
             let fullPath = (basePath as NSString).appendingPathComponent(dirName)
 
@@ -48,8 +59,9 @@ extension ThreadManager {
             let gitExists = fm.fileExists(atPath: gitPath, isDirectory: &gitIsDir)
             guard gitExists && !gitIsDir.boolValue else { continue }
 
-            // Skip if we already have a thread for this path
-            guard !existingPaths.contains(fullPath) else { continue }
+            // Skip if we already have a thread for this path, or it was archived
+            guard !existingPaths.contains(fullPath),
+                  !archivedPaths.contains(fullPath) else { continue }
 
             // If a symlink points here, the worktree was renamed — use the symlink name
             // as the sidebar thread label, but seed branchName from the actual checkout.
@@ -89,26 +101,38 @@ extension ThreadManager {
             }
         }
 
+        // Prune archived records whose worktree directories no longer exist on disk.
+        // This self-heals accumulation from delete/archive whose fire-and-forget cleanup
+        // eventually succeeded.
+        let countBefore = allPersistedThreads.count
+        allPersistedThreads.removeAll { thread in
+            thread.projectId == project.id
+                && thread.isArchived
+                && !thread.isMain
+                && !fm.fileExists(atPath: thread.worktreePath)
+        }
+        if allPersistedThreads.count != countBefore {
+            changed = true
+        }
+
         if changed {
             // Remove archived from active list
             threads = threads.filter { !$0.isArchived }
 
-            // Save all (including newly archived) to persistence
-            var allThreads = persistence.loadThreads()
             // Merge: update archived flags, add new threads
-            for thread in threads where !allThreads.contains(where: { $0.id == thread.id }) {
-                allThreads.append(thread)
+            for thread in threads where !allPersistedThreads.contains(where: { $0.id == thread.id }) {
+                allPersistedThreads.append(thread)
             }
             // Update archived flags
-            for i in allThreads.indices {
-                if !threads.contains(where: { $0.id == allThreads[i].id }) && allThreads[i].projectId == project.id && !allThreads[i].isMain {
-                    allThreads[i].isArchived = true
-                    if allThreads[i].archivedAt == nil {
-                        allThreads[i].archivedAt = Date()
+            for i in allPersistedThreads.indices {
+                if !threads.contains(where: { $0.id == allPersistedThreads[i].id }) && allPersistedThreads[i].projectId == project.id && !allPersistedThreads[i].isMain {
+                    allPersistedThreads[i].isArchived = true
+                    if allPersistedThreads[i].archivedAt == nil {
+                        allPersistedThreads[i].archivedAt = Date()
                     }
                 }
             }
-            try? persistence.saveThreads(allThreads)
+            try? persistence.saveThreads(allPersistedThreads)
 
             await MainActor.run {
                 NotificationCenter.default.post(name: .magentArchivedThreadsDidChange, object: nil)

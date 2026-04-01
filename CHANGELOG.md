@@ -36,6 +36,9 @@ All notable changes to this project will be documented in this file.
 ### Local Sync
 - Agentic Merge now falls back to the first enabled non-rate-limited agent when the project's default agent is currently rate-limited.
 
+### Thread
+- Fixed deleted threads reappearing in the sidebar after app relaunch when the worktree directory wasn't fully cleaned up.
+
 ### Status Bar
 - When the bottom-right sync status fails, hover text and the sync right-click menu now show the last error reason instead of only `Sync failed`.
 ## 1.4.0 - 2026-03-31
