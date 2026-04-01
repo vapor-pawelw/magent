@@ -16,6 +16,7 @@ final class SettingsGeneralViewController: NSViewController {
     private var syncLocalPathsOnArchiveCheckbox: NSButton!
     private var createBackupButton: NSButton!
     private var restoreFromBackupButton: NSButton!
+    private var lastBackupLabel: NSTextField!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
 
@@ -34,6 +35,12 @@ final class SettingsGeneralViewController: NSViewController {
             self,
             selector: #selector(handleUpdateStateChanged),
             name: .magentUpdateStateChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleBackupSnapshotsChanged),
+            name: .magentBackupSnapshotsDidChange,
             object: nil
         )
 
@@ -227,6 +234,11 @@ final class SettingsGeneralViewController: NSViewController {
         restoreFromBackupButton.controlSize = .small
         backupSection.addArrangedSubview(restoreFromBackupButton)
 
+        lastBackupLabel = NSTextField(wrappingLabelWithString: "")
+        lastBackupLabel.font = .systemFont(ofSize: 11)
+        lastBackupLabel.textColor = NSColor(resource: .textSecondary)
+        backupSection.addArrangedSubview(lastBackupLabel)
+
         let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(stackView)
@@ -257,9 +269,11 @@ final class SettingsGeneralViewController: NSViewController {
             updateChangelogScrollView.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
             updateChangelogScrollView.heightAnchor.constraint(equalToConstant: 160),
             syncLocalPathsOnArchiveDesc.widthAnchor.constraint(equalTo: archiveSection.widthAnchor),
+            lastBackupLabel.widthAnchor.constraint(equalTo: backupSection.widthAnchor),
         ])
 
         refreshUpdateControls()
+        refreshBackupControls()
     }
 
     override func viewDidAppear() {
@@ -350,6 +364,10 @@ final class SettingsGeneralViewController: NSViewController {
         refreshUpdateControls()
     }
 
+    @objc private func handleBackupSnapshotsChanged() {
+        refreshBackupControls()
+    }
+
     @objc private func toggleUpdateChangelog() {
         isUpdateChangelogExpanded.toggle()
         refreshUpdateChangelogDisclosure()
@@ -369,6 +387,7 @@ final class SettingsGeneralViewController: NSViewController {
         }
 
         BannerManager.shared.show(message: message, style: style, duration: 4.0)
+        refreshBackupControls()
     }
 
     private func refreshUpdateControls() {
@@ -414,6 +433,36 @@ final class SettingsGeneralViewController: NSViewController {
     private func refreshUpdateChangelogDisclosure() {
         updateChangelogToggleButton.title = isUpdateChangelogExpanded ? "Hide Changes" : "Show Changes"
         updateChangelogScrollView.isHidden = !isUpdateChangelogExpanded
+    }
+
+    private func refreshBackupControls() {
+        guard isViewLoaded else { return }
+
+        guard let snapshot = BackupService.shared.latestSnapshot() else {
+            lastBackupLabel.stringValue = "No backups have been created yet."
+            return
+        }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .short
+
+        let ageString = backupAgeString(for: snapshot.date)
+        lastBackupLabel.stringValue = "Last backup: \(dateFormatter.string(from: snapshot.date)) (\(ageString))"
+    }
+
+    private func backupAgeString(for date: Date) -> String {
+        let age = Date().timeIntervalSince(date)
+        if age < 3600 {
+            let minutes = max(1, Int(age / 60))
+            return "\(minutes) min ago"
+        } else if age < 24 * 3600 {
+            let hours = Int(age / 3600)
+            return "\(hours) hour\(hours == 1 ? "" : "s") ago"
+        } else {
+            let days = Int(age / (24 * 3600))
+            return "\(days) day\(days == 1 ? "" : "s") ago"
+        }
     }
 
     // MARK: - Backup Restore

@@ -116,6 +116,7 @@ public final class BackupService {
         }
 
         pruneSnapshots()
+        NotificationCenter.default.post(name: .magentBackupSnapshotsDidChange, object: nil)
         return copiedCount
     }
 
@@ -250,6 +251,12 @@ public final class BackupService {
         return snapshots
     }
 
+    /// Returns the newest user-facing snapshot.
+    public func latestSnapshot() -> Snapshot? {
+        let snapshots = listSnapshots()
+        return snapshots.first(where: { !$0.isSafetySnapshot })
+    }
+
     // MARK: - Restore
 
     /// Restores files from a snapshot, replacing the current critical files that are
@@ -346,4 +353,8 @@ public final class BackupService {
         }
         return result
     }
+}
+
+public extension Notification.Name {
+    static let magentBackupSnapshotsDidChange = Notification.Name("magentBackupSnapshotsDidChange")
 }

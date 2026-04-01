@@ -31,6 +31,7 @@
 ### Data backup restore (auto-backup-critical-config)
 - Added a `Data Backup` card to `Settings > General` with `Back Up Now` and `Restore from Backup…` actions.
 - Magent now keeps rolling `.bak` copies of `threads.json`, `settings.json`, and `agent-launch-prompt-drafts.json` before overwriting them, and also writes 30-minute snapshot directories under Application Support.
+- The `Data Backup` card shows the most recent snapshot timestamp so users can see when the last backup was created.
 - Restore now lists both periodic snapshots and pre-restore safety backups, then relaunches the app after replacing the current persistence files.
 - If the selected snapshot is partial, missing files are left untouched instead of being deleted during restore.
 - On launch, Magent may recover `settings.json` from the rolling backup when active thread data exists but the current settings file is missing or incomplete.
@@ -40,6 +41,7 @@
 - Category registration and the sidebar/detail controller wiring live in `Magent/Views/Settings/SettingsViewController.swift`.
 - `Magent/Views/Settings/SettingsGeneralViewController.swift` is intentionally limited to app-level preferences.
 - The backup actions are coordinated from `SettingsGeneralViewController`, but restore must first stop background pollers and block writes for the restorable persistence files before `BackupService.restoreSnapshot(_:)` swaps files on disk. The manual snapshot button can call `BackupService.createSnapshot()` directly because it only reads the current persistence files.
+- The Data Backup status line is driven by `BackupService.listSnapshots()` and refreshes when `magentBackupSnapshotsDidChange` is posted after a new snapshot is created.
 - `Magent/Views/Settings/SettingsTerminalViewController.swift` owns terminal-scoped preferences and posts `magentSettingsDidChange` so open windows update immediately.
 - `Magent/Views/Settings/SettingsThreadsViewController.swift` owns thread-scoped preferences, and `Magent/Views/Settings/SettingsThreadsViewController+Sections.swift` owns the thread-sections table behavior.
 - The recently archived list reads from persisted threads, sorts by `archivedAt`, and listens for a shared archive-state notification so it refreshes while Settings is open.
