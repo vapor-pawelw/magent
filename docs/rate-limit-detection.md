@@ -16,7 +16,7 @@ Pane content is also cached for up to 5 seconds and shared across all periodic c
 ### Agent-Specific Parsing
 
 - **Codex**: Detection is scoped to the latest pane block after the last separator line (`────…`) when present, to avoid stale matches from older output. If no separator is present, Magent scans the full captured tail.
-- **Claude**: Detection does not rely on separator scoping for the interactive limit menu. When the pane shows `1. Stop and wait for limit to reset`, Magent scans the lines directly above that choice to find and parse the reset deadline (for example, `You've hit your limit · resets Mar 6 at 10am`).
+- **Claude**: Detection does not rely on separator scoping for the interactive limit menu. When the pane shows the numbered wait/switch choices (for example `1. Stop and wait for limit to reset` and `2. Switch to Pro`), Magent treats that menu as an active rate-limit signal and scans the choice line plus nearby context above it to find and parse the reset deadline (for example, `You've hit your limit · resets Mar 6 at 10am`). This still works when the latest visible block shows only the choices and reset line, without repeating broader "rate limit" wording.
 
 ### Mandatory Reset Time
 
@@ -50,6 +50,10 @@ This cap does **not** apply when the message includes:
 ### Global Rate Limits
 
 Rate limits are tracked **per agent type** (Claude, Codex), not per session. When one session detects a Claude rate limit, the same status is shown across all Claude sessions since rate limits apply at the account level.
+
+That propagation is applied to the per-tab/thread markers too, not just the status-bar summary. Once any Claude or Codex session detects a concrete limit, every tab using that agent gets the red hourglass marker until the limit expires or is lifted manually.
+
+Claude's prompt-only blocker follows the same rule: if any Claude session is currently showing the interactive wait/switch prompt, Magent mirrors a prompt-based rate-limit marker onto all Claude tabs for that tick so the thread list, tab bar, and cleanup protection stay in sync.
 
 Once Magent has matched a non-ignored rate-limit fingerprint and anchored a concrete `resetAt`, that rate limit stays active until the timer expires or you lift it manually.
 Newer pane output such as `/status` must not auto-clear an already-anchored limit just because the latest block no longer shows the original rate-limit text.
