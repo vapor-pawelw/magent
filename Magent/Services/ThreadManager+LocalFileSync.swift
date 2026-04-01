@@ -316,60 +316,89 @@ extension ThreadManager {
     @concurrent func syncConfiguredLocalPathsIntoWorktree(
         project: Project,
         worktreePath: String,
-        syncPaths: [String],
+        syncEntries: [LocalFileSyncEntry],
         promptForConflicts: Bool = false,
         sourceRootOverride: String? = nil
     ) async throws -> [String] {
-        guard !syncPaths.isEmpty else { return [] }
+        let normalizedEntries = Project.normalizeLocalFileSyncEntries(syncEntries)
+        guard !normalizedEntries.isEmpty else { return [] }
 
         let sourceRoot = sourceRootOverride ?? project.repoPath
         var missingPaths: [String] = []
         let conflictMode: LocalSyncConflictMode = promptForConflicts ? .prompt : .overwrite
         var overwriteAll = !promptForConflicts
         var ignoreAll = false
-        for relativePath in syncPaths {
-            let sourcePath = (sourceRoot as NSString).appendingPathComponent(relativePath)
-            guard localSyncItemKind(atPath: sourcePath) != nil else {
-                missingPaths.append(relativePath)
-                continue
-            }
-
-            let destinationPath = (worktreePath as NSString).appendingPathComponent(relativePath)
+        for entry in normalizedEntries {
+            let relativePath = entry.path
             do {
-                try await mergeLocalSyncItem(
-                    sourcePath: sourcePath,
-                    destinationPath: destinationPath,
-                    relativePath: relativePath,
-                    destinationRootPath: worktreePath,
-                    repoPath: project.repoPath,
-                    conflictMode: conflictMode,
-                    overwriteAll: &overwriteAll,
-                    ignoreAll: &ignoreAll,
-                    conflictDirection: .intoWorktree,
-                    directoryMaterialization: .always
-                )
+                switch entry.mode {
+                case .copy:
+                    let sourcePath = (sourceRoot as NSString).appendingPathComponent(relativePath)
+                    guard localSyncItemKind(atPath: sourcePath) != nil else {
+                        missingPaths.append(relativePath)
+                        continue
+                    }
+
+                    let destinationPath = (worktreePath as NSString).appendingPathComponent(relativePath)
+                    try await mergeLocalSyncItem(
+                        sourcePath: sourcePath,
+                        destinationPath: destinationPath,
+                        relativePath: relativePath,
+                        destinationRootPath: worktreePath,
+                        repoPath: project.repoPath,
+                        conflictMode: conflictMode,
+                        overwriteAll: &overwriteAll,
+                        ignoreAll: &ignoreAll,
+                        conflictDirection: .intoWorktree,
+                        directoryMaterialization: .always
+                    )
+
+                case .symlink:
+                    let sharedSourcePath = (project.repoPath as NSString).appendingPathComponent(relativePath)
+                    guard localSyncItemKind(atPath: sharedSourcePath) != nil else {
+                        missingPaths.append(relativePath)
+                        continue
+                    }
+
+                    try await createLocalSyncSymlink(
+                        sourcePath: sharedSourcePath,
+                        destinationPath: (worktreePath as NSString).appendingPathComponent(relativePath),
+                        relativePath: relativePath,
+                        destinationRootPath: worktreePath,
+                        repoPath: project.repoPath,
+                        conflictMode: conflictMode,
+                        overwriteAll: &overwriteAll,
+                        ignoreAll: &ignoreAll,
+                        conflictDirection: .intoWorktree
+                    )
+                }
             } catch ThreadManagerError.agenticMergeSignal {
                 let sourceLabel = sourceRootOverride.map { ($0 as NSString).lastPathComponent } ?? "Project"
                 let destLabel = (worktreePath as NSString).lastPathComponent
                 throw ThreadManagerError.agenticMergeReady(LocalSyncAgenticMergeContext(
+                    operation: .syncSourceToDestination,
                     sourceRoot: sourceRoot,
                     destinationRoot: worktreePath,
-                    syncPaths: syncPaths,
+                    syncPaths: normalizedEntries.map(\.path),
                     sourceLabel: sourceLabel,
                     destinationLabel: destLabel
                 ))
             } catch let error as ThreadManagerError {
                 throw error
             } catch {
+                let verb = entry.mode == .copy ? "copy" : "link"
                 throw ThreadManagerError.localFileSyncFailed(
-                    "Failed to copy \"\(relativePath)\" into the new worktree: \(error.localizedDescription)"
+                    "Failed to \(verb) \"\(relativePath)\" into the new worktree: \(error.localizedDescription)"
                 )
             }
         }
 
         let baselineHashes: [String: String]
         do {
-            baselineHashes = try buildLocalSyncFileHashes(rootPath: worktreePath, syncPaths: syncPaths)
+            baselineHashes = try buildLocalSyncFileHashes(
+                rootPath: worktreePath,
+                syncPaths: normalizedEntries.filter { $0.mode == .copy }.map(\.path)
+            )
         } catch {
             throw ThreadManagerError.localFileSyncFailed(
                 "Failed to record local sync baseline: \(error.localizedDescription)"
@@ -384,18 +413,21 @@ extension ThreadManager {
     @concurrent func syncConfiguredLocalPathsFromWorktree(
         project: Project,
         worktreePath: String,
-        syncPaths: [String],
+        syncEntries: [LocalFileSyncEntry],
         promptForConflicts: Bool,
         destinationRootOverride: String? = nil
     ) async throws {
-        guard !syncPaths.isEmpty else { return }
+        let copySyncPaths = Project.normalizeLocalFileSyncEntries(syncEntries)
+            .filter { $0.mode == .copy }
+            .map(\.path)
+        guard !copySyncPaths.isEmpty else { return }
 
         let destinationRoot = destinationRootOverride ?? project.repoPath
         let baselineHashes = await loadLocalSyncBaselineFileHashes(worktreePath: worktreePath)
         let conflictMode: LocalSyncConflictMode = promptForConflicts ? .prompt : .skip
         var overwriteAll = false
         var ignoreAll = false
-        for relativePath in syncPaths {
+        for relativePath in copySyncPaths {
             let sourcePath = (worktreePath as NSString).appendingPathComponent(relativePath)
             guard localSyncItemKind(atPath: sourcePath) != nil else { continue }
 
@@ -418,9 +450,10 @@ extension ThreadManager {
                 let sourceLabel = (worktreePath as NSString).lastPathComponent
                 let destLabel = destinationRootOverride.map { ($0 as NSString).lastPathComponent } ?? "Project"
                 throw ThreadManagerError.agenticMergeReady(LocalSyncAgenticMergeContext(
+                    operation: .syncSourceToDestination,
                     sourceRoot: worktreePath,
                     destinationRoot: destinationRoot,
-                    syncPaths: syncPaths,
+                    syncPaths: copySyncPaths,
                     sourceLabel: sourceLabel,
                     destinationLabel: destLabel
                 ))
@@ -434,16 +467,82 @@ extension ThreadManager {
         }
     }
 
-    nonisolated func effectiveLocalSyncPaths(for thread: MagentThread, project: Project) -> [String] {
-        let currentPaths = project.normalizedLocalFileSyncPaths
-        if let snapshot = thread.localFileSyncPathsSnapshot {
-            let snapshotPaths = Project.normalizeLocalFileSyncPaths(snapshot)
-            let currentSet = Set(currentPaths)
+    nonisolated func effectiveLocalSyncEntries(for thread: MagentThread, project: Project) -> [LocalFileSyncEntry] {
+        let currentEntries = project.normalizedLocalFileSyncEntries
+        if let snapshot = thread.localFileSyncEntriesSnapshot {
+            let snapshotEntries = Project.normalizeLocalFileSyncEntries(snapshot)
+            let currentPaths = Set(currentEntries.map(\.path))
             // Keep historical snapshot semantics for additions, but never sync paths
             // that are no longer configured in the project.
-            return snapshotPaths.filter { currentSet.contains($0) }
+            return snapshotEntries.filter { currentPaths.contains($0.path) }
         }
-        return currentPaths
+        return currentEntries
+    }
+
+    @concurrent private func createLocalSyncSymlink(
+        sourcePath: String,
+        destinationPath: String,
+        relativePath: String,
+        destinationRootPath: String,
+        repoPath: String,
+        conflictMode: LocalSyncConflictMode,
+        overwriteAll: inout Bool,
+        ignoreAll: inout Bool,
+        conflictDirection: LocalSyncConflictDirection
+    ) async throws {
+        guard let sourceKind = localSyncItemKind(atPath: sourcePath) else { return }
+
+        let resolvedSourcePath = URL(fileURLWithPath: sourcePath).resolvingSymlinksInPath().path
+        let parentRelativePath = (relativePath as NSString).deletingLastPathComponent
+        if parentRelativePath != "." && !parentRelativePath.isEmpty {
+            let parentReady = try await ensureLocalSyncDirectoryTree(
+                destinationRootPath: destinationRootPath,
+                relativeDirectoryPath: parentRelativePath,
+                conflictMode: conflictMode,
+                overwriteAll: &overwriteAll,
+                ignoreAll: &ignoreAll,
+                conflictDirection: conflictDirection,
+                repoPath: repoPath
+            )
+            guard parentReady else { return }
+        }
+
+        let fm = FileManager.default
+        if let existingTarget = localSyncResolvedSymlinkTarget(atPath: destinationPath),
+           existingTarget == resolvedSourcePath {
+            return
+        }
+
+        let existingKind = localSyncItemKind(atPath: destinationPath)
+        if existingKind != nil || localSyncIsSymlink(atPath: destinationPath) {
+            let conflictKind: LocalSyncConflictKind = {
+                switch (sourceKind, existingKind) {
+                case (.directory, .some(.file)):
+                    return .fileBlocksDirectory
+                case (.file, .some(.directory)):
+                    return .directoryBlocksFile
+                default:
+                    return .fileDifferent
+                }
+            }()
+            let shouldOverwrite = try await shouldOverwriteLocalSyncConflict(
+                LocalSyncConflict(
+                    relativePath: relativePath,
+                    sourcePath: sourcePath,
+                    destinationPath: destinationPath,
+                    kind: conflictKind
+                ),
+                conflictMode: conflictMode,
+                overwriteAll: &overwriteAll,
+                ignoreAll: &ignoreAll,
+                conflictDirection: conflictDirection,
+                repoPath: repoPath
+            )
+            guard shouldOverwrite else { return }
+            try fm.removeItem(atPath: destinationPath)
+        }
+
+        try fm.createSymbolicLink(atPath: destinationPath, withDestinationPath: resolvedSourcePath)
     }
 
     // MARK: - Merge Copy
@@ -660,6 +759,27 @@ extension ThreadManager {
             return .file
         }
         return type == .typeDirectory ? .directory : .file
+    }
+
+    nonisolated private func localSyncIsSymlink(atPath path: String) -> Bool {
+        (try? FileManager.default.destinationOfSymbolicLink(atPath: path)) != nil
+    }
+
+    nonisolated private func localSyncResolvedSymlinkTarget(atPath path: String) -> String? {
+        let fm = FileManager.default
+        guard let rawTarget = try? fm.destinationOfSymbolicLink(atPath: path) else { return nil }
+
+        let absoluteTarget: String
+        if rawTarget.hasPrefix("/") {
+            absoluteTarget = rawTarget
+        } else {
+            let parentPath = (path as NSString).deletingLastPathComponent
+            absoluteTarget = URL(fileURLWithPath: rawTarget, relativeTo: URL(fileURLWithPath: parentPath))
+                .standardizedFileURL
+                .path
+        }
+
+        return URL(fileURLWithPath: absoluteTarget).resolvingSymlinksInPath().path
     }
 
     nonisolated private func localSyncFilesMatch(sourcePath: String, destinationPath: String) throws -> Bool {
@@ -1031,8 +1151,8 @@ extension ThreadManager {
             }
 
             // Build buttons based on conflict type.
-            // Text file conflicts: [Resolve in Merge Tool], Agentic Merge, Cancel
-            // Binary/structural conflicts: Override/Ignore (Option for All), Agentic Merge, Cancel
+            // Text file conflicts: [Resolve in Merge Tool], Resolve with Agent, Cancel
+            // Binary/structural conflicts: Override/Ignore (Option for All), Resolve with Agent, Cancel
 
             var overrideButton: NSButton?
             var ignoreButton: NSButton?
@@ -1049,7 +1169,7 @@ extension ThreadManager {
                 ignoreButton = alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveConflictIgnore))
             }
 
-            alert.addButton(withTitle: "Agentic Merge")
+            alert.addButton(withTitle: "Resolve with Agent")
 
             let cancelTitle: String = switch direction {
             case .intoRepo:
@@ -1085,7 +1205,7 @@ extension ThreadManager {
                 let useAllChoice = optionHeld || (NSApp.currentEvent?.modifierFlags.contains(.option) == true)
 
                 // Button index mapping for binary/structural:
-                // [0: Resolve?], Override, Ignore, Agentic Merge, Cancel
+                // [0: Resolve?], Override, Ignore, Resolve with Agent, Cancel
                 let buttonIndex: Int
                 switch response {
                 case .alertFirstButtonReturn: buttonIndex = 0
@@ -1101,7 +1221,7 @@ extension ThreadManager {
                     if idx == 0 { return .resolve }
                     idx -= 1
                 }
-                // idx 0 = Override, 1 = Ignore, 2 = Agentic Merge, 3 = Cancel
+                // idx 0 = Override, 1 = Ignore, 2 = Resolve with Agent, 3 = Cancel
                 switch idx {
                 case 0: return useAllChoice ? .overwriteAll : .overwrite
                 case 1: return useAllChoice ? .skipAll : .skip
@@ -1113,7 +1233,7 @@ extension ThreadManager {
                 let response = alert.runModal()
 
                 // Button index mapping for text:
-                // [0: Resolve?], Agentic Merge, Cancel
+                // [0: Resolve?], Resolve with Agent, Cancel
                 let buttonIndex: Int
                 switch response {
                 case .alertFirstButtonReturn: buttonIndex = 0
@@ -1127,7 +1247,7 @@ extension ThreadManager {
                     if idx == 0 { return .resolve }
                     idx -= 1
                 }
-                // idx 0 = Agentic Merge, 1 = Cancel
+                // idx 0 = Resolve with Agent, 1 = Cancel
                 switch idx {
                 case 0: return .agenticMerge
                 default: return .cancel

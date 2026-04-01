@@ -1315,7 +1315,7 @@ final class ThreadDetailViewController: NSViewController {
         let settings = PersistenceService.shared.loadSettings()
         let project = settings.projects.first(where: { $0.id == thread.projectId })
         guard let project else { return true }
-        guard !project.normalizedLocalFileSyncPaths.isEmpty else { return true }
+        guard project.hasCopyLocalFileSyncEntries else { return true }
         let projectId = thread.projectId
 
         let activeProjectThreadCount = threadManager.threads.lazy.filter {

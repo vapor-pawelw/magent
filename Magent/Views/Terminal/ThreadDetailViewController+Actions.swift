@@ -10,6 +10,7 @@ private struct ManualLocalSyncTarget {
 private enum ManualLocalSyncDirection: Int {
     case intoCurrentWorktree = 0
     case fromCurrentWorktree = 1
+    case reconcileBothWays = 2
 }
 
 extension ThreadDetailViewController {
@@ -143,6 +144,15 @@ extension ThreadDetailViewController {
         menu.addItem(intoWorktreeItem)
         menu.addItem(fromWorktreeItem)
 
+        let reconcileItem = NSMenuItem(
+            title: "Reconcile \(thisName) with \(syncLabel)\u{2026}",
+            action: #selector(agenticReconcileTapped(_:)),
+            keyEquivalent: ""
+        )
+        reconcileItem.target = self
+        reconcileItem.representedObject = syncPath
+        menu.addItem(reconcileItem)
+
         // Only show "Other…" if there are additional worktrees beyond the default sync target
         let otherWorktreeCount = threadManager.threads.filter { thread in
             thread.projectId == currentThread.projectId
@@ -182,6 +192,22 @@ extension ThreadDetailViewController {
         let destinationRootOverride = sender.representedObject as? String
         let destLabel = destinationRootOverride.map { ($0 as NSString).lastPathComponent } ?? "the main repo"
         performResyncFromWorktree(destLabel: destLabel, destinationRootOverride: destinationRootOverride)
+    }
+
+    @objc private func agenticReconcileTapped(_ sender: NSMenuItem) {
+        let currentThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        let settings = PersistenceService.shared.loadSettings()
+        guard let project = settings.projects.first(where: { $0.id == currentThread.projectId }) else {
+            BannerManager.shared.show(message: "Could not find the project for this thread.", style: .error)
+            return
+        }
+        let targetPath = (sender.representedObject as? String) ?? project.repoPath
+        openAgenticReconcile(
+            currentThread: currentThread,
+            project: project,
+            targetPath: targetPath,
+            targetLabel: localSyncTargetLabel(for: targetPath, projectRepoPath: project.repoPath)
+        )
     }
 
     @objc private func resyncOtherLocalPathsTapped(_ sender: NSMenuItem) {
@@ -232,8 +258,8 @@ extension ThreadDetailViewController {
     ) {
         let alert = NSAlert()
         alert.messageText = "Manual Local Sync"
-        alert.informativeText = "Choose whether to sync into or out of this worktree, then pick the target worktree."
-        alert.addButton(withTitle: "Sync")
+        alert.informativeText = "Choose whether to run a one-way sync or a two-way agentic reconcile, then pick the target worktree."
+        alert.addButton(withTitle: "Continue")
         alert.addButton(withTitle: "Cancel")
 
         let controlWidth: CGFloat = 280
@@ -245,7 +271,8 @@ extension ThreadDetailViewController {
         let directionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         directionPopup.addItems(withTitles: [
             "Sync into this worktree",
-            "Sync from this worktree"
+            "Sync from this worktree",
+            "Reconcile both ways with agent"
         ])
         directionPopup.selectItem(at: ManualLocalSyncDirection.intoCurrentWorktree.rawValue)
 
@@ -305,6 +332,13 @@ extension ThreadDetailViewController {
             performResyncIntoWorktree(sourceLabel: target.label, sourceRootOverride: target.path)
         case .fromCurrentWorktree:
             performResyncFromWorktree(destLabel: target.label, destinationRootOverride: target.path)
+        case .reconcileBothWays:
+            openAgenticReconcile(
+                currentThread: currentThread,
+                project: project,
+                targetPath: target.path,
+                targetLabel: target.label
+            )
         }
     }
 
@@ -337,8 +371,8 @@ extension ThreadDetailViewController {
             return
         }
 
-        let syncPaths = threadManager.effectiveLocalSyncPaths(for: currentThread, project: project)
-        guard !syncPaths.isEmpty else {
+        let syncEntries = threadManager.effectiveLocalSyncEntries(for: currentThread, project: project)
+        guard !syncEntries.isEmpty else {
             BannerManager.shared.show(message: "No Local Sync Paths are configured for this thread.", style: .warning)
             return
         }
@@ -353,14 +387,14 @@ extension ThreadDetailViewController {
         )
         let projectSnapshot = project
         let worktreePath = currentThread.worktreePath
-        let syncPathsSnapshot = syncPaths
+        let syncEntriesSnapshot = syncEntries
         Task {
             defer { Task { @MainActor in self.stopResyncSpinner() } }
             do {
                 let missingPaths = try await ThreadManager.shared.syncConfiguredLocalPathsIntoWorktree(
                     project: projectSnapshot,
                     worktreePath: worktreePath,
-                    syncPaths: syncPathsSnapshot,
+                    syncEntries: syncEntriesSnapshot,
                     promptForConflicts: true,
                     sourceRootOverride: sourceRootOverride
                 )
@@ -413,9 +447,9 @@ extension ThreadDetailViewController {
             return
         }
 
-        let syncPaths = threadManager.effectiveLocalSyncPaths(for: currentThread, project: project)
-        guard !syncPaths.isEmpty else {
-            BannerManager.shared.show(message: "No Local Sync Paths are configured for this thread.", style: .warning)
+        let syncEntries = threadManager.effectiveLocalSyncEntries(for: currentThread, project: project)
+        guard syncEntries.contains(where: { $0.mode == .copy }) else {
+            BannerManager.shared.show(message: "No copy-mode Local Sync Paths are configured for this thread.", style: .warning)
             return
         }
 
@@ -429,14 +463,14 @@ extension ThreadDetailViewController {
         )
         let projectSnapshot = project
         let worktreePath = currentThread.worktreePath
-        let syncPathsSnapshot = syncPaths
+        let syncEntriesSnapshot = syncEntries
         Task {
             defer { Task { @MainActor in self.stopResyncSpinner() } }
             do {
                 try await ThreadManager.shared.syncConfiguredLocalPathsFromWorktree(
                     project: projectSnapshot,
                     worktreePath: worktreePath,
-                    syncPaths: syncPathsSnapshot,
+                    syncEntries: syncEntriesSnapshot,
                     promptForConflicts: true,
                     destinationRootOverride: destinationRootOverride
                 )
@@ -468,35 +502,98 @@ extension ThreadDetailViewController {
         }
     }
 
-    // MARK: - Agentic Merge
+    // MARK: - Agentic Sync
 
     private func openAgenticMergeTab(context: LocalSyncAgenticMergeContext) {
         let pathsList = context.syncPaths.map { "  - \($0)" }.joined(separator: "\n")
-        let prompt = """
-        I need you to sync local files between two directories and resolve any conflicts.
+        let prompt: String
+        let customTitle: String
+        switch context.operation {
+        case .syncSourceToDestination:
+            customTitle = "Local Sync Resolve"
+            prompt = """
+            I need you to complete a one-way local sync and resolve any conflicts.
 
-        **Source:** \(context.sourceRoot) (\(context.sourceLabel))
-        **Destination:** \(context.destinationRoot) (\(context.destinationLabel))
+            **Authoritative Source:** \(context.sourceRoot) (\(context.sourceLabel))
+            **Destination to update:** \(context.destinationRoot) (\(context.destinationLabel))
 
-        **Paths to sync:**
-        \(pathsList)
+            **Paths to sync:**
+            \(pathsList)
 
-        For each path listed above, copy the file or directory from Source to Destination. If a file already exists at the destination and differs from the source:
-        1. Read both versions
-        2. Merge them intelligently, preserving meaningful changes from both sides
-        3. If you're not sure which change to keep, ask me before proceeding
+            For each path listed above:
+            1. Make Destination reflect Source
+            2. If the destination already has a different version, read both sides and resolve the conflict intelligently
+            3. Preserve meaningful changes when possible, but treat Source as the authoritative side for the final result
+            4. Do not modify Source
 
-        After syncing, confirm what was done and list any files where you merged changes or chose one version over another.
-        """
+            If you are unsure which change to keep, ask me before proceeding.
+
+            After syncing, confirm what you changed in Destination and list any files where you merged or made a judgment call.
+            """
+        case .reconcileBothWays:
+            customTitle = "Local Sync Reconcile"
+            prompt = """
+            I need you to reconcile local files between two directories.
+
+            **Side A:** \(context.sourceRoot) (\(context.sourceLabel))
+            **Side B:** \(context.destinationRoot) (\(context.destinationLabel))
+
+            **Paths to reconcile:**
+            \(pathsList)
+
+            For each path listed above:
+            1. Read the current state on both sides
+            2. Reconcile differences intelligently so both sides end up consistent
+            3. You may update either side when needed
+            4. Preserve meaningful changes from both sides whenever possible
+
+            If you are unsure which change to keep, ask me before proceeding.
+
+            After reconciling, confirm what changed on each side and list any files where you merged or made a judgment call.
+            """
+        }
 
         addTab(
             using: nil,
             useAgentCommand: true,
             initialPrompt: prompt,
             shouldSubmitInitialPrompt: true,
-            customTitle: "Local Sync Merge",
+            customTitle: customTitle,
             tabNameSuffix: "sync"
         )
+    }
+
+    private func openAgenticReconcile(
+        currentThread: MagentThread,
+        project: Project,
+        targetPath: String,
+        targetLabel: String
+    ) {
+        let syncPaths = effectiveAgenticSyncPaths(for: currentThread, project: project)
+        guard !syncPaths.isEmpty else {
+            BannerManager.shared.show(message: "No Local Sync Paths are configured for this thread.", style: .warning)
+            return
+        }
+
+        openAgenticMergeTab(context: LocalSyncAgenticMergeContext(
+            operation: .reconcileBothWays,
+            sourceRoot: currentThread.worktreePath,
+            destinationRoot: targetPath,
+            syncPaths: syncPaths,
+            sourceLabel: (currentThread.worktreePath as NSString).lastPathComponent,
+            destinationLabel: targetLabel
+        ))
+    }
+
+    private func effectiveAgenticSyncPaths(for currentThread: MagentThread, project: Project) -> [String] {
+        threadManager.effectiveLocalSyncEntries(for: currentThread, project: project).map(\.path)
+    }
+
+    private func localSyncTargetLabel(for path: String, projectRepoPath: String) -> String {
+        if path == projectRepoPath {
+            return "Project"
+        }
+        return (path as NSString).lastPathComponent
     }
 
     private func startResyncSpinner() {
