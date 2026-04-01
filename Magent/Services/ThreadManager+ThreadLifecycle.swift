@@ -842,9 +842,15 @@ extension ThreadManager {
         // Remove from active list
         threads.remove(at: index)
 
-        // Remove from persisted JSON entirely
+        // Mark as archived in persistence rather than removing entirely.
+        // The worktree cleanup below is fire-and-forget — if it fails, the
+        // directory survives and syncThreadsWithWorktrees would re-discover it
+        // as a new thread unless the archived record is still present.
         var allThreads = persistence.loadThreads()
-        allThreads.removeAll { $0.id == thread.id }
+        if let idx = allThreads.firstIndex(where: { $0.id == thread.id }) {
+            allThreads[idx].isArchived = true
+            allThreads[idx].archivedAt = allThreads[idx].archivedAt ?? Date()
+        }
         try persistence.saveThreads(allThreads)
 
         await MainActor.run {
