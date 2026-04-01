@@ -272,7 +272,9 @@ Legacy files (no envelope, written by older builds) are decoded directly and upg
 
 #### Startup validation & recovery
 
-On launch, `AppCoordinator.start()` calls `tryLoadSettings()` / `tryLoadThreads()` before showing the UI. If either file fails to decode (corruption, incompatible schema from a newer build, etc.):
+On launch, `AppCoordinator.start()` calls `tryLoadSettings()` / `tryLoadThreads()` before showing the UI. Before surfacing any fatal startup error, persistence first attempts silent self-recovery for missing or corrupt `settings.json` / `threads.json` by loading the newest valid copy from the rolling `.bak` file or the periodic snapshot folders and restoring it back to the primary path.
+
+If the primary file and all recovery candidates still fail to decode (or the file is from a newer incompatible schema):
 
 1. Writes to the affected file are **blocked** so no save can overwrite it.
 2. A modal alert explains which files failed and why.

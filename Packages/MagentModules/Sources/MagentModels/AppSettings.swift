@@ -227,7 +227,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         showBusyStateDuration = try container.decodeIfPresent(Bool.self, forKey: .showBusyStateDuration) ?? true
         autoRenameSlugPrompt = try container.decodeIfPresent(String.self, forKey: .autoRenameSlugPrompt) ?? Self.defaultSlugPrompt
         useThreadSections = try container.decodeIfPresent(Bool.self, forKey: .useThreadSections) ?? true
-        isConfigured = try container.decode(Bool.self, forKey: .isConfigured)
+        isConfigured = try container.decodeIfPresent(Bool.self, forKey: .isConfigured) ?? !projects.isEmpty
         threadSections = try container.decodeIfPresent([ThreadSection].self, forKey: .threadSections) ?? ThreadSection.defaults()
         defaultSectionId = try container.decodeIfPresent(UUID.self, forKey: .defaultSectionId)
         terminalInjectionCommand = try container.decodeIfPresent(String.self, forKey: .terminalInjectionCommand) ?? ""
