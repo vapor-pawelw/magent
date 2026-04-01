@@ -101,8 +101,10 @@ final class BannerOverlayView: NSView {
         // point is in superview (NSSplitView, flipped) coordinates —
         // convert to our own coordinate space before forwarding to subviews.
         let local = convert(point, from: superview)
-        for subview in subviews {
-            if let hit = subview.hitTest(local) {
+        // Walk front-to-back so overlapping views keep their expected z-order.
+        for subview in subviews.reversed() {
+            let subviewPoint = subview.convert(local, from: self)
+            if let hit = subview.hitTest(subviewPoint) {
                 return hit
             }
         }

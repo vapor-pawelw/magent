@@ -125,6 +125,7 @@ All notable changes to this project will be documented in this file.
 
 ### Banner
 - Fixed banner buttons and dismiss (X) being unresponsive — clicks were silently ignored due to a coordinate-space mismatch between the flipped split view and the unflipped banner overlay.
+- Fixed the archived-thread banner's `X` button, and the shared banner overlay fix applies to other banner buttons too.
 - "Unsubmitted prompt recovered" banners for tab prompts now appear only on the affected thread instead of as a global overlay. Dismiss hides the banner until the thread is re-selected; only "Discard" deletes the recovered prompt.
 
 ### Status Bar

@@ -12,7 +12,7 @@
 - `BannerView` owns the shared dismissal affordances. `BannerConfig.allowsUserDismissal` treats timed banners as user-dismissible even if a caller forgets to opt in explicitly.
 - Swipe dismissal is attached only when `allowsUserDismissal` is true. The gesture dismisses after a short drag threshold in any direction.
 - Call sites that represent long-running progress or forced-action states must pass `isDismissible: false` explicitly so they do not inherit the timed-banner affordances by accident.
-- **Hit-testing gotcha**: `BannerOverlayView` sits inside a flipped `NSSplitView` but is itself unflipped. Its `hitTest(_:)` override must convert the incoming point from superview coordinates before forwarding to subviews — without conversion, Y is inverted and clicks silently miss the banner.
+- **Hit-testing gotcha**: `BannerOverlayView` sits inside a flipped `NSSplitView` but is itself unflipped. Its `hitTest(_:)` override must convert the incoming point from superview coordinates, then convert again into each child subview's coordinate system while walking subviews front-to-back. If you skip either step, banner buttons can look correct but stop receiving clicks.
 
 ## Current Non-Dismissible Progress Examples
 
