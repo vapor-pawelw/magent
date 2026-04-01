@@ -16,6 +16,9 @@ All notable changes to this project will be documented in this file.
 - New "Switch to new tab" checkbox in the New Tab prompt sheet — works like the existing "Switch to new thread" option, remembers the last selection, and defaults to on.
 - Option+middle-click on a tab now closes it immediately without a confirmation alert.
 
+### Settings
+- Moved `Inject Magent IPC instructions into agent prompts` and `Track agent rate limits` out of `Agent Permissions` into a dedicated `Agent Behavior` section in Settings > Agents.
+
 ## 1.4.0 - 2026-03-31
 
 

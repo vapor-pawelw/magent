@@ -12,6 +12,28 @@
         }
       }
     },
+    "settingsAgentsBehaviorDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controls Magent-specific agent behavior like prompt injection and rate-limit monitoring."
+          }
+        }
+      }
+    },
+    "settingsAgentsBehaviorTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent Behavior"
+          }
+        }
+      }
+    },
     "settingsAgentsCustomAgentCommandDescription": {
       "extractionState": "manual",
       "localizations": {

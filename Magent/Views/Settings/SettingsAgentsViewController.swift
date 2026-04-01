@@ -153,10 +153,16 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         permissionsSection.addArrangedSubview(sandboxCheckbox)
         permissionsSection.addArrangedSubview(sandboxDesc)
 
+        let (behaviorCard, behaviorSection) = createSectionCard(
+            title: String(localized: .SettingsStrings.settingsAgentsBehaviorTitle),
+            description: String(localized: .SettingsStrings.settingsAgentsBehaviorDescription)
+        )
+        stackView.addArrangedSubview(behaviorCard)
+
         ipcInjectionCheckbox = NSButton(
             checkboxWithTitle: String(localized: .SettingsStrings.settingsAgentsInjectIPC),
             target: self,
-            action: #selector(permissionsSettingChanged)
+            action: #selector(agentBehaviorSettingChanged)
         )
         ipcInjectionCheckbox.state = settings.ipcPromptInjectionEnabled ? .on : .off
         let ipcDesc = NSTextField(
@@ -164,8 +170,8 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         )
         ipcDesc.font = .systemFont(ofSize: 11)
         ipcDesc.textColor = NSColor(resource: .textSecondary)
-        permissionsSection.addArrangedSubview(ipcInjectionCheckbox)
-        permissionsSection.addArrangedSubview(ipcDesc)
+        behaviorSection.addArrangedSubview(ipcInjectionCheckbox)
+        behaviorSection.addArrangedSubview(ipcDesc)
 
         rateLimitDetectionCheckbox = NSButton(
             checkboxWithTitle: String(localized: .SettingsStrings.settingsAgentsTrackRateLimits),
@@ -178,8 +184,8 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
         )
         rateLimitDesc.font = .systemFont(ofSize: 11)
         rateLimitDesc.textColor = NSColor(resource: .textSecondary)
-        permissionsSection.addArrangedSubview(rateLimitDetectionCheckbox)
-        permissionsSection.addArrangedSubview(rateLimitDesc)
+        behaviorSection.addArrangedSubview(rateLimitDetectionCheckbox)
+        behaviorSection.addArrangedSubview(rateLimitDesc)
 
         // Full Disk Access
         let (fdaCard, fdaSection) = createSectionCard(
@@ -208,8 +214,8 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
             defaultDesc.widthAnchor.constraint(equalTo: defaultAgentSection.widthAnchor),
             skipDesc.widthAnchor.constraint(equalTo: permissionsSection.widthAnchor),
             sandboxDesc.widthAnchor.constraint(equalTo: permissionsSection.widthAnchor),
-            ipcDesc.widthAnchor.constraint(equalTo: permissionsSection.widthAnchor),
-            rateLimitDesc.widthAnchor.constraint(equalTo: permissionsSection.widthAnchor),
+            ipcDesc.widthAnchor.constraint(equalTo: behaviorSection.widthAnchor),
+            rateLimitDesc.widthAnchor.constraint(equalTo: behaviorSection.widthAnchor),
         ])
 
         refreshFDAStatus()
@@ -261,6 +267,7 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
             selectionCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             permissionsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            behaviorCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             fdaCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             customCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
         ])
@@ -434,6 +441,10 @@ final class SettingsAgentsViewController: NSViewController, NSTextViewDelegate {
     @objc private func permissionsSettingChanged() {
         settings.agentSkipPermissions = skipPermissionsCheckbox.state == .on
         settings.agentSandboxEnabled = sandboxCheckbox.state == .on
+        try? persistence.saveSettings(settings)
+    }
+
+    @objc private func agentBehaviorSettingChanged() {
         settings.ipcPromptInjectionEnabled = ipcInjectionCheckbox.state == .on
         try? persistence.saveSettings(settings)
     }

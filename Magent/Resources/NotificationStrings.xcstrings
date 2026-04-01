@@ -227,7 +227,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Get notified when an agent's rate limit is lifted. Rate limit notifications require \"Track agent rate limits\" in Settings > Agents."
+            "value": "Get notified when an agent's rate limit is lifted. Rate limit notifications require \"Track agent rate limits\" in Settings > Agents > Agent Behavior."
           }
         }
       }
@@ -238,7 +238,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "When rate limit tracking is enabled, Magent can notify you when the countdown reaches zero and the agent is ready to use again. Requires \"Track agent rate limits\" in Settings > Agents."
+            "value": "When rate limit tracking is enabled, Magent can notify you when the countdown reaches zero and the agent is ready to use again. Requires \"Track agent rate limits\" in Settings > Agents > Agent Behavior."
           }
         }
       }

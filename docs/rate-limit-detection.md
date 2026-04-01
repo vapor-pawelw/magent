@@ -66,7 +66,7 @@ Newer pane output such as `/status` must not auto-clear an already-anchored limi
 
 ## Settings
 
-Rate limit tracking can be toggled in **Settings > Agents**:
+Rate limit tracking can be toggled in **Settings > Agents > Agent Behavior**:
 - **Track agent rate limits** — master toggle for the tracking system
 - **Show system notification when rate limit is lifted** — post a system notification when countdown reaches zero (Settings > Notifications)
 - **Play sound when rate limit is lifted** — optional lift sound
