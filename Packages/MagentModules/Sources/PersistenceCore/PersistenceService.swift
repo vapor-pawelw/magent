@@ -107,6 +107,9 @@ public final class PersistenceService {
         appSupportURL.appendingPathComponent("settings.bak.json")
     }
 
+    private var backupsURL: URL {
+        appSupportURL.appendingPathComponent("backups", isDirectory: true)
+    }
     private var agentLaunchPromptDraftsURL: URL {
         appSupportURL.appendingPathComponent("agent-launch-prompt-drafts.json")
     }
@@ -132,6 +135,30 @@ public final class PersistenceService {
     /// Core decode method: handles versioned envelope detection, version checking,
     /// migration, and legacy (v0, no envelope) fallback.
     private func decodeVersioned<T: Codable>(
+        _ type: T.Type,
+        from url: URL,
+        currentVersion: Int,
+        migrations: SchemaMigrations = [:]
+    ) -> LoadOutcome<T> {
+        let primaryOutcome = decodeVersionedPrimary(
+            type,
+            from: url,
+            currentVersion: currentVersion,
+            migrations: migrations
+        )
+        if let recoveredOutcome = recoverFromBackupIfPossible(
+            type,
+            primaryOutcome: primaryOutcome,
+            primaryURL: url,
+            currentVersion: currentVersion,
+            migrations: migrations
+        ) {
+            return recoveredOutcome
+        }
+        return primaryOutcome
+    }
+
+    private func decodeVersionedPrimary<T: Codable>(
         _ type: T.Type,
         from url: URL,
         currentVersion: Int,
@@ -189,6 +216,94 @@ public final class PersistenceService {
                 reason: .decodeFailed(error.localizedDescription)
             ))
         }
+    }
+
+    private func recoverFromBackupIfPossible<T: Codable>(
+        _ type: T.Type,
+        primaryOutcome: LoadOutcome<T>,
+        primaryURL: URL,
+        currentVersion: Int,
+        migrations: SchemaMigrations = [:]
+    ) -> LoadOutcome<T>? {
+        switch primaryOutcome {
+        case .loaded:
+            return nil
+        case .fileNotFound:
+            break
+        case .decodeFailed(let failure):
+            guard case .decodeFailed = failure.reason else {
+                return nil
+            }
+        }
+
+        for candidateURL in recoveryCandidateURLs(for: primaryURL) {
+            let fallbackOutcome = decodeVersionedPrimary(
+                type,
+                from: candidateURL,
+                currentVersion: currentVersion,
+                migrations: migrations
+            )
+            guard case .loaded(let recoveredValue) = fallbackOutcome else { continue }
+
+            do {
+                try restorePrimaryFile(at: primaryURL, from: candidateURL)
+                logger.info("Recovered \(primaryURL.lastPathComponent) from backup source \(candidateURL.lastPathComponent)")
+            } catch {
+                logger.error(
+                    "Recovered \(primaryURL.lastPathComponent) in memory but failed to restore primary file: \(error.localizedDescription)"
+                )
+            }
+
+            return .loaded(recoveredValue)
+        }
+
+        return nil
+    }
+
+    private func recoveryCandidateURLs(for primaryURL: URL) -> [URL] {
+        var candidates: [URL] = []
+
+        let rollingBackupURL = primaryURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(primaryURL.deletingPathExtension().lastPathComponent + ".bak.json")
+        if fileManager.fileExists(atPath: rollingBackupURL.path) {
+            candidates.append(rollingBackupURL)
+        }
+
+        let snapshotDirectories = (try? fileManager.contentsOfDirectory(
+            at: backupsURL,
+            includingPropertiesForKeys: [.isDirectoryKey, .creationDateKey],
+            options: .skipsHiddenFiles
+        )) ?? []
+
+        let sortedSnapshotDirectories = snapshotDirectories
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+            .sorted { lhs, rhs in
+                let lhsDate = (try? lhs.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
+                let rhsDate = (try? rhs.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
+                return lhsDate > rhsDate
+            }
+
+        for snapshotDirectory in sortedSnapshotDirectories {
+            let candidateURL = snapshotDirectory.appendingPathComponent(primaryURL.lastPathComponent)
+            guard fileManager.fileExists(atPath: candidateURL.path) else { continue }
+            candidates.append(candidateURL)
+        }
+
+        return candidates
+    }
+
+    private func restorePrimaryFile(at primaryURL: URL, from backupURL: URL) throws {
+        try fileManager.createDirectory(
+            at: primaryURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        if fileManager.fileExists(atPath: primaryURL.path) {
+            _ = backupFile(at: primaryURL)
+            try fileManager.removeItem(at: primaryURL)
+        }
+        try fileManager.copyItem(at: backupURL, to: primaryURL)
     }
 
     /// Returns true if the file on disk is in legacy (pre-envelope) format.
