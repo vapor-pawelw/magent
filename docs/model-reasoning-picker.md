@@ -58,10 +58,10 @@ Each agent independently remembers its last-selected model and reasoning level:
 
 ```swift
 struct AgentSessionConfig: Codable, Equatable {
-    var claudeModel: String?       // nil = "Default"
-    var codexModel: String?        // nil = "Default"
-    var claudeEffort: String?      // nil = "Default"
-    var codexReasoning: String?    // nil = "Default"
+    var claudeModel: String?       // nil = "Auto"
+    var codexModel: String?        // nil = "Auto"
+    var claudeEffort: String?      // nil = "Auto"
+    var codexReasoning: String?    // nil = "Auto"
 }
 ```
 
@@ -73,20 +73,24 @@ Switching between Claude and Codex in the agent picker swaps the displayed model
 
 ### Stale Selection Recovery
 
-If the user's last-selected model no longer exists in the current JSON (after a remote update), silently fall back to "Default."
+If the user's last-selected model no longer exists in the current JSON (after a remote update), silently fall back to "Auto."
 
 ## UI: Launch Sheet
 
-Two `NSPopUpButton` pickers below the agent picker in `AgentLaunchPromptSheetController`:
+Type, Model, and Reasoning pickers share a **single row** in `AgentLaunchPromptSheetController`:
 
-- **Model picker**: "Default" + models from JSON for the selected agent.
-- **Reasoning picker**: "Default" + reasoning levels. Items update when:
+```
+Type [picker]  Model [picker]  Reasoning [picker]
+```
+
+- **Model picker**: "Auto" + models from JSON for the selected agent.
+- **Reasoning picker**: "Auto" + reasoning levels. Items update when:
   - Agent changes (load that agent's reasoning levels).
   - Model changes, if the selected model has a per-model `reasoningLevels` override.
 
-Both pickers are **hidden** when agent is `.custom` or Terminal or Web.
+Model and Reasoning pickers are **hidden** (individually, not the whole row) when agent is `.custom` or Terminal or Web.
 
-"Default" means no flags are passed — the agent uses its own configured default.
+"Auto" means no flags are passed — the agent uses its own configured default.
 
 ### Fast Path (Option+click / Context Menu)
 
@@ -94,7 +98,7 @@ Uses last-selected model + reasoning for the relevant agent. No sheet shown. Equ
 
 ## Command Building
 
-Flags are appended in `freshAgentCommand` only when the selection is not "Default":
+Flags are appended in `freshAgentCommand` only when the selection is not "Auto":
 
 ### Claude
 
@@ -102,8 +106,8 @@ Flags are appended in `freshAgentCommand` only when the selection is not "Defaul
 claude --model <id> --effort <level>
 ```
 
-- `--model` omitted when "Default"
-- `--effort` omitted when "Default"
+- `--model` omitted when "Auto"
+- `--effort` omitted when "Auto"
 
 ### Codex
 
@@ -111,8 +115,8 @@ claude --model <id> --effort <level>
 codex -m <id> -c model_reasoning_effort=<level>
 ```
 
-- `-m` omitted when "Default"
-- `-c model_reasoning_effort=...` omitted when "Default"
+- `-m` omitted when "Auto"
+- `-c model_reasoning_effort=...` omitted when "Auto"
 
 ### Resume
 

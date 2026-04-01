@@ -380,7 +380,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let switchToNewTabCheckbox = NSButton(checkboxWithTitle: "Switch to new tab", target: nil, action: nil)
     private let modelPicker = NSPopUpButton()
     private let reasoningPicker = NSPopUpButton()
-    private var modelReasoningRow: NSStackView?
+    private var modelReasoningViews: [NSView] = []
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
     private let acceptButton: NSButton
     private var promptScrollView: NSScrollView!
@@ -593,7 +593,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             populateSectionPicker(for: projectId)
         }
 
-        // Agent picker row
+        // Agent / Model / Reasoning picker row (single line)
         let agentRow = NSStackView()
         agentRow.orientation = .horizontal
         agentRow.alignment = .centerY
@@ -606,34 +606,26 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         agentPicker.action = #selector(agentPickerChanged)
         agentPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
         agentRow.addArrangedSubview(agentPicker)
-        stack.addArrangedSubview(agentRow)
-
-        // Model + Reasoning picker row (inline, compact)
-        let mrRow = NSStackView()
-        mrRow.orientation = .horizontal
-        mrRow.alignment = .centerY
-        mrRow.spacing = 8
 
         let modelLabel = makeFormLabel("Model")
-        modelLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([modelLabel.widthAnchor.constraint(equalToConstant: Self.formLabelWidth)])
-        mrRow.addArrangedSubview(modelLabel)
+        agentRow.addArrangedSubview(modelLabel)
 
         modelPicker.target = self
         modelPicker.action = #selector(modelPickerChanged)
         modelPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        mrRow.addArrangedSubview(modelPicker)
+        agentRow.addArrangedSubview(modelPicker)
 
         let reasoningLabel = makeFormLabel("Reasoning")
-        mrRow.addArrangedSubview(reasoningLabel)
+        agentRow.addArrangedSubview(reasoningLabel)
 
         reasoningPicker.target = self
         reasoningPicker.action = #selector(reasoningPickerChanged)
         reasoningPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        mrRow.addArrangedSubview(reasoningPicker)
+        agentRow.addArrangedSubview(reasoningPicker)
 
-        stack.addArrangedSubview(mrRow)
-        modelReasoningRow = mrRow
+        modelReasoningViews = [modelLabel, modelPicker, reasoningLabel, reasoningPicker]
+
+        stack.addArrangedSubview(agentRow)
         populateModelReasoningPickers()
         applyLastModelReasoningSelection()
         updateModelReasoningVisibility()
@@ -855,7 +847,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             titleLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             agentRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             rememberCheckbox.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            agentPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
+            agentPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 100),
             promptLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             promptScrollView.widthAnchor.constraint(equalTo: stack.widthAnchor),
             promptScrollView.heightAnchor.constraint(equalToConstant: promptHeight),
@@ -863,8 +855,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ] + (contextChip.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
           + (projectPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
-          + (sectionPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
-          + (modelReasoningRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
+          + (sectionPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
 
         if let titleRow {
             NSLayoutConstraint.activate([
@@ -1299,12 +1290,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private var selectedModelId: String? {
-        guard modelPicker.indexOfSelectedItem > 0 else { return nil } // index 0 = "Default"
+        guard modelPicker.indexOfSelectedItem > 0 else { return nil } // index 0 = "Auto"
         return modelPicker.selectedItem?.representedObject as? String
     }
 
     private var selectedReasoningLevel: String? {
-        guard reasoningPicker.indexOfSelectedItem > 0 else { return nil } // index 0 = "Default"
+        guard reasoningPicker.indexOfSelectedItem > 0 else { return nil } // index 0 = "Auto"
         return reasoningPicker.selectedItem?.representedObject as? String
     }
 
@@ -1318,7 +1309,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
 
         // Model picker: Default + models from manifest
-        modelPicker.addItem(withTitle: "Default")
+        modelPicker.addItem(withTitle: "Auto")
         modelPicker.lastItem?.representedObject = nil
         for model in agentConfig.models {
             modelPicker.addItem(withTitle: model.label)
@@ -1332,7 +1323,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private func populateReasoningPicker(agentConfig: AgentModelConfig, modelId: String?) {
         let previousSelection = reasoningPicker.selectedItem?.representedObject as? String
         reasoningPicker.removeAllItems()
-        reasoningPicker.addItem(withTitle: "Default")
+        reasoningPicker.addItem(withTitle: "Auto")
         reasoningPicker.lastItem?.representedObject = nil
         let levels = agentConfig.effectiveReasoningLevels(for: modelId)
         for level in levels {
@@ -1372,7 +1363,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     private func updateModelReasoningVisibility() {
         let visible = selectedAgentTypeForModelPicker != nil
-        modelReasoningRow?.isHidden = !visible
+        for view in modelReasoningViews {
+            view.isHidden = !visible
+        }
     }
 
     /// Resync model/reasoning pickers after programmatic agent picker changes
