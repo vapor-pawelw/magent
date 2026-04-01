@@ -11,7 +11,7 @@
 `Libraries/GhosttyKit.xcframework/macos-arm64_x86_64/libghostty.a` is intentionally local-only and not tracked in git.
 
 ```bash
-git clone git@github.com:vapor-pawelw/magent.git
+git clone git@github.com:vapor-pawelw/mAgent.git
 cd magent
 
 # Install local toolchain (tuist + zig)
@@ -30,7 +30,7 @@ open Magent.xcworkspace
 xcodebuild build -workspace Magent.xcworkspace -scheme Magent -configuration Release
 ```
 
-Requires GitHub access to the private `vapor-pawelw/magent` repository.
+The source repository is public at `vapor-pawelw/mAgent`.
 
 ## Rebuild + Relaunch (Debug)
 

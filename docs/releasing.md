@@ -16,7 +16,7 @@ It will:
 3. Commit and push the changelog update
 4. Create and push an annotated git tag with changelog notes
 5. Watch the GitHub `Release` workflow until completion
-6. Verify the GitHub release on `vapor-pawelw/magent` contains `Magent.dmg` (plus compatibility `Magent.zip`)
+6. Verify the GitHub release on `vapor-pawelw/mAgent` contains `Magent.dmg` (plus compatibility `Magent.zip`)
 7. Verify `homebrew-tap/Casks/magent.rb` was updated to the same version
 
 If your tap repo is different, set:
@@ -35,14 +35,14 @@ git push origin v1.2.0
 This triggers a GitHub Actions workflow that:
 
 1. Builds `Magent.app` (unsigned)
-2. Publishes a GitHub Release to `vapor-pawelw/magent` with `Magent.dmg`, a compatibility `Magent.zip`, and tag-annotation release notes
+2. Publishes a GitHub Release to `vapor-pawelw/mAgent` with `Magent.dmg`, a compatibility `Magent.zip`, and tag-annotation release notes
 3. Auto-updates the Homebrew cask formula in `vapor-pawelw/homebrew-tap` with the new version, SHA, and the public release download URL for `Magent.dmg`
 
 The release workflow also rebuilds `Libraries/GhosttyKit.xcframework` using `./scripts/bootstrap-ghosttykit.sh` (instead of relying on git-lfs artifacts).
 
 Commits on `main` without a tag do **not** produce a release.
 
-Release artifacts are published directly on the source repository `vapor-pawelw/magent`. The workflow uses `GITHUB_TOKEN` for creating releases on the same repo, and `HOMEBREW_TAP_TOKEN` for pushing cask updates to `vapor-pawelw/homebrew-tap`.
+Release artifacts are published directly on the source repository `vapor-pawelw/mAgent`. The workflow uses `GITHUB_TOKEN` for creating releases on the same repo, and `HOMEBREW_TAP_TOKEN` for pushing cask updates to `vapor-pawelw/homebrew-tap`.
 
 ## Changelog Guidelines
 

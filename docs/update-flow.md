@@ -5,7 +5,7 @@ User-facing behavior:
 - Launch-time update checks run only when `AppSettings.autoCheckForUpdates` is enabled.
 - When auto-check is enabled, Magent also polls for new versions every hour in the background. The poller starts/stops immediately when the setting is toggled mid-session. Periodic checks that find an available update only show the banner once per version per session to avoid clobbering unrelated banners.
 - In debug builds, the "Update available" banner is suppressed entirely. The update check still runs and populates `detectedUpdate` (so the Settings panel works), but `showAvailableUpdateBanner` returns early under `#if DEBUG`.
-- When no published release exists yet in `vapor-pawelw/magent`, manual checks say there are no new releases instead of surfacing a raw GitHub `404`.
+- When no published release exists yet in `vapor-pawelw/mAgent`, manual checks say there are no new releases instead of surfacing a raw GitHub `404`.
 - When a newer version is found, Magent shows a persistent dismissible banner with `Update Now`, `Skip this version`, and a collapsed-by-default `Show Changes` control.
 - Settings mirrors the same detected version and the same read-only changelog, using a fixed-height scrollable text area when expanded.
 - `Skip this version` suppresses the launch/banner prompt for that exact version only. The skipped version still appears in Settings with an update button, and a newer version shows prompts again automatically.

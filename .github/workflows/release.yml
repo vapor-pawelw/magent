@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 env:
-  RELEASE_REPO: vapor-pawelw/magent
+  RELEASE_REPO: vapor-pawelw/mAgent
 
 permissions:
   contents: write

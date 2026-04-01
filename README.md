@@ -20,7 +20,7 @@
 brew tap vapor-pawelw/tap && brew install --cask magent
 ```
 
-**Manual:** grab the `.dmg` from [Releases](https://github.com/vapor-pawelw/magent/releases).
+**Manual:** grab the `.dmg` from [Releases](https://github.com/vapor-pawelw/mAgent/releases).
 
 Requires **macOS 14+**, **tmux** (`brew install tmux`), and **git**.
 
