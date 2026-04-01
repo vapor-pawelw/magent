@@ -25,6 +25,7 @@ When `injectAfterStart` is called with an initial prompt, the session is registe
 
 > "Prompt will be injected once the agent is ready."
 
+- **Copy Prompt** — copies the retained prompt to the clipboard without clearing the pending state, so the user can launch another tab/thread with the same prompt if they want
 - **Inject Now** — cancels the in-flight polling task (`pendingPromptInjectionTasks[sessionName]`), then directly sends the prompt to tmux via `injectPendingPromptNow(...)`, bypassing `waitForAgentPrompt`.
 - The banner auto-dismisses only when a prompt-bearing `magentAgentKeysInjected` fires (`includedInitialPrompt == true`) or when `magentInitialPromptInjectionFailed` fires (transitions to the failure banner below).
 - Scoped to the current tab only — switching tabs re-evaluates via `refreshPendingPromptBanner()`.
@@ -43,9 +44,10 @@ Cancellation is **conditional**: a new `injectAfterStart` call only cancels the 
 
 If `sendText` fails (e.g., tmux session died between readiness check and paste), `injectAfterStart` does **not** post `magentAgentKeysInjected`. Instead it transitions into the same per-tab initial-prompt failure state as a readiness timeout, so the recovery file is intentionally preserved and the user still gets an `Inject Prompt` retry path.
 
-If the agent prompt marker never appears within the initial-prompt timeout, Magent also keeps the pending prompt state instead of blindly pasting into the pane. The affected terminal tab shows a persistent, non-dismissable warning banner with:
+If the agent prompt marker never appears within the initial-prompt timeout, Magent also keeps the pending prompt state instead of blindly pasting into the pane. When the tab has fallen back to a plain shell (for example, the agent updater took over and the agent never returned), Magent first attempts one automatic agent relaunch in that same tmux session. If that still does not restore the agent prompt, the affected terminal tab shows a persistent, non-dismissable warning banner with:
 
-- **Inject Prompt** — retries prompt injection for that same session/tab
+- **Relaunch Agent** — shown when Magent detected that the agent is no longer running in the tab; starts the agent again in the same session and retries the retained prompt
+- **Inject Prompt** — shown for the ordinary timeout case; retries prompt injection for that same session/tab
 - **Copy Prompt** — copies the prompt text to the clipboard so the user can paste it manually, then dismisses the banner
 - **Already Injected** — clears the warning when the user has already entered the prompt manually
 

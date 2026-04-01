@@ -1409,6 +1409,47 @@ final class ThreadDetailViewController: NSViewController {
         showInitialPromptFailureBanner(sessionName: sessionName, failure: failure)
     }
 
+    private func copyPromptToPasteboard(_ prompt: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(prompt, forType: .string)
+    }
+
+    private func retryInitialPromptInjection(
+        sessionName: String,
+        failure: ThreadManager.InitialPromptInjectionFailureInfo
+    ) {
+        let injection = threadManager.effectiveInjection(for: thread.projectId)
+        if failure.requiresAgentRelaunch {
+            let relaunched = threadManager.relaunchAgentInExistingSession(
+                sessionName: sessionName,
+                initialPrompt: failure.prompt,
+                shouldSubmitInitialPrompt: failure.shouldSubmitInitialPrompt,
+                agentContext: injection.agentContext,
+                agentType: failure.agentType
+            )
+            if !relaunched {
+                threadManager.injectAfterStart(
+                    sessionName: sessionName,
+                    terminalCommand: "",
+                    agentContext: injection.agentContext,
+                    initialPrompt: failure.prompt,
+                    shouldSubmitInitialPrompt: failure.shouldSubmitInitialPrompt,
+                    agentType: failure.agentType
+                )
+            }
+        } else {
+            threadManager.injectAfterStart(
+                sessionName: sessionName,
+                terminalCommand: "",
+                agentContext: injection.agentContext,
+                initialPrompt: failure.prompt,
+                shouldSubmitInitialPrompt: failure.shouldSubmitInitialPrompt,
+                agentType: failure.agentType
+            )
+        }
+        refreshInitialPromptFailureBanner()
+    }
+
     private func showInitialPromptFailureBanner(
         sessionName: String,
         failure: ThreadManager.InitialPromptInjectionFailureInfo
@@ -1421,33 +1462,26 @@ final class ThreadDetailViewController: NSViewController {
         dismissInitialPromptFailureBanner()
 
         let banner = BannerView(config: BannerConfig(
-            message: "Initial prompt injection failed for this tab.",
+            message: failure.requiresAgentRelaunch
+                ? "The agent stopped during launch and this tab is now at a shell prompt."
+                : "Initial prompt injection failed for this tab.",
             style: .warning,
             duration: nil,
             isDismissible: false,
             actions: [
-                BannerAction(title: "Inject Prompt") { [weak self] in
+                BannerAction(title: failure.requiresAgentRelaunch ? "Relaunch Agent" : "Inject Prompt") { [weak self] in
                     guard let self else { return }
-                    let injection = self.threadManager.effectiveInjection(for: self.thread.projectId)
-                    self.threadManager.injectAfterStart(
-                        sessionName: sessionName,
-                        terminalCommand: "",
-                        agentContext: injection.agentContext,
-                        initialPrompt: failure.prompt,
-                        shouldSubmitInitialPrompt: failure.shouldSubmitInitialPrompt,
-                        agentType: failure.agentType
-                    )
+                    self.retryInitialPromptInjection(sessionName: sessionName, failure: failure)
                 },
                 BannerAction(title: "Copy Prompt") { [weak self] in
                     guard let self else { return }
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(failure.prompt, forType: .string)
-                    self.threadManager.clearInitialPromptInjectionFailure(for: sessionName)
+                    self.copyPromptToPasteboard(failure.prompt)
+                    self.threadManager.clearTrackedInitialPromptInjection(for: sessionName)
                     self.refreshInitialPromptFailureBanner()
                 },
                 BannerAction(title: "Already Injected") { [weak self] in
                     guard let self else { return }
-                    self.threadManager.clearInitialPromptInjectionFailure(for: sessionName)
+                    self.threadManager.clearTrackedInitialPromptInjection(for: sessionName)
                     self.refreshInitialPromptFailureBanner()
                 },
             ]
@@ -1496,6 +1530,9 @@ final class ThreadDetailViewController: NSViewController {
             duration: nil,
             isDismissible: false,
             actions: [
+                BannerAction(title: "Copy Prompt") { [weak self] in
+                    self?.copyPromptToPasteboard(pending.prompt)
+                },
                 BannerAction(title: "Inject Now") { [weak self] in
                     guard let self else { return }
                     self.dismissPendingPromptBanner()

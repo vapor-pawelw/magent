@@ -16,6 +16,7 @@ final class ThreadManager {
         let prompt: String
         let shouldSubmitInitialPrompt: Bool
         let agentType: AgentType?
+        let requiresAgentRelaunch: Bool
     }
 
     struct BaseBranchReset: Sendable {
@@ -58,6 +59,9 @@ final class ThreadManager {
     /// Timestamp of the last successful prompt-bearing injection per session.
     /// Lets callers wait for the actual tmux send to complete before renaming sessions.
     var initialPromptInjectionCompletionsBySession: [String: Date] = [:]
+    /// One-shot guard for launch-time auto-recovery when an agent exits back to shell
+    /// before the retained initial prompt can be injected.
+    var initialPromptAutoRelaunchAttempts: Set<String> = []
     /// Per-thread cache of AI-generated rename payloads, keyed by normalized prompt.
     /// Avoids repeat agent calls when the same prompt is re-used for rename on the same thread.
     /// Cleared when a thread is archived or deleted.

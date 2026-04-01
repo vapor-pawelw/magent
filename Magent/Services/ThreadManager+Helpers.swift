@@ -280,6 +280,8 @@ extension ThreadManager {
     private func showInjectionRetryBanner(
         message: String,
         sessionName: String,
+        actionTitle: String = "Retry",
+        terminalCommand: String = "",
         agentContext: String,
         initialPrompt: String?,
         shouldSubmitInitialPrompt: Bool,
@@ -292,10 +294,10 @@ extension ThreadManager {
                 style: .warning,
                 duration: nil,
                 isDismissible: true,
-                actions: [BannerAction(title: "Retry") { [weak self] in
+                actions: [BannerAction(title: actionTitle) { [weak self] in
                     self?.injectAfterStart(
                         sessionName: sessionName,
-                        terminalCommand: "",
+                        terminalCommand: terminalCommand,
                         agentContext: agentContext,
                         initialPrompt: initialPrompt,
                         shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
@@ -310,16 +312,19 @@ extension ThreadManager {
         sessionName: String,
         prompt: String,
         shouldSubmitInitialPrompt: Bool,
-        agentType: AgentType?
+        agentType: AgentType?,
+        requiresAgentRelaunch: Bool = false
     ) async {
         clearMagentBusy(sessionName: sessionName)
         pendingPromptInjectionSessions.removeValue(forKey: sessionName)
         pendingPromptInjectionTasks.removeValue(forKey: sessionName)
         initialPromptInjectionCompletionsBySession.removeValue(forKey: sessionName)
+        initialPromptAutoRelaunchAttempts.remove(sessionName)
         initialPromptInjectionFailuresBySession[sessionName] = InitialPromptInjectionFailureInfo(
             prompt: prompt,
             shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
-            agentType: agentType
+            agentType: agentType,
+            requiresAgentRelaunch: requiresAgentRelaunch
         )
         await MainActor.run {
             NotificationCenter.default.post(
@@ -346,6 +351,7 @@ extension ThreadManager {
     func clearTrackedInitialPromptInjection(for sessionName: String) {
         initialPromptInjectionFailuresBySession.removeValue(forKey: sessionName)
         initialPromptInjectionCompletionsBySession.removeValue(forKey: sessionName)
+        initialPromptAutoRelaunchAttempts.remove(sessionName)
         clearPendingPromptInjection(for: sessionName)
     }
 
@@ -456,6 +462,105 @@ extension ThreadManager {
         pendingPromptInjectionTasks.removeValue(forKey: sessionName)
     }
 
+    private func supportsAgentShellRelaunch(_ agentType: AgentType?) -> Bool {
+        switch agentType {
+        case .claude, .codex:
+            return true
+        case .custom, .none:
+            return false
+        }
+    }
+
+    private func agentRelaunchCommand(sessionName: String, agentType: AgentType?) -> String? {
+        guard let thread = threads.first(where: { $0.agentTmuxSessions.contains(sessionName) }) else {
+            return nil
+        }
+        guard let resolvedAgentType = agentType ?? self.agentType(for: thread, sessionName: sessionName),
+              supportsAgentShellRelaunch(resolvedAgentType) else {
+            return nil
+        }
+
+        let settings = persistence.loadSettings()
+        let preAgentCommand = preAgentInjectionCommand(for: thread.projectId, settings: settings)
+        let resumeSessionID = thread.sessionConversationIDs[sessionName]
+        var parts = [String]()
+
+        if resolvedAgentType == .claude {
+            installClaudeHooksSettings(
+                for: settings.appAppearanceMode,
+                preserveAgentColorTheme: settings.preserveAgentColorTheme
+            )
+            parts.append("unset CLAUDECODE")
+        }
+        if !preAgentCommand.isEmpty {
+            parts.append("{ \(preAgentCommand) ; } || true")
+        }
+        parts.append(
+            agentCommand(
+                settings: settings,
+                agentType: resolvedAgentType,
+                resumeSessionID: resumeSessionID
+            )
+        )
+
+        return parts.joined(separator: " && ")
+    }
+
+    private func availableAgentRelaunchCommand(
+        sessionName: String,
+        agentType: AgentType?
+    ) async -> String? {
+        guard await detectedAgentTypeInSession(sessionName) == nil else { return nil }
+        return agentRelaunchCommand(sessionName: sessionName, agentType: agentType)
+    }
+
+    @discardableResult
+    func relaunchAgentInExistingSession(
+        sessionName: String,
+        initialPrompt: String? = nil,
+        shouldSubmitInitialPrompt: Bool = true,
+        agentContext: String,
+        agentType: AgentType?
+    ) -> Bool {
+        guard let thread = threads.first(where: { $0.agentTmuxSessions.contains(sessionName) }),
+              let resolvedAgentType = agentType ?? self.agentType(for: thread, sessionName: sessionName),
+              let terminalCommand = agentRelaunchCommand(sessionName: sessionName, agentType: resolvedAgentType) else {
+            return false
+        }
+
+        trustDirectoryIfNeeded(thread.worktreePath, agentType: resolvedAgentType)
+        injectAfterStart(
+            sessionName: sessionName,
+            terminalCommand: terminalCommand,
+            agentContext: agentContext,
+            initialPrompt: initialPrompt,
+            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+            agentType: resolvedAgentType
+        )
+        return true
+    }
+
+    private func autoRelaunchAgentAfterPromptLaunchFailureIfNeeded(
+        sessionName: String,
+        prompt: String,
+        shouldSubmitInitialPrompt: Bool,
+        agentType: AgentType?
+    ) async -> Bool {
+        guard !initialPromptAutoRelaunchAttempts.contains(sessionName) else { return false }
+        guard await availableAgentRelaunchCommand(sessionName: sessionName, agentType: agentType) != nil else {
+            return false
+        }
+
+        initialPromptAutoRelaunchAttempts.insert(sessionName)
+        return relaunchAgentInExistingSession(
+            sessionName: sessionName,
+            initialPrompt: prompt,
+            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+            agentContext: "",
+            agentType: agentType
+        )
+    }
+
     /// Cancels the in-flight polling task and immediately injects the pending prompt.
     func injectPendingPromptNow(sessionName: String, prompt: String, shouldSubmitInitialPrompt: Bool, agentType: AgentType?) {
         clearPendingPromptInjection(for: sessionName)
@@ -538,6 +643,7 @@ extension ThreadManager {
         clearMagentBusy(sessionName: sessionName)
         if includedInitialPrompt {
             initialPromptInjectionCompletionsBySession[sessionName] = Date()
+            initialPromptAutoRelaunchAttempts.remove(sessionName)
         }
         NotificationCenter.default.post(
             name: .magentAgentKeysInjected,
@@ -577,7 +683,8 @@ extension ThreadManager {
             pendingPromptInjectionSessions[sessionName] = InitialPromptInjectionFailureInfo(
                 prompt: prompt,
                 shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
-                agentType: agentType
+                agentType: agentType,
+                requiresAgentRelaunch: false
             )
             NotificationCenter.default.post(
                 name: .magentPendingPromptInjection,
@@ -616,11 +723,27 @@ extension ThreadManager {
                     return
                 }
                 if !promptReady {
-                    await postInitialPromptInjectionFailure(
+                    let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? ""
+                    let shellBlockerDetected = detectsInteractiveShellBlocker(paneContent)
+                    let relaunchCommand = shellBlockerDetected ? nil : await self.availableAgentRelaunchCommand(
+                        sessionName: sessionName,
+                        agentType: agentType
+                    )
+                    if relaunchCommand != nil,
+                       await self.autoRelaunchAgentAfterPromptLaunchFailureIfNeeded(
                         sessionName: sessionName,
                         prompt: prompt,
                         shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
                         agentType: agentType
+                    ) {
+                        return
+                    }
+                    await postInitialPromptInjectionFailure(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType,
+                        requiresAgentRelaunch: relaunchCommand != nil
                     )
                     return
                 }
@@ -655,11 +778,27 @@ extension ThreadManager {
                     return
                 }
                 if !promptReady {
-                    await postInitialPromptInjectionFailure(
+                    let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 30) ?? ""
+                    let shellBlockerDetected = detectsInteractiveShellBlocker(paneContent)
+                    let relaunchCommand = shellBlockerDetected ? nil : await self.availableAgentRelaunchCommand(
+                        sessionName: sessionName,
+                        agentType: agentType
+                    )
+                    if relaunchCommand != nil,
+                       await self.autoRelaunchAgentAfterPromptLaunchFailureIfNeeded(
                         sessionName: sessionName,
                         prompt: prompt,
                         shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
                         agentType: agentType
+                    ) {
+                        return
+                    }
+                    await postInitialPromptInjectionFailure(
+                        sessionName: sessionName,
+                        prompt: prompt,
+                        shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                        agentType: agentType,
+                        requiresAgentRelaunch: relaunchCommand != nil
                     )
                     return
                 }
@@ -700,6 +839,22 @@ extension ThreadManager {
                         await showInjectionRetryBanner(
                             message: "Agent context not injected — shell is waiting for user input. Answer the prompt in the terminal, then retry.",
                             sessionName: sessionName,
+                            actionTitle: "Retry",
+                            terminalCommand: "",
+                            agentContext: agentContext,
+                            initialPrompt: nil,
+                            shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                            agentType: agentType
+                        )
+                    } else if let relaunchCommand = await availableAgentRelaunchCommand(
+                        sessionName: sessionName,
+                        agentType: agentType
+                    ) {
+                        await showInjectionRetryBanner(
+                            message: "Agent launch did not reach its prompt, and this tab is now at a shell prompt. Relaunch the agent, then Magent will retry the saved startup injection.",
+                            sessionName: sessionName,
+                            actionTitle: "Relaunch Agent",
+                            terminalCommand: relaunchCommand,
                             agentContext: agentContext,
                             initialPrompt: nil,
                             shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
@@ -709,6 +864,8 @@ extension ThreadManager {
                         await showInjectionRetryBanner(
                             message: "Agent context not injected — the agent input prompt did not appear yet. Retry after the agent finishes starting.",
                             sessionName: sessionName,
+                            actionTitle: "Retry",
+                            terminalCommand: "",
                             agentContext: agentContext,
                             initialPrompt: nil,
                             shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
@@ -1267,6 +1424,14 @@ extension ThreadManager {
         }
         pendingPromptInjectionTasks = remappedTasks
         if Set(pendingPromptInjectionTasks.keys) != originalTaskKeys {
+            changed = true
+        }
+
+        let originalAutoRelaunchSessions = initialPromptAutoRelaunchAttempts
+        initialPromptAutoRelaunchAttempts = Set(
+            initialPromptAutoRelaunchAttempts.map { sessionRenameMap[$0] ?? $0 }
+        )
+        if initialPromptAutoRelaunchAttempts != originalAutoRelaunchSessions {
             changed = true
         }
 
