@@ -48,6 +48,8 @@ final class AppCoordinator {
 
         let settings = persistence.loadSettings()
 
+        BackupService.shared.startPeriodicSnapshots()
+
         let splitVC = SplitViewController()
 
         // Default size: 75% of screen. setFrameAutosaveName restores the previous

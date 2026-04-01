@@ -61,7 +61,7 @@ Module boundary rules:
 - `ShellInfra` holds shell execution primitives that other package targets can depend on without pulling in higher-level services.
 - `GitCore`, `TmuxCore`, and `JiraCore` isolate subsystem-specific services behind narrower dependency edges.
 - `IPCCore` isolates CLI/IPC-facing request-response models and agent guidance text from the rest of the shared domain layer.
-- `PersistenceCore` owns JSON/file-backed persistence for threads, settings, and caches. `loadSettings()` uses an in-memory cache (invalidated on every `saveSettings()` call) to avoid repeated disk reads — it is called dozens of times per polling cycle. `debouncedSaveActiveThreads(_:)` coalesces rapid thread-state saves within a 300 ms window for non-critical state changes (dirty flags, completion markers); critical saves (archive, rename, thread creation) still use the synchronous `saveActiveThreads(_:)`.
+- `PersistenceCore` owns JSON/file-backed persistence for threads, settings, caches, and last-resort backup/restore support. `loadSettings()` uses an in-memory cache (invalidated on every `saveSettings()` call) to avoid repeated disk reads — it is called dozens of times per polling cycle. `debouncedSaveActiveThreads(_:)` coalesces rapid thread-state saves within a 300 ms window for non-critical state changes (dirty flags, completion markers); critical saves (archive, rename, thread creation) still use the synchronous `saveActiveThreads(_:)`.
 - `UtilityCore` holds remaining cross-cutting non-UI helpers that do not justify their own subsystem target yet.
 - `GhosttyBridge` wraps `GhosttyKit.xcframework` and is consumed as a local package product.
 - The app target keeps AppKit controllers/views plus resource-backed code that depends on generated asset and string-catalog symbols.
@@ -237,6 +237,21 @@ Shell startup uses a managed `ZDOTDIR` wrapper so Magent can source the user's s
 - Store handoff files under the project's worktrees base path in a hidden Magent-owned directory so they stay outside the repo but near the trusted worktree boundary.
 - Use a unique filename per transfer (for example a UUID-based suffix) so multiple transfers can be created concurrently without clobbering each other.
 - Treat these files as ephemeral cache entries: remove them after a bounded TTL and prune leftovers on app launch/shutdown.
+
+### 4.10 Persistence Backup + Restore Contract
+
+Magent keeps two layers of backup protection for critical app-state files in Application Support:
+
+- Rolling backups: before overwriting `threads.json`, `settings.json`, or `agent-launch-prompt-drafts.json`, keep the previous file as `<name>.bak.json`.
+- Periodic snapshots: every 30 minutes while the app is running, copy the currently present critical files into `Application Support/Magent/backups/<timestamp>/`.
+
+Restore is a coordinated app-state transition, not just a filesystem copy:
+
+- The Settings restore action must stop background pollers/timers that can write state (`ThreadManager` session monitor, update polling, periodic backup timer).
+- Cancel any pending debounced thread save before touching snapshot files.
+- Block writes for every restorable critical file while the restore is in progress so UI or background code cannot immediately overwrite the restored snapshot.
+- Restore uses replacement semantics for the critical-file set. If the chosen snapshot does not contain one of those files, the current on-disk copy should be removed rather than silently preserved from a newer state.
+- Every restore first creates a `pre-restore-<timestamp>` safety snapshot of the current state, and those safety snapshots must stay visible in the restore picker so the user can undo a bad restore.
 
 ### 5. Persistence Model
 

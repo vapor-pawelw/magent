@@ -14,6 +14,7 @@ final class SettingsGeneralViewController: NSViewController {
     private var updateChangelogTextView: NSTextView!
     private var isUpdateChangelogExpanded = false
     private var syncLocalPathsOnArchiveCheckbox: NSButton!
+    private var restoreFromBackupButton: NSButton!
     private var contentScrollView: NSScrollView!
     private var didInitialScrollToTop = false
 
@@ -200,6 +201,22 @@ final class SettingsGeneralViewController: NSViewController {
             ])
         }
 
+        // --- Data Backup card (last-resort restore) ---
+        let (backupCard, backupSection) = createSectionCard(
+            title: "Data Backup",
+            description: "Magent automatically snapshots critical data (threads, settings, drafts) every 30 minutes. If something goes wrong, you can restore from a previous snapshot."
+        )
+        stackView.addArrangedSubview(backupCard)
+
+        restoreFromBackupButton = NSButton(
+            title: "Restore from Backup\u{2026}",
+            target: self,
+            action: #selector(restoreFromBackupTapped)
+        )
+        restoreFromBackupButton.bezelStyle = .rounded
+        restoreFromBackupButton.controlSize = .small
+        backupSection.addArrangedSubview(restoreFromBackupButton)
+
         let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(stackView)
@@ -224,6 +241,7 @@ final class SettingsGeneralViewController: NSViewController {
             keybindsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             keybindsGrid.widthAnchor.constraint(equalTo: keybindsStack.widthAnchor),
             envCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            backupCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             updatesDesc.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
             updateStatusLabel.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
             updateChangelogScrollView.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
@@ -370,5 +388,111 @@ final class SettingsGeneralViewController: NSViewController {
     private func refreshUpdateChangelogDisclosure() {
         updateChangelogToggleButton.title = isUpdateChangelogExpanded ? "Hide Changes" : "Show Changes"
         updateChangelogScrollView.isHidden = !isUpdateChangelogExpanded
+    }
+
+    // MARK: - Backup Restore
+
+    @objc private func restoreFromBackupTapped() {
+        let snapshots = BackupService.shared.listSnapshots()
+        guard !snapshots.isEmpty else {
+            let alert = NSAlert()
+            alert.messageText = "No Backups Available"
+            alert.informativeText = "No backup snapshots were found. Snapshots are created automatically every 30 minutes while Magent is running."
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Restore from Backup"
+        alert.informativeText = "Select a snapshot to restore. A safety backup of your current data will be created first, so you can undo this if needed.\n\nMagent will relaunch after restoring."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Restore")
+        alert.addButton(withTitle: "Cancel")
+
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 340, height: 24), pullsDown: false)
+        let now = Date()
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .short
+
+        for snapshot in snapshots {
+            let age = now.timeIntervalSince(snapshot.date)
+            let ageString: String
+            if age < 3600 {
+                ageString = "\(Int(age / 60)) min ago"
+            } else if age < 24 * 3600 {
+                let hours = Int(age / 3600)
+                ageString = "\(hours) hour\(hours == 1 ? "" : "s") ago"
+            } else {
+                let days = Int(age / (24 * 3600))
+                ageString = "\(days) day\(days == 1 ? "" : "s") ago"
+            }
+
+            let fileList = snapshot.files.joined(separator: ", ")
+            let labelPrefix = snapshot.isSafetySnapshot ? "Safety backup" : "Snapshot"
+            let title = "\(labelPrefix): \(dateFormatter.string(from: snapshot.date)) (\(ageString)) - \(fileList)"
+            popup.addItem(withTitle: title)
+        }
+
+        alert.accessoryView = popup
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        let selectedIndex = popup.indexOfSelectedItem
+        guard selectedIndex >= 0, selectedIndex < snapshots.count else { return }
+        let selected = snapshots[selectedIndex]
+
+        // Confirm once more
+        let confirm = NSAlert()
+        confirm.messageText = "Are you sure?"
+        confirm.informativeText = "This will replace your current threads, settings, and drafts with the snapshot from \(dateFormatter.string(from: selected.date)). A safety backup will be created first."
+        confirm.alertStyle = .critical
+        confirm.addButton(withTitle: "Restore and Relaunch")
+        confirm.addButton(withTitle: "Cancel")
+
+        guard confirm.runModal() == .alertFirstButtonReturn else { return }
+
+        do {
+            try performRestoreAndRelaunch(using: selected)
+        } catch {
+            let errorAlert = NSAlert()
+            errorAlert.messageText = "Restore Failed"
+            errorAlert.informativeText = error.localizedDescription
+            errorAlert.alertStyle = .critical
+            errorAlert.addButton(withTitle: "OK")
+            errorAlert.runModal()
+        }
+    }
+
+    private func performRestoreAndRelaunch(using snapshot: BackupService.Snapshot) throws {
+        let restorableFiles = PersistenceService.restorableCriticalFileNames
+        ThreadManager.shared.stopSessionMonitor()
+        UpdateService.shared.stopPeriodicUpdateChecks()
+        BackupService.shared.stopPeriodicSnapshots()
+        persistence.cancelPendingThreadSave()
+        persistence.blockWrites(for: restorableFiles)
+
+        do {
+            try BackupService.shared.restoreSnapshot(snapshot)
+            relaunchApp()
+        } catch {
+            persistence.unblockWrites(for: restorableFiles)
+            BackupService.shared.startPeriodicSnapshots()
+            UpdateService.shared.startPeriodicUpdateChecks()
+            ThreadManager.shared.startSessionMonitor()
+            throw error
+        }
+    }
+
+    private func relaunchApp() {
+        let url = Bundle.main.bundleURL
+        let task = Process()
+        task.launchPath = "/usr/bin/open"
+        task.arguments = ["-n", url.path]
+        try? task.run()
+        NSApp.terminate(nil)
     }
 }

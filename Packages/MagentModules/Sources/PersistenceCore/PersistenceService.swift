@@ -7,6 +7,11 @@ private let logger = Logger(subsystem: "com.magent.persistence", category: "Pers
 public final class PersistenceService {
 
     public static let shared = PersistenceService()
+    public static let restorableCriticalFileNames = [
+        "threads.json",
+        "settings.json",
+        "agent-launch-prompt-drafts.json",
+    ]
 
     private let fileManager = FileManager.default
     private let encoder: JSONEncoder = {
@@ -33,9 +38,23 @@ public final class PersistenceService {
         writeBlockedFiles.insert(fileName)
     }
 
+    /// Block all writes to the named files until explicitly unblocked.
+    public func blockWrites(for fileNames: [String]) {
+        for fileName in fileNames {
+            blockWrites(for: fileName)
+        }
+    }
+
     /// Allow writes to the named file again (after user chose to reset).
     public func unblockWrites(for fileName: String) {
         writeBlockedFiles.remove(fileName)
+    }
+
+    /// Allow writes to the named files again.
+    public func unblockWrites(for fileNames: [String]) {
+        for fileName in fileNames {
+            unblockWrites(for: fileName)
+        }
     }
 
     /// True if any critical file is currently write-blocked.
@@ -182,6 +201,18 @@ public final class PersistenceService {
 
     private var _pendingThreadSaveWorkItem: DispatchWorkItem?
 
+    private func ensureWritesAllowed(for fileName: String) throws {
+        guard !writeBlockedFiles.contains(fileName) else {
+            throw PersistenceWriteBlockedError(fileName: fileName)
+        }
+    }
+
+    /// Cancels any debounced thread write that has not started yet.
+    public func cancelPendingThreadSave() {
+        _pendingThreadSaveWorkItem?.cancel()
+        _pendingThreadSaveWorkItem = nil
+    }
+
     /// Validates and loads threads.json, returning a detailed outcome.
     /// Use this at startup for pre-flight validation before the UI appears.
     public func tryLoadThreads() -> LoadOutcome<[MagentThread]> {
@@ -210,9 +241,8 @@ public final class PersistenceService {
     }
 
     public func saveThreads(_ threads: [MagentThread]) throws {
-        guard !writeBlockedFiles.contains(threadsURL.lastPathComponent) else {
-            throw PersistenceWriteBlockedError(fileName: threadsURL.lastPathComponent)
-        }
+        try ensureWritesAllowed(for: threadsURL.lastPathComponent)
+        BackupService.shared.createRollingBackup(of: threadsURL)
         let envelope = VersionedEnvelope(schemaVersion: SchemaVersion.threads, data: threads)
         let data = try encoder.encode(envelope)
         try data.write(to: threadsURL, options: .atomic)
@@ -284,9 +314,8 @@ public final class PersistenceService {
     }
 
     public func saveSettings(_ settings: AppSettings) throws {
-        guard !writeBlockedFiles.contains(settingsURL.lastPathComponent) else {
-            throw PersistenceWriteBlockedError(fileName: settingsURL.lastPathComponent)
-        }
+        try ensureWritesAllowed(for: settingsURL.lastPathComponent)
+        BackupService.shared.createRollingBackup(of: settingsURL)
         let envelope = VersionedEnvelope(schemaVersion: SchemaVersion.settings, data: settings)
         let data = try encoder.encode(envelope)
         try data.write(to: settingsURL, options: .atomic)
@@ -307,6 +336,8 @@ public final class PersistenceService {
     }
 
     public func saveAgentLaunchPromptDrafts(_ drafts: [String: AgentLaunchPromptDraft]) {
+        guard (try? ensureWritesAllowed(for: agentLaunchPromptDraftsURL.lastPathComponent)) != nil else { return }
+        BackupService.shared.createRollingBackup(of: agentLaunchPromptDraftsURL)
         guard let data = try? encoder.encode(drafts) else { return }
         try? data.write(to: agentLaunchPromptDraftsURL, options: .atomic)
     }

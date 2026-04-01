@@ -5,7 +5,7 @@
 - App-wide preferences stay in `Settings > General`.
 - Terminal-specific preferences now live in `Settings > Terminal`.
 - Thread-focused preferences now live in `Settings > Threads`.
-- `General` currently owns update controls, archive defaults, the keyboard shortcuts reference card, and the environment-variable reference used by startup injection settings.
+- `General` currently owns update controls, archive defaults, the keyboard shortcuts reference card, the Data Backup restore card, and the environment-variable reference used by startup injection settings.
 - `Terminal` owns app/terminal light-dark appearance, the "Don't override agent color theme" toggle, Ghostty mouse-wheel override behavior, and terminal overlay visibility toggles.
 - `Threads` owns thread naming defaults, thread sections, recently archived thread restore history, startup injection fields, the review prompt, sidebar display options (narrow threads, PR/Jira status badge toggles, busy/idle duration toggle), and session management (idle session eviction limit — defaults to 30 — plus "Protect pinned threads and tabs from eviction" toggle).
 - Section color editing now reuses a single system color picker per settings screen, so switching to another section keeps the earlier section's custom dot color intact instead of resetting it.
@@ -28,10 +28,16 @@
 - Tightened section color picker ownership in both section editors so only one shared picker is active and changing focus between rows does not write the new color back into the previously edited section.
 - Added a `Recently Archived` card to `Settings > Threads` that lists up to 10 archived threads and provides inline restore actions.
 
+### Data backup restore (auto-backup-critical-config)
+- Added a `Data Backup` card to `Settings > General` with a `Restore from Backup…` action.
+- Magent now keeps rolling `.bak` copies of `threads.json`, `settings.json`, and `agent-launch-prompt-drafts.json` before overwriting them, and also writes 30-minute snapshot directories under Application Support.
+- Restore now lists both periodic snapshots and pre-restore safety backups, then relaunches the app after replacing the current persistence files.
+
 ## Implementation Notes
 
 - Category registration and the sidebar/detail controller wiring live in `Magent/Views/Settings/SettingsViewController.swift`.
 - `Magent/Views/Settings/SettingsGeneralViewController.swift` is intentionally limited to app-level preferences.
+- The backup restore action is coordinated from `SettingsGeneralViewController`, but it must first stop background pollers and block writes for the restorable persistence files before `BackupService.restoreSnapshot(_:)` swaps files on disk.
 - `Magent/Views/Settings/SettingsTerminalViewController.swift` owns terminal-scoped preferences and posts `magentSettingsDidChange` so open windows update immediately.
 - `Magent/Views/Settings/SettingsThreadsViewController.swift` owns thread-scoped preferences, and `Magent/Views/Settings/SettingsThreadsViewController+Sections.swift` owns the thread-sections table behavior.
 - The recently archived list reads from persisted threads, sorts by `archivedAt`, and listens for a shared archive-state notification so it refreshes while Settings is open.
@@ -66,3 +72,4 @@ For views whose appearance cannot be caught via `viewDidChangeEffectiveAppearanc
 - The app appearance selector is the source of truth for both AppKit and the embedded terminal. Do not add a separate terminal-only light/dark selector unless the product deliberately supports mixed chrome/terminal appearance.
 - The "Don't override agent color theme" checkbox (`AppSettings.preserveAgentColorTheme`) gates three things: (1) the Claude settings JSON (`/tmp/magent-claude-hooks.json`) won't include `theme`/`terminalTheme` keys, (2) Claude won't get `TERM=screen COLORTERM=` prepended in light mode, and (3) Codex won't get `-c tui.theme="ansi"` in light mode. The Claude hooks settings cache key includes a `-notheme` suffix when the toggle is on, so the file is regenerated correctly when the setting changes between sessions.
 - Codex sessions must explicitly unset inherited `NO_COLOR` in their launch wrapper. Magent itself may run under environments that export `NO_COLOR=1`, and that global flag can flatten Codex's TUI palette inside tmux even when Ghostty/tmux truecolor support is otherwise configured correctly.
+- Snapshot restore is not safe as a raw file copy while the app is live. Before restoring, stop the session monitor/update poller/backup timer, cancel pending debounced thread saves, and block writes for every restorable file. Otherwise a background save can immediately overwrite the restored snapshot or interleave with it.
