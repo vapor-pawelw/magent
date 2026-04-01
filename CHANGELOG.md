@@ -20,6 +20,8 @@ All notable changes to this project will be documented in this file.
 ### Settings
 - Moved `Inject Magent IPC instructions into agent prompts` and `Track agent rate limits` out of `Agent Permissions` into a dedicated `Agent Behavior` section in Settings > Agents.
 
+### Local Sync
+- Agentic Merge now falls back to the first enabled non-rate-limited agent when the project's default agent is currently rate-limited.
 ## 1.4.0 - 2026-03-31
 
 

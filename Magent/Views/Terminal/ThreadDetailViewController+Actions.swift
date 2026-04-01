@@ -488,9 +488,10 @@ extension ThreadDetailViewController {
 
         After syncing, confirm what was done and list any files where you merged changes or chose one version over another.
         """
+        let agentType = threadManager.effectiveAgentTypeAvoidingRateLimit(for: thread.projectId)
 
         addTab(
-            using: nil,
+            using: agentType,
             useAgentCommand: true,
             initialPrompt: prompt,
             shouldSubmitInitialPrompt: true,

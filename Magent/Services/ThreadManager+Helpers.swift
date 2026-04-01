@@ -892,6 +892,26 @@ extension ThreadManager {
         return resolveAgentType(for: projectId, requestedAgentType: nil, settings: settings)
     }
 
+    /// Resolves the project's default agent, but when that agent currently has an
+    /// active tracked rate limit, falls back to the first enabled agent that does not.
+    /// If every enabled agent is currently rate-limited (or untracked), keeps the default.
+    func effectiveAgentTypeAvoidingRateLimit(for projectId: UUID, now: Date = Date()) -> AgentType? {
+        let settings = persistence.loadSettings()
+        let activeAgents = settings.availableActiveAgents
+        guard !activeAgents.isEmpty else { return nil }
+        guard let preferred = resolveAgentType(for: projectId, requestedAgentType: nil, settings: settings) else {
+            return activeAgents.first
+        }
+        guard hasActiveRateLimit(for: preferred, now: now) else { return preferred }
+
+        for candidate in activeAgents where candidate != preferred {
+            if !hasActiveRateLimit(for: candidate, now: now) {
+                return candidate
+            }
+        }
+        return preferred
+    }
+
     func detectedRunningAgentType(
         paneCommand: String,
         childProcesses: [(pid: pid_t, args: String)]

@@ -130,14 +130,14 @@ Interactive archive/resync (UI) shows a conflict alert. The button layout differ
 **Text file conflicts** (both sides are text files):
 
 - `Resolve in Merge Tool` (primary, only when `git config merge.tool` is set) — creates a temporary git repo with a real staged merge conflict and runs `git mergetool`, which correctly invokes whatever tool the user has configured (opendiff, vimdiff, meld, custom commands, etc.). If the user resolves and quits, the result is applied and the alert is dismissed. If the user quits without resolving, the alert re-appears.
-- `Agentic Merge` — aborts the file-by-file sync loop and opens a new agent tab with a structured prompt that delegates the entire sync operation to the agent for intelligent conflict resolution.
+- `Agentic Merge` — aborts the file-by-file sync loop and opens a new agent tab with a structured prompt that delegates the entire sync operation to the agent for intelligent conflict resolution. It prefers the project's default agent, but if that agent currently has an active tracked rate limit Magent falls back to the first other enabled agent without one. If every enabled agent is rate-limited, it still opens with the default agent.
 - `Cancel Archive` / `Cancel` (abort entire operation)
 
 **Binary/structural conflicts** (binary files, file-blocks-directory, directory-blocks-file):
 
 - `Override` (current conflict only)
 - `Ignore` (skip current conflict)
-- `Agentic Merge` — same as above, delegates to agent.
+- `Agentic Merge` — same as above, including the default-agent rate-limit fallback behavior.
 - `Cancel Archive` / `Cancel` (abort entire operation)
 - Holding Option changes `Override` to `Override All` and `Ignore` to `Ignore All` for the rest of that sync run
 
