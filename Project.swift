@@ -26,6 +26,7 @@ let project = Project(
             ]),
             sources: [
                 "Magent/App/**",
+                "Magent/Services/AgentModelsService.swift",
                 "Magent/Services/BannerManager.swift",
                 "Magent/Services/CrashReportingService.swift",
                 "Magent/Services/IPCCommandHandler.swift",
@@ -44,6 +45,7 @@ let project = Project(
                 "Magent/Resources/Assets.xcassets",
                 "Magent/Resources/AppIcon.icon",
                 "Magent/Resources/**/*.xcstrings",
+                "config/agent-models.json",
             ],
             entitlements: .file(path: "Magent/Magent.entitlements"),
             scripts: [

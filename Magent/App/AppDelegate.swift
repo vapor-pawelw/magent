@@ -121,6 +121,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             await UpdateService.shared.checkForUpdatesOnLaunchIfEnabled()
             UpdateService.shared.startPeriodicUpdateChecks()
         }
+        AgentModelsService.shared.refreshOnLaunch()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

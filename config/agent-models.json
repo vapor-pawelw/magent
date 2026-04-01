@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "agents": {
+    "claude": {
+      "models": [
+        { "id": "opus", "label": "Opus" },
+        { "id": "sonnet", "label": "Sonnet" },
+        { "id": "haiku", "label": "Haiku" }
+      ],
+      "reasoningLevels": ["low", "medium", "high", "max"]
+    },
+    "codex": {
+      "models": [
+        { "id": "gpt-5.4", "label": "GPT 5.4" },
+        { "id": "gpt-5.4-mini", "label": "GPT 5.4 Mini" }
+      ],
+      "reasoningLevels": ["low", "medium", "high", "xhigh"]
+    }
+  }
+}
