@@ -1538,7 +1538,9 @@ extension ThreadManager {
         agentType: AgentType?,
         envExports: String,
         workingDirectory: String,
-        resumeSessionID: String? = nil
+        resumeSessionID: String? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
     ) -> String {
         let shell = ShellExecutor.shellQuote(Self.startupShell)
         let zdotdir = ShellExecutor.shellQuote(ensureManagedZdotdir())
@@ -1561,7 +1563,9 @@ extension ThreadManager {
         let command = agentCommand(
             settings: settings,
             agentType: agentType,
-            resumeSessionID: resumeSessionID
+            resumeSessionID: resumeSessionID,
+            modelId: modelId,
+            reasoningLevel: reasoningLevel
         )
         // Use an interactive login shell so zsh loads both login files and `.zshrc`
         // before resolving the agent binary. Many PATH/custom command setups live in `.zshrc`.
@@ -1573,9 +1577,11 @@ extension ThreadManager {
     private func agentCommand(
         settings: AppSettings,
         agentType: AgentType,
-        resumeSessionID: String?
+        resumeSessionID: String?,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil
     ) -> String {
-        let fresh = freshAgentCommand(settings: settings, agentType: agentType)
+        let fresh = freshAgentCommand(settings: settings, agentType: agentType, modelId: modelId, reasoningLevel: reasoningLevel)
         guard let resumeSessionID = normalizedResumeID(resumeSessionID),
               let resume = resumableAgentCommand(
                 settings: settings,
@@ -1588,16 +1594,37 @@ extension ThreadManager {
         return "{ \(resume) || \(fresh) ; }"
     }
 
-    private func freshAgentCommand(settings: AppSettings, agentType: AgentType) -> String {
+    private func freshAgentCommand(settings: AppSettings, agentType: AgentType, modelId: String? = nil, reasoningLevel: String? = nil) -> String {
         var command = settings.command(for: agentType)
-        if agentType == .claude {
+
+        // Validate against current manifest before emitting CLI flags — stale persisted values are dropped.
+        let validModel = AgentModelsService.shared.validatedModelId(modelId, for: agentType)
+        let validReasoning = AgentModelsService.shared.validatedReasoningLevel(reasoningLevel, for: agentType, modelId: validModel)
+
+        // Append model/reasoning flags before agent-specific session config (which adds -c flags for codex).
+        switch agentType {
+        case .claude:
+            if let validModel {
+                command += " --model \(ShellExecutor.shellQuote(validModel))"
+            }
+            if let validReasoning {
+                command += " --effort \(ShellExecutor.shellQuote(validReasoning))"
+            }
             command += " --settings \(Self.claudeHooksSettingsPath)"
             if settings.ipcPromptInjectionEnabled {
                 command += " --append-system-prompt \(ShellExecutor.shellQuote(IPCAgentDocs.claudeSystemPrompt))"
             }
             command = claudeSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
-        } else if agentType == .codex {
+        case .codex:
+            if let validModel {
+                command += " -m \(ShellExecutor.shellQuote(validModel))"
+            }
+            if let validReasoning {
+                command += " -c \(ShellExecutor.shellQuote("model_reasoning_effort=\"\(validReasoning)\""))"
+            }
             command = codexSessionConfiguredCommand(command, appearanceMode: settings.appAppearanceMode, preserveAgentColorTheme: settings.preserveAgentColorTheme)
+        case .custom:
+            break
         }
         return command
     }
