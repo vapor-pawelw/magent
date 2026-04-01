@@ -394,9 +394,6 @@ extension SettingsProjectsViewController: NSTextViewDelegate {
         } else if textView === agentContextTextView {
             let value = textView.string
             settings.projects[index].agentContextInjection = value.isEmpty ? nil : value
-        } else if textView === localFileSyncPathsTextView {
-            let rawPaths = textView.string.components(separatedBy: .newlines)
-            settings.projects[index].localFileSyncPaths = Project.normalizeLocalFileSyncPaths(rawPaths)
         } else if textView === slugPromptTextView {
             settings.projects[index].autoRenameSlugPrompt = textView.string
         }

@@ -12,6 +12,11 @@ All notable changes to this project will be documented in this file.
 - New `set-base-branch` command to override a thread's base branch.
 - New `keep-alive-thread`, `keep-alive-tab`, and `keep-alive-section` commands to enable/disable Keep Alive protection (`--remove` to disable).
 
+### Local Sync
+- Project settings now use a row-based `Local Sync Paths` editor with per-path modes: `Copy` or `Shared Link`.
+- `Shared Link` local sync entries now create direct symlinks to the main repo copy during thread creation and forked-thread setup, while archive/push-back remains limited to `Copy` entries.
+- Local Sync menus now separate one-way sync from two-way agentic reconcile, and conflict dialogs rename `Agentic Merge` to `Resolve with Agent` so the chosen direction remains clear.
+
 ### Tab
 - Retained startup prompts now include a "Copy Prompt" action while the new thread/tab waits for the agent to become ready. If a built-in agent drops back to a shell during launch (for example after a self-update), Magent retries one relaunch automatically and then offers a "Relaunch Agent" recovery action on that tab.
 - New "Switch to new tab" checkbox in the New Tab prompt sheet — works like the existing "Switch to new thread" option, remembers the last selection, and defaults to on.

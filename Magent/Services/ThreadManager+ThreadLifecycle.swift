@@ -22,7 +22,7 @@ extension ThreadManager {
         insertAtTopOfVisibleGroup: Bool = false,
         skipAutoSelect: Bool = false,
         initialWebURL: URL? = nil,
-        localFileSyncPathsOverride: [String]? = nil
+        localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil
     ) async throws -> MagentThread {
         var name = ""
         var foundUnique = false
@@ -151,21 +151,21 @@ extension ThreadManager {
                 baseBranch: baseBranch
             )
 
-            let localFileSyncPathsSnapshot: [String] = {
-                guard let override = localFileSyncPathsOverride else {
-                    return project.normalizedLocalFileSyncPaths
+            let localFileSyncEntriesSnapshot: [LocalFileSyncEntry] = {
+                guard let override = localFileSyncEntriesOverride else {
+                    return project.normalizedLocalFileSyncEntries
                 }
                 // Merge source thread snapshot with current project paths:
                 // - keep source paths that are still configured in the project
                 // - append any new project paths not in the source snapshot
                 // This matches the effectiveLocalSyncPaths contract (never sync
                 // paths removed from project config).
-                let currentPaths = project.normalizedLocalFileSyncPaths
-                let currentSet = Set(currentPaths)
-                var merged = override.filter { currentSet.contains($0) }
-                let mergedSet = Set(merged)
-                for path in currentPaths where !mergedSet.contains(path) {
-                    merged.append(path)
+                let currentEntries = project.normalizedLocalFileSyncEntries
+                let currentPaths = Set(currentEntries.map(\.path))
+                var merged = Project.normalizeLocalFileSyncEntries(override).filter { currentPaths.contains($0.path) }
+                let mergedPaths = Set(merged.map(\.path))
+                for entry in currentEntries where !mergedPaths.contains(entry.path) {
+                    merged.append(entry)
                 }
                 return merged
             }()
@@ -181,7 +181,7 @@ extension ThreadManager {
                 missingLocalSyncPaths = try await syncConfiguredLocalPathsIntoWorktree(
                     project: project,
                     worktreePath: worktreePath,
-                    syncPaths: localFileSyncPathsSnapshot,
+                    syncEntries: localFileSyncEntriesSnapshot,
                     sourceRootOverride: sourceOverride
                 )
             } catch {
@@ -214,7 +214,7 @@ extension ThreadManager {
                     tmuxSessionNames: [],
                     sectionId: requestedSectionId ?? settings.defaultSection(for: project.id)?.id,
                     baseBranch: baseBranch,
-                    localFileSyncPathsSnapshot: localFileSyncPathsSnapshot
+                    localFileSyncEntriesSnapshot: localFileSyncEntriesSnapshot
                 )
                 thread.persistedWebTabs.append(webTab)
 
@@ -346,7 +346,7 @@ extension ThreadManager {
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                     ]]
                 }(),
-                localFileSyncPathsSnapshot: localFileSyncPathsSnapshot
+                localFileSyncEntriesSnapshot: localFileSyncEntriesSnapshot
             )
 
             pendingThreadIds.remove(threadID)
@@ -574,17 +574,18 @@ extension ThreadManager {
         let shouldSyncEagerly = promptForLocalSyncConflicts || !force || awaitLocalSync
         if shouldSyncLocalPathsBackToRepo, shouldSyncEagerly,
            let project = settings.projects.first(where: { $0.id == thread.projectId }) {
-            let syncPaths = effectiveLocalSyncPaths(for: thread, project: project)
+            let syncEntries = effectiveLocalSyncEntries(for: thread, project: project)
+            let copySyncPaths = syncEntries.filter { $0.mode == .copy }.map(\.path)
             // Resolve the sync destination: base-branch sibling worktree if available,
             // otherwise the main repo path.
             let (syncTargetPath, _) = resolveBaseBranchSyncTarget(for: thread, project: project)
             let destOverride = syncTargetPath != project.repoPath ? syncTargetPath : nil
-            if promptForLocalSyncConflicts {
+            if !copySyncPaths.isEmpty, promptForLocalSyncConflicts {
                 do {
                     try await syncConfiguredLocalPathsFromWorktree(
                         project: project,
                         worktreePath: thread.worktreePath,
-                        syncPaths: syncPaths,
+                        syncEntries: syncEntries,
                         promptForConflicts: true,
                         destinationRootOverride: destOverride
                     )
@@ -596,13 +597,13 @@ extension ThreadManager {
                     }
                     archiveWarning = "Archived without completing local sync: \(message)"
                 }
-            } else {
+            } else if !copySyncPaths.isEmpty {
                 // Non-interactive: @concurrent runs off the main actor so the UI stays responsive.
                 do {
                     try await Self.runLocalSync(
                         projectRepoPath: syncTargetPath,
                         worktreePath: thread.worktreePath,
-                        syncPaths: syncPaths
+                        syncPaths: copySyncPaths
                     )
                 } catch {
                     guard force else {
@@ -619,7 +620,9 @@ extension ThreadManager {
         let deferredSyncDestination: String?
         if !shouldSyncEagerly, shouldSyncLocalPathsBackToRepo,
            let project = settings.projects.first(where: { $0.id == thread.projectId }) {
-            deferredSyncPaths = effectiveLocalSyncPaths(for: thread, project: project)
+            deferredSyncPaths = effectiveLocalSyncEntries(for: thread, project: project)
+                .filter { $0.mode == .copy }
+                .map(\.path)
             let (syncTargetPath, _) = resolveBaseBranchSyncTarget(for: thread, project: project)
             deferredSyncDestination = syncTargetPath
         } else {

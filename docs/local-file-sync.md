@@ -1,6 +1,6 @@
 # Local File Sync Paths
 
-Per-project `Local Sync Paths` let users keep selected local-only files/directories synchronized between thread worktrees. By default, sync targets the worktree that owns the thread's base branch (enabling stacked worktree chains). When no sibling thread owns the base branch, sync falls back to the project repo root.
+Per-project `Local Sync Paths` let users keep selected local-only files/directories available across thread worktrees. Copy-mode entries are seeded from the worktree that owns the thread's base branch (enabling stacked worktree chains). When no sibling thread owns the base branch, copy mode falls back to the project repo root. Shared-link entries always point directly at the project repo root.
 
 Typical use cases:
 
@@ -10,13 +10,32 @@ Typical use cases:
 ## Configuration
 
 - Scope: project-level setting
-- Input format: line-separated repo-relative paths
+- Input format: row-based list in Project Settings
+- Each row has:
+  - `Path`: repo-relative file or directory
+  - `Mode`: `Copy` or `Shared Link`
 - Supported entries: files and directories
 - Normalization:
   - trims whitespace
   - removes leading `./`
   - rejects empty, `..`, or `~` paths
-  - deduplicates entries
+  - deduplicates entries by path (first row wins)
+
+## Sync Modes
+
+### Copy
+
+- Each thread gets its own copy of the configured file/directory
+- New threads seed from the resolved base-branch sync target
+- Manual Local Sync and archive merge-back apply to copy entries
+- Copy entries participate in baseline hashing and conflict prompts
+
+### Shared Link
+
+- The thread worktree gets a direct symlink to the project repo root's copy
+- Magent flattens pre-existing symlinks, so the worktree link points at the final resolved target rather than chaining through another worktree
+- Shared-link entries are refreshed when syncing into a worktree or when creating/forking a thread
+- Shared-link entries are excluded from push-back/archive merge-back because they are already live-shared
 
 ## Sync Target Resolution
 
@@ -31,13 +50,18 @@ A second overload `resolveBaseBranchSyncTarget(baseBranch:excludingThreadId:proj
 
 ## Thread Creation Behavior
 
-After `git worktree add`, Magent copies each configured path from the resolved sync target (base branch worktree or project root) into the new worktree.
+After `git worktree add`, Magent applies each configured local sync entry into the new worktree:
 
-The thread also stores a snapshot of that normalized path list at creation time. Later project setting changes only affect newly created threads.
+- `Copy` entries are copied from the resolved sync target (base branch worktree or project root fallback)
+- `Shared Link` entries create direct symlinks to the project repo root version of that path
 
-When forking a thread (Fork Thread), the new thread's sync snapshot is built by merging the source thread's snapshot with the current project paths: source paths still present in the project config are kept, removed paths are filtered out, and any new project paths are appended. This ensures the fork inherits the source thread's sync state while staying consistent with the current project configuration.
+The thread also stores a snapshot of the normalized entry list at creation time. Later project setting changes only affect newly created threads.
 
-- Missing source path in sync target: skipped
+When forking a thread (Fork Thread), the new thread's sync snapshot is built by merging the source thread's snapshot with the current project entries: source paths still present in the project config are kept with their snapshotted mode, removed paths are filtered out, and any new project entries are appended. This ensures the fork inherits the source thread's sync state while staying consistent with the current project configuration.
+
+- Missing source path in the selected source:
+  - `Copy`: missing in the resolved copy source
+  - `Shared Link`: missing in the project repo root
 - After thread creation, Magent shows a warning banner listing any configured sync paths that were missing in the source
 - Existing destination in new worktree: overwritten for configured path contents
 - Directory entries are materialized as directories during sync-in, including empty folders and trees that only contain empty subdirectories
@@ -45,7 +69,7 @@ When forking a thread (Fork Thread), the new thread's sync snapshot is built by 
 
 ## Manual Resync
 
-When a project has configured `Local Sync Paths` and at least one other active worktree in that project, Magent shows a top-bar resync button (↺). The current worktree is never offered as a target.
+When a project has at least one `Copy` local sync entry configured and at least one other active worktree in that project, Magent shows a top-bar resync button (↺). The current worktree is never offered as a target.
 
 Non-main threads use a quick-action menu first:
 
@@ -53,6 +77,7 @@ Non-main threads use a quick-action menu first:
 
 - **`<base-worktree> → <this-worktree>`**: copies from the resolved sync target into this thread
 - **`<this-worktree> → <base-worktree>`**: pushes from this worktree into the resolved sync target
+- **`Reconcile <this-worktree> with <base-worktree>…`**: opens an agent tab for fully agentic two-way reconciliation between the current worktree and the resolved sync target
 
 When no sibling thread owns the base branch, labels show "Project" (e.g. `Project → primeape`).
 
@@ -60,20 +85,24 @@ When no sibling thread owns the base branch, labels show "Project" (e.g. `Projec
 
 - **`Project → <this-worktree>`**: copies from the project repo root into this thread
 - **`<this-worktree> → Project`**: pushes from this worktree to the project repo root
+- **`Reconcile <this-worktree> with Project…`**: opens an agent tab for fully agentic two-way reconciliation between the current worktree and the main repo copy
 
 When there are more than two active worktrees in the project, the quick-action menu also includes **`Other…`**, which opens a manual picker. When only one other worktree exists, `Other…` is hidden since the direct menu items already cover it.
 
 - Direction selector: `Sync into this worktree` or `Sync from this worktree`
+- Direction selector also includes `Reconcile both ways with agent`
 - Worktree selector: `NSComboBox` listing every other non-bare git worktree in the repo, including the main worktree when the current thread is not main
 - Default target: the same resolved base-branch sync target used by the quick menu when present; otherwise the first available other worktree
 
 The main worktree skips the quick-action menu entirely and opens this manual picker directly, so manual sync behavior is consistent across all worktrees.
 
-The button stays hidden when the project has no Local Sync Paths configured, or when there is no second active worktree in the project to sync against. Visibility is re-evaluated when settings or thread lists change, so it appears automatically once both conditions are true. While sync is running the button is replaced by a spinner and a persistent non-dismissible banner with a spinner is shown (e.g. "Syncing Local Paths from main repo…"). The banner is replaced by the success/warning/error result banner when the operation completes, or dismissed on cancellation. Both directions run filesystem work (recursive copy, hashing) via `@concurrent` methods on the concurrent thread pool so the UI stays responsive during large syncs. Only conflict alert presentation hops back to the main actor.
+The button stays hidden when the project has no `Copy` entries configured, or when there is no second active worktree in the project to sync against. Visibility is re-evaluated when settings or thread lists change, so it appears automatically once both conditions are true. While sync is running the button is replaced by a spinner and a persistent non-dismissible banner with a spinner is shown (e.g. "Syncing Local Paths from main repo…"). The banner is replaced by the success/warning/error result banner when the operation completes, or dismissed on cancellation. Both directions run filesystem work (recursive copy, hashing) via `@concurrent` methods on the concurrent thread pool so the UI stays responsive during large syncs. Only conflict alert presentation hops back to the main actor.
 
 ### Sync Target → Worktree
 
-- Uses the thread's snapshotted path list, filtered to paths still configured on the project
+- Uses the thread's snapshotted entry list, filtered to paths still configured on the project
+- `Copy` entries pull from the selected sync source
+- `Shared Link` entries recreate a direct symlink to the project repo root copy
 - Prompts before overwriting conflicting files/directories already present in the thread worktree
 - Supports `Override`, `Override All`, `Ignore`, and `Cancel`
 - Shows a warning banner with missing repo-relative source paths instead of failing the resync
@@ -82,19 +111,20 @@ The button stays hidden when the project has no Local Sync Paths configured, or 
 
 ### Worktree → Sync Target
 
-- Uses the same snapshotted+filtered path list as the Sync Target → Worktree direction
+- Uses only the snapshotted+filtered `Copy` entries from the thread snapshot
 - Files unchanged in the thread since the last baseline (set at creation or last inbound sync) are skipped
 - Prompts before overwriting conflicting files/directories in the target (same conflict UX as archive)
 - Additive and non-destructive: intermediate directories created only when a file is actually copied; never deletes destination files absent in the thread
+- `Shared Link` entries are skipped because they already point at the repo-root source of truth
 
 ## Archive Behavior
 
-Before removing a thread worktree, Magent can merge configured paths for that thread back into the resolved sync target (base branch worktree or project root).
+Before removing a thread worktree, Magent can merge configured `Copy` entries for that thread back into the resolved sync target (base branch worktree or project root).
 
 - Merge-back is enabled by default.
 - It can be disabled globally in Settings -> General -> Archive (`Sync Local Sync Paths back to main worktree on archive`).
 - For CLI archive, `--skip-local-sync` disables merge-back for that specific archive command.
-- Only paths currently listed in project `Local Sync Paths` are eligible for merge-back.
+- Only `Copy` paths currently listed in project `Local Sync Paths` are eligible for merge-back.
 
 - Missing source path in thread worktree: skipped
 - Files unchanged in the thread since creation are skipped (no copy-back)
@@ -113,7 +143,7 @@ Repo root should become dirty only when a listed path actually syncs back (for e
 
 This preserves files created in the main repo while a thread was active.
 
-Thread snapshots still protect against retroactive additions: paths added after a thread was created are not applied to that existing thread during archive.
+Thread snapshots still protect against retroactive additions: entries added after a thread was created are not applied to that existing thread during archive.
 
 ## Conflict Handling
 
@@ -130,14 +160,15 @@ Interactive archive/resync (UI) shows a conflict alert. The button layout differ
 **Text file conflicts** (both sides are text files):
 
 - `Resolve in Merge Tool` (primary, only when `git config merge.tool` is set) — creates a temporary git repo with a real staged merge conflict and runs `git mergetool`, which correctly invokes whatever tool the user has configured (opendiff, vimdiff, meld, custom commands, etc.). If the user resolves and quits, the result is applied and the alert is dismissed. If the user quits without resolving, the alert re-appears.
-- `Agentic Merge` — aborts the file-by-file sync loop and opens a new agent tab with a structured prompt that delegates the entire sync operation to the agent for intelligent conflict resolution. It prefers the project's default agent, but if that agent currently has an active tracked rate limit Magent falls back to the first other enabled agent without one. If every enabled agent is rate-limited, it still opens with the default agent.
+- `Resolve with Agent` — aborts the file-by-file sync loop and opens a new agent tab with a structured prompt that completes the currently requested one-way sync while treating the chosen source as authoritative.
+  It prefers the project's default agent, but if that agent currently has an active tracked rate limit Magent falls back to the first other enabled agent without one. If every enabled agent is rate-limited, it still opens with the default agent.
 - `Cancel Archive` / `Cancel` (abort entire operation)
 
 **Binary/structural conflicts** (binary files, file-blocks-directory, directory-blocks-file):
 
 - `Override` (current conflict only)
 - `Ignore` (skip current conflict)
-- `Agentic Merge` — same as above, including the default-agent rate-limit fallback behavior.
+- `Resolve with Agent` — same as above, delegates the current one-way sync to the agent.
 - `Cancel Archive` / `Cancel` (abort entire operation)
 - Holding Option changes `Override` to `Override All` and `Ignore` to `Ignore All` for the rest of that sync run
 

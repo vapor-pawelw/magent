@@ -2057,9 +2057,16 @@ enum ThreadManagerError: LocalizedError {
     }
 }
 
-/// Context passed when the user chooses "Agentic Merge" during local sync conflict resolution.
+/// Describes the intent for an agent-driven local sync operation.
+enum LocalSyncAgenticOperation: Sendable {
+    case syncSourceToDestination
+    case reconcileBothWays
+}
+
+/// Context passed when the user chooses agent-driven local sync handling.
 /// Carries all the information needed to construct an agent prompt for the sync operation.
 struct LocalSyncAgenticMergeContext: Sendable {
+    let operation: LocalSyncAgenticOperation
     let sourceRoot: String
     let destinationRoot: String
     let syncPaths: [String]

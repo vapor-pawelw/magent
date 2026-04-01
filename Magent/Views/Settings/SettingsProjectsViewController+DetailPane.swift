@@ -101,13 +101,7 @@ extension SettingsProjectsViewController {
         defaultBranchField.action = #selector(defaultBranchFieldChanged)
         detailsStack.addArrangedSubview(defaultBranchField)
 
-        localFileSyncPathsTextView = createOverrideSection(
-            in: detailsStack,
-            title: "Local Sync Paths",
-            description: "Line-separated repo-relative files/directories for local-only assets (for example gitignored docs or build artifacts). Directory entries sync recursively, per-file, without wholesale overwrite.",
-            value: project.normalizedLocalFileSyncPaths.joined(separator: "\n"),
-            font: .monospacedSystemFont(ofSize: 13, weight: .regular)
-        )
+        createLocalSyncEntriesSection(in: detailsStack, project: project)
 
         // Default Section popup
         defaultSectionContainer = NSStackView()
@@ -574,5 +568,185 @@ extension SettingsProjectsViewController {
         textView.textContainer?.widthTracksTextView = true
 
         return textView
+    }
+
+    func createLocalSyncEntriesSection(in stackView: NSStackView, project: Project) {
+        let titleLabel = NSTextField(labelWithString: "Local Sync Paths")
+        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        stackView.addArrangedSubview(titleLabel)
+
+        let descLabel = NSTextField(
+            wrappingLabelWithString: "Repo-relative files/directories for local-only assets. Copy gives each thread its own version seeded from the base branch source. Shared Link creates a live symlink to the main repo copy."
+        )
+        descLabel.font = .systemFont(ofSize: 11)
+        descLabel.textColor = NSColor(resource: .textSecondary)
+        stackView.addArrangedSubview(descLabel)
+
+        localFileSyncEntriesStack = NSStackView()
+        localFileSyncEntriesStack.orientation = .vertical
+        localFileSyncEntriesStack.alignment = .leading
+        localFileSyncEntriesStack.spacing = 8
+        localFileSyncEntriesStack.translatesAutoresizingMaskIntoConstraints = false
+        stackView.addArrangedSubview(localFileSyncEntriesStack)
+
+        let buttonRow = NSStackView()
+        buttonRow.orientation = .horizontal
+        buttonRow.alignment = .centerY
+        buttonRow.spacing = 8
+
+        let addRowButton = NSButton(title: "Add Row", target: self, action: #selector(addLocalSyncEntryRow))
+        addRowButton.bezelStyle = .rounded
+        addRowButton.controlSize = .small
+        buttonRow.addArrangedSubview(addRowButton)
+
+        let addPathButton = NSButton(title: "Add Paths…", target: self, action: #selector(addLocalSyncPathsFromRepo))
+        addPathButton.bezelStyle = .rounded
+        addPathButton.controlSize = .small
+        buttonRow.addArrangedSubview(addPathButton)
+
+        stackView.addArrangedSubview(buttonRow)
+
+        NSLayoutConstraint.activate([
+            localFileSyncEntriesStack.widthAnchor.constraint(equalTo: stackView.widthAnchor),
+        ])
+
+        rebuildLocalSyncEntryRows(for: project.normalizedLocalFileSyncEntries)
+    }
+
+    func rebuildLocalSyncEntryRows(for entries: [LocalFileSyncEntry]) {
+        guard let localFileSyncEntriesStack else { return }
+
+        for arrangedSubview in localFileSyncEntriesStack.arrangedSubviews {
+            localFileSyncEntriesStack.removeArrangedSubview(arrangedSubview)
+            arrangedSubview.removeFromSuperview()
+        }
+
+        if entries.isEmpty {
+            let emptyLabel = NSTextField(
+                wrappingLabelWithString: "No local sync entries configured. Add copy entries for base-branch seeded files, or shared links for repo-root-backed symlinks."
+            )
+            emptyLabel.font = .systemFont(ofSize: 11)
+            emptyLabel.textColor = NSColor(resource: .textSecondary)
+            localFileSyncEntriesStack.addArrangedSubview(emptyLabel)
+            NSLayoutConstraint.activate([
+                emptyLabel.widthAnchor.constraint(equalTo: localFileSyncEntriesStack.widthAnchor),
+            ])
+            return
+        }
+
+        for entry in entries {
+            let row = LocalSyncEntryRowView(entry: entry)
+            row.onChange = { [weak self] _ in
+                self?.persistLocalSyncEntriesFromVisibleRows()
+            }
+            row.onRemove = { [weak self, weak row] in
+                guard let self, let row else { return }
+                self.localFileSyncEntriesStack.removeArrangedSubview(row)
+                row.removeFromSuperview()
+                self.persistLocalSyncEntriesFromVisibleRows()
+                self.rebuildLocalSyncEntryRows(for: self.visibleLocalSyncEntries())
+            }
+            localFileSyncEntriesStack.addArrangedSubview(row)
+            NSLayoutConstraint.activate([
+                row.widthAnchor.constraint(equalTo: localFileSyncEntriesStack.widthAnchor),
+            ])
+        }
+    }
+
+    func visibleLocalSyncEntries() -> [LocalFileSyncEntry] {
+        guard let localFileSyncEntriesStack else { return [] }
+        let rows = localFileSyncEntriesStack.arrangedSubviews.compactMap { $0 as? LocalSyncEntryRowView }
+        return rows.map(\.entry)
+    }
+
+    func persistLocalSyncEntriesFromVisibleRows() {
+        guard let index = selectedProjectIndex else { return }
+        settings.projects[index].localFileSyncEntries = Project.normalizeLocalFileSyncEntries(visibleLocalSyncEntries())
+        try? persistence.saveSettings(settings)
+    }
+}
+
+private final class LocalSyncEntryRowView: NSView, NSTextFieldDelegate {
+    var entry: LocalFileSyncEntry {
+        didSet {
+            onChange?(entry)
+        }
+    }
+
+    var onChange: ((LocalFileSyncEntry) -> Void)?
+    var onRemove: (() -> Void)?
+
+    private let pathField: NSTextField
+    private let modePopup: NSPopUpButton
+
+    init(entry: LocalFileSyncEntry) {
+        self.entry = entry
+        self.pathField = NSTextField(string: entry.path)
+        self.modePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        super.init(frame: .zero)
+
+        translatesAutoresizingMaskIntoConstraints = false
+
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+
+        pathField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        pathField.placeholderString = "repo-relative/path"
+        pathField.delegate = self
+        row.addArrangedSubview(pathField)
+
+        modePopup.addItems(withTitles: LocalFileSyncMode.allCases.map(\.displayName))
+        if let selectedIndex = LocalFileSyncMode.allCases.firstIndex(of: entry.mode) {
+            modePopup.selectItem(at: selectedIndex)
+        }
+        modePopup.target = self
+        modePopup.action = #selector(modeChanged)
+        row.addArrangedSubview(modePopup)
+
+        let removeButton = NSButton(
+            image: NSImage(named: NSImage.removeTemplateName) ?? NSImage(),
+            target: self,
+            action: #selector(removeTapped)
+        )
+        removeButton.bezelStyle = .texturedRounded
+        removeButton.controlSize = .small
+        removeButton.imagePosition = .imageOnly
+        removeButton.toolTip = "Remove Local Sync Path"
+        row.addArrangedSubview(removeButton)
+
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: topAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor),
+            pathField.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),
+        ])
+        pathField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        pathField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        modePopup.setContentHuggingPriority(.required, for: .horizontal)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        entry.path = pathField.stringValue
+    }
+
+    @objc private func modeChanged() {
+        let modes = LocalFileSyncMode.allCases
+        let index = modePopup.indexOfSelectedItem
+        guard modes.indices.contains(index) else { return }
+        entry.mode = modes[index]
+    }
+
+    @objc private func removeTapped() {
+        onRemove?()
     }
 }

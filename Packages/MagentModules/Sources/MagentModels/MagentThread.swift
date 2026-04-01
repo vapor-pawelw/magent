@@ -251,10 +251,10 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var isThreadIconManuallySet: Bool
     /// Persisted per-session history of TOC-confirmed prompts (newest at end).
     public var submittedPromptsBySession: [String: [String]]
-    /// Snapshot of project local sync paths taken when the thread was created.
-    /// `nil` means the thread predates path snapshotting and should fall back to
+    /// Snapshot of project local sync entries taken when the thread was created.
+    /// `nil` means the thread predates entry snapshotting and should fall back to
     /// current project settings during archive.
-    public var localFileSyncPathsSnapshot: [String]?
+    public var localFileSyncEntriesSnapshot: [LocalFileSyncEntry]?
     /// Persisted flag — set the first time this thread's worktree becomes dirty or has commits
     /// ahead of its base branch on any branch. Used to guard archive suggestions so a brand-new,
     /// untouched worktree is never suggested for archiving.
@@ -530,6 +530,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case threadIcon
         case isThreadIconManuallySet
         case submittedPromptsBySession
+        case localFileSyncEntriesSnapshot
         case localFileSyncPathsSnapshot
         case hasEverDoneWork
         case persistedWebTabs
@@ -572,7 +573,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         threadIcon: ThreadIcon = .other,
         isThreadIconManuallySet: Bool = false,
         submittedPromptsBySession: [String: [String]] = [:],
-        localFileSyncPathsSnapshot: [String]? = nil,
+        localFileSyncEntriesSnapshot: [LocalFileSyncEntry]? = nil,
         hasEverDoneWork: Bool = false,
         persistedWebTabs: [PersistedWebTab] = [],
         persistedDraftTabs: [PersistedDraftTab] = [],
@@ -611,7 +612,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.threadIcon = threadIcon
         self.isThreadIconManuallySet = isThreadIconManuallySet
         self.submittedPromptsBySession = submittedPromptsBySession
-        self.localFileSyncPathsSnapshot = localFileSyncPathsSnapshot
+        self.localFileSyncEntriesSnapshot = localFileSyncEntriesSnapshot
         self.hasEverDoneWork = hasEverDoneWork
         self.persistedWebTabs = persistedWebTabs
         self.persistedDraftTabs = persistedDraftTabs
@@ -630,7 +631,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         customTabNames = completed.customTabNames
         baseBranch = completed.baseBranch
         submittedPromptsBySession = completed.submittedPromptsBySession
-        localFileSyncPathsSnapshot = completed.localFileSyncPathsSnapshot
+        localFileSyncEntriesSnapshot = completed.localFileSyncEntriesSnapshot
         persistedWebTabs = completed.persistedWebTabs
     }
 
@@ -669,7 +670,12 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         isThreadIconManuallySet = try container.decodeIfPresent(Bool.self, forKey: .isThreadIconManuallySet)
             ?? (threadIcon != .other)
         submittedPromptsBySession = try container.decodeIfPresent([String: [String]].self, forKey: .submittedPromptsBySession) ?? [:]
-        localFileSyncPathsSnapshot = try container.decodeIfPresent([String].self, forKey: .localFileSyncPathsSnapshot)
+        if let decodedEntries = try container.decodeIfPresent([LocalFileSyncEntry].self, forKey: .localFileSyncEntriesSnapshot) {
+            localFileSyncEntriesSnapshot = decodedEntries
+        } else {
+            let legacyPaths = try container.decodeIfPresent([String].self, forKey: .localFileSyncPathsSnapshot)
+            localFileSyncEntriesSnapshot = legacyPaths?.map { LocalFileSyncEntry(path: $0, mode: .copy) }
+        }
         hasEverDoneWork = try container.decodeIfPresent(Bool.self, forKey: .hasEverDoneWork) ?? false
         persistedWebTabs = try container.decodeIfPresent([PersistedWebTab].self, forKey: .persistedWebTabs) ?? []
         persistedDraftTabs = try container.decodeIfPresent([PersistedDraftTab].self, forKey: .persistedDraftTabs) ?? []
@@ -739,7 +745,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         if !submittedPromptsBySession.isEmpty {
             try container.encode(submittedPromptsBySession, forKey: .submittedPromptsBySession)
         }
-        try container.encodeIfPresent(localFileSyncPathsSnapshot, forKey: .localFileSyncPathsSnapshot)
+        try container.encodeIfPresent(localFileSyncEntriesSnapshot, forKey: .localFileSyncEntriesSnapshot)
+        try container.encodeIfPresent(localFileSyncEntriesSnapshot?.map(\.path), forKey: .localFileSyncPathsSnapshot)
         if hasEverDoneWork {
             try container.encode(hasEverDoneWork, forKey: .hasEverDoneWork)
         }

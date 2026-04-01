@@ -97,6 +97,63 @@ extension SettingsProjectsViewController {
         try? persistence.saveSettings(settings)
     }
 
+    @objc func addLocalSyncEntryRow() {
+        let entries = visibleLocalSyncEntries() + [LocalFileSyncEntry(path: "", mode: .copy)]
+        rebuildLocalSyncEntryRows(for: entries)
+    }
+
+    @objc func addLocalSyncPathsFromRepo() {
+        guard let index = selectedProjectIndex,
+              let window = view.window else { return }
+
+        let project = settings.projects[index]
+        let repoURL = URL(fileURLWithPath: project.repoPath).standardizedFileURL
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = true
+        panel.directoryURL = repoURL
+        panel.message = "Select files or folders inside the repository"
+
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK else { return }
+
+            var invalidSelections: [String] = []
+            let newEntries: [LocalFileSyncEntry] = panel.urls.compactMap { url in
+                let standardizedURL = url.standardizedFileURL
+                let path = standardizedURL.path
+                guard path == repoURL.path || path.hasPrefix(repoURL.path + "/") else {
+                    invalidSelections.append(path)
+                    return nil
+                }
+
+                let relativePath = path == repoURL.path
+                    ? ""
+                    : String(path.dropFirst(repoURL.path.count + 1))
+                guard let entry = Project.normalizeLocalFileSyncEntry(LocalFileSyncEntry(path: relativePath, mode: .copy)) else {
+                    invalidSelections.append(path)
+                    return nil
+                }
+                return entry
+            }
+
+            settings.projects[index].localFileSyncEntries = Project.normalizeLocalFileSyncEntries(
+                self.visibleLocalSyncEntries() + newEntries
+            )
+            try? self.persistence.saveSettings(self.settings)
+            self.rebuildLocalSyncEntryRows(for: self.settings.projects[index].normalizedLocalFileSyncEntries)
+
+            guard !invalidSelections.isEmpty else { return }
+            let alert = NSAlert()
+            alert.messageText = "Some paths were skipped"
+            alert.informativeText = invalidSelections.joined(separator: "\n")
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+        }
+    }
+
     @objc func agentTypeOverrideChanged() {
         guard let index = selectedProjectIndex, let agentTypePopup else { return }
         let activeAgents = settings.availableActiveAgents

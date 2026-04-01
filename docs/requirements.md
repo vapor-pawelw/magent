@@ -86,7 +86,7 @@ Before the app is usable, the user must complete a configuration step:
 4. The new-thread sheet offers optional fields: **Description**, **Branch**, **Base branch** (combo box with type-ahead — lists local branches sorted most-recently-modified first, with default branch shown as placeholder; field left empty defaults to the project's default branch, falling back to "main"; validates branch existence on accept), **Prompt**, agent type picker, project picker (multi-project setups), and section picker. A "Switch to new thread" checkbox (default: on, persisted) controls whether focus switches to the new thread.
 5. The thread appears in the sidebar immediately and is auto-selected by default; a "Creating thread..." overlay is shown in the detail area while background setup runs.
 6. A new git worktree is created for the selected project (background), branching from the chosen base branch
-7. If the project has local sync paths configured, those repo-relative files/directories are copied from the repo root into the new worktree and snapshotted onto the thread (background)
+7. If the project has local sync paths configured, each entry is applied into the new worktree according to its mode: `Copy` entries are seeded from the resolved copy source, `Shared Link` entries become direct symlinks to the main repo copy, and the normalized entry list is snapshotted onto the thread (background)
 8. A tmux session is started in the worktree directory (background)
 9. The configured agent is launched inside tmux (background)
 10. The creation overlay is dismissed and the terminal is displayed; normal "Starting agent..." overlay takes over until the agent is ready
@@ -94,7 +94,7 @@ Before the app is usable, the user must complete a configuration step:
 ### Archiving a Thread
 
 1. User triggers archive action on a thread
-2. If the project has local sync paths configured and archive local-sync is enabled, only listed local-sync files/directories are candidates for merge-back into the repo root before removal
+2. If the project has local sync paths configured and archive local-sync is enabled, only listed `Copy` local-sync files/directories are candidates for merge-back into the repo root before removal
 3. Existing files in the repo that are not present in the worktree are preserved (no delete sync)
 4. Directory paths are merged recursively on a per-file basis; intermediate directories are created only when needed for copied files
 5. If merge-back would overwrite an existing target, user can choose `Override`, `Override All`, `Ignore`, or `Cancel Archive`

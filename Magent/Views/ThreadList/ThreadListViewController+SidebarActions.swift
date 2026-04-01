@@ -326,7 +326,7 @@ extension ThreadListViewController {
                 insertAtTopOfVisibleGroup: insertAtTop,
                 initialWebURL: result.initialWebURL,
                 draftPrompt: result.isDraft ? result.agentType.map { ($0, result.prompt ?? "") } : nil,
-                localFileSyncPathsOverride: isFork ? capturedSourceThread?.localFileSyncPathsSnapshot : nil
+                localFileSyncEntriesOverride: isFork ? capturedSourceThread?.localFileSyncEntriesSnapshot : nil
             )
         }
     }
@@ -445,7 +445,7 @@ extension ThreadListViewController {
         insertAtTopOfVisibleGroup: Bool = false,
         initialWebURL: URL? = nil,
         draftPrompt: (AgentType, String)? = nil,
-        localFileSyncPathsOverride: [String]? = nil
+        localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil
     ) {
         isCreatingThread = true
         reloadData()
@@ -464,7 +464,7 @@ extension ThreadListViewController {
                     insertAfterThreadId: insertAfterThreadId,
                     insertAtTopOfVisibleGroup: insertAtTopOfVisibleGroup,
                     initialWebURL: initialWebURL,
-                    localFileSyncPathsOverride: localFileSyncPathsOverride
+                    localFileSyncEntriesOverride: localFileSyncEntriesOverride
                 )
                 if let desc = taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !desc.isEmpty {
