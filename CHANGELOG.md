@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Option+middle-click on a tab now closes it immediately without a confirmation alert.
 
 ### Agents
+- New thread/tab prompt sheets are slightly wider so the Type, Model, and Reasoning pickers fit more comfortably on one row.
 - Type, Model, and Reasoning pickers now share a single compact row in the launch sheet, and model/reasoning default labels read "Auto" instead of "Default" to avoid ambiguity with the agent-type default set in Settings.
 - Rate-limit markers now propagate across every tab using the same agent, so a Claude or Codex limit is shown consistently across the app instead of only on the session that surfaced it.
 - Fixed Claude interactive rate-limit prompts sometimes being missed when only the wait/switch options were visible, so blocked Claude tabs show the rate-limit marker more reliably.

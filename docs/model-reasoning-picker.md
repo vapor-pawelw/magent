@@ -83,6 +83,8 @@ Type, Model, and Reasoning pickers share a **single row** in `AgentLaunchPromptS
 Type [picker]  Model [picker]  Reasoning [picker]
 ```
 
+The launch sheet uses a wider default content width so the three pickers have enough room to stay readable on one line without crowding the prompt field below.
+
 - **Model picker**: "Auto" + models from JSON for the selected agent.
 - **Reasoning picker**: "Auto" + reasoning levels. Items update when:
   - Agent changes (load that agent's reasoning levels).

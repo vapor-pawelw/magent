@@ -363,6 +363,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private static var activeControllers: [ObjectIdentifier: AgentLaunchPromptSheetController] = [:]
     private static let formLabelWidth: CGFloat = 80
     private static let formLabelColumnWidth: CGFloat = formLabelWidth + 8 // label + row spacing
+    private static let sheetContentWidth: CGFloat = 620
 
     private let config: AgentLaunchSheetConfig
     private let agentPicker = NSPopUpButton()
@@ -425,7 +426,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         self.projectPickerItems = config.availableProjects
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 540, height: 1),
+            contentRect: NSRect(x: 0, y: 0, width: Self.sheetContentWidth, height: 1),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -553,7 +554,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let contentView = NSView()
         contentView.translatesAutoresizingMaskIntoConstraints = false
         window.contentView = contentView
-        contentView.widthAnchor.constraint(equalToConstant: 540).isActive = true
+        contentView.widthAnchor.constraint(equalToConstant: Self.sheetContentWidth).isActive = true
 
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -876,7 +877,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         contentView.layoutSubtreeIfNeeded()
         let fitting = contentView.fittingSize
         let h = max(fitting.height, 200)
-        window.setContentSize(NSSize(width: fitting.width > 0 ? fitting.width : 540, height: h))
+        window.setContentSize(NSSize(width: fitting.width > 0 ? fitting.width : Self.sheetContentWidth, height: h))
     }
 
     // MARK: - Helpers
