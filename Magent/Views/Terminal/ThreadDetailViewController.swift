@@ -1603,12 +1603,17 @@ final class ThreadDetailViewController: NSViewController {
 
         let threadId = thread.id
         let countSuffix = total > 1 ? " (\(total) prompts)" : ""
+        let promptPreview = recovery.prompt.magentPromptPreview(maxLength: 140, singleLine: true)
+        let promptDetails = recovery.prompt.magentPromptPreview(maxLength: 500, singleLine: false)
         let banner = BannerView(config: BannerConfig(
-            message: "Unsubmitted tab prompt recovered for this thread.\(countSuffix)",
+            message: "Unsubmitted tab prompt recovered for this thread.\(countSuffix)\nPreview: \(promptPreview)",
             style: .warning,
             duration: nil,
             isDismissible: true,
             actions: [
+                BannerAction(title: "Copy Prompt") { [weak self] in
+                    self?.copyPromptToPasteboard(recovery.prompt)
+                },
                 BannerAction(title: "Reopen as Thread") { [weak self] in
                     guard let self else { return }
                     let prefill = AgentLaunchSheetPrefill(
@@ -1643,7 +1648,10 @@ final class ThreadDetailViewController: NSViewController {
                     // Show next recovery banner if any remain.
                     self.refreshRecoveryBanner()
                 },
-            ]
+            ],
+            details: promptDetails,
+            detailsCollapsedTitle: "Show More",
+            detailsExpandedTitle: "Hide More"
         ))
         // Dismiss just hides the banner — data stays alive and the banner reappears
         // next time the thread is selected.

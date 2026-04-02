@@ -114,6 +114,32 @@ struct PendingInitialPrompt: Codable {
     }
 }
 
+extension String {
+    func magentPromptPreview(maxLength: Int, singleLine: Bool) -> String {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let normalized: String
+        if singleLine {
+            normalized = trimmed.replacingOccurrences(
+                of: #"\s+"#,
+                with: " ",
+                options: .regularExpression
+            )
+        } else {
+            normalized = trimmed.replacingOccurrences(
+                of: #"[ \t]+\n"#,
+                with: "\n",
+                options: .regularExpression
+            )
+        }
+
+        guard normalized.count > maxLength else { return normalized }
+        let endIndex = normalized.index(normalized.startIndex, offsetBy: maxLength)
+        return normalized[..<endIndex].trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    }
+}
+
 /// Manages crash-recovery temp files for submitted (but not yet injected) initial prompts.
 ///
 /// When the user accepts the launch sheet, their prompt is written to a unique JSON file

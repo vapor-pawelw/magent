@@ -33,6 +33,7 @@ All notable changes to this project will be documented in this file.
 - New "Switch to new tab" checkbox in the New Tab prompt sheet — works like the existing "Switch to new thread" option, remembers the last selection, and defaults to on.
 - Option+middle-click on a tab now closes it immediately without a confirmation alert.
 - New agent tabs now include the selected model tier and reasoning level in the default title when no custom title is provided, so tabs like `Codex (Mini) (Low)` are easier to distinguish.
+- Recovered unsubmitted thread/tab prompt banners now show a short prompt preview, with a "Copy Prompt" action and expandable "Show More" details before you reopen or discard them.
 
 ### Agents
 - Review tabs now use the plain name `Review` when only one agent is enabled, and `Review (Claude)` / `Review (Codex)` when multiple agents are available, so the launch target stays clear without the older hyphenated suffix.

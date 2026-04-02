@@ -685,12 +685,18 @@ extension ThreadListViewController {
                 selectionRaw: record.selectionRaw,
                 isDraft: false
             )
+            let promptPreview = record.prompt.magentPromptPreview(maxLength: 140, singleLine: true)
+            let promptDetails = record.prompt.magentPromptPreview(maxLength: 500, singleLine: false)
             BannerManager.shared.show(
-                message: "Unsubmitted thread prompt recovered — Project: \(project.name)\(countSuffix)",
+                message: "Unsubmitted thread prompt recovered — Project: \(project.name)\(countSuffix)\nPreview: \(promptPreview)",
                 style: .warning,
                 duration: nil,
                 isDismissible: true,
                 actions: [
+                    BannerAction(title: "Copy Prompt") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(record.prompt, forType: .string)
+                    },
                     BannerAction(title: "Reopen") { [weak self] in
                         BannerManager.shared.dismissCurrent()
                         // File stays alive; a new pending file will be created on next submit.
@@ -703,7 +709,10 @@ extension ThreadListViewController {
                         try? FileManager.default.removeItem(at: url)
                         nextAfterBanner()
                     }
-                ]
+                ],
+                details: promptDetails,
+                detailsCollapsedTitle: "Show More",
+                detailsExpandedTitle: "Hide More"
             )
 
         case .newTab:
