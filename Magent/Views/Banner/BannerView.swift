@@ -168,6 +168,10 @@ final class BannerView: NSView {
 
         leadingAccessoryView.translatesAutoresizingMaskIntoConstraints = false
         trailingAccessoryView.translatesAutoresizingMaskIntoConstraints = false
+        leadingAccessoryView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        trailingAccessoryView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        leadingAccessoryView.setContentHuggingPriority(.required, for: .horizontal)
+        trailingAccessoryView.setContentHuggingPriority(.required, for: .horizontal)
         headerRow.addSubview(leadingAccessoryView)
         headerRow.addSubview(trailingAccessoryView)
 
@@ -201,6 +205,8 @@ final class BannerView: NSView {
         messageLabel.isEditable = false
         messageLabel.drawsBackground = false
         messageLabel.isBezeled = false
+        messageLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        messageLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
         headerRow.addSubview(messageLabel)
 
@@ -240,9 +246,8 @@ final class BannerView: NSView {
 
             messageLabel.topAnchor.constraint(equalTo: headerRow.topAnchor),
             messageLabel.bottomAnchor.constraint(equalTo: headerRow.bottomAnchor),
-            messageLabel.centerXAnchor.constraint(equalTo: headerRow.centerXAnchor),
-            messageLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAccessoryView.trailingAnchor, constant: 10),
-            messageLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAccessoryView.leadingAnchor, constant: -10),
+            messageLabel.leadingAnchor.constraint(equalTo: leadingAccessoryView.trailingAnchor, constant: 10),
+            messageLabel.trailingAnchor.constraint(equalTo: trailingAccessoryView.leadingAnchor, constant: -10),
             headerRow.heightAnchor.constraint(greaterThanOrEqualToConstant: 20),
         ])
 

@@ -13,6 +13,7 @@
 - Swipe dismissal is attached only when `allowsUserDismissal` is true. The gesture dismisses after a short drag threshold in any direction.
 - Call sites that represent long-running progress or forced-action states must pass `isDismissible: false` explicitly so they do not inherit the timed-banner affordances by accident.
 - **Hit-testing gotcha**: `BannerOverlayView` sits inside a flipped `NSSplitView` but is itself unflipped. Its `hitTest(_:)` override must convert the incoming point from superview coordinates, then convert again into each child subview's coordinate system while walking subviews front-to-back. If you skip either step, banner buttons can look correct but stop receiving clicks.
+- **Header layout gotcha**: `BannerView`'s `messageLabel` must stay constrained between the leading/trailing accessory columns with lower horizontal hugging/compression resistance than those accessory containers. If the label is allowed to center itself independently or expand past the trailing accessory boundary, long messages can visually cover the `X` even though the button is present.
 
 ## Current Non-Dismissible Progress Examples
 

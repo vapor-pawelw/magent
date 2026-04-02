@@ -64,6 +64,11 @@
 - `restoreArchivedThread`: `allThreads` is reloaded and the archived index re-located by ID after the worktree-creation awaits, preventing stale-index overwrites if concurrent archive/restore modified persistence in the meantime. The second write-back (after `bumpThreadToTopOfSection`) also uses a fresh index lookup instead of reusing the earlier one.
 - Removed a redundant `Task { @MainActor }` wrapper around `BannerManager.shared.show(...)` in `showArchivedThreadBanner` — `ThreadManager` is already main-actor-isolated, so the wrapper only deferred the banner to a later run-loop tick.
 
+## What changed in the fix-banner-close-button thread
+
+- The archive banner now inherits a shared `BannerView` header-layout fix that keeps long message text from overlapping the trailing accessory column.
+- The top-right `X` on the archived-thread banner is clickable again, and the same shared fix also covers other banners rendered through `BannerManager`.
+
 ## Gotchas
 
 - **Use `saveActiveThreads` for active-only saves.** `ThreadManager` keeps only non-archived threads in its in-memory `threads` array. Calling `PersistenceService.saveThreads(threads)` with that list overwrites `threads.json` with active-only data and silently wipes all archived threads from disk. Always call `PersistenceService.saveActiveThreads(_:)` instead — it merges the incoming active list with the existing archived threads on disk before writing. Archive/restore flows that already build a complete `allThreads` array should continue to call `saveThreads(allThreads)` directly.
