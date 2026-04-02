@@ -335,6 +335,7 @@ User Action (+ button)
 - The top-right Review button reuses the same active-agent menu model as `+` buttons so the available agents stay aligned with `AppSettings.activeAgents`.
 - Unlike `+`, the Review button must not offer `Terminal`; every review launch should open an agent tab with the configured review prompt.
 - Review launches should override built-in agents to the flagship review models (`opus` for Claude, `gpt-5.4` for Codex) and pass elevated reasoning on startup (`high` by default; Option-held review menu uses `max` for Claude and `xhigh` for Codex).
+- Review tab titles should be `Review` when only one agent is enabled, and `Review (Claude)` or `Review (Codex)` when multiple agents are enabled. The visible title must still go through the standard tab deduplication path so repeated review launches remain unique.
 - Review should keep a dedicated menu instead of using the `+` fast-path shortcuts so users can always pick an agent. When Option is not held, show a disabled discoverability hint near the menu header explaining that holding Option switches the Review menu to max reasoning.
 
 ## Session Reopen / Recovery

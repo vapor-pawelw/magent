@@ -57,6 +57,11 @@ public enum TmuxSessionNaming {
         return parts.joined(separator: " ")
     }
 
+    public static func reviewTabDisplayName(for agentType: AgentType?, showAgentName: Bool) -> String {
+        guard showAgentName else { return "Review" }
+        return "Review (\(defaultTabDisplayName(for: agentType)))"
+    }
+
     public static func normalizedModelLabel(_ modelLabel: String?, for agentType: AgentType?) -> String? {
         guard let modelLabel else { return nil }
         let trimmed = modelLabel.trimmingCharacters(in: .whitespacesAndNewlines)

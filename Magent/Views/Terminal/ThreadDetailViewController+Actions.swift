@@ -1003,12 +1003,16 @@ extension ThreadDetailViewController {
             return
         }
 
+        let settings = PersistenceService.shared.loadSettings()
         let overrides = reviewLaunchOverrides(for: agentType, usesMaxReasoning: usesMaxReasoning)
         addTab(
             using: agentType,
             useAgentCommand: true,
             initialPrompt: reviewPrompt(),
-            tabNameSuffix: "-review",
+            customTitle: TmuxSessionNaming.reviewTabDisplayName(
+                for: agentType,
+                showAgentName: settings.availableActiveAgents.count > 1
+            ),
             modelId: overrides.modelId,
             reasoningLevel: overrides.reasoningLevel
         )
