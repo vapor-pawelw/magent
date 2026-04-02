@@ -837,6 +837,17 @@
         }
       }
     },
+    "threadAppearanceMenuTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appearance"
+          }
+        }
+      }
+    },
     "threadSetDescription": {
       "extractionState": "manual",
       "localizations": {
@@ -888,6 +899,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Set icon"
+          }
+        }
+      }
+    },
+    "threadIconMenuTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icon"
           }
         }
       }
