@@ -47,34 +47,62 @@ public enum TmuxSessionNaming {
         modelLabel: String? = nil,
         reasoningLevel: String? = nil
     ) -> String {
-        var parts = [defaultTabDisplayName(for: agentType)]
-        if let modelLabel = normalizedModelLabel(modelLabel, for: agentType) {
-            parts.append("(\(modelLabel))")
+        var details: [String] = []
+        if let modelLabel = displayModelLabel(modelLabel, for: agentType) {
+            details.append(modelLabel)
         }
-        if let reasoningLevel, !reasoningLevel.isEmpty {
-            parts.append("(\(reasoningLevel.capitalized))")
+        if let reasoningLabel = displayReasoningLevelLabel(reasoningLevel) {
+            details.append(reasoningLabel)
         }
-        return parts.joined(separator: " ")
+
+        guard !details.isEmpty else { return defaultTabDisplayName(for: agentType) }
+        return "\(defaultTabDisplayName(for: agentType)) (\(details.joined(separator: ", ")))"
+    }
+
+    private static func displayModelLabel(_ modelLabel: String?, for agentType: AgentType?) -> String? {
+        let trimmed = modelLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else { return nil }
+
+        switch agentType {
+        case .codex:
+            let stripped = trimmed
+                .replacingOccurrences(of: #"(?i)\bgpt\b"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: #"(?i)\b\d+(\.\d+)*\b"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return stripped.isEmpty ? nil : stripped
+        case .claude:
+            return trimmed.caseInsensitiveCompare("Opus") == .orderedSame ? nil : trimmed
+        case .custom:
+            return nil
+        @unknown default:
+            return nil
+        }
+    }
+
+    private static func displayReasoningLevelLabel(_ reasoningLevel: String?) -> String? {
+        let trimmed = reasoningLevel?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else { return nil }
+
+        switch trimmed.lowercased() {
+        case "low":
+            return "L"
+        case "medium":
+            return "M"
+        case "high":
+            return "H"
+        case "xhigh":
+            return "xH"
+        case "max":
+            return "Max"
+        default:
+            return trimmed
+        }
     }
 
     public static func reviewTabDisplayName(for agentType: AgentType?, showAgentName: Bool) -> String {
         guard showAgentName else { return "Review" }
         return "Review (\(defaultTabDisplayName(for: agentType)))"
-    }
-
-    public static func normalizedModelLabel(_ modelLabel: String?, for agentType: AgentType?) -> String? {
-        guard let modelLabel else { return nil }
-        let trimmed = modelLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        guard agentType == .codex else { return trimmed }
-
-        let stripped = trimmed
-            .replacingOccurrences(of: #"(?i)\bgpt\b"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"(?i)\b\d+(\.\d+)*\b"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return stripped.isEmpty ? nil : stripped
     }
 
     public static func isMagentSession(_ name: String) -> Bool {

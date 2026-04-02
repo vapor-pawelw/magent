@@ -75,7 +75,7 @@ Switching between Claude and Codex in the agent picker swaps the displayed model
 
 If the user's last-selected model no longer exists in the current JSON (after a remote update), silently fall back to "Auto."
 
-When a new thread or agent tab is created without an explicit custom title, Magent folds the chosen model tier and reasoning level into the default tab title. For Codex, the model label is normalized to keep the tier name only, so `GPT 5.4 Mini` becomes `Codex (Mini) (Low)` rather than showing the raw model identifier.
+When a new thread or agent tab is created without an explicit custom title, Magent keeps the default title focused on the agent name and appends a single suffix for any visible model label plus reasoning. Built-in reasoning labels are abbreviated to `L`, `M`, `H`, `xH`, and `Max`; any other value is left as-is.
 
 ## UI: Launch Sheet
 

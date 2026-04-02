@@ -33,7 +33,7 @@ All notable changes to this project will be documented in this file.
 - Retained startup prompts now include a "Copy Prompt" action while the new thread/tab waits for the agent to become ready. If a built-in agent drops back to a shell during launch (for example after a self-update), Magent retries one relaunch automatically and then offers a "Relaunch Agent" recovery action on that tab.
 - New "Switch to new tab" checkbox in the New Tab prompt sheet — works like the existing "Switch to new thread" option, remembers the last selection, and defaults to on.
 - Option+middle-click on a tab now closes it immediately without a confirmation alert.
-- New agent tabs now include the selected model tier and reasoning level in the default title when no custom title is provided, so tabs like `Codex (Mini) (Low)` are easier to distinguish.
+- New agent tabs now keep flagship model names out of the default title, and combine any visible model label plus reasoning into a single suffix like `Mini, M` instead of separate parentheses.
 
 ### Agents
 - Review tabs now use the plain name `Review` when only one agent is enabled, and `Review (Claude)` / `Review (Codex)` when multiple agents are available, so the launch target stays clear without the older hyphenated suffix.
