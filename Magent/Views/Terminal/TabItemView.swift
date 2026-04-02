@@ -360,16 +360,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         pinItem.target = self
         menu.addItem(pinItem)
 
-        if onKeepAlive != nil {
-            let keepAliveTitle = showKeepAliveIcon ? "Remove Keep Alive" : "Keep Alive"
-            let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(keepAliveTapped), keyEquivalent: "")
-            keepAliveItem.target = self
-            keepAliveItem.image = NSImage(systemSymbolName: showKeepAliveIcon ? "shield.slash" : "shield.righthalf.filled", accessibilityDescription: nil)
-            menu.addItem(keepAliveItem)
-        }
-
         if onRename != nil {
-            menu.addItem(.separator())
             let renameItem = NSMenuItem(title: "Rename Tab...", action: #selector(renameTapped), keyEquivalent: "")
             renameItem.target = self
             menu.addItem(renameItem)
@@ -449,12 +440,21 @@ final class TabItemView: NSView, NSMenuDelegate {
             }
         }
 
+        if onKeepAlive != nil {
+            menu.addItem(.separator())
+            let keepAliveTitle = showKeepAliveIcon ? "Remove Keep Alive" : "Keep Alive"
+            let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(keepAliveTapped), keyEquivalent: "")
+            keepAliveItem.target = self
+            menu.addItem(keepAliveItem)
+        }
+
         // Kill tmux session (terminal tabs only, when session is alive)
         if let onKillSession, !isSessionDead {
-            menu.addItem(.separator())
+            if onKeepAlive == nil {
+                menu.addItem(.separator())
+            }
             let killItem = NSMenuItem(title: "Kill Session", action: #selector(killSessionTapped), keyEquivalent: "")
             killItem.target = self
-            killItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
             menu.addItem(killItem)
         }
 

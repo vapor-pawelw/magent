@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Copy-mode Local Sync now flattens symlinked source files/directories when seeding or syncing, while destination-side symlink paths are still treated as conflicts instead of being traversed implicitly.
 
 ### Tab
+- Simplified the tab context menu by moving `Keep Alive` directly above `Kill Session`, removing the extra separator before `Rename Tab...`, and keeping the menu text-only.
 - Retained startup prompts now include a "Copy Prompt" action while the new thread/tab waits for the agent to become ready. If a built-in agent drops back to a shell during launch (for example after a self-update), Magent retries one relaunch automatically and then offers a "Relaunch Agent" recovery action on that tab.
 - New "Switch to new tab" checkbox in the New Tab prompt sheet — works like the existing "Switch to new thread" option, remembers the last selection, and defaults to on.
 - Option+middle-click on a tab now closes it immediately without a confirmation alert.
