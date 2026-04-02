@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 
 ### Banner
 - Fixed long banner messages overlapping the top-right dismiss button, so the archived-thread banner and other shared banners close reliably.
+- Fixed shared banner buttons sometimes ignoring clicks, including the recovered unsubmitted prompt banners and other top-of-window action banners.
 
 ### Thread
 - Grouped `Set description`, `Icon`, and `Sign` under a new `Appearance` submenu in the thread right-click menu.

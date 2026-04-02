@@ -98,12 +98,14 @@ struct BannerConfig {
 final class BannerOverlayView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        // point is in superview (NSSplitView, flipped) coordinates —
-        // convert to our own coordinate space before forwarding to subviews.
-        let local = convert(point, from: superview)
+        guard !isHidden, alphaValue > 0, bounds.contains(point) else {
+            return nil
+        }
+
         // Walk front-to-back so overlapping views keep their expected z-order.
         for subview in subviews.reversed() {
-            let subviewPoint = subview.convert(local, from: self)
+            guard !subview.isHidden, subview.alphaValue > 0 else { continue }
+            let subviewPoint = subview.convert(point, from: self)
             if let hit = subview.hitTest(subviewPoint) {
                 return hit
             }
@@ -222,24 +224,24 @@ final class BannerView: NSView {
 
         NSLayoutConstraint.activate([
             leadingAccessoryView.leadingAnchor.constraint(equalTo: headerRow.leadingAnchor),
-            leadingAccessoryView.topAnchor.constraint(equalTo: headerRow.topAnchor),
-            leadingAccessoryView.bottomAnchor.constraint(lessThanOrEqualTo: headerRow.bottomAnchor),
+            leadingAccessoryView.centerYAnchor.constraint(equalTo: headerRow.centerYAnchor),
             leadingAccessoryView.widthAnchor.constraint(equalToConstant: 20),
+            leadingAccessoryView.heightAnchor.constraint(equalToConstant: 20),
 
             trailingAccessoryView.trailingAnchor.constraint(equalTo: headerRow.trailingAnchor),
-            trailingAccessoryView.topAnchor.constraint(equalTo: headerRow.topAnchor),
-            trailingAccessoryView.bottomAnchor.constraint(lessThanOrEqualTo: headerRow.bottomAnchor),
+            trailingAccessoryView.centerYAnchor.constraint(equalTo: headerRow.centerYAnchor),
             trailingAccessoryView.widthAnchor.constraint(equalTo: leadingAccessoryView.widthAnchor),
+            trailingAccessoryView.heightAnchor.constraint(equalTo: leadingAccessoryView.heightAnchor),
 
-            iconView.topAnchor.constraint(equalTo: leadingAccessoryView.topAnchor),
+            iconView.centerYAnchor.constraint(equalTo: leadingAccessoryView.centerYAnchor),
             iconView.centerXAnchor.constraint(equalTo: leadingAccessoryView.centerXAnchor),
             iconView.widthAnchor.constraint(equalToConstant: 18),
             iconView.heightAnchor.constraint(equalToConstant: 18),
 
-            spinnerView.topAnchor.constraint(equalTo: leadingAccessoryView.topAnchor),
+            spinnerView.centerYAnchor.constraint(equalTo: leadingAccessoryView.centerYAnchor),
             spinnerView.centerXAnchor.constraint(equalTo: leadingAccessoryView.centerXAnchor),
 
-            closeButton.topAnchor.constraint(equalTo: trailingAccessoryView.topAnchor),
+            closeButton.centerYAnchor.constraint(equalTo: trailingAccessoryView.centerYAnchor),
             closeButton.centerXAnchor.constraint(equalTo: trailingAccessoryView.centerXAnchor),
             closeButton.widthAnchor.constraint(equalToConstant: 20),
             closeButton.heightAnchor.constraint(equalToConstant: 20),
