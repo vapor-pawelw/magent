@@ -51,12 +51,6 @@ extension ThreadListViewController {
         renamePromptItem.submenu = buildRenameWithPromptSubmenu(for: thread)
         menu.addItem(renamePromptItem)
 
-        let descriptionItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetDescription), action: #selector(setThreadDescription(_:)), keyEquivalent: "")
-        descriptionItem.target = self
-        descriptionItem.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
-        descriptionItem.representedObject = thread
-        menu.addItem(descriptionItem)
-
         // Rename branch
         let renameItem = NSMenuItem(title: String(localized: .ThreadStrings.threadRenameBranch), action: #selector(renameThread(_:)), keyEquivalent: "")
         renameItem.target = self
@@ -64,18 +58,10 @@ extension ThreadListViewController {
         renameItem.representedObject = thread
         menu.addItem(renameItem)
 
-        let iconItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetIcon), action: nil, keyEquivalent: "")
-        iconItem.image = NSImage(
-            systemSymbolName: thread.threadIcon.symbolName,
-            accessibilityDescription: thread.threadIcon.accessibilityDescription
-        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
-        iconItem.submenu = buildThreadIconSubmenu(for: thread)
-        menu.addItem(iconItem)
-
-        let signItem = NSMenuItem(title: "Sign", action: nil, keyEquivalent: "")
-        signItem.image = NSImage(systemSymbolName: "flag.fill", accessibilityDescription: "Sign emoji")
-        signItem.submenu = buildSignEmojiSubmenu(for: thread)
-        menu.addItem(signItem)
+        let appearanceItem = NSMenuItem(title: String(localized: .ThreadStrings.threadAppearanceMenuTitle), action: nil, keyEquivalent: "")
+        appearanceItem.image = NSImage(systemSymbolName: "paintbrush", accessibilityDescription: nil)
+        appearanceItem.submenu = buildAppearanceSubmenu(for: thread)
+        menu.addItem(appearanceItem)
 
         // Move to... submenu
         let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
@@ -226,6 +212,31 @@ extension ThreadListViewController {
         customItem.image = NSImage(systemSymbolName: "text.cursor", accessibilityDescription: nil)
         customItem.representedObject = thread
         submenu.addItem(customItem)
+
+        return submenu
+    }
+
+    private func buildAppearanceSubmenu(for thread: MagentThread) -> NSMenu {
+        let submenu = NSMenu()
+
+        let descriptionItem = NSMenuItem(title: String(localized: .ThreadStrings.threadSetDescription), action: #selector(setThreadDescription(_:)), keyEquivalent: "")
+        descriptionItem.target = self
+        descriptionItem.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
+        descriptionItem.representedObject = thread
+        submenu.addItem(descriptionItem)
+
+        let iconItem = NSMenuItem(title: String(localized: .ThreadStrings.threadIconMenuTitle), action: nil, keyEquivalent: "")
+        iconItem.image = NSImage(
+            systemSymbolName: thread.threadIcon.symbolName,
+            accessibilityDescription: thread.threadIcon.accessibilityDescription
+        ) ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Thread icon")
+        iconItem.submenu = buildThreadIconSubmenu(for: thread)
+        submenu.addItem(iconItem)
+
+        let signItem = NSMenuItem(title: "Sign", action: nil, keyEquivalent: "")
+        signItem.image = NSImage(systemSymbolName: "flag.fill", accessibilityDescription: "Sign emoji")
+        signItem.submenu = buildSignEmojiSubmenu(for: thread)
+        submenu.addItem(signItem)
 
         return submenu
     }
