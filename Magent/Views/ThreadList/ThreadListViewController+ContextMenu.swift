@@ -33,24 +33,9 @@ extension ThreadListViewController {
         pinItem.representedObject = thread.id
         menu.addItem(pinItem)
 
-        // Keep Alive
-        let keepAliveTitle = thread.isKeepAlive ? "Remove Keep Alive" : "Keep Alive"
-        let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(toggleThreadKeepAlive(_:)), keyEquivalent: "")
-        keepAliveItem.target = self
-        keepAliveItem.image = NSImage(systemSymbolName: thread.isKeepAlive ? "shield.slash" : "shield.righthalf.filled", accessibilityDescription: nil)
-        keepAliveItem.representedObject = thread.id
-        menu.addItem(keepAliveItem)
-
-        // Kill All Sessions
-        let hasLiveSessions = thread.tmuxSessionNames.contains {
-            !thread.deadSessions.contains($0)
-        }
-        if hasLiveSessions {
-            let killItem = NSMenuItem(title: "Kill All Sessions", action: #selector(killAllThreadSessions(_:)), keyEquivalent: "")
-            killItem.target = self
-            killItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
-            killItem.representedObject = thread.id
-            menu.addItem(killItem)
+        // Fork Thread
+        if let createFromBranchItem = createThreadFromBaseMenuItem(for: thread, settings: settings) {
+            menu.addItem(createFromBranchItem)
         }
 
         // Jira (below pin)
@@ -92,21 +77,6 @@ extension ThreadListViewController {
         signItem.submenu = buildSignEmojiSubmenu(for: thread)
         menu.addItem(signItem)
 
-        menu.addItem(NSMenuItem.separator())
-
-        // Hide/Unhide
-        let hideTitle = thread.isSidebarHidden
-            ? String(localized: .CommonStrings.commonUnhide)
-            : String(localized: .CommonStrings.commonHide)
-        let hideItem = NSMenuItem(title: hideTitle, action: #selector(toggleThreadHidden(_:)), keyEquivalent: "")
-        hideItem.target = self
-        hideItem.image = NSImage(
-            systemSymbolName: thread.isSidebarHidden ? "eye" : "eye.slash",
-            accessibilityDescription: nil
-        )
-        hideItem.representedObject = thread.id
-        menu.addItem(hideItem)
-
         // Move to... submenu
         let visibleSections = settings.visibleSections.filter { $0.id != thread.sectionId }
         let moveSubmenu = NSMenu()
@@ -123,8 +93,37 @@ extension ThreadListViewController {
         moveItem.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
         menu.addItem(moveItem)
 
-        if let createFromBranchItem = createThreadFromBaseMenuItem(for: thread, settings: settings) {
-            menu.addItem(createFromBranchItem)
+        // Hide/Unhide
+        let hideTitle = thread.isSidebarHidden
+            ? String(localized: .CommonStrings.commonUnhide)
+            : String(localized: .CommonStrings.commonHide)
+        let hideItem = NSMenuItem(title: hideTitle, action: #selector(toggleThreadHidden(_:)), keyEquivalent: "")
+        hideItem.target = self
+        hideItem.image = NSImage(
+            systemSymbolName: thread.isSidebarHidden ? "eye" : "eye.slash",
+            accessibilityDescription: nil
+        )
+        hideItem.representedObject = thread.id
+        menu.addItem(hideItem)
+
+        // Keep Alive
+        let keepAliveTitle = thread.isKeepAlive ? "Remove Keep Alive" : "Keep Alive"
+        let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(toggleThreadKeepAlive(_:)), keyEquivalent: "")
+        keepAliveItem.target = self
+        keepAliveItem.image = NSImage(systemSymbolName: thread.isKeepAlive ? "shield.slash" : "shield.righthalf.filled", accessibilityDescription: nil)
+        keepAliveItem.representedObject = thread.id
+        menu.addItem(keepAliveItem)
+
+        // Kill All Sessions
+        let hasLiveSessions = thread.tmuxSessionNames.contains {
+            !thread.deadSessions.contains($0)
+        }
+        if hasLiveSessions {
+            let killItem = NSMenuItem(title: "Kill All Sessions", action: #selector(killAllThreadSessions(_:)), keyEquivalent: "")
+            killItem.target = self
+            killItem.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
+            killItem.representedObject = thread.id
+            menu.addItem(killItem)
         }
 
         menu.addItem(NSMenuItem.separator())
