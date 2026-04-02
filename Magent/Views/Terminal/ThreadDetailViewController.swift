@@ -1617,7 +1617,9 @@ final class ThreadDetailViewController: NSViewController {
                         branchName: nil,
                         agentType: recovery.agentType,
                         modelId: recovery.modelId,
-                        reasoningLevel: recovery.reasoningLevel
+                        reasoningLevel: recovery.reasoningLevel,
+                        selectionRaw: recovery.agentType?.rawValue ?? "terminal",
+                        isDraft: false
                     )
                     self.threadManager.removePendingPromptRecovery(for: threadId, tempFileURL: recovery.tempFileURL)
                     self.dismissRecoveryBanner()

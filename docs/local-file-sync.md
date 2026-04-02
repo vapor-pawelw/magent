@@ -29,6 +29,8 @@ Typical use cases:
 - New threads seed from the resolved base-branch sync target
 - Local Sync and archive merge-back apply to copy entries
 - Copy entries participate in baseline hashing and conflict prompts
+- Copy mode flattens symlinked source files/directories before copying, so entries like a symlinked `.agents` directory seed correctly into new/forked threads
+- Destination-side symlink paths are not traversed implicitly during copy/push-back; Magent treats them as conflicts and replaces them only if the sync flow explicitly chooses overwrite
 
 ### Shared Link
 

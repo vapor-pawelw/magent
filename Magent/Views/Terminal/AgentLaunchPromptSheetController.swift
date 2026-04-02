@@ -68,8 +68,22 @@ struct PendingInitialPrompt: Codable {
     let modelId: String?
     /// Selected reasoning level at submission time (e.g. "high", "max"). Nil = agent default.
     let reasoningLevel: String?
+    /// Original picker selection (`agent rawValue`, `terminal`, or `web`) for exact recovery.
+    let selectionRaw: String?
 
-    init(scopeKind: ScopeKind, projectId: UUID?, threadId: UUID?, prompt: String, description: String?, branchName: String?, agentType: AgentType?, createdAt: Date, modelId: String? = nil, reasoningLevel: String? = nil) {
+    init(
+        scopeKind: ScopeKind,
+        projectId: UUID?,
+        threadId: UUID?,
+        prompt: String,
+        description: String?,
+        branchName: String?,
+        agentType: AgentType?,
+        createdAt: Date,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil,
+        selectionRaw: String? = nil
+    ) {
         self.scopeKind = scopeKind
         self.projectId = projectId
         self.threadId = threadId
@@ -80,6 +94,7 @@ struct PendingInitialPrompt: Codable {
         self.createdAt = createdAt
         self.modelId = modelId
         self.reasoningLevel = reasoningLevel
+        self.selectionRaw = selectionRaw
     }
 
     init(from decoder: Decoder) throws {
@@ -95,6 +110,7 @@ struct PendingInitialPrompt: Codable {
         // Backwards-compatible: old temp files won't have these keys.
         modelId = try container.decodeIfPresent(String.self, forKey: .modelId)
         reasoningLevel = try container.decodeIfPresent(String.self, forKey: .reasoningLevel)
+        selectionRaw = try container.decodeIfPresent(String.self, forKey: .selectionRaw)
     }
 }
 
@@ -119,7 +135,8 @@ enum PendingInitialPromptStore {
         agentType: AgentType?,
         scope: AgentLaunchPromptDraftScope,
         modelId: String? = nil,
-        reasoningLevel: String? = nil
+        reasoningLevel: String? = nil,
+        selectionRaw: String? = nil
     ) -> URL? {
         let scopeKind: PendingInitialPrompt.ScopeKind
         let projectId: UUID?
@@ -138,7 +155,8 @@ enum PendingInitialPromptStore {
             agentType: agentType,
             createdAt: Date(),
             modelId: modelId,
-            reasoningLevel: reasoningLevel
+            reasoningLevel: reasoningLevel,
+            selectionRaw: selectionRaw
         )
         let url = URL(fileURLWithPath: "/tmp/magent-pending-prompt-\(UUID().uuidString).json")
         guard let data = try? encoder.encode(record) else { return nil }
@@ -196,6 +214,8 @@ struct AgentLaunchSheetPrefill {
     let agentType: AgentType?
     let modelId: String?
     let reasoningLevel: String?
+    let selectionRaw: String?
+    let isDraft: Bool
 }
 
 enum AgentLastSelectionStore {
@@ -441,8 +461,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         if let prefill = config.recoveryPrefill {
             // Recovery mode: pre-select the recovered agent type, then populate fields.
             // Skip draft loading — we're restoring submitted content, not a mid-edit draft.
-            applyRecoveryAgentSelection(prefill)
+            applyRecoverySelection(prefill)
             syncModelReasoningToCurrentAgent()
+            applyRecoveryModelReasoningSelection(prefill)
             previousMode = currentMode
             applyRecoveryPrefill(prefill)
         } else {
@@ -531,7 +552,13 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         agentPicker.selectItem(withTag: index)
     }
 
-    private func applyRecoveryAgentSelection(_ prefill: AgentLaunchSheetPrefill) {
+    private func applyRecoverySelection(_ prefill: AgentLaunchSheetPrefill) {
+        if let selectionRaw = prefill.selectionRaw,
+           let index = pickerItems.firstIndex(where: { $0.storageRaw == selectionRaw }) {
+            agentPicker.selectItem(withTag: index)
+            return
+        }
+
         guard let agentType = prefill.agentType,
               let index = pickerItems.firstIndex(where: {
                   if case .agent(let t, _) = $0 { return t == agentType }
@@ -540,11 +567,30 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         agentPicker.selectItem(withTag: index)
     }
 
+    private func applyRecoveryModelReasoningSelection(_ prefill: AgentLaunchSheetPrefill) {
+        if let modelId = prefill.modelId,
+           let matchIndex = modelPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == modelId }) {
+            modelPicker.selectItem(at: matchIndex)
+            if let agentType = selectedAgentTypeForModelPicker,
+               let agentConfig = AgentModelsService.shared.config(for: agentType) {
+                populateReasoningPicker(agentConfig: agentConfig, modelId: modelId)
+            }
+        }
+
+        if let reasoningLevel = prefill.reasoningLevel,
+           let matchIndex = reasoningPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == reasoningLevel }) {
+            reasoningPicker.selectItem(at: matchIndex)
+        }
+    }
+
     private func applyRecoveryPrefill(_ prefill: AgentLaunchSheetPrefill) {
         promptTextView.string = prefill.prompt
         if config.showDescriptionAndBranchFields {
             descriptionField.stringValue = prefill.description ?? ""
             branchField.stringValue = prefill.branchName ?? ""
+        }
+        if config.showDraftCheckbox {
+            draftCheckbox.state = prefill.isDraft && currentMode == "agent" ? .on : .off
         }
     }
 
@@ -1539,7 +1585,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 agentType: agentType,
                 scope: currentDraftScope,
                 modelId: chosenModelId,
-                reasoningLevel: chosenReasoningLevel
+                reasoningLevel: chosenReasoningLevel,
+                selectionRaw: item.storageRaw
             )
         }
 

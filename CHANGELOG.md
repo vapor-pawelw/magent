@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file.
 - Project settings now use a row-based `Local Sync Paths` editor with per-path modes: `Copy` or `Shared Link`.
 - `Shared Link` local sync entries now create direct symlinks to the main repo copy during thread creation and forked-thread setup, while archive/push-back remains limited to `Copy` entries.
 - Local Sync menus now separate one-way sync from two-way agentic reconcile, and conflict dialogs rename `Agentic Merge` to `Resolve with Agent` so the chosen direction remains clear.
+- Copy-mode Local Sync now flattens symlinked source files/directories when seeding or syncing, while destination-side symlink paths are still treated as conflicts instead of being traversed implicitly.
 
 ### Tab
 - Retained startup prompts now include a "Copy Prompt" action while the new thread/tab waits for the agent to become ready. If a built-in agent drops back to a shell during launch (for example after a self-update), Magent retries one relaunch automatically and then offers a "Relaunch Agent" recovery action on that tab.
@@ -51,6 +52,7 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - Fixed deleted threads reappearing in the sidebar after app relaunch when the worktree directory wasn't fully cleaned up.
+- Failed thread creation now offers a persistent retry banner that reopens the sheet in the original mode and context (including fork/draft/web/terminal state) without overwriting saved new-thread drafts.
 
 ### Status Bar
 - When the bottom-right sync status fails, hover text and the sync right-click menu now show the last error reason instead of only `Sync failed`.

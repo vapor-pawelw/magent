@@ -2,7 +2,7 @@
 
 ## Overview
 
-When the user submits the New Thread or New Tab sheet, their prompt is written to a crash-recovery temp file in `/tmp` before the draft is cleared. If the app crashes between submission and tmux injection, the file survives and surfaces as a recovery banner on the next launch.
+When the user submits the New Thread or New Tab sheet, their prompt is written to a crash-recovery temp file in `/tmp` before the draft is cleared. If the app crashes between submission and tmux injection, the file survives and surfaces as a recovery banner on the next launch. The temp file also stores the original picker mode (`agent` / `terminal`) plus model/reasoning metadata so the recovery sheet can reopen in the same configuration.
 
 ## Non-tmux Tab Exemption
 
@@ -71,6 +71,15 @@ When a thread with pending recoveries is selected, `ThreadDetailViewController.r
 - **Reopen as Thread** — removes that single recovery entry, posts `.magentRecoveryReopenRequested` (observed by `ThreadListViewController` to present the recovery sheet), then shows the next recovery if any remain.
 - **Discard** — deletes the temp file, removes the entry, and shows the next.
 - **Dismiss (X)** — hides the banner without deleting data. The banner reappears on next thread selection, giving the user a "deal with it later" option.
+
+## Failed Create Recovery
+
+Thread creation failures that happen **before** tmux injection use a separate recovery path from `/tmp` pending-prompt files:
+
+- `ThreadListViewController.createThread(...)` shows a persistent error banner with **Reopen** and **Copy Prompt** actions.
+- **Reopen** reopens the New Thread sheet directly with an `AgentLaunchSheetPrefill`, restoring the original picker mode (`agent`, `terminal`, or `web`), model/reasoning selection, draft checkbox state, and fork context.
+- This path intentionally does **not** write back into `AgentLaunchPromptDraftStore`, so fast-path thread creation failures cannot clobber the user's saved per-project drafts.
+- Because the banner is a normal `BannerManager` banner (not backed by a temp file), dismissing it with **X** should simply hide it instead of re-triggering crash recovery.
 
 ### Cleanup on archive/delete
 

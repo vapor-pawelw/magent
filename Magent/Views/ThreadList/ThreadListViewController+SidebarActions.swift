@@ -212,7 +212,14 @@ extension ThreadListViewController {
         return projects.first
     }
 
-    func presentNewThreadSheet(for project: Project, anchorView: NSView, baseBranch: String? = nil, sourceThread: MagentThread? = nil) {
+    func presentNewThreadSheet(
+        for project: Project,
+        anchorView: NSView,
+        baseBranch: String? = nil,
+        sourceThread: MagentThread? = nil,
+        selectedSectionIdOverride: UUID? = nil,
+        recoveryPrefill: AgentLaunchSheetPrefill? = nil
+    ) {
         guard let window = view.window else { return }
         let settings = persistence.loadSettings()
 
@@ -246,6 +253,9 @@ extension ThreadListViewController {
         if let sourceThread, let sourceSectionId = threadManager.effectiveSectionId(for: sourceThread, settings: settings) {
             defaultSectionIdByProjectId[sourceThread.projectId] = sourceSectionId
         }
+        if let selectedSectionIdOverride {
+            defaultSectionIdByProjectId[project.id] = selectedSectionIdOverride
+        }
 
         let defaultBranchName = project.defaultBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
         // Only prefill the base branch field when explicitly creating from another thread's branch.
@@ -277,6 +287,7 @@ extension ThreadListViewController {
             autoGenerateHint: autoGenerateHint,
             terminalInjectionPrefill: injection.terminalCommand.isEmpty ? nil : injection.terminalCommand,
             agentContextPrefill: injection.agentContext.isEmpty ? nil : injection.agentContext,
+            recoveryPrefill: recoveryPrefill,
             sectionsByProjectId: sectionsByProjectId,
             defaultSectionIdByProjectId: defaultSectionIdByProjectId,
             baseBranchPrefill: resolvedBaseBranchPrefill,
@@ -318,6 +329,7 @@ extension ThreadListViewController {
                 for: targetProject,
                 requestedAgentType: result.agentType,
                 useAgentCommand: result.isDraft ? false : result.useAgentCommand,
+                sourceThread: capturedSourceThread,
                 baseBranch: result.baseBranch,
                 initialPrompt: result.isDraft ? nil : result.prompt,
                 shouldSubmitInitialPrompt: !result.isDraft,
@@ -449,6 +461,7 @@ extension ThreadListViewController {
         for project: Project,
         requestedAgentType: AgentType? = nil,
         useAgentCommand: Bool = true,
+        sourceThread: MagentThread? = nil,
         baseBranch: String? = nil,
         initialPrompt: String? = nil,
         shouldSubmitInitialPrompt: Bool = true,
@@ -512,14 +525,108 @@ extension ThreadListViewController {
                 await MainActor.run {
                     self.isCreatingThread = false
                     self.reloadData()
+                    let recoveryPrefill = self.failedThreadCreationRecoveryPrefill(
+                        requestedAgentType: requestedAgentType,
+                        useAgentCommand: useAgentCommand,
+                        initialPrompt: initialPrompt,
+                        taskDescription: taskDescription,
+                        requestedBranchName: requestedBranchName,
+                        initialWebURL: initialWebURL,
+                        draftPrompt: draftPrompt,
+                        modelId: modelId,
+                        reasoningLevel: reasoningLevel
+                    )
+                    let recoverablePrompt = recoveryPrefill?.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                     BannerManager.shared.show(
                         message: "Failed to create thread: \(error.localizedDescription)",
                         style: .error,
-                        duration: 8.0
+                        duration: nil,
+                        actions: [
+                            BannerAction(title: "Reopen") { [weak self] in
+                                guard let self else { return }
+                                BannerManager.shared.dismissCurrent()
+                                self.presentNewThreadSheet(
+                                    for: project,
+                                    anchorView: self.outlineView,
+                                    baseBranch: baseBranch,
+                                    sourceThread: sourceThread,
+                                    selectedSectionIdOverride: requestedSectionId,
+                                    recoveryPrefill: recoveryPrefill
+                                )
+                            },
+                            BannerAction(title: "Copy Prompt") {
+                                guard let recoverablePrompt,
+                                      !recoverablePrompt.isEmpty else { return }
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(recoverablePrompt, forType: .string)
+                            }
+                        ]
                     )
                 }
             }
         }
+    }
+
+    private func failedThreadCreationRecoveryPrefill(
+        requestedAgentType: AgentType?,
+        useAgentCommand: Bool,
+        initialPrompt: String?,
+        taskDescription: String?,
+        requestedBranchName: String?,
+        initialWebURL: URL?,
+        draftPrompt: (AgentType, String)?,
+        modelId: String?,
+        reasoningLevel: String?
+    ) -> AgentLaunchSheetPrefill? {
+        let prompt: String
+        let agentType: AgentType?
+        let selectionRaw: String?
+        let isDraft: Bool
+
+        if let initialWebURL {
+            prompt = initialWebURL.absoluteString
+            agentType = nil
+            selectionRaw = "web"
+            isDraft = false
+        } else if let draftPrompt {
+            prompt = draftPrompt.1
+            agentType = draftPrompt.0
+            selectionRaw = draftPrompt.0.rawValue
+            isDraft = true
+        } else if useAgentCommand {
+            prompt = initialPrompt ?? ""
+            agentType = requestedAgentType
+            selectionRaw = requestedAgentType?.rawValue
+            isDraft = false
+        } else {
+            prompt = initialPrompt ?? ""
+            agentType = nil
+            selectionRaw = "terminal"
+            isDraft = false
+        }
+
+        let description = (selectionRaw == "web" || selectionRaw == "terminal") ? nil : taskDescription
+        let branchName = (selectionRaw == "web" || selectionRaw == "terminal") ? nil : requestedBranchName
+        let hasRecoverableContent =
+            !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            !(description?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) ||
+            !(branchName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) ||
+            modelId != nil ||
+            reasoningLevel != nil ||
+            selectionRaw != nil ||
+            isDraft
+        guard hasRecoverableContent else { return nil }
+
+        return AgentLaunchSheetPrefill(
+            prompt: prompt,
+            description: description,
+            branchName: branchName,
+            agentType: agentType,
+            modelId: modelId,
+            reasoningLevel: reasoningLevel,
+            selectionRaw: selectionRaw,
+            isDraft: isDraft
+        )
     }
 
     // MARK: - Pending Prompt Recovery
@@ -574,7 +681,9 @@ extension ThreadListViewController {
                 branchName: record.branchName,
                 agentType: record.agentType,
                 modelId: record.modelId,
-                reasoningLevel: record.reasoningLevel
+                reasoningLevel: record.reasoningLevel,
+                selectionRaw: record.selectionRaw,
+                isDraft: false
             )
             BannerManager.shared.show(
                 message: "Unsubmitted thread prompt recovered — Project: \(project.name)\(countSuffix)",

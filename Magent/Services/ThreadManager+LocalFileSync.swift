@@ -23,7 +23,7 @@ nonisolated enum BackgroundLocalSyncWorker {
         let baselineHashes = await loadBaselineFileHashes(worktreePath: worktreePath)
         for relativePath in syncPaths {
             let sourcePath = (worktreePath as NSString).appendingPathComponent(relativePath)
-            guard itemKind(atPath: sourcePath) != nil else { continue }
+            guard sourceItemKind(atPath: sourcePath) != nil else { continue }
 
             let destinationPath = (projectRepoPath as NSString).appendingPathComponent(relativePath)
             do {
@@ -52,7 +52,7 @@ nonisolated enum BackgroundLocalSyncWorker {
         baselineFileHashes: [String: String]?
     ) async throws {
         do {
-            guard let sourceKind = itemKind(atPath: sourcePath) else { return }
+            guard let sourceKind = sourceItemKind(atPath: sourcePath) else { return }
             let fm = FileManager.default
 
             switch sourceKind {
@@ -86,7 +86,7 @@ nonisolated enum BackgroundLocalSyncWorker {
                     guard parentReady else { return }
                 }
 
-                if let destinationKind = itemKind(atPath: destinationPath) {
+                if let destinationKind = destinationItemKind(atPath: destinationPath) {
                     switch destinationKind {
                     case .directory:
                         return
@@ -130,7 +130,7 @@ nonisolated enum BackgroundLocalSyncWorker {
 
     private static func ensureDirectoryExists(atPath destinationPath: String) -> Bool {
         let fm = FileManager.default
-        if let existingKind = itemKind(atPath: destinationPath) {
+        if let existingKind = destinationItemKind(atPath: destinationPath) {
             switch existingKind {
             case .directory:
                 return true
@@ -147,7 +147,14 @@ nonisolated enum BackgroundLocalSyncWorker {
         }
     }
 
-    private static func itemKind(atPath path: String) -> ItemKind? {
+    private static func sourceItemKind(atPath path: String) -> ItemKind? {
+        let resolvedPath = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        var isDirectory = ObjCBool(false)
+        guard FileManager.default.fileExists(atPath: resolvedPath, isDirectory: &isDirectory) else { return nil }
+        return isDirectory.boolValue ? .directory : .file
+    }
+
+    private static func destinationItemKind(atPath path: String) -> ItemKind? {
         guard FileManager.default.fileExists(atPath: path) else { return nil }
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
               let type = attrs[.type] as? FileAttributeType else {
@@ -334,7 +341,7 @@ extension ThreadManager {
                 switch entry.mode {
                 case .copy:
                     let sourcePath = (sourceRoot as NSString).appendingPathComponent(relativePath)
-                    guard localSyncItemKind(atPath: sourcePath) != nil else {
+                    guard localSyncSourceItemKind(atPath: sourcePath) != nil else {
                         missingPaths.append(relativePath)
                         continue
                     }
@@ -355,7 +362,7 @@ extension ThreadManager {
 
                 case .symlink:
                     let sharedSourcePath = (project.repoPath as NSString).appendingPathComponent(relativePath)
-                    guard localSyncItemKind(atPath: sharedSourcePath) != nil else {
+                    guard localSyncSourceItemKind(atPath: sharedSourcePath) != nil else {
                         missingPaths.append(relativePath)
                         continue
                     }
@@ -429,7 +436,7 @@ extension ThreadManager {
         var ignoreAll = false
         for relativePath in copySyncPaths {
             let sourcePath = (worktreePath as NSString).appendingPathComponent(relativePath)
-            guard localSyncItemKind(atPath: sourcePath) != nil else { continue }
+            guard localSyncSourceItemKind(atPath: sourcePath) != nil else { continue }
 
             let destinationPath = (destinationRoot as NSString).appendingPathComponent(relativePath)
             do {
@@ -490,7 +497,7 @@ extension ThreadManager {
         ignoreAll: inout Bool,
         conflictDirection: LocalSyncConflictDirection
     ) async throws {
-        guard let sourceKind = localSyncItemKind(atPath: sourcePath) else { return }
+        guard let sourceKind = localSyncSourceItemKind(atPath: sourcePath) else { return }
 
         let resolvedSourcePath = URL(fileURLWithPath: sourcePath).resolvingSymlinksInPath().path
         let parentRelativePath = (relativePath as NSString).deletingLastPathComponent
@@ -513,7 +520,7 @@ extension ThreadManager {
             return
         }
 
-        let existingKind = localSyncItemKind(atPath: destinationPath)
+        let existingKind = localSyncDestinationItemKind(atPath: destinationPath)
         if existingKind != nil || localSyncIsSymlink(atPath: destinationPath) {
             let conflictKind: LocalSyncConflictKind = {
                 switch (sourceKind, existingKind) {
@@ -561,7 +568,7 @@ extension ThreadManager {
         directoryMaterialization: LocalSyncDirectoryMaterialization
     ) async throws {
         do {
-            guard let sourceKind = localSyncItemKind(atPath: sourcePath) else { return }
+            guard let sourceKind = localSyncSourceItemKind(atPath: sourcePath) else { return }
             let fm = FileManager.default
 
             switch sourceKind {
@@ -626,7 +633,7 @@ extension ThreadManager {
                     guard parentReady else { return }
                 }
 
-                if let destinationKind = localSyncItemKind(atPath: destinationPath) {
+                if let destinationKind = localSyncDestinationItemKind(atPath: destinationPath) {
                     switch destinationKind {
                     case .directory:
                         let shouldOverwrite = try await shouldOverwriteLocalSyncConflict(
@@ -725,7 +732,7 @@ extension ThreadManager {
         repoPath: String
     ) async throws -> Bool {
         let fm = FileManager.default
-        if let existingKind = localSyncItemKind(atPath: destinationPath) {
+        if let existingKind = localSyncDestinationItemKind(atPath: destinationPath) {
             switch existingKind {
             case .directory:
                 return true
@@ -752,7 +759,14 @@ extension ThreadManager {
         return true
     }
 
-    nonisolated private func localSyncItemKind(atPath path: String) -> LocalSyncItemKind? {
+    nonisolated private func localSyncSourceItemKind(atPath path: String) -> LocalSyncItemKind? {
+        let resolvedPath = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        var isDirectory = ObjCBool(false)
+        guard FileManager.default.fileExists(atPath: resolvedPath, isDirectory: &isDirectory) else { return nil }
+        return isDirectory.boolValue ? .directory : .file
+    }
+
+    nonisolated private func localSyncDestinationItemKind(atPath path: String) -> LocalSyncItemKind? {
         guard FileManager.default.fileExists(atPath: path) else { return nil }
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
               let type = attrs[.type] as? FileAttributeType else {
@@ -837,7 +851,7 @@ extension ThreadManager {
         relativePath: String,
         into hashes: inout [String: String]
     ) throws {
-        guard let kind = localSyncItemKind(atPath: absolutePath) else { return }
+        guard let kind = localSyncSourceItemKind(atPath: absolutePath) else { return }
         let fm = FileManager.default
         switch kind {
         case .directory:
