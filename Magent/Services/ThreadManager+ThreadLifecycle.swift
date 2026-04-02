@@ -14,6 +14,7 @@ extension ThreadManager {
         useAgentCommand: Bool = true,
         initialPrompt: String? = nil,
         shouldSubmitInitialPrompt: Bool = true,
+        initialDraftTab: PersistedDraftTab? = nil,
         requestedName: String? = nil,
         requestedBaseBranch: String? = nil,
         pendingPromptFileURL: URL? = nil,
@@ -201,11 +202,16 @@ extension ThreadManager {
                 persistence.saveWorktreeCache(cache, worktreesBasePath: basePath)
             }
 
-            // Web-only thread: skip tmux session creation, only add the web tab.
-            if let webURL = initialWebURL {
-                let identifier = "web:\(UUID().uuidString)"
-                let title = webURL.host ?? "Web"
-                let webTab = PersistedWebTab(identifier: identifier, url: webURL, title: title, iconType: .web)
+            // Non-terminal thread: skip tmux session creation and persist the initial web/draft tab.
+            if initialWebURL != nil || initialDraftTab != nil {
+                let webTab: PersistedWebTab?
+                if let webURL = initialWebURL {
+                    let identifier = "web:\(UUID().uuidString)"
+                    let title = webURL.host ?? "Web"
+                    webTab = PersistedWebTab(identifier: identifier, url: webURL, title: title, iconType: .web)
+                } else {
+                    webTab = nil
+                }
 
                 var thread = MagentThread(
                     id: threadID,
@@ -218,7 +224,14 @@ extension ThreadManager {
                     baseBranch: baseBranch,
                     localFileSyncEntriesSnapshot: localFileSyncEntriesSnapshot
                 )
-                thread.persistedWebTabs.append(webTab)
+                if let webTab {
+                    thread.persistedWebTabs.append(webTab)
+                    thread.lastSelectedTabIdentifier = webTab.identifier
+                }
+                if let initialDraftTab {
+                    thread.persistedDraftTabs = [initialDraftTab]
+                    thread.lastSelectedTabIdentifier = initialDraftTab.identifier
+                }
 
                 pendingThreadIds.remove(threadID)
                 if let idx = threads.firstIndex(where: { $0.id == threadID }) {
@@ -231,10 +244,13 @@ extension ThreadManager {
                     NotificationCenter.default.post(
                         name: .magentThreadCreationFinished,
                         object: nil,
-                        userInfo: [
-                            "threadId": threadID,
-                            "initialWebTabIdentifier": identifier,
-                        ] as [String: Any]
+                        userInfo: {
+                            var info: [String: Any] = ["threadId": threadID]
+                            if let webTab {
+                                info["initialWebTabIdentifier"] = webTab.identifier
+                            }
+                            return info
+                        }()
                     )
                     if !missingLocalSyncPaths.isEmpty {
                         let noun = missingLocalSyncPaths.count == 1 ? "path" : "paths"

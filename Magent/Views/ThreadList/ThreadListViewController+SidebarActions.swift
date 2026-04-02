@@ -487,6 +487,14 @@ extension ThreadListViewController {
                     requestedAgentType: requestedAgentType,
                     useAgentCommand: useAgentCommand,
                     initialPrompt: initialPrompt,
+                    shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
+                    initialDraftTab: draftPrompt.map { agentType, prompt in
+                        PersistedDraftTab(
+                            identifier: "draft:\(UUID().uuidString)",
+                            agentType: agentType,
+                            prompt: prompt
+                        )
+                    },
                     requestedName: requestedBranchName,
                     requestedBaseBranch: baseBranch,
                     pendingPromptFileURL: pendingPromptFileURL,
@@ -502,13 +510,9 @@ extension ThreadListViewController {
                    !desc.isEmpty {
                     try? self.threadManager.setTaskDescription(threadId: created.id, description: desc)
                 }
-                // If this is a draft, add a persisted draft tab to the newly created thread
-                // and trigger auto-rename from the draft prompt text.
-                if let (agentType, prompt) = draftPrompt {
-                    let identifier = "draft:\(UUID().uuidString)"
-                    let draftTab = PersistedDraftTab(identifier: identifier, agentType: agentType, prompt: prompt)
-                    self.threadManager.updatePersistedDraftTabs(for: created.id, draftTabs: [draftTab])
-
+                // Trigger auto-rename from the draft prompt text after the draft-only
+                // thread has been created and persisted.
+                if let (_, prompt) = draftPrompt {
                     let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmedPrompt.isEmpty {
                         _ = await self.threadManager.autoRenameThreadFromDraftPromptIfNeeded(

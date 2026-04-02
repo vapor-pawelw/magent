@@ -625,11 +625,12 @@ final class ThreadDetailViewController: NSViewController {
         let pinnedSet = Set(thread.pinnedTmuxSessions)
 
         var sessions: [String] = thread.tmuxSessionNames
-        let hasWebTabsOnly = sessions.isEmpty && !thread.persistedWebTabs.isEmpty
+        let hasNonTerminalTabsOnly = sessions.isEmpty
+            && (!thread.persistedWebTabs.isEmpty || !thread.persistedDraftTabs.isEmpty)
 
-        if sessions.isEmpty && !hasWebTabsOnly {
-            // Thread has no sessions and no web tabs — create a fallback and register it in the manager
-            // so that recreateSessionIfNeeded sees it as an agent session and close-tab works.
+        if sessions.isEmpty && !hasNonTerminalTabsOnly {
+            // Thread has no tabs at all — create a fallback terminal session so the user
+            // still has somewhere to land when opening an otherwise empty thread.
             let slug = TmuxSessionNaming.repoSlug(from:
                 settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "project"
             )
@@ -692,15 +693,12 @@ final class ThreadDetailViewController: NSViewController {
             rebindAllTabActions()
         }
 
-        // Web-only thread: skip terminal session setup entirely, just select the first web tab.
-        if hasWebTabsOnly {
+        // Non-terminal thread: skip terminal session setup entirely, just restore the
+        // selected draft/web tab instead of inventing a fallback tmux session name.
+        if hasNonTerminalTabsOnly {
             await MainActor.run {
                 dismissLoadingOverlay()
-                let restoredSlotIndex = resolveLastSelectedSlotIndex()
-                if let idx = restoredSlotIndex ?? tabSlots.firstIndex(where: {
-                    if case .web = $0 { return true }
-                    return false
-                }) {
+                if let idx = resolveLastSelectedSlotIndex() ?? tabSlots.indices.first {
                     selectTab(at: idx)
                 } else {
                     showEmptyState()
