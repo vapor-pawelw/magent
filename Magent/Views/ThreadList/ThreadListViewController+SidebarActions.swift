@@ -1003,12 +1003,17 @@ extension ThreadListViewController {
     }
 
     func manuallyRefreshSelectedThreadGitState() {
-        guard let thread = selectedThreadFromState(),
-              !isDiffPanelManualRefreshInFlight else { return }
+        guard let thread = selectedThreadFromState() else { return }
+        if isDiffPanelManualRefreshInFlight {
+            pendingDiffPanelManualRefresh = true
+            return
+        }
 
         let threadId = thread.id
         isDiffPanelManualRefreshInFlight = true
+        pendingDiffPanelManualRefresh = false
         diffPanelView.setRefreshInProgress(true)
+        refreshDiffPanel(for: thread, resetPagination: false, preserveSelection: true)
 
         Task { [weak self] in
             guard let self else { return }
@@ -1018,6 +1023,8 @@ extension ThreadListViewController {
             await self.threadManager.refreshDeliveredStates()
 
             await MainActor.run {
+                let shouldRefreshAgain = self.pendingDiffPanelManualRefresh
+                self.pendingDiffPanelManualRefresh = false
                 defer {
                     self.isDiffPanelManualRefreshInFlight = false
                     self.diffPanelView.setRefreshInProgress(false)
@@ -1026,6 +1033,12 @@ extension ThreadListViewController {
                 guard let selected = self.selectedThreadFromState(),
                       selected.id == threadId else { return }
                 self.refreshDiffPanel(for: selected, resetPagination: false, preserveSelection: true)
+
+                if shouldRefreshAgain {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.manuallyRefreshSelectedThreadGitState()
+                    }
+                }
             }
         }
     }

@@ -157,6 +157,8 @@ final class ThreadListViewController: NSViewController {
     var diffPanelRefreshGeneration: [UUID: Int] = [:]
     /// Guards the manual changes-panel refresh button against overlapping git refresh passes.
     var isDiffPanelManualRefreshInFlight = false
+    /// Queues one extra manual refresh when a discard/stage action happens while a refresh is already running.
+    var pendingDiffPanelManualRefresh = false
     /// Generation counter for the git remote check Task spawned by reloadData().
     /// Prevents stale Tasks from running when reloadData() is called rapidly.
     private var remoteCheckGeneration: Int = 0
