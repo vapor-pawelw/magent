@@ -238,6 +238,8 @@ Shell startup uses a managed `ZDOTDIR` wrapper so Magent can source the user's s
 - Use a unique filename per transfer (for example a UUID-based suffix) so multiple transfers can be created concurrently without clobbering each other.
 - Treat these files as ephemeral cache entries: remove them after a bounded TTL and prune leftovers on app launch/shutdown.
 
+The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu. That sheet is agent-only, so it keeps the model picker, title field, and model/reasoning controls while hiding the initial prompt box and the draft checkbox.
+
 ### 4.10 Persistence Backup + Restore Contract
 
 Magent keeps two layers of backup protection for critical app-state files in Application Support:

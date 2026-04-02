@@ -102,7 +102,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onRename: (() -> Void)?
     var onPin: (() -> Void)?
     var onKeepAlive: (() -> Void)?
-    var onContinueIn: ((AgentType) -> Void)?
+    var onContinueIn: (() -> Void)?
     var onExportContext: (() -> Void)?
     var onKillSession: (() -> Void)?
     var onCloseTabsToTheRight: (() -> Void)?
@@ -291,9 +291,8 @@ final class TabItemView: NSView, NSMenuDelegate {
         onKeepAlive?()
     }
 
-    @objc private func continueInAgentTapped(_ sender: NSMenuItem) {
-        guard let agent = sender.representedObject as? AgentType else { return }
-        onContinueIn?(agent)
+    @objc private func continueInTapped() {
+        onContinueIn?()
     }
 
     @objc private func exportContextTapped() {
@@ -372,19 +371,8 @@ final class TabItemView: NSView, NSMenuDelegate {
         }
 
         if !availableAgentsForContinue.isEmpty {
-            let continueItem = NSMenuItem(title: "Continue in...", action: nil, keyEquivalent: "")
-            let submenu = NSMenu()
-            for agent in availableAgentsForContinue {
-                let agentItem = NSMenuItem(
-                    title: agent.displayName,
-                    action: #selector(continueInAgentTapped(_:)),
-                    keyEquivalent: ""
-                )
-                agentItem.target = self
-                agentItem.representedObject = agent
-                submenu.addItem(agentItem)
-            }
-            continueItem.submenu = submenu
+            let continueItem = NSMenuItem(title: "Continue in...", action: #selector(continueInTapped), keyEquivalent: "")
+            continueItem.target = self
             menu.addItem(continueItem)
         }
 
@@ -449,7 +437,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         }
 
         // Kill tmux session (terminal tabs only, when session is alive)
-        if let onKillSession, !isSessionDead {
+        if onKillSession != nil, !isSessionDead {
             if onKeepAlive == nil {
                 menu.addItem(.separator())
             }

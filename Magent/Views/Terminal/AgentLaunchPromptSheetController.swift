@@ -293,6 +293,8 @@ struct AgentLaunchSheetConfig {
     let draftScope: AgentLaunchPromptDraftScope
     let availableAgents: [AgentType]
     let defaultAgentType: AgentType?
+    /// When true, keep the picker agent-only.
+    let isAgentOnly: Bool
     /// Secondary label shown below the window title (e.g. "Project: MyProject").
     /// Ignored when `availableProjects` has more than one entry (picker is shown instead).
     let subtitle: String?
@@ -320,6 +322,8 @@ struct AgentLaunchSheetConfig {
     let baseBranchRepoPath: String?
     /// The project's default branch name (e.g. "main"). Used as placeholder and for validation fallback.
     let defaultBranchName: String?
+    /// When false, hide the initial prompt label/input entirely.
+    let showPromptInputArea: Bool
     /// When true, a "Draft" checkbox is shown (only enabled for agent mode).
     let showDraftCheckbox: Bool
 
@@ -329,6 +333,7 @@ struct AgentLaunchSheetConfig {
         draftScope: AgentLaunchPromptDraftScope,
         availableAgents: [AgentType],
         defaultAgentType: AgentType?,
+        isAgentOnly: Bool = false,
         subtitle: String?,
         availableProjects: [Project] = [],
         showDescriptionAndBranchFields: Bool,
@@ -342,6 +347,7 @@ struct AgentLaunchSheetConfig {
         baseBranchPrefill: String? = nil,
         baseBranchRepoPath: String? = nil,
         defaultBranchName: String? = nil,
+        showPromptInputArea: Bool = true,
         showDraftCheckbox: Bool = false
     ) {
         self.title = title
@@ -349,6 +355,7 @@ struct AgentLaunchSheetConfig {
         self.draftScope = draftScope
         self.availableAgents = availableAgents
         self.defaultAgentType = defaultAgentType
+        self.isAgentOnly = isAgentOnly
         self.subtitle = subtitle
         self.availableProjects = availableProjects
         self.showDescriptionAndBranchFields = showDescriptionAndBranchFields
@@ -362,6 +369,7 @@ struct AgentLaunchSheetConfig {
         self.baseBranchPrefill = baseBranchPrefill
         self.baseBranchRepoPath = baseBranchRepoPath
         self.defaultBranchName = defaultBranchName
+        self.showPromptInputArea = showPromptInputArea
         self.showDraftCheckbox = showDraftCheckbox
     }
 }
@@ -523,7 +531,13 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let window = self.window else { return }
-            window.makeFirstResponder(self.promptTextView)
+            if self.config.showPromptInputArea {
+                window.makeFirstResponder(self.promptTextView)
+            } else if self.config.showTitleField {
+                window.makeFirstResponder(self.titleField)
+            } else {
+                window.makeFirstResponder(self.agentPicker)
+            }
         }
     }
 
@@ -545,8 +559,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         for agent in agents {
             pickerItems.append(.agent(agent, isDefault: agent == config.defaultAgentType))
         }
-        pickerItems.append(.terminal)
-        pickerItems.append(.web)
+        if !config.isAgentOnly {
+            pickerItems.append(.terminal)
+            pickerItems.append(.web)
+        }
 
         for (i, item) in pickerItems.enumerated() {
             switch item {
@@ -610,7 +626,9 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func applyRecoveryPrefill(_ prefill: AgentLaunchSheetPrefill) {
-        promptTextView.string = prefill.prompt
+        if config.showPromptInputArea {
+            promptTextView.string = prefill.prompt
+        }
         if config.showDescriptionAndBranchFields {
             descriptionField.stringValue = prefill.description ?? ""
             branchField.stringValue = prefill.branchName ?? ""
@@ -703,58 +721,63 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         applyLastModelReasoningSelection()
         updateModelReasoningVisibility()
 
-        // Prompt label
-        promptLabel = makeFormLabel(promptLabelText)
-        stack.addArrangedSubview(promptLabel)
-        stack.setCustomSpacing(4, after: promptLabel)
-
-        // Prompt text view
         let promptFont = NSFont.systemFont(ofSize: 13)
-        promptTextView.isRichText = false
-        promptTextView.font = promptFont
-        promptTextView.isAutomaticQuoteSubstitutionEnabled = false
-        promptTextView.isAutomaticDashSubstitutionEnabled = false
-        promptTextView.isAutomaticTextReplacementEnabled = false
-        promptTextView.isVerticallyResizable = true
-        promptTextView.isHorizontallyResizable = false
-        promptTextView.allowsUndo = true
-        promptTextView.textContainerInset = NSSize(width: 8, height: 8)
-        promptTextView.textContainer?.widthTracksTextView = true
-        promptTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        promptTextView.delegate = self
+        var lastFieldView: NSView = agentRow
+        if config.showPromptInputArea {
+            // Prompt label
+            promptLabel = makeFormLabel(promptLabelText)
+            stack.addArrangedSubview(promptLabel)
+            stack.setCustomSpacing(4, after: promptLabel)
 
-        promptScrollView = NonCapturingScrollView()
-        promptScrollView.translatesAutoresizingMaskIntoConstraints = false
-        promptScrollView.drawsBackground = false
-        promptScrollView.borderType = .bezelBorder
-        promptScrollView.hasVerticalScroller = true
-        promptScrollView.autohidesScrollers = true
-        promptScrollView.documentView = promptTextView
-        stack.addArrangedSubview(promptScrollView)
+            // Prompt text view
+            promptTextView.isRichText = false
+            promptTextView.font = promptFont
+            promptTextView.isAutomaticQuoteSubstitutionEnabled = false
+            promptTextView.isAutomaticDashSubstitutionEnabled = false
+            promptTextView.isAutomaticTextReplacementEnabled = false
+            promptTextView.isVerticallyResizable = true
+            promptTextView.isHorizontallyResizable = false
+            promptTextView.allowsUndo = true
+            promptTextView.textContainerInset = NSSize(width: 8, height: 8)
+            promptTextView.textContainer?.widthTracksTextView = true
+            promptTextView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+            promptTextView.delegate = self
 
-        // Draft checkbox — right-aligned below the prompt, only visible for agent mode
-        if config.showDraftCheckbox {
-            draftCheckbox.state = .off
-            draftCheckbox.font = .systemFont(ofSize: 11)
-            draftCheckbox.contentTintColor = .controlAccentColor
-            draftCheckbox.toolTip = "Save this prompt as a draft tab instead of running it immediately"
+            promptScrollView = NonCapturingScrollView()
+            promptScrollView.translatesAutoresizingMaskIntoConstraints = false
+            promptScrollView.drawsBackground = false
+            promptScrollView.borderType = .bezelBorder
+            promptScrollView.hasVerticalScroller = true
+            promptScrollView.autohidesScrollers = true
+            promptScrollView.documentView = promptTextView
+            stack.addArrangedSubview(promptScrollView)
+            lastFieldView = promptScrollView
 
-            let draftRow = NSStackView()
-            draftRow.orientation = .horizontal
-            draftRow.alignment = .centerY
-            draftRow.translatesAutoresizingMaskIntoConstraints = false
-            let draftSpacer = NSView()
-            draftSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-            draftSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            draftRow.addArrangedSubview(draftSpacer)
-            draftRow.addArrangedSubview(draftCheckbox)
+            // Draft checkbox — right-aligned below the prompt, only visible for agent mode
+            if config.showDraftCheckbox {
+                draftCheckbox.state = .off
+                draftCheckbox.font = .systemFont(ofSize: 11)
+                draftCheckbox.contentTintColor = .controlAccentColor
+                draftCheckbox.toolTip = "Save this prompt as a draft tab instead of running it immediately"
 
-            stack.setCustomSpacing(4, after: promptScrollView)
-            stack.addArrangedSubview(draftRow)
-            NSLayoutConstraint.activate([draftRow.widthAnchor.constraint(equalTo: stack.widthAnchor)])
-            stack.setCustomSpacing(14, after: draftRow)
-            draftCheckboxRow = draftRow
-            updateDraftCheckboxVisibility()
+                let draftRow = NSStackView()
+                draftRow.orientation = .horizontal
+                draftRow.alignment = .centerY
+                draftRow.translatesAutoresizingMaskIntoConstraints = false
+                let draftSpacer = NSView()
+                draftSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+                draftSpacer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+                draftRow.addArrangedSubview(draftSpacer)
+                draftRow.addArrangedSubview(draftCheckbox)
+
+                stack.setCustomSpacing(4, after: promptScrollView)
+                stack.addArrangedSubview(draftRow)
+                NSLayoutConstraint.activate([draftRow.widthAnchor.constraint(equalTo: stack.widthAnchor)])
+                stack.setCustomSpacing(14, after: draftRow)
+                draftCheckboxRow = draftRow
+                updateDraftCheckboxVisibility()
+                lastFieldView = draftRow
+            }
         }
 
         let lineHeight = promptFont.ascender + abs(promptFont.descender) + promptFont.leading
@@ -763,13 +786,18 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         // Title field (for tab title)
         var titleRow: NSStackView?
         if config.showTitleField {
-            stack.setCustomSpacing(12, after: promptScrollView)
+            stack.setCustomSpacing(12, after: lastFieldView)
 
             let tr = makeTextFieldRow(label: "Title", field: titleField, placeholder: "Optional")
             stack.addArrangedSubview(tr)
             titleRow = tr
 
-            promptTextView.nextKeyView = titleField
+            if config.showPromptInputArea {
+                promptTextView.nextKeyView = titleField
+            } else {
+                agentPicker.nextKeyView = titleField
+            }
+            lastFieldView = tr
         }
 
         // Description + Branch fields
@@ -777,7 +805,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         var branchRow: NSStackView?
         var baseBranchRow: NSStackView?
         if config.showDescriptionAndBranchFields {
-            stack.setCustomSpacing(12, after: promptScrollView)
+            stack.setCustomSpacing(12, after: lastFieldView)
 
             let dr = makeTextFieldRow(label: "Description", field: descriptionField, placeholder: "Optional")
             stack.addArrangedSubview(dr)
@@ -835,7 +863,13 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             loadBaseBranchItems()
 
             // Tab order: prompt → description → branch → base branch → (wraps back via window key loop)
-            promptTextView.nextKeyView = descriptionField
+            if config.showPromptInputArea {
+                promptTextView.nextKeyView = descriptionField
+            } else if config.showTitleField {
+                titleField.nextKeyView = descriptionField
+            } else {
+                agentPicker.nextKeyView = descriptionField
+            }
             descriptionField.nextKeyView = branchField
             branchField.nextKeyView = baseBranchField
 
@@ -855,7 +889,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             text: "All fields are optional — you can start the session and add them later.",
             color: .systemBlue
         )
-        stack.setCustomSpacing(12, after: stack.arrangedSubviews.last ?? promptScrollView)
+        stack.setCustomSpacing(12, after: stack.arrangedSubviews.last ?? lastFieldView)
         stack.addArrangedSubview(optionalNotice)
         stack.setCustomSpacing(10, after: optionalNotice)
 
@@ -887,7 +921,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
 
         // Button row
-        stack.setCustomSpacing(14, after: stack.arrangedSubviews.last ?? promptScrollView)
+        stack.setCustomSpacing(14, after: stack.arrangedSubviews.last ?? lastFieldView)
 
         let buttonRow = NSStackView()
         buttonRow.orientation = .horizontal
@@ -921,14 +955,19 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             agentRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             rememberCheckbox.widthAnchor.constraint(equalTo: stack.widthAnchor),
             agentPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 100),
-            promptLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            promptScrollView.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            promptScrollView.heightAnchor.constraint(equalToConstant: promptHeight),
             optionalNotice.widthAnchor.constraint(equalTo: stack.widthAnchor),
             buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ] + (contextChip.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
           + (projectPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? [])
           + (sectionPickerRow.map { [$0.widthAnchor.constraint(equalTo: stack.widthAnchor)] } ?? []))
+
+        if let promptLabel, let promptScrollView {
+            NSLayoutConstraint.activate([
+                promptLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+                promptScrollView.widthAnchor.constraint(equalTo: stack.widthAnchor),
+                promptScrollView.heightAnchor.constraint(equalToConstant: promptHeight),
+            ])
+        }
 
         if let titleRow {
             NSLayoutConstraint.activate([
@@ -1256,8 +1295,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func loadDraft(mode: String) {
+        guard config.showPromptInputArea || config.showDescriptionAndBranchFields else { return }
         let draft = AgentLaunchPromptDraftStore.draft(for: currentDraftScope, mode: mode)
-        promptTextView.string = draft.prompt
+        if config.showPromptInputArea {
+            promptTextView.string = draft.prompt
+        }
         if config.showDescriptionAndBranchFields && mode == "agent" {
             descriptionField.stringValue = draft.description
             branchField.stringValue = draft.branchName
@@ -1265,10 +1307,11 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func persistDraft(mode: String? = nil) {
+        guard config.showPromptInputArea || config.showDescriptionAndBranchFields else { return }
         let mode = mode ?? currentMode
         AgentLaunchPromptDraftStore.save(
             AgentLaunchPromptDraft(
-                prompt: promptTextView.string,
+                prompt: config.showPromptInputArea ? promptTextView.string : "",
                 description: mode == "agent" && config.showDescriptionAndBranchFields ? descriptionField.stringValue : "",
                 branchName: mode == "agent" && config.showDescriptionAndBranchFields ? branchField.stringValue : ""
             ),
@@ -1278,6 +1321,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func applyPrefillIfNeeded() {
+        guard config.showPromptInputArea else { return }
         guard currentMode != "web" else { return }
         guard promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let prefill = currentMode == "terminal" ? config.terminalInjectionPrefill : config.agentContextPrefill
@@ -1337,6 +1381,10 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private func updatePromptAreaEnabled() {
+        guard config.showPromptInputArea else {
+            updateDraftCheckboxVisibility()
+            return
+        }
         // Prompt text view is always editable — for terminal it's the shell command, for agents it's the initial prompt, for web it's the URL
         promptTextView.isEditable = true
         promptTextView.alphaValue = 1.0

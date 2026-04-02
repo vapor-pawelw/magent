@@ -289,7 +289,7 @@ extension ThreadDetailViewController {
             switch slot {
             case .terminal(let sessionName):
                 item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
-                item.onContinueIn = { [weak self] agent in self?.continueTabInAgent(at: i, targetAgent: agent) }
+                item.onContinueIn = { [weak self] in self?.presentContinueTabSheet(for: i) }
                 item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
                 // Hide per-tab Keep Alive controls when the thread itself is keep-alive.
                 item.onKeepAlive = thread.isKeepAlive ? nil : { [weak self] in self?.toggleKeepAlive(at: i) }

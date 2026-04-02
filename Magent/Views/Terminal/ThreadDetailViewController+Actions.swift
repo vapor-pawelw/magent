@@ -635,6 +635,16 @@ extension ThreadDetailViewController {
         }
     }
 
+    private func tabSheetSubtitle() -> String {
+        if thread.isMain {
+            return "Thread: Main"
+        }
+        if let description = thread.taskDescription {
+            return "Thread: \(description) (\(thread.branchName))"
+        }
+        return "Thread: \(thread.branchName)"
+    }
+
     private func presentNewTabSheet() {
         guard let window = view.window else { return }
         let settings = PersistenceService.shared.loadSettings()
@@ -645,7 +655,7 @@ extension ThreadDetailViewController {
             draftScope: .newTab(threadId: thread.id),
             availableAgents: settings.availableActiveAgents,
             defaultAgentType: threadManager.effectiveAgentType(for: thread.projectId),
-            subtitle: "Thread: \(thread.isMain ? "Main" : (thread.taskDescription.map { "\($0) (\(thread.branchName))" } ?? thread.branchName))",
+            subtitle: tabSheetSubtitle(),
             showDescriptionAndBranchFields: false,
             showTitleField: true,
             autoGenerateHint: nil,
@@ -680,6 +690,45 @@ extension ThreadDetailViewController {
                     switchToTab: switchToTab
                 )
             }
+        }
+    }
+
+    func presentContinueTabSheet(for index: Int) {
+        guard index < tabSlots.count, case .terminal = tabSlots[index] else { return }
+        guard let window = view.window else { return }
+
+        let settings = PersistenceService.shared.loadSettings()
+        let agents = settings.availableActiveAgents
+        guard !agents.isEmpty else { return }
+
+        let config = AgentLaunchSheetConfig(
+            title: "Continue In",
+            acceptButtonTitle: "Continue",
+            draftScope: .newTab(threadId: thread.id),
+            availableAgents: agents,
+            defaultAgentType: threadManager.effectiveAgentType(for: thread.projectId),
+            isAgentOnly: true,
+            subtitle: tabSheetSubtitle(),
+            showDescriptionAndBranchFields: false,
+            showTitleField: true,
+            autoGenerateHint: nil,
+            terminalInjectionPrefill: nil,
+            agentContextPrefill: nil,
+            showPromptInputArea: false,
+            showDraftCheckbox: false
+        )
+        let controller = AgentLaunchPromptSheetController(config: config)
+        controller.present(for: window) { [weak self] result in
+            guard let self, let result, let agentType = result.agentType else { return }
+            let switchToTab = PersistenceService.shared.loadSettings().switchToNewlyCreatedTab
+            self.continueTabInAgent(
+                at: index,
+                targetAgent: agentType,
+                customTitle: result.tabTitle,
+                modelId: result.modelId,
+                reasoningLevel: result.reasoningLevel,
+                switchToTab: switchToTab
+            )
         }
     }
 
@@ -1115,32 +1164,17 @@ extension ThreadDetailViewController {
     }
 
     @objc func continueInButtonTapped(_ sender: NSButton) {
-        let settings = PersistenceService.shared.loadSettings()
-        let agents = settings.availableActiveAgents
-        guard !agents.isEmpty else { return }
-
-        let menu = NSMenu()
-        for agent in agents {
-            let item = NSMenuItem(
-                title: agent.displayName,
-                action: #selector(continueInAgentMenuItemTapped(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = agent
-            menu.addItem(item)
-        }
-
-        let point = NSPoint(x: 0, y: sender.bounds.maxY + 4)
-        menu.popUp(positioning: nil, at: point, in: sender)
+        presentContinueTabSheet(for: currentTabIndex)
     }
 
-    @objc func continueInAgentMenuItemTapped(_ sender: NSMenuItem) {
-        guard let agent = sender.representedObject as? AgentType else { return }
-        continueTabInAgent(at: currentTabIndex, targetAgent: agent)
-    }
-
-    func continueTabInAgent(at index: Int, targetAgent: AgentType) {
+    func continueTabInAgent(
+        at index: Int,
+        targetAgent: AgentType,
+        customTitle: String? = nil,
+        modelId: String? = nil,
+        reasoningLevel: String? = nil,
+        switchToTab: Bool = true
+    ) {
         guard index < tabSlots.count, case .terminal(let sessionName) = tabSlots[index] else { return }
         let sourceAgent = threadManager.agentType(for: thread, sessionName: sessionName)
         let settings = PersistenceService.shared.loadSettings()
@@ -1183,7 +1217,15 @@ extension ThreadDetailViewController {
             let prompt = ContextExporter.transferPrompt(contextFilePath: contextPath)
 
             await MainActor.run {
-                self.addTab(using: targetAgent, useAgentCommand: true, initialPrompt: prompt)
+                self.addTab(
+                    using: targetAgent,
+                    useAgentCommand: true,
+                    initialPrompt: prompt,
+                    customTitle: customTitle,
+                    modelId: modelId,
+                    reasoningLevel: reasoningLevel,
+                    switchToTab: switchToTab
+                )
             }
         }
     }
