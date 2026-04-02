@@ -96,21 +96,33 @@ struct BannerConfig {
 
 /// Transparent container that passes through mouse events unless they hit a banner child.
 final class BannerOverlayView: NSView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard !isHidden, alphaValue > 0, bounds.contains(point) else {
+        guard !isHidden, alphaValue > 0 else {
             return nil
         }
+
+        let localPoint = convert(point, from: superview)
+        guard bounds.contains(localPoint) else { return nil }
 
         // Walk front-to-back so overlapping views keep their expected z-order.
         for subview in subviews.reversed() {
             guard !subview.isHidden, subview.alphaValue > 0 else { continue }
-            let subviewPoint = subview.convert(point, from: self)
+            let subviewPoint = subview.convert(localPoint, from: self)
             if let hit = subview.hitTest(subviewPoint) {
                 return hit
             }
         }
         return nil
+    }
+}
+
+private final class BannerButton: NSButton {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
     }
 }
 
@@ -126,7 +138,7 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
     private let iconView = NSImageView()
     private let spinnerView = NSProgressIndicator()
     private let messageLabel = NSTextField(wrappingLabelWithString: "")
-    private let closeButton = NSButton()
+    private let closeButton = BannerButton()
     private let leadingAccessoryView = NSView()
     private let trailingAccessoryView = NSView()
     private var actionButtons: [NSButton] = []
@@ -136,6 +148,10 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
     private var detailsScrollView: NSScrollView?
     private var detailsTextView: NSTextView?
     private var isDetailsExpanded = false
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
 
     init(config: BannerConfig) {
         self.config = config
@@ -300,7 +316,7 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
         row.translatesAutoresizingMaskIntoConstraints = false
 
         for action in config.actions {
-            let button = NSButton(title: action.title, target: self, action: #selector(actionTapped(_:)))
+            let button = BannerButton(title: action.title, target: self, action: #selector(actionTapped(_:)))
             button.bezelStyle = .rounded
             button.controlSize = .small
             button.font = .systemFont(ofSize: 12, weight: .medium)
@@ -315,7 +331,7 @@ final class BannerView: NSView, NSGestureRecognizerDelegate {
 
         if hasDetails {
             let title = config.detailsCollapsedTitle ?? "Show Details"
-            let button = NSButton(title: title, target: self, action: #selector(toggleDetails))
+            let button = BannerButton(title: title, target: self, action: #selector(toggleDetails))
             button.bezelStyle = .rounded
             button.controlSize = .small
             button.font = .systemFont(ofSize: 12, weight: .medium)
