@@ -28,6 +28,7 @@ All notable changes to this project will be documented in this file.
 - New agent tabs now include the selected model tier and reasoning level in the default title when no custom title is provided, so tabs like `Codex (Mini) (Low)` are easier to distinguish.
 
 ### Agents
+- Review tabs now always launch built-in agents on their flagship model with elevated reasoning (`Opus`/`GPT 5.4` with `High` by default), and holding Option switches the Review menu to max-reasoning launches with a discoverability hint in the menu header.
 - New thread/tab prompt sheets are slightly wider so the Type, Model, and Reasoning pickers fit more comfortably on one row.
 - Type, Model, and Reasoning pickers now share a single compact row in the launch sheet, and model/reasoning default labels read "Auto" instead of "Default" to avoid ambiguity with the agent-type default set in Settings.
 - Rate-limit markers now propagate across every tab using the same agent, so a Claude or Codex limit is shown consistently across the app instead of only on the session that surfaced it.

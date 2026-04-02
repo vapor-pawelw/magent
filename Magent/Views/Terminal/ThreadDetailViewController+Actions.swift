@@ -970,49 +970,128 @@ extension ThreadDetailViewController {
             return
         }
 
-        if NSApp.currentEvent?.modifierFlags.contains(.option) == true {
-            startReview(using: defaultReviewAgentType(from: settings))
-            return
-        }
+        let usesMaxReasoning = NSApp.currentEvent?.modifierFlags.contains(.option) == true
 
         let menu = NSMenu()
-        AgentMenuBuilder.populate(
+        populateReviewMenu(
             menu: menu,
-            menuTitle: "Review Changes",
-            defaultAgentName: defaultReviewAgentType(from: settings)?.displayName,
             activeAgents: activeAgents,
-            includeTerminal: false,
-            target: self,
-            action: #selector(reviewMenuItemTapped(_:))
+            defaultAgentType: defaultReviewAgentType(from: settings),
+            usesMaxReasoning: usesMaxReasoning
         )
         menu.popUp(positioning: nil, at: NSPoint(x: reviewButton.bounds.minX, y: reviewButton.bounds.minY), in: reviewButton)
     }
 
     @objc private func reviewMenuItemTapped(_ sender: NSMenuItem) {
         guard let selection = AgentMenuBuilder.parseSelection(from: sender) else { return }
+        let usesMaxReasoning = selection.data["reviewReasoningMode"] == "max"
 
         switch selection.mode {
         case .agent(let agentType):
-            startReview(using: agentType)
+            startReview(using: agentType, usesMaxReasoning: usesMaxReasoning)
         case .projectDefault:
             let settings = PersistenceService.shared.loadSettings()
-            startReview(using: defaultReviewAgentType(from: settings))
+            startReview(using: defaultReviewAgentType(from: settings), usesMaxReasoning: usesMaxReasoning)
         case .terminal, .web:
             return
         }
     }
 
-    private func startReview(using agentType: AgentType?) {
+    private func startReview(using agentType: AgentType?, usesMaxReasoning: Bool = false) {
         guard let agentType else {
             BannerManager.shared.show(message: String(localized: .NotificationStrings.reviewEnableAgentWarning), style: .warning)
             return
         }
 
-        addTab(using: agentType, useAgentCommand: true, initialPrompt: reviewPrompt(), tabNameSuffix: "-review")
+        let overrides = reviewLaunchOverrides(for: agentType, usesMaxReasoning: usesMaxReasoning)
+        addTab(
+            using: agentType,
+            useAgentCommand: true,
+            initialPrompt: reviewPrompt(),
+            tabNameSuffix: "-review",
+            modelId: overrides.modelId,
+            reasoningLevel: overrides.reasoningLevel
+        )
     }
 
     private func defaultReviewAgentType(from settings: AppSettings) -> AgentType? {
         threadManager.resolveAgentType(for: thread.projectId, requestedAgentType: nil, settings: settings)
+    }
+
+    private func populateReviewMenu(
+        menu: NSMenu,
+        activeAgents: [AgentType],
+        defaultAgentType: AgentType?,
+        usesMaxReasoning: Bool
+    ) {
+        let title = "Review Changes"
+        let headerItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        headerItem.isEnabled = false
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]
+        headerItem.attributedTitle = NSAttributedString(string: title, attributes: attrs)
+        menu.addItem(headerItem)
+
+        if !usesMaxReasoning {
+            let hint = NSMenuItem(title: "Hold Option for Max reasoning", action: nil, keyEquivalent: "")
+            hint.isEnabled = false
+            let hintAttrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+                .foregroundColor: NSColor.tertiaryLabelColor,
+            ]
+            hint.attributedTitle = NSAttributedString(string: hint.title, attributes: hintAttrs)
+            menu.addItem(hint)
+        }
+
+        menu.addItem(.separator())
+
+        if let defaultAgentType {
+            let defaultTitle = "Use Project Default (\(reviewMenuTitle(for: defaultAgentType, usesMaxReasoning: usesMaxReasoning)))"
+            let item = NSMenuItem(title: defaultTitle, action: #selector(reviewMenuItemTapped(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = [
+                "mode": "default",
+                "reviewReasoningMode": usesMaxReasoning ? "max" : "high",
+            ]
+            menu.addItem(item)
+        }
+
+        for agent in activeAgents {
+            let item = NSMenuItem(title: reviewMenuTitle(for: agent, usesMaxReasoning: usesMaxReasoning), action: #selector(reviewMenuItemTapped(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = [
+                "mode": "agent",
+                "agentRaw": agent.rawValue,
+                "reviewReasoningMode": usesMaxReasoning ? "max" : "high",
+            ]
+            menu.addItem(item)
+        }
+    }
+
+    private func reviewMenuTitle(for agentType: AgentType, usesMaxReasoning: Bool) -> String {
+        if usesMaxReasoning, reviewLaunchOverrides(for: agentType, usesMaxReasoning: true).reasoningLevel != nil {
+            return "\(agentType.displayName) (Max reasoning)"
+        }
+        return agentType.displayName
+    }
+
+    private func reviewLaunchOverrides(for agentType: AgentType, usesMaxReasoning: Bool) -> (modelId: String?, reasoningLevel: String?) {
+        switch agentType {
+        case .claude:
+            return (
+                AgentModelsService.shared.validatedModelId("opus", for: .claude) ?? "opus",
+                AgentModelsService.shared.validatedReasoningLevel(usesMaxReasoning ? "max" : "high", for: .claude, modelId: "opus")
+            )
+        case .codex:
+            return (
+                AgentModelsService.shared.validatedModelId("gpt-5.4", for: .codex) ?? "gpt-5.4",
+                AgentModelsService.shared.validatedReasoningLevel(usesMaxReasoning ? "xhigh" : "high", for: .codex, modelId: "gpt-5.4")
+            )
+        case .custom:
+            return (nil, nil)
+        }
     }
 
     private func reviewPrompt() -> String {
