@@ -79,6 +79,8 @@ extension ThreadListViewController {
         moveItem.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
         menu.addItem(moveItem)
 
+        menu.addItem(NSMenuItem.separator())
+
         // Hide/Unhide
         let hideTitle = thread.isSidebarHidden
             ? String(localized: .CommonStrings.commonUnhide)

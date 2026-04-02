@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 ### Thread
 - Grouped `Set description`, `Icon`, and `Sign` under a new `Appearance` submenu in the thread right-click menu.
 - Reordered the non-main thread context menu so `Fork Thread` sits directly under `Pin`, and `Move to` appears before `Hide` while `Keep Alive` and `Kill All Sessions` stay grouped below.
+- Added a separator above `Hide` in the non-main thread right-click menu to make the menu grouping clearer.
 - Added a discard action to the CHANGES panel file context menu for non-committed rows, with a warning confirmation before tracked changes are reset or untracked files are removed.
 
 ### CLI
