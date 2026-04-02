@@ -294,9 +294,13 @@ If the primary file and all recovery candidates still fail to decode (or the fil
 
 If threads load successfully but settings are missing or no longer cover the live project IDs, Magent scans every `settings.json` recovery candidate (rolling backup first, then periodic snapshots newest-first) and restores the candidate with the best project-ID coverage before falling back to onboarding/default settings. This keeps existing threads attached to their projects after a missing-settings failure, even if `settings.bak.json` is stale but a newer snapshot is still good.
 
+If the loaded settings still do not contain a project for one or more active threads, `AppCoordinator` makes one last best-effort pass before declaring the file incomplete: it tries to rebind each orphaned thread to a single matching project by exact repo path, then by worktree base-path prefix. Any successful rebinding is written back to `threads.json` immediately so the current launch starts from a consistent project/thread map.
+
 If no candidate fully repairs coverage, startup still treats the file as incomplete when active threads reference projects that the loaded settings do not cover. In that state, writes to `settings.json` stay blocked for the launch so onboarding or other defaults cannot silently strand those threads.
 
 Settings UI controllers must not cache an `AppSettings` value for later whole-object saves. A pane can keep a local copy for rendering, but each save path must reload the latest settings from persistence immediately before mutating the relevant fields. Otherwise a stale Settings window opened during recovery/default-state startup can overwrite newer project registrations or restored settings with an old snapshot.
+
+`saveSettings(_:)` rejects partial coverage as well as total loss of coverage: every active thread project ID must still exist in the candidate settings file, or the write is blocked. This prevents a settings pane from saving a project list that strands only some live threads.
 
 Non-critical caches (Jira, PR, rate-limit, etc.) keep silent fallback to empty — they are regenerated from APIs.
 

@@ -6,25 +6,25 @@ extension SettingsProjectsViewController {
     // MARK: - Jira Field Handlers
 
     @objc func jiraProjectKeyChanged() {
-        guard let index = selectedProjectIndex else { return }
         let value = jiraProjectKeyField.stringValue.trimmingCharacters(in: .whitespaces).uppercased()
-        settings.projects[index].jiraProjectKey = value.isEmpty ? nil : value
         jiraProjectKeyField.stringValue = value
-        try? persistence.saveSettings(settings)
+        _ = mutateSelectedProject { settings, index in
+            settings.projects[index].jiraProjectKey = value.isEmpty ? nil : value
+        }
     }
 
     @objc func jiraBoardChanged() {
-        guard let index = selectedProjectIndex else { return }
         let selected = jiraBoardPopup.indexOfSelectedItem
-        if selected >= 0, selected < jiraBoards.count {
-            let board = jiraBoards[selected]
-            settings.projects[index].jiraBoardId = board.id
-            settings.projects[index].jiraBoardName = board.name
-        } else {
-            settings.projects[index].jiraBoardId = nil
-            settings.projects[index].jiraBoardName = nil
+        _ = mutateSelectedProject { settings, index in
+            if selected >= 0, selected < jiraBoards.count {
+                let board = jiraBoards[selected]
+                settings.projects[index].jiraBoardId = board.id
+                settings.projects[index].jiraBoardName = board.name
+            } else {
+                settings.projects[index].jiraBoardId = nil
+                settings.projects[index].jiraBoardName = nil
+            }
         }
-        try? persistence.saveSettings(settings)
     }
 
     @objc func refreshBoardsTapped() {
@@ -60,10 +60,10 @@ extension SettingsProjectsViewController {
     }
 
     @objc func jiraAssigneeChanged() {
-        guard let index = selectedProjectIndex else { return }
         let value = jiraAssigneeField.stringValue.trimmingCharacters(in: .whitespaces)
-        settings.projects[index].jiraAssigneeAccountId = value.isEmpty ? nil : value
-        try? persistence.saveSettings(settings)
+        _ = mutateSelectedProject { settings, index in
+            settings.projects[index].jiraAssigneeAccountId = value.isEmpty ? nil : value
+        }
     }
 
     // MARK: - Sync
@@ -94,16 +94,17 @@ extension SettingsProjectsViewController {
                     return
                 }
 
-                settings.projects[index].threadSections = sections
-                settings.projects[index].jiraAcknowledgedStatuses = nil
-                try? persistence.saveSettings(settings)
+                guard let project = mutateSelectedProject({ settings, index in
+                    settings.projects[index].threadSections = sections
+                    settings.projects[index].jiraAcknowledgedStatuses = nil
+                }) else { return }
                 NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
 
                 // Update sections card UI
                 sectionsModePopup?.selectItem(at: 1)
-                updateSectionsVisibilityControls(for: settings.projects[index])
+                updateSectionsVisibilityControls(for: project)
                 sectionsTableView?.reloadData()
-                refreshDefaultSectionPopup(for: settings.projects[index])
+                refreshDefaultSectionPopup(for: project)
 
                 BannerManager.shared.show(
                     message: "Created \(sections.count) sections from Jira statuses",
@@ -143,26 +144,28 @@ extension SettingsProjectsViewController {
             }
         }
 
-        settings.projects[index].jiraSyncEnabled = enabling
-        try? persistence.saveSettings(settings)
+        guard let updatedProject = mutateSelectedProject({ settings, index in
+            settings.projects[index].jiraSyncEnabled = enabling
+        }) else { return }
 
         // Auto-create project sections from Jira when enabling sync and no custom sections exist
-        if enabling, settings.projects[index].threadSections == nil {
-            let project = settings.projects[index]
+        if enabling, updatedProject.threadSections == nil {
+            let project = updatedProject
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 do {
                     let sections = try await ThreadManager.shared.syncSectionsFromJira(project: project)
                     guard !sections.isEmpty else { return }
-                    settings.projects[index].threadSections = sections
-                    try? persistence.saveSettings(settings)
+                    guard let refreshedProject = mutateSelectedProject({ settings, index in
+                        settings.projects[index].threadSections = sections
+                    }) else { return }
                     NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
 
                     // Update sections card UI
                     sectionsModePopup?.selectItem(at: 1)
-                    updateSectionsVisibilityControls(for: settings.projects[index])
+                    updateSectionsVisibilityControls(for: refreshedProject)
                     sectionsTableView?.reloadData()
-                    refreshDefaultSectionPopup(for: settings.projects[index])
+                    refreshDefaultSectionPopup(for: refreshedProject)
 
                     BannerManager.shared.show(
                         message: "Created \(sections.count) sections from Jira statuses",

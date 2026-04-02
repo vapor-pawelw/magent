@@ -645,6 +645,69 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         persistedWebTabs = completed.persistedWebTabs
     }
 
+    public func withProjectId(_ newProjectId: UUID) -> MagentThread {
+        var copy = MagentThread(
+            id: id,
+            projectId: newProjectId,
+            name: name,
+            worktreePath: worktreePath,
+            branchName: branchName,
+            tmuxSessionNames: tmuxSessionNames,
+            agentTmuxSessions: agentTmuxSessions,
+            sessionConversationIDs: sessionConversationIDs,
+            sessionAgentTypes: sessionAgentTypes,
+            pinnedTmuxSessions: pinnedTmuxSessions,
+            protectedTmuxSessions: protectedTmuxSessions,
+            isKeepAlive: isKeepAlive,
+            didOfferKeepAlivePromotion: didOfferKeepAlivePromotion,
+            createdAt: createdAt,
+            isArchived: isArchived,
+            archivedAt: archivedAt,
+            sectionId: sectionId,
+            isMain: isMain,
+            lastSelectedTabIdentifier: lastSelectedTabIdentifier,
+            agentHasRun: agentHasRun,
+            isPinned: isPinned,
+            isSidebarHidden: isSidebarHidden,
+            lastAgentCompletionAt: lastAgentCompletionAt,
+            unreadCompletionSessions: unreadCompletionSessions,
+            didAutoRenameFromFirstPrompt: didAutoRenameFromFirstPrompt,
+            customTabNames: customTabNames,
+            baseBranch: baseBranch,
+            displayOrder: displayOrder,
+            jiraTicketKey: jiraTicketKey,
+            taskDescription: taskDescription,
+            threadIcon: threadIcon,
+            isThreadIconManuallySet: isThreadIconManuallySet,
+            submittedPromptsBySession: submittedPromptsBySession,
+            localFileSyncEntriesSnapshot: localFileSyncEntriesSnapshot,
+            hasEverDoneWork: hasEverDoneWork,
+            persistedWebTabs: persistedWebTabs,
+            persistedDraftTabs: persistedDraftTabs,
+            signEmoji: signEmoji
+        )
+        copy.busySessions = busySessions
+        copy.magentBusySessions = magentBusySessions
+        copy.waitingForInputSessions = waitingForInputSessions
+        copy.hasUnsubmittedInputSessions = hasUnsubmittedInputSessions
+        copy.busyStateSince = busyStateSince
+        copy._debouncedBusyState = _debouncedBusyState
+        copy._rawStateChangeTime = _rawStateChangeTime
+        copy.isDirty = isDirty
+        copy.isFullyDelivered = isFullyDelivered
+        copy.jiraUnassigned = jiraUnassigned
+        copy.actualBranch = actualBranch
+        copy.expectedBranch = expectedBranch
+        copy.hasBranchMismatch = hasBranchMismatch
+        copy.rateLimitedSessions = rateLimitedSessions
+        copy.pullRequestInfo = pullRequestInfo
+        copy.pullRequestLookupStatus = pullRequestLookupStatus
+        copy.isArchiving = isArchiving
+        copy.verifiedJiraTicket = verifiedJiraTicket
+        copy.deadSessions = deadSessions
+        return copy
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)

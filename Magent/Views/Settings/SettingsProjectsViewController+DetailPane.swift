@@ -4,6 +4,7 @@ import MagentCore
 extension SettingsProjectsViewController {
 
     func showDetailForProject(_ project: Project) {
+        currentProjectID = project.id
         detailScrollView.isHidden = false
         emptyLabel.isHidden = true
 
@@ -660,9 +661,9 @@ extension SettingsProjectsViewController {
     }
 
     func persistLocalSyncEntriesFromVisibleRows() {
-        guard let index = selectedProjectIndex else { return }
-        settings.projects[index].localFileSyncEntries = Project.normalizeLocalFileSyncEntries(visibleLocalSyncEntries())
-        try? persistence.saveSettings(settings)
+        _ = mutateSelectedProject { settings, index in
+            settings.projects[index].localFileSyncEntries = Project.normalizeLocalFileSyncEntries(visibleLocalSyncEntries())
+        }
     }
 }
 

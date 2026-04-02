@@ -537,7 +537,7 @@ public final class PersistenceService {
         let activeProjectIDs = activeThreadProjectIDs()
         if !activeProjectIDs.isEmpty {
             let coveredProjectCount = projectCoverageCount(settings: settings, activeThreadProjectIDs: activeProjectIDs)
-            if coveredProjectCount == 0 {
+            if coveredProjectCount < activeProjectIDs.count {
                 throw SettingsWriteProtectionError(
                     activeThreadProjectCount: activeProjectIDs.count,
                     coveredProjectCount: coveredProjectCount

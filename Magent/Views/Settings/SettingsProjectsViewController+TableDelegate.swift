@@ -50,10 +50,14 @@ extension SettingsProjectsViewController: NSTableViewDataSource {
                 return false
             }
 
-            let movedProject = settings.projects.remove(at: sourceRow)
             let insertIndex = sourceRow < destinationRow ? destinationRow - 1 : destinationRow
-            settings.projects.insert(movedProject, at: insertIndex)
-            try? persistence.saveSettings(settings)
+            let movedProjectID = settings.projects[sourceRow].id
+            guard mutateSettings({ settings in
+                guard let currentSourceIndex = settings.projects.firstIndex(where: { $0.id == movedProjectID }) else { return }
+                let movedProject = settings.projects.remove(at: currentSourceIndex)
+                let clampedDestination = min(max(insertIndex, 0), settings.projects.count)
+                settings.projects.insert(movedProject, at: clampedDestination)
+            }) else { return false }
             reloadProjectsAndSelect(row: insertIndex)
             NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
             return true
@@ -70,16 +74,17 @@ extension SettingsProjectsViewController: NSTableViewDataSource {
         let dest = sourceRow < row ? row - 1 : row
         sections.insert(moved, at: dest)
 
-        for (i, section) in sections.enumerated() {
-            if var projectSections = settings.projects[index].threadSections,
-               let idx = projectSections.firstIndex(where: { $0.id == section.id }) {
-                projectSections[idx].sortOrder = i
-                settings.projects[index].threadSections = projectSections
+        guard let project = mutateSelectedProject({ settings, index in
+            for (i, section) in sections.enumerated() {
+                if var projectSections = settings.projects[index].threadSections,
+                   let idx = projectSections.firstIndex(where: { $0.id == section.id }) {
+                    projectSections[idx].sortOrder = i
+                    settings.projects[index].threadSections = projectSections
+                }
             }
-        }
-        try? persistence.saveSettings(settings)
+        }) else { return false }
         sectionsTableView.reloadData()
-        refreshDefaultSectionPopup(for: settings.projects[index])
+        refreshDefaultSectionPopup(for: project)
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
         return true
     }
@@ -197,8 +202,9 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
         }
         guard let sectionIndex = sections.firstIndex(where: { $0.id == sectionId }) else { return }
         sections[sectionIndex].name = newName
-        settings.projects[projectIndex].threadSections = sections
-        try persistence.saveSettings(settings)
+        guard mutateSelectedProject({ settings, index in
+            settings.projects[index].threadSections = sections
+        }) != nil else { return }
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -382,23 +388,29 @@ extension SettingsProjectsViewController: NSTableViewDelegate {
 
 extension SettingsProjectsViewController: NSTextViewDelegate {
     func textDidChange(_ notification: Notification) {
-        guard let textView = notification.object as? NSTextView,
-              let index = selectedProjectIndex else { return }
+        guard let textView = notification.object as? NSTextView else { return }
 
         if textView === terminalInjectionTextView {
             let value = textView.string
-            settings.projects[index].terminalInjectionCommand = value.isEmpty ? nil : value
+            _ = mutateSelectedProject { settings, index in
+                settings.projects[index].terminalInjectionCommand = value.isEmpty ? nil : value
+            }
         } else if textView === preAgentInjectionTextView {
             let value = textView.string
-            settings.projects[index].preAgentInjectionCommand = value.isEmpty ? nil : value
+            _ = mutateSelectedProject { settings, index in
+                settings.projects[index].preAgentInjectionCommand = value.isEmpty ? nil : value
+            }
         } else if textView === agentContextTextView {
             let value = textView.string
-            settings.projects[index].agentContextInjection = value.isEmpty ? nil : value
+            _ = mutateSelectedProject { settings, index in
+                settings.projects[index].agentContextInjection = value.isEmpty ? nil : value
+            }
         } else if textView === slugPromptTextView {
-            settings.projects[index].autoRenameSlugPrompt = textView.string
+            let value = textView.string
+            _ = mutateSelectedProject { settings, index in
+                settings.projects[index].autoRenameSlugPrompt = value
+            }
         }
-
-        try? persistence.saveSettings(settings)
     }
 }
 

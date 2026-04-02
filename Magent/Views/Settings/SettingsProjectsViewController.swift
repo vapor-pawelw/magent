@@ -10,6 +10,7 @@ final class SettingsProjectsViewController: NSViewController {
 
     let persistence = PersistenceService.shared
     var settings: AppSettings!
+    var currentProjectID: UUID?
 
     var projectTableView: NSTableView!
     var detailScrollView: NSScrollView!
@@ -60,8 +61,12 @@ final class SettingsProjectsViewController: NSViewController {
     var jiraBoards: [JiraBoard] = []
 
     var selectedProjectIndex: Int? {
+        if let currentProjectID,
+           let index = settings.projects.firstIndex(where: { $0.id == currentProjectID }) {
+            return index
+        }
         let row = projectTableView.selectedRow
-        return row >= 0 ? row : nil
+        return row >= 0 && row < settings.projects.count ? row : nil
     }
 
     var selectedProject: Project? {
@@ -202,6 +207,7 @@ final class SettingsProjectsViewController: NSViewController {
 
     func reloadProjectsAndSelect(row preferredRow: Int? = nil) {
         let currentRow = selectedProjectIndex
+        let preferredProjectID = currentProjectID
         projectTableView.reloadData()
 
         guard !settings.projects.isEmpty else {
@@ -211,14 +217,45 @@ final class SettingsProjectsViewController: NSViewController {
             return
         }
 
-        let target = max(0, min(preferredRow ?? currentRow ?? 0, settings.projects.count - 1))
+        let target = preferredProjectID.flatMap { projectID in
+            settings.projects.firstIndex(where: { $0.id == projectID })
+        } ?? max(0, min(preferredRow ?? currentRow ?? 0, settings.projects.count - 1))
         projectTableView.selectRowIndexes(IndexSet(integer: target), byExtendingSelection: false)
         showDetailForProject(settings.projects[target])
         updateRemoveButtonState()
     }
 
     func showEmptyState() {
+        currentProjectID = nil
         detailScrollView.isHidden = true
         emptyLabel.isHidden = false
+    }
+
+    @discardableResult
+    func mutateSettings(_ mutate: (inout AppSettings) -> Void) -> Bool {
+        settings = persistence.loadSettings()
+        mutate(&settings)
+        do {
+            try persistence.saveSettings(settings)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    @discardableResult
+    func mutateSelectedProject(_ mutate: (inout AppSettings, Int) -> Void) -> Project? {
+        guard let projectID = currentProjectID ?? selectedProject?.id else { return nil }
+        settings = persistence.loadSettings()
+        guard let index = settings.projects.firstIndex(where: { $0.id == projectID }) else { return nil }
+        mutate(&settings, index)
+        do {
+            try persistence.saveSettings(settings)
+            let project = settings.projects[index]
+            currentProjectID = project.id
+            return project
+        } catch {
+            return nil
+        }
     }
 }

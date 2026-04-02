@@ -28,7 +28,7 @@ final class AppCoordinator {
         // user decide: quit (to fix manually) or continue with defaults.
         var failures: [PersistenceLoadFailure] = []
 
-        let settingsOutcome = persistence.tryLoadSettings()
+        var settingsOutcome = persistence.tryLoadSettings()
         switch settingsOutcome {
         case .loaded: break
         case .fileNotFound: break
@@ -37,7 +37,7 @@ final class AppCoordinator {
             failures.append(failure)
         }
 
-        let threadsOutcome = persistence.tryLoadThreads()
+        var threadsOutcome = persistence.tryLoadThreads()
         switch threadsOutcome {
         case .loaded: break
         case .fileNotFound: break
@@ -45,6 +45,11 @@ final class AppCoordinator {
             persistence.blockWrites(for: failure.fileName)
             failures.append(failure)
         }
+
+        (settingsOutcome, threadsOutcome) = reconcileThreadsToExistingProjectsIfPossible(
+            settingsOutcome: settingsOutcome,
+            threadsOutcome: threadsOutcome
+        )
 
         if failures.isEmpty, shouldTreatSettingsAsIncomplete(settingsOutcome, threadsOutcome: threadsOutcome) {
             persistence.blockWrites(for: "settings.json")
@@ -216,6 +221,53 @@ final class AppCoordinator {
         case .decodeFailed:
             return false
         }
+    }
+
+    private func reconcileThreadsToExistingProjectsIfPossible(
+        settingsOutcome: LoadOutcome<AppSettings>,
+        threadsOutcome: LoadOutcome<[MagentThread]>
+    ) -> (LoadOutcome<AppSettings>, LoadOutcome<[MagentThread]>) {
+        guard case .loaded(let settings) = settingsOutcome,
+              case .loaded(var threads) = threadsOutcome else {
+            return (settingsOutcome, threadsOutcome)
+        }
+
+        var didChange = false
+        for index in threads.indices {
+            guard !threads[index].isArchived else { continue }
+            guard settings.projects.contains(where: { $0.id == threads[index].projectId }) == false else { continue }
+            guard let replacementProjectID = matchingProjectID(for: threads[index], settings: settings) else { continue }
+            threads[index] = threads[index].withProjectId(replacementProjectID)
+            didChange = true
+        }
+
+        guard didChange else {
+            return (settingsOutcome, threadsOutcome)
+        }
+
+        try? persistence.saveThreads(threads)
+        return (settingsOutcome, .loaded(threads))
+    }
+
+    private func matchingProjectID(for thread: MagentThread, settings: AppSettings) -> UUID? {
+        let worktreePath = URL(fileURLWithPath: thread.worktreePath).standardizedFileURL.path
+
+        let exactRepoMatches = settings.projects.filter {
+            URL(fileURLWithPath: $0.repoPath).standardizedFileURL.path == worktreePath
+        }
+        if exactRepoMatches.count == 1 {
+            return exactRepoMatches[0].id
+        }
+
+        let worktreeBaseMatches = settings.projects.filter {
+            let basePath = URL(fileURLWithPath: $0.resolvedWorktreesBasePath()).standardizedFileURL.path
+            return worktreePath.hasPrefix(basePath + "/")
+        }
+        if worktreeBaseMatches.count == 1 {
+            return worktreeBaseMatches[0].id
+        }
+
+        return nil
     }
 
     private func presentIncompleteSettingsAlert() -> Bool {

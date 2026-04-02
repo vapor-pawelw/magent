@@ -14,22 +14,20 @@ extension SettingsProjectsViewController {
     }
 
     @objc func sectionsModeChanged() {
-        guard let index = selectedProjectIndex else { return }
         let isCustom = sectionsModePopup.indexOfSelectedItem == 1
-
-        if isCustom {
-            if settings.projects[index].threadSections == nil {
-                settings.projects[index].threadSections = settings.threadSections
+        guard let project = mutateSelectedProject({ settings, index in
+            if isCustom {
+                if settings.projects[index].threadSections == nil {
+                    settings.projects[index].threadSections = settings.threadSections
+                }
+            } else {
+                settings.projects[index].threadSections = nil
+                settings.projects[index].defaultSectionId = nil
             }
-        } else {
-            settings.projects[index].threadSections = nil
-            settings.projects[index].defaultSectionId = nil
-        }
-
-        try? persistence.saveSettings(settings)
-        updateSectionsVisibilityControls(for: settings.projects[index])
+        }) else { return }
+        updateSectionsVisibilityControls(for: project)
         sectionsTableView?.reloadData()
-        refreshDefaultSectionPopup(for: settings.projects[index])
+        refreshDefaultSectionPopup(for: project)
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
@@ -71,11 +69,13 @@ extension SettingsProjectsViewController {
             colorHex: "#8E8E93",
             sortOrder: maxOrder + 1
         )
-        sections.append(section)
-        settings.projects[index].threadSections = sections
-        try? persistence.saveSettings(settings)
+        guard let project = mutateSelectedProject({ settings, index in
+            var updatedSections = settings.projects[index].threadSections ?? []
+            updatedSections.append(section)
+            settings.projects[index].threadSections = updatedSections
+        }) else { return }
         sectionsTableView.reloadData()
-        refreshDefaultSectionPopup(for: settings.projects[index])
+        refreshDefaultSectionPopup(for: project)
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
 
         showProjectColorPicker(for: section)
@@ -132,11 +132,13 @@ extension SettingsProjectsViewController {
             settings: settings
         )
 
-        sections.removeAll { $0.id == section.id }
-        settings.projects[index].threadSections = sections
-        try? persistence.saveSettings(settings)
+        guard let project = mutateSelectedProject({ settings, index in
+            var updatedSections = settings.projects[index].threadSections ?? []
+            updatedSections.removeAll { $0.id == section.id }
+            settings.projects[index].threadSections = updatedSections
+        }) else { return }
         sectionsTableView.reloadData()
-        refreshDefaultSectionPopup(for: settings.projects[index])
+        refreshDefaultSectionPopup(for: project)
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
@@ -165,11 +167,14 @@ extension SettingsProjectsViewController {
             }
         }
 
-        sections[sectionIndex].isVisible.toggle()
-        settings.projects[index].threadSections = sections
-        try? persistence.saveSettings(settings)
+        guard let project = mutateSelectedProject({ settings, index in
+            guard var updatedSections = settings.projects[index].threadSections,
+                  let updatedSectionIndex = updatedSections.firstIndex(where: { $0.id == section.id }) else { return }
+            updatedSections[updatedSectionIndex].isVisible.toggle()
+            settings.projects[index].threadSections = updatedSections
+        }) else { return }
         sectionsTableView.reloadData()
-        refreshDefaultSectionPopup(for: settings.projects[index])
+        refreshDefaultSectionPopup(for: project)
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
     }
 
@@ -200,14 +205,13 @@ extension SettingsProjectsViewController {
 
     @objc func projectSectionColorChanged(_ sender: NSColorPanel) {
         guard !isUpdatingSectionColorPanel else { return }
-        guard let sectionId = currentEditingSectionId,
-              let index = selectedProjectIndex,
-              var sections = settings.projects[index].threadSections,
-              let sectionIndex = sections.firstIndex(where: { $0.id == sectionId }) else { return }
-
-        sections[sectionIndex].colorHex = sender.color.hexString
-        settings.projects[index].threadSections = sections
-        try? persistence.saveSettings(settings)
+        guard let sectionId = currentEditingSectionId else { return }
+        _ = mutateSelectedProject { settings, index in
+            guard var sections = settings.projects[index].threadSections,
+                  let sectionIndex = sections.firstIndex(where: { $0.id == sectionId }) else { return }
+            sections[sectionIndex].colorHex = sender.color.hexString
+            settings.projects[index].threadSections = sections
+        }
         sectionsTableView.reloadData()
     }
 
