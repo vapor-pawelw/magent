@@ -676,10 +676,45 @@ extension ThreadListViewController {
         return url
     }
 
+    private func prefersInAppExternalLinks() -> Bool {
+        persistence.loadSettings().externalLinkOpenPreference == .inApp
+    }
+
+    private func openExternalLinkForThread(
+        _ thread: MagentThread,
+        url: URL,
+        identifier: String,
+        title: String,
+        iconType: WebTabIconType
+    ) {
+        guard prefersInAppExternalLinks() else {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        NotificationCenter.default.post(
+            name: .magentOpenExternalLinkInApp,
+            object: nil,
+            userInfo: [
+                "threadId": thread.id,
+                "url": url,
+                "identifier": identifier,
+                "title": title,
+                "iconType": iconType.rawValue,
+            ]
+        )
+    }
+
     @objc private func openThreadInJira(_ sender: NSMenuItem) {
         guard let thread = sender.representedObject as? MagentThread,
               let url = resolveJiraURL(for: thread) else { return }
-        NSWorkspace.shared.open(url)
+        let ticketKey = thread.effectiveJiraTicketKey(settings: persistence.loadSettings())
+        openExternalLinkForThread(
+            thread,
+            url: url,
+            identifier: ticketKey.map { "jira:\($0)" } ?? "jira:\(url.absoluteString)",
+            title: ticketKey ?? "Jira",
+            iconType: .jira
+        )
     }
 
     @objc private func copyJiraLink(_ sender: NSMenuItem) {
@@ -1275,7 +1310,22 @@ extension ThreadListViewController {
             Task {
                 guard let action = await threadManager.resolvePullRequestActionTarget(for: thread) else { return }
                 await MainActor.run {
-                    _ = NSWorkspace.shared.open(action.url)
+                    let title: String
+                    if action.isCreation {
+                        title = action.provider == .gitlab ? "Create MR" : "Create PR"
+                    } else if let pr = thread.pullRequestInfo {
+                        title = pr.shortLabel
+                    } else {
+                        title = action.provider == .gitlab ? "MR" : "PR"
+                    }
+                    let identifierPrefix = action.isCreation ? "pr-create:" : "pr:"
+                    self.openExternalLinkForThread(
+                        thread,
+                        url: action.url,
+                        identifier: "\(identifierPrefix)\(action.url.absoluteString)",
+                        title: title,
+                        iconType: .pullRequest
+                    )
                 }
             }
             return
@@ -1316,7 +1366,14 @@ extension ThreadListViewController {
                     BannerManager.shared.show(message: String(localized: .ThreadStrings.threadCouldNotConstructRemoteURL(remote.name)), style: .warning)
                     return
                 }
-                NSWorkspace.shared.open(url)
+                let title = thread.pullRequestInfo?.shortLabel ?? (remote.provider == .gitlab ? "MR" : "PR")
+                self.openExternalLinkForThread(
+                    thread,
+                    url: url,
+                    identifier: "pr:\(url.absoluteString)",
+                    title: title,
+                    iconType: .pullRequest
+                )
             }
         }
     }

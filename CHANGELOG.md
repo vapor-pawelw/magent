@@ -11,9 +11,17 @@ All notable changes to this project will be documented in this file.
 ### Banner
 - Fixed embedded terminal banners ignoring button and dismiss clicks, including recovered unsubmitted prompt banners shown inside a thread.
 
+### General
+- External web actions can now open in either the default browser or a Magent web tab by default, configurable in `Settings > General > Links`. PR/Jira buttons and matching thread menu actions follow that preference, while middle-click still opens the opposite destination as a quick override.
+- Terminal links now respect the same in-app web flow for HTTP(S) targets: `Cmd`-click follows your default link destination, and `Cmd`+middle-click explicitly opens the link in a Magent web tab.
+
 ### Settings
 - Startup now treats `settings.json` as incomplete when it no longer covers every project referenced by active threads, recovers from the best available backup or snapshot candidate, and blocks writes that would replace thread-linked settings with an empty/default project list.
 - Settings panes now reload the latest `settings.json` before saving UI changes, preventing stale Settings windows from overwriting the registered projects list after a restore or startup recovery.
+
+### Diff Viewer
+- The bottom-left git panel now appends compact remote-tracking status to the current branch name, showing short suffixes like `(+1 -3 from remote)` or `(local)` when the branch has no upstream.
+- Discarding a file in the CHANGES panel now refreshes the panel immediately, and queues a follow-up refresh if another git refresh is already in progress so the file state does not stay stale.
 
 ### Thread
 - Fixed draft threads sometimes restoring as terminal/Codex tabs from stale tmux sessions. Draft-only threads now stay non-terminal until you explicitly start the agent.
@@ -21,10 +29,6 @@ All notable changes to this project will be documented in this file.
 ### Tab
 - The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu, and the continuation sheet now focuses the receiving agent model, title, and model/reasoning fields without showing a prompt box.
 - Agent-backed tabs now expose `Resume Agent Session in New Tab` in the tab context menu, opening a fresh tab that resumes the same Claude/Codex conversation when a saved resume ID is available.
-
-### Diff Viewer
-- The bottom-left git panel now appends compact remote-tracking status to the current branch name, showing short suffixes like `(+1 -3 from remote)` or `(local)` when the branch has no upstream.
-- Discarding a file in the CHANGES panel now refreshes the panel immediately, and queues a follow-up refresh if another git refresh is already in progress so the file state does not stay stale.
 
 ## 1.5.0 - 2026-04-02
 

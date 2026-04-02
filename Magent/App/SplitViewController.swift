@@ -100,6 +100,12 @@ final class SplitViewController: NSSplitViewController {
             name: .magentNavigateToThread,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOpenExternalLinkInApp(_:)),
+            name: .magentOpenExternalLinkInApp,
+            object: nil
+        )
 
         reloadKeyBindings()
 
@@ -390,6 +396,34 @@ final class SplitViewController: NSSplitViewController {
             if let tabIndex = detailVC.displayIndex(forSession: sessionName) {
                 detailVC.selectTab(at: tabIndex)
             }
+        }
+    }
+
+    @objc private func handleOpenExternalLinkInApp(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let threadId = userInfo["threadId"] as? UUID,
+              let url = userInfo["url"] as? URL,
+              let identifier = userInfo["identifier"] as? String,
+              let title = userInfo["title"] as? String,
+              let iconRawValue = userInfo["iconType"] as? String,
+              let iconType = WebTabIconType(rawValue: iconRawValue) else { return }
+
+        let openTab = { [weak self] in
+            guard let self,
+                  let detailVC = self.currentDetailVC,
+                  detailVC.thread.id == threadId else { return }
+            detailVC.loadViewIfNeeded()
+            detailVC.openWebTab(url: url, identifier: identifier, title: title, iconType: iconType)
+        }
+
+        if currentDetailVC?.thread.id == threadId {
+            openTab()
+            return
+        }
+
+        threadListVC.selectThread(byId: threadId)
+        DispatchQueue.main.async {
+            openTab()
         }
     }
 

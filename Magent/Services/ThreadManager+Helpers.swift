@@ -1991,6 +1991,7 @@ extension Notification.Name {
     static let magentGlobalRateLimitSummaryChanged = Notification.Name("magentGlobalRateLimitSummaryChanged")
     static let magentSectionsDidChange = Notification.Name("magentSectionsDidChange")
     static let magentOpenSettings = Notification.Name("magentOpenSettings")
+    static let magentOpenExternalLinkInApp = Notification.Name("magentOpenExternalLinkInApp")
     static let magentShowDiffViewer = Notification.Name("magentShowDiffViewer")
     static let magentHideDiffViewer = Notification.Name("magentHideDiffViewer")
     static let magentDiffViewerScrolledToFile = Notification.Name("magentDiffViewerScrolledToFile")

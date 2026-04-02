@@ -14,6 +14,7 @@ final class SettingsGeneralViewController: NSViewController {
     private var updateChangelogTextView: NSTextView!
     private var isUpdateChangelogExpanded = false
     private var syncLocalPathsOnArchiveCheckbox: NSButton!
+    private var externalLinkPreferencePopup: NSPopUpButton!
     private var createBackupButton: NSButton!
     private var restoreFromBackupButton: NSButton!
     private var lastBackupLabel: NSTextField!
@@ -120,6 +121,32 @@ final class SettingsGeneralViewController: NSViewController {
         updateChangelogScrollView.translatesAutoresizingMaskIntoConstraints = false
         updateChangelogScrollView.isHidden = true
         updatesSection.addArrangedSubview(updateChangelogScrollView)
+
+        let (linksCard, linksSection) = createSectionCard(
+            title: "Links",
+            description: "Choose where Magent opens web targets like PRs, Jira pages, and other in-app web destinations by default."
+        )
+        stackView.addArrangedSubview(linksCard)
+
+        externalLinkPreferencePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        externalLinkPreferencePopup.controlSize = .small
+        externalLinkPreferencePopup.font = .systemFont(ofSize: 12)
+        externalLinkPreferencePopup.addItems(withTitles: ExternalLinkOpenPreference.allCases.map(\.displayName))
+        if let index = ExternalLinkOpenPreference.allCases.firstIndex(of: settings.externalLinkOpenPreference) {
+            externalLinkPreferencePopup.selectItem(at: index)
+        }
+        externalLinkPreferencePopup.target = self
+        externalLinkPreferencePopup.action = #selector(externalLinkPreferenceChanged)
+        linksSection.addArrangedSubview(
+            labeledPopupRow(label: "Open web links in", popup: externalLinkPreferencePopup)
+        )
+
+        let linksDesc = NSTextField(
+            wrappingLabelWithString: "Primary clicks follow this preference. Middle-click on Magent toolbar link buttons still opens the opposite destination as a quick override."
+        )
+        linksDesc.font = .systemFont(ofSize: 11)
+        linksDesc.textColor = NSColor(resource: .textSecondary)
+        linksSection.addArrangedSubview(linksDesc)
 
         let (archiveCard, archiveSection) = createSectionCard(
             title: "Archive",
@@ -259,6 +286,7 @@ final class SettingsGeneralViewController: NSViewController {
 
             documentView.widthAnchor.constraint(equalTo: contentScrollView.widthAnchor),
             updatesCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
+            linksCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             archiveCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             keybindsCard.widthAnchor.constraint(equalTo: stackView.widthAnchor, constant: -40),
             keybindsGrid.widthAnchor.constraint(equalTo: keybindsStack.widthAnchor),
@@ -268,6 +296,7 @@ final class SettingsGeneralViewController: NSViewController {
             updateStatusLabel.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
             updateChangelogScrollView.widthAnchor.constraint(equalTo: updatesSection.widthAnchor),
             updateChangelogScrollView.heightAnchor.constraint(equalToConstant: 160),
+            linksDesc.widthAnchor.constraint(equalTo: linksSection.widthAnchor),
             syncLocalPathsOnArchiveDesc.widthAnchor.constraint(equalTo: archiveSection.widthAnchor),
             lastBackupLabel.widthAnchor.constraint(equalTo: backupSection.widthAnchor),
         ])
@@ -333,6 +362,19 @@ final class SettingsGeneralViewController: NSViewController {
         return (container, content)
     }
 
+    private func labeledPopupRow(label: String, popup: NSPopUpButton) -> NSStackView {
+        let labelField = NSTextField(labelWithString: label)
+        labelField.font = .systemFont(ofSize: 12, weight: .medium)
+
+        let row = NSStackView(views: [labelField, popup])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 12
+        row.translatesAutoresizingMaskIntoConstraints = false
+        labelField.setContentHuggingPriority(.required, for: .horizontal)
+        return row
+    }
+
     @objc private func autoCheckForUpdatesToggled() {
         settings = persistence.loadSettings()
         settings.autoCheckForUpdates = autoCheckForUpdatesCheckbox.state == .on
@@ -344,6 +386,14 @@ final class SettingsGeneralViewController: NSViewController {
         settings = persistence.loadSettings()
         settings.syncLocalPathsOnArchive = syncLocalPathsOnArchiveCheckbox.state == .on
         try? persistence.saveSettings(settings)
+    }
+
+    @objc private func externalLinkPreferenceChanged() {
+        let index = externalLinkPreferencePopup.indexOfSelectedItem
+        guard ExternalLinkOpenPreference.allCases.indices.contains(index) else { return }
+        settings.externalLinkOpenPreference = ExternalLinkOpenPreference.allCases[index]
+        try? persistence.saveSettings(settings)
+        NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
     }
 
     @objc private func checkForUpdatesNowTapped() {

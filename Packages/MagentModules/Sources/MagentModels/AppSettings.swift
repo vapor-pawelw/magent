@@ -28,6 +28,18 @@ public enum TerminalMouseWheelBehavior: String, Codable, Sendable, CaseIterable 
     }
 }
 
+public enum ExternalLinkOpenPreference: String, Codable, Sendable, CaseIterable {
+    case browser
+    case inApp
+
+    public var displayName: String {
+        switch self {
+        case .browser: "Default browser"
+        case .inApp: "Magent web tab"
+        }
+    }
+}
+
 public nonisolated struct AgentLaunchPromptDraft: Codable, Sendable, Equatable {
     public var prompt: String
     public var description: String
@@ -83,6 +95,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var autoCheckForUpdates: Bool
     public var skippedUpdateVersion: String?
     public var syncLocalPathsOnArchive: Bool
+    public var externalLinkOpenPreference: ExternalLinkOpenPreference
     public var appAppearanceMode: AppAppearanceMode
     public var terminalMouseWheelBehavior: TerminalMouseWheelBehavior
     public var showScrollToBottomIndicator: Bool
@@ -137,6 +150,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoCheckForUpdates: Bool = true,
         skippedUpdateVersion: String? = nil,
         syncLocalPathsOnArchive: Bool = true,
+        externalLinkOpenPreference: ExternalLinkOpenPreference = .browser,
         appAppearanceMode: AppAppearanceMode = .system,
         terminalMouseWheelBehavior: TerminalMouseWheelBehavior = .magentDefaultScroll,
         showScrollToBottomIndicator: Bool = true,
@@ -190,6 +204,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.autoCheckForUpdates = autoCheckForUpdates
         self.skippedUpdateVersion = skippedUpdateVersion
         self.syncLocalPathsOnArchive = syncLocalPathsOnArchive
+        self.externalLinkOpenPreference = externalLinkOpenPreference
         self.appAppearanceMode = appAppearanceMode
         self.terminalMouseWheelBehavior = terminalMouseWheelBehavior
         self.showScrollToBottomIndicator = showScrollToBottomIndicator
@@ -249,6 +264,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoCheckForUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckForUpdates) ?? true
         skippedUpdateVersion = try container.decodeIfPresent(String.self, forKey: .skippedUpdateVersion)
         syncLocalPathsOnArchive = try container.decodeIfPresent(Bool.self, forKey: .syncLocalPathsOnArchive) ?? true
+        externalLinkOpenPreference = try container.decodeIfPresent(ExternalLinkOpenPreference.self, forKey: .externalLinkOpenPreference) ?? .browser
         appAppearanceMode = try container.decodeIfPresent(AppAppearanceMode.self, forKey: .appAppearanceMode) ?? .system
         terminalMouseWheelBehavior = try container.decodeIfPresent(TerminalMouseWheelBehavior.self, forKey: .terminalMouseWheelBehavior) ?? .magentDefaultScroll
         showScrollToBottomIndicator = try container.decodeIfPresent(Bool.self, forKey: .showScrollToBottomIndicator) ?? true
@@ -474,6 +490,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case autoCheckForUpdates
         case skippedUpdateVersion
         case syncLocalPathsOnArchive
+        case externalLinkOpenPreference
         case appAppearanceMode
         case terminalMouseWheelBehavior
         case showScrollToBottomIndicator

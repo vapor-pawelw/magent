@@ -38,11 +38,14 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     public var resolveTmuxMouseOpenableURL: (() -> String?)?
     /// Resolves a visible URL near the current mouse position using normalized pane coordinates.
     public var resolveTmuxVisibleOpenableURL: ((_ xFraction: Double, _ yFraction: Double) async -> String?)?
+    /// Opens a resolved URL. `forceInApp` is used for explicit in-app overrides such as Cmd+middle-click.
+    public var openURLHandler: ((URL, Bool) -> Void)?
 
     private var currentInputLine = ""
     private var hoveredLinkSource: HoveredLinkSource?
     private var hoveredLinkURL: String?
     private var pendingLinkOpenURL: String?
+    private var pendingLinkOpenForceInApp = false
     private var pendingCommandClick = false
     private var hoverProbeSerial = 0
     private var hoverProbeTask: Task<Void, Never>?
@@ -579,6 +582,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         pendingCommandClick = shouldAttemptCommandLinkOpen(with: event)
         if shouldHandleDirectLinkOpen(with: event) {
             pendingLinkOpenURL = hoveredLinkURL
+            pendingLinkOpenForceInApp = false
             return
         }
         let mods = Self.ghosttyMods(event.modifierFlags)
@@ -593,8 +597,9 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
             self.pendingLinkOpenURL = nil
             pendingCommandClick = false
             if shouldHandleDirectLinkOpen(with: event), hoveredLinkURL == pendingLinkOpenURL {
-                GhosttyAppManager.shared.openURL(pendingLinkOpenURL)
+                handleResolvedURLString(pendingLinkOpenURL, forceInApp: pendingLinkOpenForceInApp)
             }
+            pendingLinkOpenForceInApp = false
             return
         }
         let mods = Self.ghosttyMods(event.modifierFlags)
@@ -612,6 +617,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     override public func mouseDragged(with event: NSEvent) {
         if pendingLinkOpenURL != nil {
             pendingLinkOpenURL = nil
+            pendingLinkOpenForceInApp = false
             pendingCommandClick = false
             return
         }
@@ -649,22 +655,41 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     }
 
     override public func otherMouseDown(with event: NSEvent) {
-        guard let surface else { return }
         sendMousePos(event)
+        refreshHoveredLink(at: convert(event.locationInWindow, from: nil))
+        if shouldHandleInAppLinkOpen(with: event) {
+            pendingLinkOpenURL = hoveredLinkURL
+            pendingLinkOpenForceInApp = true
+            return
+        }
+        guard let surface else { return }
         let mods = Self.ghosttyMods(event.modifierFlags)
         let button = mouseButton(for: event.buttonNumber)
         ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, button, mods)
     }
 
     override public func otherMouseUp(with event: NSEvent) {
-        guard let surface else { return }
         sendMousePos(event)
+        refreshHoveredLink(at: convert(event.locationInWindow, from: nil))
+        if let pendingLinkOpenURL {
+            self.pendingLinkOpenURL = nil
+            if shouldHandleInAppLinkOpen(with: event), hoveredLinkURL == pendingLinkOpenURL {
+                handleResolvedURLString(pendingLinkOpenURL, forceInApp: true)
+            }
+            pendingLinkOpenForceInApp = false
+            return
+        }
+        guard let surface else { return }
         let mods = Self.ghosttyMods(event.modifierFlags)
         let button = mouseButton(for: event.buttonNumber)
         ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, button, mods)
     }
 
     override public func otherMouseDragged(with event: NSEvent) {
+        if pendingLinkOpenURL != nil {
+            pendingLinkOpenURL = nil
+            pendingLinkOpenForceInApp = false
+        }
         mouseMoved(with: event)
     }
 
@@ -699,6 +724,21 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     private func shouldHandleDirectLinkOpen(with event: NSEvent) -> Bool {
         guard hoveredLinkURL != nil else { return false }
         return shouldAttemptCommandLinkOpen(with: event)
+    }
+
+    private func shouldHandleInAppLinkOpen(with event: NSEvent) -> Bool {
+        guard event.buttonNumber == 2, hoveredLinkURL != nil else { return false }
+        return shouldAttemptCommandLinkOpen(with: event)
+    }
+
+    func handleResolvedURLString(_ urlString: String, forceInApp: Bool = false) {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
+        if let openURLHandler {
+            openURLHandler(url, forceInApp)
+        } else {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func refreshHoveredLinkForCurrentMouseLocation() {

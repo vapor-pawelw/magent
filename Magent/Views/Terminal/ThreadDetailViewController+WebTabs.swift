@@ -12,12 +12,46 @@ struct WebTabEntry {
 
 extension ThreadDetailViewController {
 
+    func prefersInAppExternalLinks() -> Bool {
+        PersistenceService.shared.loadSettings().externalLinkOpenPreference == .inApp
+    }
+
+    func supportsInAppWebTab(for url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
+    func openExternalWebDestination(
+        url: URL,
+        identifier: String,
+        title: String,
+        icon: NSImage? = nil,
+        iconType: WebTabIconType = .web,
+        forceInApp: Bool? = nil
+    ) {
+        let shouldOpenInApp = (forceInApp ?? prefersInAppExternalLinks()) && supportsInAppWebTab(for: url)
+        if shouldOpenInApp {
+            openWebTab(url: url, identifier: identifier, title: title, icon: icon, iconType: iconType)
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    func externalLinkTooltip(clickDestinationInApp: Bool) -> String {
+        let clickTarget = clickDestinationInApp ? "Magent" : "browser"
+        let middleTarget = clickDestinationInApp ? "browser" : "Magent"
+        return "Click: open in \(clickTarget) · Middle-click: open in \(middleTarget)"
+    }
+
     // MARK: - Restore from Persistence
 
     /// Recreates tab items for persisted web tabs without loading any pages.
     /// Pinned web tabs are inserted into the pinned section; unpinned are appended.
     func restoreWebTabItems() {
         for persisted in thread.persistedWebTabs {
+            if webTabs.contains(where: { $0.identifier == persisted.identifier }) {
+                continue
+            }
             let entry = WebTabEntry(
                 identifier: persisted.identifier,
                 url: persisted.url,

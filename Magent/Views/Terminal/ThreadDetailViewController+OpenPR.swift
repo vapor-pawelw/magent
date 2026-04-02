@@ -5,72 +5,36 @@ extension ThreadDetailViewController {
 
     // MARK: - Open PR/MR
 
-    /// Middle-click: open PR/MR in an in-app web tab.
+    func openPROppositeDestination() {
+        let forceInApp = !prefersInAppExternalLinks()
+        openPR(forceInApp: forceInApp, sender: nil)
+    }
+
+    /// Explicit in-app override for PR/MR destinations.
     func openPRInWebTab() {
-        if !thread.isMain {
-            Task {
-                guard let action = await threadManager.resolvePullRequestActionTarget(for: self.thread) else { return }
-                await MainActor.run {
-                    let icon = self.openPRButtonImage(for: action.provider)
-                    let title = self.pullRequestWebTabTitle(for: action)
-                    let identifierPrefix = action.isCreation ? "pr-create:" : "pr:"
-                    self.openWebTab(
-                        url: action.url,
-                        identifier: "\(identifierPrefix)\(action.url.absoluteString)",
-                        title: title,
-                        icon: icon,
-                        iconType: .pullRequest
-                    )
-                }
-            }
-            return
-        }
-
-        // No detected PR — resolve URL the same way as left-click but open in web tab
-        Task {
-            let settings = PersistenceService.shared.loadSettings()
-            guard let project = settings.projects.first(where: { $0.id == self.thread.projectId }) else { return }
-
-            let remotes = await GitService.shared.getRemotes(repoPath: project.repoPath)
-            guard let remote = remotes.first(where: { $0.name == "origin" }) ?? remotes.first else {
-                await MainActor.run {
-                    BannerManager.shared.show(message: "No git remotes found", style: .warning)
-                }
-                return
-            }
-
-            let branch = self.thread.actualBranch ?? self.thread.branchName
-            let defaultBranch: String?
-            if let projectDefaultBranch = project.defaultBranch {
-                defaultBranch = projectDefaultBranch
-            } else {
-                defaultBranch = await GitService.shared.detectDefaultBranch(repoPath: project.repoPath)
-            }
-            let prInfo = try? await GitService.shared.fetchPullRequest(remote: remote, branch: branch)
-            let url = prInfo?.url
-                ?? remote.pullRequestURL(for: branch, defaultBranch: defaultBranch)
-                ?? remote.openPullRequestsURL
-                ?? remote.repoWebURL
-
-            await MainActor.run {
-                guard let url else {
-                    BannerManager.shared.show(message: "Could not construct URL for remote \(remote.name)", style: .warning)
-                    return
-                }
-                let provider = remote.provider
-                let icon = self.openPRButtonImage(for: provider)
-                let title = prInfo.map { $0.shortLabel } ?? "PR"
-                self.openWebTab(url: url, identifier: "pr:\(url.absoluteString)", title: title, icon: icon, iconType: .pullRequest)
-            }
-        }
+        openPR(forceInApp: true, sender: nil)
     }
 
     @objc func openPRTapped(_ sender: NSButton) {
+        openPR(forceInApp: nil, sender: sender)
+    }
+
+    private func openPR(forceInApp: Bool?, sender: NSButton?) {
         if !thread.isMain {
             Task {
                 guard let action = await threadManager.resolvePullRequestActionTarget(for: thread) else { return }
                 await MainActor.run {
-                    _ = NSWorkspace.shared.open(action.url)
+                    let icon = self.openPRButtonImage(for: action.provider)
+                    let title = self.pullRequestWebTabTitle(for: action)
+                    let identifierPrefix = action.isCreation ? "pr-create:" : "pr:"
+                    self.openExternalWebDestination(
+                        url: action.url,
+                        identifier: "\(identifierPrefix)\(action.url.absoluteString)",
+                        title: title,
+                        icon: icon,
+                        iconType: .pullRequest,
+                        forceInApp: forceInApp
+                    )
                 }
             }
             return
@@ -97,7 +61,7 @@ extension ThreadDetailViewController {
             }
             if remotes.count == 1 {
                 await MainActor.run {
-                    openRemoteURL(remotes[0], branch: branch, defaultBranch: defaultBranch)
+                    openRemoteURL(remotes[0], branch: branch, defaultBranch: defaultBranch, forceInApp: forceInApp)
                 }
             } else {
                 // Find the "primary" remote — prefer origin
@@ -105,12 +69,18 @@ extension ThreadDetailViewController {
                 if let origin, remotes.allSatisfy({ $0.host == origin.host && $0.repoPath == origin.repoPath }) {
                     // All remotes point to the same place
                     await MainActor.run {
-                        openRemoteURL(origin, branch: branch, defaultBranch: defaultBranch)
+                        openRemoteURL(origin, branch: branch, defaultBranch: defaultBranch, forceInApp: forceInApp)
                     }
                 } else {
                     let menuTargets = await resolveRemoteMenuTargets(remotes: remotes, branch: branch, defaultBranch: defaultBranch)
                     await MainActor.run {
-                        showRemoteMenu(targets: menuTargets, relativeTo: sender)
+                        if let sender {
+                            showRemoteMenu(targets: menuTargets, relativeTo: sender, forceInApp: forceInApp)
+                        } else if let origin {
+                            openRemoteURL(origin, branch: branch, defaultBranch: defaultBranch, forceInApp: forceInApp)
+                        } else if let first = remotes.first {
+                            openRemoteURL(first, branch: branch, defaultBranch: defaultBranch, forceInApp: forceInApp)
+                        }
                     }
                 }
             }
@@ -146,7 +116,7 @@ extension ThreadDetailViewController {
             openPRButton.isHidden = false
             openPRButton.title = pr.shortLabel
             openPRButton.imagePosition = .imageLeading
-            openPRButton.toolTip = "\(pr.displayLabel) (\(pr.statusText))\nClick: open in browser · Middle-click: open in tab"
+            openPRButton.toolTip = "\(pr.displayLabel) (\(pr.statusText))\n\(externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks()))"
         } else if !thread.isMain, thread.pullRequestLookupStatus == .notFound, provider != .unknown {
             openPRButton.isHidden = false
             openPRButton.title = createPullRequestShortTitle(for: provider)
@@ -185,16 +155,16 @@ extension ThreadDetailViewController {
     }
 
     private func openPRTooltip(for provider: GitHostingProvider) -> String {
-        let suffix = "\nMiddle-click: open in tab"
+        let suffix = "\n" + externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks())
         switch provider {
         case .github:
-            return "Open GitHub Pull Request in Browser" + suffix
+            return "Open GitHub Pull Request" + suffix
         case .gitlab:
-            return "Open GitLab Merge Request in Browser" + suffix
+            return "Open GitLab Merge Request" + suffix
         case .bitbucket:
-            return "Open Bitbucket Pull Request in Browser" + suffix
+            return "Open Bitbucket Pull Request" + suffix
         case .unknown:
-            return "Open Pull Request in Browser" + suffix
+            return "Open Pull Request" + suffix
         }
     }
 
@@ -208,16 +178,16 @@ extension ThreadDetailViewController {
     }
 
     private func createPullRequestTooltip(for provider: GitHostingProvider) -> String {
-        let suffix = "\nMiddle-click: open in tab"
+        let suffix = "\n" + externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks())
         switch provider {
         case .github:
-            return "Create GitHub Pull Request in Browser" + suffix
+            return "Create GitHub Pull Request" + suffix
         case .gitlab:
-            return "Create GitLab Merge Request in Browser" + suffix
+            return "Create GitLab Merge Request" + suffix
         case .bitbucket:
-            return "Create Bitbucket Pull Request in Browser" + suffix
+            return "Create Bitbucket Pull Request" + suffix
         case .unknown:
-            return "Create Pull Request in Browser" + suffix
+            return "Create Pull Request" + suffix
         }
     }
 
@@ -259,14 +229,18 @@ extension ThreadDetailViewController {
         return targets
     }
 
-    private func showRemoteMenu(targets: [(remote: GitRemote, url: URL)], relativeTo button: NSButton) {
+    private func showRemoteMenu(targets: [(remote: GitRemote, url: URL)], relativeTo button: NSButton, forceInApp: Bool?) {
         let menu = NSMenu(title: "Select Remote")
         for target in targets {
             let remote = target.remote
             let title = "\(remote.name) (\(remote.host)/\(remote.repoPath))"
             let item = NSMenuItem(title: title, action: #selector(remoteMenuItemTapped(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = target.url
+            item.representedObject = [
+                "url": target.url,
+                "remote": remote,
+                "forceInApp": forceInApp as Any
+            ] as [String: Any]
             item.image = hostIcon(for: remote.provider)
             menu.addItem(item)
         }
@@ -274,13 +248,26 @@ extension ThreadDetailViewController {
     }
 
     @objc private func remoteMenuItemTapped(_ sender: NSMenuItem) {
-        guard let url = sender.representedObject as? URL else { return }
-        NSWorkspace.shared.open(url)
+        guard let info = sender.representedObject as? [String: Any],
+              let url = info["url"] as? URL else { return }
+        let remote = info["remote"] as? GitRemote
+        let forceInApp = info["forceInApp"] as? Bool
+        let icon = remote.map { openPRButtonImage(for: $0.provider) }
+        let title = remote?.provider == .gitlab ? "MR" : "PR"
+        openExternalWebDestination(
+            url: url,
+            identifier: "pr:\(url.absoluteString)",
+            title: title,
+            icon: icon,
+            iconType: .pullRequest,
+            forceInApp: forceInApp
+        )
     }
 
-    private func openRemoteURL(_ remote: GitRemote, branch: String, defaultBranch: String?) {
+    private func openRemoteURL(_ remote: GitRemote, branch: String, defaultBranch: String?, forceInApp: Bool?) {
         Task {
-            let url = (try? await GitService.shared.fetchPullRequest(remote: remote, branch: branch))?.url
+            let prInfo = try? await GitService.shared.fetchPullRequest(remote: remote, branch: branch)
+            let url = prInfo?.url
                 ?? remote.pullRequestURL(for: branch, defaultBranch: defaultBranch)
                 ?? remote.openPullRequestsURL
                 ?? remote.repoWebURL
@@ -290,7 +277,15 @@ extension ThreadDetailViewController {
                     BannerManager.shared.show(message: "Could not construct URL for remote \(remote.name)", style: .warning)
                     return
                 }
-                NSWorkspace.shared.open(url)
+                let title = prInfo?.shortLabel ?? (remote.provider == .gitlab ? "MR" : "PR")
+                self.openExternalWebDestination(
+                    url: url,
+                    identifier: "pr:\(url.absoluteString)",
+                    title: title,
+                    icon: self.openPRButtonImage(for: remote.provider),
+                    iconType: .pullRequest,
+                    forceInApp: forceInApp
+                )
             }
         }
     }

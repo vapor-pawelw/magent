@@ -42,11 +42,11 @@ extension ThreadDetailViewController {
             } else if thread.isMain {
                 openInJiraButton.title = ""
                 openInJiraButton.imagePosition = .imageOnly
-                openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenJiraBoard) + "\nMiddle-click: open in tab"
+                openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenJiraBoard) + "\n" + externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks())
             } else {
                 openInJiraButton.title = ""
                 openInJiraButton.imagePosition = .imageOnly
-                openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenJiraProject) + "\nMiddle-click: open in tab"
+                openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenJiraProject) + "\n" + externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks())
             }
             refreshPRJiraSeparator()
             return
@@ -71,9 +71,9 @@ extension ThreadDetailViewController {
         openInJiraButton.title = ticketKey
         openInJiraButton.imagePosition = .imageLeading
         if let summary = thread.verifiedJiraTicket?.summary, !summary.isEmpty {
-            openInJiraButton.toolTip = "\(ticketKey): \(summary)\nClick: open in browser · Middle-click: open in tab"
+            openInJiraButton.toolTip = "\(ticketKey): \(summary)\n\(externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks()))"
         } else {
-            openInJiraButton.toolTip = "\(ticketKey)\nClick: open in browser · Middle-click: open in tab"
+            openInJiraButton.toolTip = "\(ticketKey)\n\(externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks()))"
         }
     }
 
@@ -122,8 +122,16 @@ extension ThreadDetailViewController {
         return (url, ticketKey)
     }
 
-    /// Middle-click: open Jira ticket in an in-app web tab.
+    /// Explicit in-app override for Jira destinations.
     func openJiraInWebTab() {
+        openJira(forceInApp: true)
+    }
+
+    func openJiraOppositeDestination() {
+        openJira(forceInApp: !prefersInAppExternalLinks())
+    }
+
+    private func openJira(forceInApp: Bool?) {
         guard let resolved = resolveJiraURLAndKey() else {
             BannerManager.shared.show(
                 message: String(localized: .JiraStrings.jiraCouldNotBuildURL),
@@ -138,18 +146,17 @@ extension ThreadDetailViewController {
         let title = ticketKey ?? "Jira"
         let icon = jiraButtonImage()
 
-        openWebTab(url: resolved.url, identifier: identifier, title: title, icon: icon, iconType: .jira)
+        openExternalWebDestination(
+            url: resolved.url,
+            identifier: identifier,
+            title: title,
+            icon: icon,
+            iconType: .jira,
+            forceInApp: forceInApp
+        )
     }
 
     @objc func openInJiraTapped() {
-        guard let resolved = resolveJiraURLAndKey() else {
-            BannerManager.shared.show(
-                message: String(localized: .JiraStrings.jiraCouldNotBuildURL),
-                style: .warning,
-                duration: 5.0
-            )
-            return
-        }
-        NSWorkspace.shared.open(resolved.url)
+        openJira(forceInApp: nil)
     }
 }

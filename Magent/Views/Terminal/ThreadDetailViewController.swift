@@ -453,17 +453,17 @@ final class ThreadDetailViewController: NSViewController {
         openPRButton.imageScaling = .scaleProportionallyDown
         openPRButton.target = self
         openPRButton.action = #selector(openPRTapped(_:))
-        openPRButton.toolTip = "Open Pull Request in Browser\nMiddle-click: open in tab"
-        openPRButton.onMiddleClick = { [weak self] in self?.openPRInWebTab() }
+        openPRButton.toolTip = "Open Pull Request\n\(externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks()))"
+        openPRButton.onMiddleClick = { [weak self] in self?.openPROppositeDestination() }
 
         openInJiraButton.bezelStyle = .texturedRounded
         openInJiraButton.image = jiraButtonImage()
         openInJiraButton.imageScaling = .scaleProportionallyDown
         openInJiraButton.target = self
         openInJiraButton.action = #selector(openInJiraTapped)
-        openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenInJira) + "\nMiddle-click: open in tab"
+        openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenInJira) + "\n" + externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks())
         openInJiraButton.isHidden = true
-        openInJiraButton.onMiddleClick = { [weak self] in self?.openJiraInWebTab() }
+        openInJiraButton.onMiddleClick = { [weak self] in self?.openJiraOppositeDestination() }
 
         openInXcodeButton.bezelStyle = .texturedRounded
         openInXcodeButton.imageScaling = .scaleProportionallyDown
@@ -953,6 +953,19 @@ final class ThreadDetailViewController: NSViewController {
                 yFraction: yFraction
             )
         }
+        view.openURLHandler = { [weak self] url, forceInApp in
+            self?.openTerminalLink(url, forceInApp: forceInApp)
+        }
+    }
+
+    private func openTerminalLink(_ url: URL, forceInApp: Bool) {
+        openExternalWebDestination(
+            url: url,
+            identifier: "web:\(url.absoluteString)",
+            title: WebURLNormalizer.shortHost(from: url) ?? url.absoluteString,
+            iconType: .web,
+            forceInApp: forceInApp ? true : nil
+        )
     }
 
     private func terminalReuseKey(for sessionName: String) -> String {
@@ -1309,6 +1322,7 @@ final class ThreadDetailViewController: NSViewController {
             reloadTerminalViewsForUpdatedTerminalPreferences()
         }
         resyncLocalPathsButton.isHidden = resyncLocalPathsButtonShouldBeHidden()
+        refreshOpenPRButtonIcon()
         refreshJiraButton()
         refreshOverlayVisibilitySettings()
         updateTerminalScrollControlsState()

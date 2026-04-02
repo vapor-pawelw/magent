@@ -222,6 +222,11 @@ public final class GhosttyAppManager {
     }
 
     public func openURL(_ urlString: String) {
+        if let surface = focusedSurface,
+           let surfaceView = terminalSurfaceView(for: surface) {
+            surfaceView.handleResolvedURLString(urlString)
+            return
+        }
         let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let url = URL(string: trimmed) else {
             Self.log("openURL: invalid URL '\(urlString)'")
