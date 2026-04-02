@@ -116,7 +116,7 @@ final class BannerOverlayView: NSView {
 
 // MARK: - BannerView
 
-final class BannerView: NSView {
+final class BannerView: NSView, NSGestureRecognizerDelegate {
 
     private let config: BannerConfig
     var onDismiss: (() -> Void)?
@@ -265,6 +265,7 @@ final class BannerView: NSView {
         if config.allowsUserDismissal {
             let pan = NSPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
             pan.delaysPrimaryMouseButtonEvents = false
+            pan.delegate = self
             addGestureRecognizer(pan)
         }
 
@@ -423,5 +424,20 @@ final class BannerView: NSView {
            max(abs(translation.x), abs(translation.y)) >= dismissThreshold {
             onDismiss?()
         }
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: NSGestureRecognizer) -> Bool {
+        guard gestureRecognizer is NSPanGestureRecognizer else { return true }
+
+        let location = gestureRecognizer.location(in: self)
+        var currentView = super.hitTest(location)
+        while let view = currentView {
+            if view is NSControl || view is NSTextView || view is NSScrollView {
+                return false
+            }
+            currentView = view.superview
+        }
+
+        return true
     }
 }
