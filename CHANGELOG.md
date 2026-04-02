@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- _No notable changes yet._
+
+## 1.5.0 - 2026-04-02
+
+
 ### General
 - Updated app icon.
 
@@ -65,6 +70,7 @@ All notable changes to this project will be documented in this file.
 
 ### Status Bar
 - When the bottom-right sync status fails, hover text and the sync right-click menu now show the last error reason instead of only `Sync failed`.
+
 ## 1.4.0 - 2026-03-31
 
 
