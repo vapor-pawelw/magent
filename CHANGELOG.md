@@ -26,6 +26,12 @@ All notable changes to this project will be documented in this file.
 - Settings panes now reload the latest `settings.json` before saving UI changes, preventing stale Settings windows from overwriting the registered projects list after a restore or startup recovery.
 - Startup now merges duplicate thread records that resolve to the same worktree after project-ID recovery, so restored projects no longer show duplicated main/worktree rows and all tabs stay attached to a single thread.
 
+### Sessions
+- Agent completion tracking no longer relies on tmux `pipe-pane` watchers by default. Claude uses the injected Stop hook and Codex completion is inferred from busy→idle transitions, reducing tmux zombie buildup from long-lived watcher children.
+
+### Status Bar
+- The session count popover now shows detected tmux defunct-process counts and offers a manual `Restart tmux + Recover` action alongside idle-session cleanup.
+
 ### Diff Viewer
 - The bottom-left `ALL CHANGES` view now loads branch-wide file lists lazily, and very large diffs show a simple `Diff is too large` placeholder instead of hanging the app.
 - The bottom-left git panel now appends compact remote-tracking status to the current branch name, showing short suffixes like `(+1 -3 from remote)` or `(local)` when the branch has no upstream.

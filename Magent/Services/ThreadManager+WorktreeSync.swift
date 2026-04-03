@@ -233,16 +233,20 @@ extension ThreadManager {
 
     // MARK: - Bell Pipes
 
-    /// Ensures every live agent tmux session has a pipe-pane bell watcher set up.
-    /// Called at startup and periodically from the session monitor.
+    /// Legacy tmux bell-pipe management. When the legacy path is disabled,
+    /// proactively detaches any old Magent pipes that may still be running on
+    /// upgraded sessions so tmux stops managing those helper children.
     func ensureBellPipes() async {
         let pipedSessions = await tmux.sessionsWithActivePipe()
         for thread in threads where !thread.isArchived {
             for sessionName in thread.agentTmuxSessions {
-                guard !pipedSessions.contains(sessionName) else { continue }
-                // Only set up if the session is actually alive
                 guard await tmux.hasSession(name: sessionName) else { continue }
-                await tmux.setupBellPipe(for: sessionName)
+                if TmuxService.legacyAgentBellPipeEnabled {
+                    guard !pipedSessions.contains(sessionName) else { continue }
+                    await tmux.setupBellPipe(for: sessionName)
+                } else if pipedSessions.contains(sessionName) {
+                    await tmux.clearBellPipe(for: sessionName)
+                }
             }
         }
     }

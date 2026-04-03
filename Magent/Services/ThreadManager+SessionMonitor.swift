@@ -4,6 +4,26 @@ import MagentCore
 
 extension ThreadManager {
 
+    private func publishTmuxHealthChanged() {
+        NotificationCenter.default.post(name: .magentTmuxHealthChanged, object: nil)
+    }
+
+    private func setTmuxZombieSummary(_ summary: TmuxService.ZombieParentSummary?) {
+        let didChange = lastTmuxZombieSummary?.parentPid != summary?.parentPid
+            || lastTmuxZombieSummary?.zombieCount != summary?.zombieCount
+        lastTmuxZombieSummary = summary
+        if didChange {
+            publishTmuxHealthChanged()
+        }
+    }
+
+    @discardableResult
+    private func refreshTmuxZombieSummary() async -> TmuxService.ZombieParentSummary? {
+        let summary = await tmux.zombieParentSummaries().max(by: { $0.zombieCount < $1.zombieCount })
+        setTmuxZombieSummary(summary)
+        return summary
+    }
+
     // MARK: - Session Monitor
 
     func startSessionMonitor() {
@@ -181,9 +201,8 @@ extension ThreadManager {
         lastTmuxZombieHealthCheckAt = now
         guard !isRestartingTmuxForRecovery else { return }
 
-        let summaries = await tmux.zombieParentSummaries()
         let threshold = 200
-        guard let worst = summaries.max(by: { $0.zombieCount < $1.zombieCount }),
+        guard let worst = await refreshTmuxZombieSummary(),
               worst.zombieCount >= threshold else {
             didShowTmuxZombieWarning = false
             return
@@ -212,6 +231,19 @@ extension ThreadManager {
         guard !isRestartingTmuxForRecovery else { return }
         isRestartingTmuxForRecovery = true
         didShowTmuxZombieWarning = false
+        publishTmuxHealthChanged()
+
+        let recoverySessionsByThread = Dictionary(uniqueKeysWithValues: threads
+            .filter { !$0.isArchived }
+            .map { thread in
+                (
+                    thread.id,
+                    thread.tmuxSessionNames.filter { sessionName in
+                        !thread.deadSessions.contains(sessionName)
+                            && !evictedIdleSessions.contains(sessionName)
+                    }
+                )
+            })
 
         await MainActor.run {
             BannerManager.shared.show(
@@ -224,11 +256,13 @@ extension ThreadManager {
         }
 
         await tmux.killServer()
+        setTmuxZombieSummary(nil)
 
         var recreatedCount = 0
         let activeThreads = threads.filter { !$0.isArchived }
         for thread in activeThreads {
-            for sessionName in thread.tmuxSessionNames {
+            let sessionsToRecover = recoverySessionsByThread[thread.id] ?? []
+            for sessionName in sessionsToRecover {
                 let recreated = await recreateSessionIfNeeded(sessionName: sessionName, thread: thread)
                 if recreated {
                     recreatedCount += 1
@@ -240,8 +274,10 @@ extension ThreadManager {
         await syncBusySessionsFromProcessState()
         _ = await cleanupStaleMagentSessions()
         persistence.debouncedSaveActiveThreads(threads)
+        _ = await refreshTmuxZombieSummary()
 
         isRestartingTmuxForRecovery = false
+        publishTmuxHealthChanged()
 
         await MainActor.run {
             updateDockBadge()

@@ -766,7 +766,8 @@ final class IPCCommandHandler {
                 requestedAgentType: requestedAgent,
                 initialPrompt: initialPrompt
             )
-            // Finalize session context (bell monitoring, cwd enforcement) — same as UI path
+            // Finalize session context (legacy pipe cleanup/rollback path, cwd enforcement)
+            // — same as UI path.
             let latestThread = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
             _ = await threadManager.recreateSessionIfNeeded(
                 sessionName: tab.tmuxSessionName,

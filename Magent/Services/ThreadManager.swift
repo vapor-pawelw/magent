@@ -58,6 +58,8 @@ final class ThreadManager {
     /// Set by the IPC handler for `--no-select`; consumed and reset by the delegate.
     var skipNextAutoSelect: Bool = false
     var activeThreadId: UUID?
+    /// Dedupes completion attention events across legacy bell sources and the
+    /// synthetic busy->idle completion path.
     var recentBellBySession: [String: Date] = [:]
     var autoRenameInProgress: Set<UUID> = []
     /// Tracks threads for which an auto-rename failure banner has already been shown this session.
@@ -110,6 +112,7 @@ final class ThreadManager {
     var lastStaleSessionCleanupAt: Date = .distantPast
     var staleMagentSessionsFirstSeenAt: [String: Date] = [:]
     var lastTmuxZombieHealthCheckAt: Date = .distantPast
+    var lastTmuxZombieSummary: TmuxService.ZombieParentSummary?
     var didShowTmuxZombieWarning = false
     var isRestartingTmuxForRecovery = false
     var _slowTickCounter: Int = 0

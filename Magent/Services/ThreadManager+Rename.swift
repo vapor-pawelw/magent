@@ -1035,8 +1035,8 @@ extension ThreadManager {
         threads[index].customTabNames.removeValue(forKey: sessionName)
         threads[index].customTabNames[resolvedSessionName] = trimmed
 
-        // Re-setup bell monitoring if this was an agent session.
-        // Use forceSetupBellPipe to stop the old-name pipe and start a fresh one.
+        // Legacy rollback path only: if tmux bell pipes are re-enabled, rename must
+        // also retarget the pipe so any fallback completion events keep the new name.
         if threads[index].agentTmuxSessions.contains(resolvedSessionName) {
             await tmux.forceSetupBellPipe(for: resolvedSessionName)
         }

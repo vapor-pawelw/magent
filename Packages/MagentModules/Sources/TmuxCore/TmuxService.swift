@@ -5,6 +5,7 @@ import MagentModels
 public final class TmuxService: Sendable {
 
     public static let shared = TmuxService()
+    public static let legacyAgentBellPipeEnabled = false
     private static let requiredTerminalFeatureEntries = [
         "alacritty*:RGB",
         "foot*:RGB",
@@ -115,7 +116,9 @@ public final class TmuxService: Sendable {
     }
 
     private func configureBellMonitoring() async {
-        // Ensure the event log file exists so pipe-pane can append to it.
+        guard Self.legacyAgentBellPipeEnabled else { return }
+        // Legacy rollback path only: ensure the event log file exists so
+        // pipe-pane can append to it when the old watcher mechanism is enabled.
         // Never truncate on startup — accumulated events are consumed by
         // ThreadManager at launch via consumeAgentCompletionSessions().
         _ = try? await ShellExecutor.run("touch \(shellQuote(agentCompletionEventsPath))")
@@ -356,20 +359,21 @@ public final class TmuxService: Sendable {
         )
     }
 
-    /// Sets up `pipe-pane` on a tmux session to detect bell characters (0x07) in pane output.
-    /// This replaces the broken tmux `alert-bell` hook (which does not fire in tmux ≤3.6a).
+    /// Legacy rollback path only: sets up `pipe-pane` on a tmux session to detect
+    /// bell characters (0x07) in pane output.
     public func setupBellPipe(for sessionName: String) async {
+        guard Self.legacyAgentBellPipeEnabled else { return }
         installBellWatcherScript()
         _ = try? await ShellExecutor.run(
             "tmux pipe-pane -o -t \(shellQuote(sessionName)) \(shellQuote("\(bellWatcherScriptPath) \(sessionName)"))"
         )
     }
 
-    /// Like `setupBellPipe(for:)` but always replaces an existing pipe.
-    /// Use after tmux session rename: the old pipe survives the rename and keeps writing
-    /// the pre-rename session name to the event log. Stopping it first and starting fresh
-    /// ensures subsequent bell events are attributed to the correct (new) session name.
+    /// Legacy rollback path only: like `setupBellPipe(for:)` but always replaces an
+    /// existing pipe. Use after tmux session rename so fallback completion events keep
+    /// the new session name.
     public func forceSetupBellPipe(for sessionName: String) async {
+        guard Self.legacyAgentBellPipeEnabled else { return }
         installBellWatcherScript()
         // Stop any existing pipe on this session (idempotent; no-op if already stopped).
         _ = try? await ShellExecutor.run("tmux pipe-pane -t \(shellQuote(sessionName))")
@@ -460,6 +464,10 @@ public final class TmuxService: Sendable {
             }
         }
         return result
+    }
+
+    public func clearBellPipe(for sessionName: String) async {
+        _ = try? await ShellExecutor.run("tmux pipe-pane -t \(shellQuote(sessionName))")
     }
 
     public func consumeAgentCompletionSessions() async -> [String] {

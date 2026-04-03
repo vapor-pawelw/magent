@@ -381,20 +381,32 @@ private final class SessionCleanupPopoverViewController: NSViewController {
     private let liveSessions: Int
     private let protectedSessions: Int
     private let idleSessions: Int
+    private let zombieCount: Int
+    private let zombieParentPid: Int?
+    private let isRecoveringTmux: Bool
     private let onCleanup: () -> Void
+    private let onRestartTmux: () -> Void
 
     init(
         totalSessions: Int,
         liveSessions: Int,
         protectedSessions: Int,
         idleSessions: Int,
-        onCleanup: @escaping () -> Void
+        zombieCount: Int,
+        zombieParentPid: Int?,
+        isRecoveringTmux: Bool,
+        onCleanup: @escaping () -> Void,
+        onRestartTmux: @escaping () -> Void
     ) {
         self.totalSessions = totalSessions
         self.liveSessions = liveSessions
         self.protectedSessions = protectedSessions
         self.idleSessions = idleSessions
+        self.zombieCount = zombieCount
+        self.zombieParentPid = zombieParentPid
+        self.isRecoveringTmux = isRecoveringTmux
         self.onCleanup = onCleanup
+        self.onRestartTmux = onRestartTmux
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -437,6 +449,21 @@ private final class SessionCleanupPopoverViewController: NSViewController {
             stack.addArrangedSubview(protectedLabel)
         }
 
+        if zombieCount > 0 || isRecoveringTmux {
+            let zombieText: String
+            if isRecoveringTmux {
+                zombieText = "tmux recovery in progress"
+            } else if let zombieParentPid {
+                zombieText = "\(zombieCount) defunct tmux child process\(zombieCount == 1 ? "" : "es") on parent \(zombieParentPid)"
+            } else {
+                zombieText = "\(zombieCount) defunct tmux child process\(zombieCount == 1 ? "" : "es")"
+            }
+            let zombieLabel = NSTextField(labelWithString: zombieText)
+            zombieLabel.font = .systemFont(ofSize: 11)
+            zombieLabel.textColor = zombieCount >= 200 ? .systemRed : .systemOrange
+            stack.addArrangedSubview(zombieLabel)
+        }
+
         // Cleanup button
         let separator = NSBox()
         separator.boxType = .separator
@@ -460,6 +487,25 @@ private final class SessionCleanupPopoverViewController: NSViewController {
 
         stack.addArrangedSubview(cleanupButton)
 
+        let restartButton = NSButton()
+        restartButton.bezelStyle = .inline
+        restartButton.isBordered = true
+        restartButton.target = self
+        restartButton.action = #selector(restartTmuxTapped)
+        restartButton.translatesAutoresizingMaskIntoConstraints = false
+        if isRecoveringTmux {
+            restartButton.title = "Restarting tmux…"
+            restartButton.isEnabled = false
+        } else if zombieCount > 0 {
+            restartButton.title = "Restart tmux + Recover"
+            restartButton.isEnabled = true
+        } else {
+            restartButton.title = "Restart tmux + Recover"
+            restartButton.isEnabled = true
+        }
+
+        stack.addArrangedSubview(restartButton)
+
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: view.topAnchor, constant: 12),
             stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
@@ -477,6 +523,10 @@ private final class SessionCleanupPopoverViewController: NSViewController {
 
     @objc private func cleanupTapped() {
         onCleanup()
+    }
+
+    @objc private func restartTmuxTapped() {
+        onRestartTmux()
     }
 }
 
@@ -512,6 +562,8 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private var sessionCleanupPopover: NSPopover?
     private var lastRenderedSessionCount: Int = -1
     private var lastRenderedLiveSessionCount: Int = -1
+    private var lastRenderedZombieCount: Int = -1
+    private var lastRenderedTmuxRecoveryState = false
 
     // MARK: - Init
 
@@ -583,7 +635,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         sessionCountButton.action = #selector(sessionCountTapped)
         sessionCountButton.toolTip = "Active tmux sessions — click to manage"
         sessionCountButton.translatesAutoresizingMaskIntoConstraints = false
-        updateSessionCountButton(total: 0, live: 0)
+        updateSessionCountButton(total: 0, live: 0, zombieCount: 0, isRecoveringTmux: false)
 
         configureLabel(rateLimitLabel, size: 11)
         rateLimitLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
@@ -661,6 +713,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         nc.addObserver(self, selector: sel, name: .magentThreadCreationFinished, object: nil)
         nc.addObserver(self, selector: sel, name: .magentSessionCleanupCompleted, object: nil)
         nc.addObserver(self, selector: sel, name: .magentDeadSessionsDetected, object: nil)
+        nc.addObserver(self, selector: sel, name: .magentTmuxHealthChanged, object: nil)
 
         statusTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
@@ -918,13 +971,20 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         let tm = ThreadManager.shared
         let total = tm.totalSessionCount
         let live = tm.liveSessionCount
-        guard total != lastRenderedSessionCount || live != lastRenderedLiveSessionCount else { return }
+        let zombieCount = tm.lastTmuxZombieSummary?.zombieCount ?? 0
+        let isRecoveringTmux = tm.isRestartingTmuxForRecovery
+        guard total != lastRenderedSessionCount
+            || live != lastRenderedLiveSessionCount
+            || zombieCount != lastRenderedZombieCount
+            || isRecoveringTmux != lastRenderedTmuxRecoveryState else { return }
         lastRenderedSessionCount = total
         lastRenderedLiveSessionCount = live
-        updateSessionCountButton(total: total, live: live)
+        lastRenderedZombieCount = zombieCount
+        lastRenderedTmuxRecoveryState = isRecoveringTmux
+        updateSessionCountButton(total: total, live: live, zombieCount: zombieCount, isRecoveringTmux: isRecoveringTmux)
     }
 
-    private func updateSessionCountButton(total: Int, live: Int) {
+    private func updateSessionCountButton(total: Int, live: Int, zombieCount: Int, isRecoveringTmux: Bool) {
         let symbolConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
         sessionCountButton.image = NSImage(
             systemSymbolName: "terminal",
@@ -932,18 +992,33 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         )?.withSymbolConfiguration(symbolConfig)
         sessionCountButton.imagePosition = .imageLeading
         sessionCountButton.imageHugsTitle = true
-        sessionCountButton.contentTintColor = .secondaryLabelColor
+        sessionCountButton.contentTintColor = zombieCount > 0 || isRecoveringTmux ? .systemOrange : .secondaryLabelColor
 
         let displayText = live < total ? "\(live)/\(total)" : "\(total)"
+        let zombieSuffix = zombieCount > 0 ? " · z\(zombieCount)" : ""
         sessionCountButton.attributedTitle = NSAttributedString(
-            string: displayText,
+            string: displayText + zombieSuffix,
             attributes: [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: NSColor.secondaryLabelColor,
+                .foregroundColor: zombieCount > 0 || isRecoveringTmux ? NSColor.systemOrange : NSColor.secondaryLabelColor,
             ]
         )
-        sessionCountButton.setAccessibilityLabel("\(live) live, \(total) total sessions")
-        sessionCountButton.isHidden = total == 0
+        var accessibilityLabel = "\(live) live, \(total) total sessions"
+        if zombieCount > 0 {
+            accessibilityLabel += ", \(zombieCount) tmux defunct processes detected"
+        }
+        if isRecoveringTmux {
+            accessibilityLabel += ", tmux recovery in progress"
+        }
+        sessionCountButton.setAccessibilityLabel(accessibilityLabel)
+        if isRecoveringTmux {
+            sessionCountButton.toolTip = "Active tmux sessions — tmux recovery in progress"
+        } else if zombieCount > 0 {
+            sessionCountButton.toolTip = "Active tmux sessions — \(zombieCount) defunct tmux child process\(zombieCount == 1 ? "" : "es") detected"
+        } else {
+            sessionCountButton.toolTip = "Active tmux sessions — click to manage"
+        }
+        sessionCountButton.isHidden = total == 0 && zombieCount == 0 && !isRecoveringTmux
     }
 
     @objc private func sessionCountTapped() {
@@ -957,15 +1032,25 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         let live = tm.liveSessionCount
         let protectedCount = tm.protectedSessionCount
         let idleCount = live - protectedCount
+        let zombieSummary = tm.lastTmuxZombieSummary
 
         let vc = SessionCleanupPopoverViewController(
             totalSessions: total,
             liveSessions: live,
             protectedSessions: protectedCount,
             idleSessions: max(0, idleCount),
+            zombieCount: zombieSummary?.zombieCount ?? 0,
+            zombieParentPid: zombieSummary?.parentPid,
+            isRecoveringTmux: tm.isRestartingTmuxForRecovery,
             onCleanup: { [weak self] in
                 self?.sessionCleanupPopover?.close()
                 self?.showCleanupConfirmation()
+            },
+            onRestartTmux: { [weak self] in
+                self?.sessionCleanupPopover?.close()
+                Task {
+                    await ThreadManager.shared.restartTmuxAndRecoverSessions()
+                }
             }
         )
 

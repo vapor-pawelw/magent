@@ -76,8 +76,12 @@ extension ThreadManager {
     func checkForAgentCompletions() async {
         let sessions = await tmux.consumeAgentCompletionSessions()
         guard !sessions.isEmpty else { return }
+        await processAgentCompletionSessions(sessions)
+    }
 
-        let now = Date()
+    private func processAgentCompletionSessions(_ sessions: [String], now: Date = Date()) async {
+        guard !sessions.isEmpty else { return }
+
         let settings = persistence.loadSettings()
         let playSound = settings.playSoundForAgentCompletion
         let orderedUniqueSessions = deduplicatedSessions(sessions)
@@ -362,7 +366,6 @@ extension ThreadManager {
                             busyChangedThreadIds.insert(threads[i].id)
                         }
 
-                        // When Codex is idle, check for unsubmitted typed input.
                         if await syncUnsubmittedInputState(threadId: threadId, sessionName: session, agentType: .codex) {
                             changed = true
                             busyChangedThreadIds.insert(threadId)
@@ -381,6 +384,13 @@ extension ThreadManager {
                             changed = true
                             busyChangedThreadIds.insert(threadId)
                         }
+                    }
+
+                    if wasBusy
+                        && !isBusy
+                        && !threads[i].waitingForInputSessions.contains(session)
+                        && threads[i].rateLimitedSessions[session] == nil {
+                        _ = await processAgentCompletionSessions([session])
                     }
 
                 case .claude?:
