@@ -121,7 +121,7 @@ extension ThreadManager {
             } else if insertAtTopOfVisibleGroup {
                 bumpThreadToTopOfSection(threads[lastIndex].id)
             } else {
-                placeThreadAtBottomOfSidebarGroup(threadId: threads[lastIndex].id)
+                bumpThreadToTopOfSection(threads[lastIndex].id)
             }
         }
         if skipAutoSelect {
