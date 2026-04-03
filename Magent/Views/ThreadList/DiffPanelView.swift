@@ -718,6 +718,7 @@ final class DiffPanelView: NSView {
                 workingStatus: currentStatus
             )
             if didDiscard {
+                optimisticallyRemoveFile(path: path)
                 onRefreshRequested?()
             } else {
                 BannerManager.shared.show(
@@ -822,6 +823,16 @@ final class DiffPanelView: NSView {
         }
 
         updateBranchInfo(branchName: branchName, baseBranch: baseBranch, upstreamStatus: upstreamStatus)
+    }
+
+    /// Immediately removes the file from the visible list without waiting for a git refresh.
+    /// The async refresh triggered after this will confirm the final state.
+    func optimisticallyRemoveFile(path: String) {
+        uncommittedEntries.removeAll { $0.relativePath == path }
+        allBranchEntries?.removeAll { $0.relativePath == path }
+        updateTabTitles()
+        guard activeTab == .changes, !isInCommitDetailMode else { return }
+        rebuildRows()
     }
 
     func updateAllBranchEntries(_ entries: [FileDiffEntry]) {
