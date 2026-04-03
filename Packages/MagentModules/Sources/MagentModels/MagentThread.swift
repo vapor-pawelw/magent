@@ -231,6 +231,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var agentTmuxSessions: [String]
     public var sessionConversationIDs: [String: String]
     public var sessionAgentTypes: [String: AgentType]
+    public var forwardedTmuxSessions: Set<String>
     public var pinnedTmuxSessions: [String]
     /// Sessions marked as "Keep Alive" — protected from idle eviction and manual cleanup.
     public var protectedTmuxSessions: Set<String>
@@ -525,7 +526,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     public enum CodingKeys: String, CodingKey {
         case id, projectId, name, worktreePath, branchName
-        case tmuxSessionNames, agentTmuxSessions, sessionConversationIDs, sessionAgentTypes, pinnedTmuxSessions, protectedTmuxSessions, isKeepAlive, didOfferKeepAlivePromotion
+        case tmuxSessionNames, agentTmuxSessions, sessionConversationIDs, sessionAgentTypes, forwardedTmuxSessions, pinnedTmuxSessions, protectedTmuxSessions, isKeepAlive, didOfferKeepAlivePromotion
         case createdAt, isArchived, archivedAt, sectionId, isMain
         case lastSelectedTabIdentifier = "lastSelectedTmuxSessionName"
         case agentHasRun, isPinned, isSidebarHidden, lastAgentCompletionAt
@@ -559,6 +560,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         agentTmuxSessions: [String] = [],
         sessionConversationIDs: [String: String] = [:],
         sessionAgentTypes: [String: AgentType] = [:],
+        forwardedTmuxSessions: Set<String> = [],
         pinnedTmuxSessions: [String] = [],
         protectedTmuxSessions: Set<String> = [],
         isKeepAlive: Bool = false,
@@ -598,6 +600,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.agentTmuxSessions = agentTmuxSessions
         self.sessionConversationIDs = sessionConversationIDs
         self.sessionAgentTypes = sessionAgentTypes
+        self.forwardedTmuxSessions = forwardedTmuxSessions
         self.pinnedTmuxSessions = pinnedTmuxSessions
         self.protectedTmuxSessions = protectedTmuxSessions
         self.isKeepAlive = isKeepAlive
@@ -637,6 +640,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         tmuxSessionNames = completed.tmuxSessionNames
         agentTmuxSessions = completed.agentTmuxSessions
         sessionAgentTypes = completed.sessionAgentTypes
+        forwardedTmuxSessions = completed.forwardedTmuxSessions
         lastSelectedTabIdentifier = completed.lastSelectedTabIdentifier
         customTabNames = completed.customTabNames
         baseBranch = completed.baseBranch
@@ -656,6 +660,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             agentTmuxSessions: agentTmuxSessions,
             sessionConversationIDs: sessionConversationIDs,
             sessionAgentTypes: sessionAgentTypes,
+            forwardedTmuxSessions: forwardedTmuxSessions,
             pinnedTmuxSessions: pinnedTmuxSessions,
             protectedTmuxSessions: protectedTmuxSessions,
             isKeepAlive: isKeepAlive,
@@ -719,6 +724,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         agentTmuxSessions = try container.decodeIfPresent([String].self, forKey: .agentTmuxSessions) ?? []
         sessionConversationIDs = try container.decodeIfPresent([String: String].self, forKey: .sessionConversationIDs) ?? [:]
         sessionAgentTypes = try container.decodeIfPresent([String: AgentType].self, forKey: .sessionAgentTypes) ?? [:]
+        forwardedTmuxSessions = try container.decodeIfPresent(Set<String>.self, forKey: .forwardedTmuxSessions) ?? []
         pinnedTmuxSessions = try container.decodeIfPresent([String].self, forKey: .pinnedTmuxSessions) ?? []
         protectedTmuxSessions = try container.decodeIfPresent(Set<String>.self, forKey: .protectedTmuxSessions) ?? []
         isKeepAlive = try container.decodeIfPresent(Bool.self, forKey: .isKeepAlive) ?? false
@@ -783,6 +789,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         }
         if !sessionAgentTypes.isEmpty {
             try container.encode(sessionAgentTypes, forKey: .sessionAgentTypes)
+        }
+        if !forwardedTmuxSessions.isEmpty {
+            try container.encode(forwardedTmuxSessions, forKey: .forwardedTmuxSessions)
         }
         try container.encode(pinnedTmuxSessions, forKey: .pinnedTmuxSessions)
         if !protectedTmuxSessions.isEmpty {

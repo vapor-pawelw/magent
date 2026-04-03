@@ -209,6 +209,9 @@ extension ThreadManager {
                 threads[i].unreadCompletionSessions.map { renameMap[$0] ?? $0 }
             )
             _ = remapSessionAgentTypes(threadIndex: i, sessionRenameMap: renameMap)
+            threads[i].forwardedTmuxSessions = Set(
+                threads[i].forwardedTmuxSessions.map { renameMap[$0] ?? $0 }
+            )
             threads[i].sessionConversationIDs = Dictionary(
                 uniqueKeysWithValues: threads[i].sessionConversationIDs.map { key, value in
                     (renameMap[key] ?? key, value)

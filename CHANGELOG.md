@@ -45,6 +45,7 @@ All notable changes to this project will be documented in this file.
 
 ### Tab
 - The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu, and the continuation sheet now focuses the receiving agent model, title, and model/reasoning fields without showing a prompt box.
+- Tabs created via `Continue in...` now show the same forward icon as the header handoff button, making forwarded sessions easier to spot in the tab bar.
 - Agent-backed tabs now expose `Resume Agent Session in New Tab` in the tab context menu, opening a fresh tab that resumes the same Claude/Codex conversation when a saved resume ID is available.
 
 ## 1.5.0 - 2026-04-02

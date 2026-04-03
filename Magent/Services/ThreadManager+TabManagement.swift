@@ -12,6 +12,7 @@ extension ThreadManager {
         initialPrompt: String? = nil,
         shouldSubmitInitialPrompt: Bool = true,
         resumeSessionID: String? = nil,
+        isForwardedContinuation: Bool = false,
         customTitle: String? = nil,
         tabNameSuffix: String? = nil,
         pendingPromptFileURL: URL? = nil,
@@ -210,6 +211,9 @@ extension ThreadManager {
             }
             threads[index].agentHasRun = true
         }
+        if isForwardedContinuation {
+            threads[index].forwardedTmuxSessions.insert(tmuxSessionName)
+        }
         // Mark session as magent-busy until injection/readiness completes.
         threads[index].magentBusySessions.insert(tmuxSessionName)
         try persistence.saveActiveThreads(threads)
@@ -398,6 +402,7 @@ extension ThreadManager {
         threads[idx].agentTmuxSessions.removeAll { $0 == sessionName }
         threads[idx].sessionConversationIDs.removeValue(forKey: sessionName)
         threads[idx].sessionAgentTypes.removeValue(forKey: sessionName)
+        threads[idx].forwardedTmuxSessions.remove(sessionName)
         threads[idx].unreadCompletionSessions.remove(sessionName)
         threads[idx].busySessions.remove(sessionName)
         threads[idx].magentBusySessions.remove(sessionName)

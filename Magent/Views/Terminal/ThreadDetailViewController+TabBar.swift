@@ -291,6 +291,7 @@ extension ThreadDetailViewController {
             case .terminal(let sessionName):
                 let agentType = threadManager.agentType(for: thread, sessionName: sessionName)
                 let resumeID = threadManager.conversationID(for: thread.id, sessionName: sessionName)
+                let isForwardedContinuation = thread.forwardedTmuxSessions.contains(sessionName)
                 item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
                 item.onResumeAgentInNewTab = agentType?.supportsResume == true
                     ? { [weak self] in self?.resumeAgentSessionInNewTab(at: i) }
@@ -304,6 +305,11 @@ extension ThreadDetailViewController {
                 item.availableAgentsForContinue = settings.availableActiveAgents
                 item.showKeepAliveIcon = !thread.isKeepAlive
                     && thread.protectedTmuxSessions.contains(sessionName)
+                item.typeIcon.image = isForwardedContinuation
+                    ? NSImage(systemSymbolName: "arrowshape.turn.up.forward", accessibilityDescription: "Forwarded continuation")
+                    : nil
+                item.typeIcon.contentTintColor = .secondaryLabelColor
+                item.typeIcon.isHidden = !isForwardedContinuation
             case .web:
                 item.onRename = { [weak self] in self?.showWebTabRenameDialog(at: i) }
                 item.onResumeAgentInNewTab = nil

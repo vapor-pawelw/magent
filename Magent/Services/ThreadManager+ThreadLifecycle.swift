@@ -957,6 +957,7 @@ extension ThreadManager {
             }
             threads[index].tmuxSessionNames = []
             threads[index].sessionConversationIDs = [:]
+            threads[index].forwardedTmuxSessions = []
             threads[index].submittedPromptsBySession = [:]
             threads[index].lastSelectedTabIdentifier = nil
 
@@ -1008,6 +1009,7 @@ extension ThreadManager {
         thread.agentTmuxSessions = []
         thread.sessionConversationIDs = [:]
         thread.sessionAgentTypes = [:]
+        thread.forwardedTmuxSessions = []
         thread.pinnedTmuxSessions = []
         thread.protectedTmuxSessions = []
         thread.lastSelectedTabIdentifier = nil
