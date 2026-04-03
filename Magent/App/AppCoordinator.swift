@@ -111,19 +111,7 @@ final class AppCoordinator {
         window.makeKeyAndOrderFront(nil)
         self.window = window
 
-        // Add banner overlay above all content
-        if let contentView = window.contentView {
-            let bannerOverlay = BannerOverlayView()
-            bannerOverlay.translatesAutoresizingMaskIntoConstraints = false
-            contentView.addSubview(bannerOverlay)
-            NSLayoutConstraint.activate([
-                bannerOverlay.topAnchor.constraint(equalTo: contentView.topAnchor),
-                bannerOverlay.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-                bannerOverlay.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-                bannerOverlay.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            ])
-            BannerManager.shared.setContainer(bannerOverlay)
-        }
+        installBannerOverlay(for: window)
 
         if !settings.isConfigured {
             presentConfiguration(over: splitVC)
@@ -149,6 +137,27 @@ final class AppCoordinator {
                 }
             }
         }
+    }
+
+    private func installBannerOverlay(for window: NSWindow) {
+        guard let contentView = window.contentView else { return }
+
+        // Transparent-titlebar windows can render content visually under the title bar
+        // while the theme frame above `contentView` still wins hit-testing there.
+        // Mount the banner overlay on that parent when available so top banners remain
+        // clickable instead of behaving like titlebar drag targets.
+        let overlayHost = contentView.superview ?? contentView
+
+        let bannerOverlay = BannerOverlayView()
+        bannerOverlay.translatesAutoresizingMaskIntoConstraints = false
+        overlayHost.addSubview(bannerOverlay, positioned: .above, relativeTo: contentView)
+        NSLayoutConstraint.activate([
+            bannerOverlay.topAnchor.constraint(equalTo: overlayHost.topAnchor),
+            bannerOverlay.leadingAnchor.constraint(equalTo: overlayHost.leadingAnchor),
+            bannerOverlay.trailingAnchor.constraint(equalTo: overlayHost.trailingAnchor),
+            bannerOverlay.bottomAnchor.constraint(equalTo: overlayHost.bottomAnchor),
+        ])
+        BannerManager.shared.setContainer(bannerOverlay)
     }
 
     func showMainWindow() {
