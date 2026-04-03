@@ -264,14 +264,21 @@ enum AgentLastSelectionStore {
 
     /// Keys for per-agent model/reasoning last selections, stored alongside the type selections.
     private static func modelKey(for agentType: AgentType) -> String { "model:\(agentType.rawValue)" }
-    private static func reasoningKey(for agentType: AgentType) -> String { "reasoning:\(agentType.rawValue)" }
+    /// Reasoning is keyed per model (agent+model), not just per agent type,
+    /// because different models have different reasoning capabilities.
+    private static func reasoningKey(for agentType: AgentType, modelId: String?) -> String {
+        if let modelId {
+            return "reasoning:\(agentType.rawValue):\(modelId)"
+        }
+        return "reasoning:\(agentType.rawValue)"
+    }
 
     static func lastModel(for agentType: AgentType) -> String? {
         persistence.loadAgentLastSelections()[modelKey(for: agentType)]
     }
 
-    static func lastReasoning(for agentType: AgentType) -> String? {
-        persistence.loadAgentLastSelections()[reasoningKey(for: agentType)]
+    static func lastReasoning(for agentType: AgentType, modelId: String?) -> String? {
+        persistence.loadAgentLastSelections()[reasoningKey(for: agentType, modelId: modelId)]
     }
 
     static func saveModel(_ modelId: String?, for agentType: AgentType) {
@@ -280,9 +287,9 @@ enum AgentLastSelectionStore {
         persistence.saveAgentLastSelections(selections)
     }
 
-    static func saveReasoning(_ level: String?, for agentType: AgentType) {
+    static func saveReasoning(_ level: String?, for agentType: AgentType, modelId: String?) {
         var selections = persistence.loadAgentLastSelections()
-        selections[reasoningKey(for: agentType)] = level
+        selections[reasoningKey(for: agentType, modelId: modelId)] = level
         persistence.saveAgentLastSelections(selections)
     }
 }
@@ -1484,7 +1491,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
                 }
             }
         }
-        if let lastReasoning = AgentLastSelectionStore.lastReasoning(for: agentType) {
+        let resolvedModel = selectedModelId
+        if let lastReasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: resolvedModel) {
             let matchIndex = reasoningPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == lastReasoning })
             if let matchIndex {
                 reasoningPicker.selectItem(at: matchIndex)
@@ -1512,13 +1520,18 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
               let agentConfig = AgentModelsService.shared.config(for: agentType) else { return }
         let modelId = selectedModelId
         populateReasoningPicker(agentConfig: agentConfig, modelId: modelId)
+        // Restore last reasoning selection for this specific model
+        if let lastReasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId),
+           let matchIndex = reasoningPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == lastReasoning }) {
+            reasoningPicker.selectItem(at: matchIndex)
+        }
         // Save immediately so fast-path picks it up
         AgentLastSelectionStore.saveModel(modelId, for: agentType)
     }
 
     @objc private func reasoningPickerChanged() {
         guard let agentType = selectedAgentTypeForModelPicker else { return }
-        AgentLastSelectionStore.saveReasoning(selectedReasoningLevel, for: agentType)
+        AgentLastSelectionStore.saveReasoning(selectedReasoningLevel, for: agentType, modelId: selectedModelId)
     }
 
     // MARK: - NSTextViewDelegate
@@ -1644,7 +1657,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let chosenReasoningLevel = selectedReasoningLevel
         if let agentType = selectedAgentTypeForModelPicker {
             AgentLastSelectionStore.saveModel(chosenModelId, for: agentType)
-            AgentLastSelectionStore.saveReasoning(chosenReasoningLevel, for: agentType)
+            AgentLastSelectionStore.saveReasoning(chosenReasoningLevel, for: agentType, modelId: chosenModelId)
         }
 
         // Write crash-recovery temp file before clearing the draft, so the submitted

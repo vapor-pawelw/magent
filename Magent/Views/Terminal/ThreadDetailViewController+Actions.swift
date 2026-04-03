@@ -628,7 +628,7 @@ extension ThreadDetailViewController {
             // Fast path: use last-selected model/reasoning for the resolved agent type
             let resolvedAgent = threadManager.effectiveAgentType(for: thread.projectId)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
-            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
             addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
         } else {
             presentNewTabSheet()
@@ -859,7 +859,7 @@ extension ThreadDetailViewController {
         if isOptionPressed {
             let resolvedAgent = threadManager.effectiveAgentType(for: thread.projectId)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
-            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
             addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
         } else {
             presentNewTabSheet()
@@ -1322,12 +1322,12 @@ extension ThreadDetailViewController: NSMenuDelegate {
             addTab(using: nil, useAgentCommand: false)
         case .agent(let agentType):
             let modelId = AgentLastSelectionStore.lastModel(for: agentType)
-            let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType)
+            let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
             addTab(using: agentType, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
         case .projectDefault:
             let resolvedAgent = threadManager.effectiveAgentType(for: thread.projectId)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
-            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
             addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
         case .web:
             let blankURL = URL(string: "about:blank")!

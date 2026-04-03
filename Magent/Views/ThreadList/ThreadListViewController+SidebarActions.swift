@@ -20,7 +20,7 @@ extension ThreadListViewController {
         if isOptionPressed {
             let resolvedAgent = threadManager.effectiveAgentType(for: project.id)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
-            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
             createThread(for: project, requestedAgentType: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
         } else {
             presentNewThreadSheet(for: project, anchorView: sender)
@@ -383,12 +383,12 @@ extension ThreadListViewController {
             createThread(for: project, requestedAgentType: nil, useAgentCommand: false, baseBranch: baseBranch)
         case .agent(let agentType):
             let modelId = AgentLastSelectionStore.lastModel(for: agentType)
-            let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType)
+            let reasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId)
             createThread(for: project, requestedAgentType: agentType, useAgentCommand: true, baseBranch: baseBranch, modelId: modelId, reasoningLevel: reasoning)
         case .projectDefault:
             let resolvedAgent = threadManager.effectiveAgentType(for: project.id)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
-            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
             createThread(for: project, requestedAgentType: nil, useAgentCommand: true, baseBranch: baseBranch, modelId: modelId, reasoningLevel: reasoning)
         case .web:
             presentNewThreadSheet(for: project, anchorView: outlineView)
@@ -441,7 +441,7 @@ extension ThreadListViewController {
             let isPinnedSource = sourceInSameProject?.sidebarListState == .pinned
             let resolvedAgent = threadManager.effectiveAgentType(for: project.id)
             let modelId = resolvedAgent.flatMap { AgentLastSelectionStore.lastModel(for: $0) }
-            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0) }
+            let reasoning = resolvedAgent.flatMap { AgentLastSelectionStore.lastReasoning(for: $0, modelId: modelId) }
             createThread(
                 for: project,
                 requestedAgentType: nil,

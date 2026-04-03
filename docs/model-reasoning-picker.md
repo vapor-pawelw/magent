@@ -4,7 +4,7 @@ Per-agent model and reasoning level selection when starting new threads or tabs.
 
 ## Overview
 
-Users can pick a model and reasoning level from the agent launch sheet before starting a new thread or tab. Each agent type (Claude, Codex) maintains its own independent last-selected values. Selections persist across sessions and are reused by fast-path creation (Option+click, context menu).
+Users can pick a model and reasoning level from the agent launch sheet before starting a new thread or tab. Each agent type (Claude, Codex) maintains its own last-selected model, and reasoning is remembered per model (not per agent type). Selections persist across sessions and are reused by fast-path creation (Option+click, context menu).
 
 ## Data Source: `agent-models.json`
 
@@ -52,28 +52,26 @@ A JSON file defines available models and reasoning levels per agent. The file li
 - **On fetch failure**: silently use local cache (or bundled fallback if no cache).
 - **`version` field**: reserved for future schema migrations. Current version: 1.
 
-## Persistence: Per-Agent Last Selection
+## Persistence: Per-Model Last Selection
 
-Each agent independently remembers its last-selected model and reasoning level:
+Each agent independently remembers its last-selected model. Reasoning level is remembered **per model** (not just per agent), so switching between e.g. Opus and Sonnet restores each model's own last-used reasoning level.
 
-```swift
-struct AgentSessionConfig: Codable, Equatable {
-    var claudeModel: String?       // nil = "Auto"
-    var codexModel: String?        // nil = "Auto"
-    var claudeEffort: String?      // nil = "Auto"
-    var codexReasoning: String?    // nil = "Auto"
-}
-```
+Storage keys in `agent-last-selections.json`:
+- `model:<agent>` — e.g. `model:claude` → `"opus"`
+- `reasoning:<agent>:<model>` — e.g. `reasoning:claude:opus` → `"high"`
+- `reasoning:<agent>` — fallback key when model is `nil` (Auto)
 
-Stored in `AgentLastSelectionStore` (or equivalent persistence). **Not stored per-thread** for normal live sessions — model/reasoning is only used at fresh-start time, and resume inherits from the agent session itself.
+Stored in `AgentLastSelectionStore`. **Not stored per-thread** for normal live sessions — model/reasoning is only used at fresh-start time, and resume inherits from the agent session itself.
 
 Draft tabs are the exception: if the user checks `Draft` in the launch sheet, the selected model and reasoning are persisted alongside the saved prompt so `Start Agent` later launches with the same explicit configuration. Missing values remain `nil` and mean `Auto`, which keeps older persisted drafts backward-compatible.
 
 The `Draft` checkbox state itself is also persisted with the saved launch-sheet draft, so reopening the sheet restores whether that prompt was meant to stay parked or launch immediately. The checkbox updates live while editing the sheet, which keeps the saved draft state aligned with what the user sees.
 
-### Switching Agent in Picker
+### Switching Agent or Model in Picker
 
 Switching between Claude and Codex in the agent picker swaps the displayed model/reasoning to that agent's own last-selected values. **No cross-agent mapping** — each agent's selections are fully independent.
+
+Switching models within the same agent restores that model's own last-used reasoning level. For example, if you set Claude Opus to "High" and Sonnet to "Low", switching between models in the picker restores each one's setting.
 
 ### Stale Selection Recovery
 

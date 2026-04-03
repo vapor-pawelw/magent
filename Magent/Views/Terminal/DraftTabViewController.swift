@@ -336,7 +336,7 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
 
         let storedReasoningLevel = AgentModelsService.shared.validatedReasoningLevel(reasoningLevel, for: agentType, modelId: selectedModelId)
             ?? AgentModelsService.shared.validatedReasoningLevel(
-                AgentLastSelectionStore.lastReasoning(for: agentType),
+                AgentLastSelectionStore.lastReasoning(for: agentType, modelId: selectedModelId),
                 for: agentType,
                 modelId: selectedModelId
             )
@@ -372,10 +372,15 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
         guard let agentConfig = AgentModelsService.shared.config(for: agentType) else { return }
         let modelId = selectedModelId
         populateReasoningPicker(agentConfig: agentConfig, modelId: modelId)
+        // Restore last reasoning selection for this specific model
+        if let lastReasoning = AgentLastSelectionStore.lastReasoning(for: agentType, modelId: modelId),
+           let matchIndex = reasoningPicker.itemArray.firstIndex(where: { ($0.representedObject as? String) == lastReasoning }) {
+            reasoningPicker.selectItem(at: matchIndex)
+        }
         self.modelId = modelId
         self.reasoningLevel = selectedReasoningLevel
         AgentLastSelectionStore.saveModel(modelId, for: agentType)
-        AgentLastSelectionStore.saveReasoning(selectedReasoningLevel, for: agentType)
+        AgentLastSelectionStore.saveReasoning(selectedReasoningLevel, for: agentType, modelId: modelId)
         notifyChanged()
     }
 
@@ -383,7 +388,7 @@ final class DraftTabViewController: NSViewController, NSTextViewDelegate {
         modelId = selectedModelId
         reasoningLevel = selectedReasoningLevel
         AgentLastSelectionStore.saveModel(modelId, for: agentType)
-        AgentLastSelectionStore.saveReasoning(reasoningLevel, for: agentType)
+        AgentLastSelectionStore.saveReasoning(reasoningLevel, for: agentType, modelId: modelId)
         notifyChanged()
     }
 
