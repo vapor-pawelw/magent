@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 ### Settings
 - Startup now treats `settings.json` as incomplete when it no longer covers every project referenced by active threads, recovers from the best available backup or snapshot candidate, and blocks writes that would replace thread-linked settings with an empty/default project list.
 - Settings panes now reload the latest `settings.json` before saving UI changes, preventing stale Settings windows from overwriting the registered projects list after a restore or startup recovery.
+- Startup now merges duplicate thread records that resolve to the same worktree after project-ID recovery, so restored projects no longer show duplicated main/worktree rows and all tabs stay attached to a single thread.
 
 ### Diff Viewer
 - The bottom-left `ALL CHANGES` view now loads branch-wide file lists lazily, and very large diffs show a simple `Diff is too large` placeholder instead of hanging the app.

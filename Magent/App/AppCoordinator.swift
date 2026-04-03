@@ -241,6 +241,12 @@ final class AppCoordinator {
             didChange = true
         }
 
+        let consolidatedThreads = consolidateDuplicateThreads(threads)
+        if consolidatedThreads.count != threads.count {
+            threads = consolidatedThreads
+            didChange = true
+        }
+
         guard didChange else {
             return (settingsOutcome, threadsOutcome)
         }
@@ -268,6 +274,269 @@ final class AppCoordinator {
         }
 
         return nil
+    }
+
+    private func consolidateDuplicateThreads(_ threads: [MagentThread]) -> [MagentThread] {
+        var consolidated: [MagentThread] = []
+        var activeThreadIndexByKey: [String: Int] = [:]
+
+        for thread in threads {
+            guard !thread.isArchived else {
+                consolidated.append(thread)
+                continue
+            }
+
+            let key = "\(thread.projectId.uuidString)|\(normalizedThreadWorktreePath(thread))"
+            if let existingIndex = activeThreadIndexByKey[key] {
+                consolidated[existingIndex] = mergeThreads(consolidated[existingIndex], duplicate: thread)
+            } else {
+                activeThreadIndexByKey[key] = consolidated.count
+                consolidated.append(thread)
+            }
+        }
+
+        return consolidated
+    }
+
+    private func normalizedThreadWorktreePath(_ thread: MagentThread) -> String {
+        URL(fileURLWithPath: thread.worktreePath).standardizedFileURL.path
+    }
+
+    private func mergeThreads(_ canonical: MagentThread, duplicate: MagentThread) -> MagentThread {
+        var merged = canonical
+
+        merged.name = preferredThreadName(primary: canonical.name, secondary: duplicate.name)
+        merged.worktreePath = preferredNonEmpty(primary: canonical.worktreePath, secondary: duplicate.worktreePath)
+        merged.branchName = preferredNonEmpty(primary: canonical.branchName, secondary: duplicate.branchName)
+        merged.tmuxSessionNames = appendUnique(canonical.tmuxSessionNames, duplicate.tmuxSessionNames)
+        merged.agentTmuxSessions = appendUnique(canonical.agentTmuxSessions, duplicate.agentTmuxSessions)
+        merged.pinnedTmuxSessions = appendUnique(canonical.pinnedTmuxSessions, duplicate.pinnedTmuxSessions)
+        merged.protectedTmuxSessions.formUnion(duplicate.protectedTmuxSessions)
+        merged.isKeepAlive = canonical.isKeepAlive || duplicate.isKeepAlive
+        merged.didOfferKeepAlivePromotion = canonical.didOfferKeepAlivePromotion || duplicate.didOfferKeepAlivePromotion
+        merged.isMain = canonical.isMain || duplicate.isMain
+        merged.agentHasRun = canonical.agentHasRun || duplicate.agentHasRun
+        merged.isPinned = canonical.isPinned || duplicate.isPinned
+        merged.isSidebarHidden = canonical.isSidebarHidden && duplicate.isSidebarHidden
+        merged.lastAgentCompletionAt = [canonical.lastAgentCompletionAt, duplicate.lastAgentCompletionAt].compactMap { $0 }.max()
+        merged.unreadCompletionSessions.formUnion(duplicate.unreadCompletionSessions)
+        merged.didAutoRenameFromFirstPrompt = canonical.didAutoRenameFromFirstPrompt || duplicate.didAutoRenameFromFirstPrompt
+        merged.baseBranch = preferredOptional(primary: canonical.baseBranch, secondary: duplicate.baseBranch)
+        merged.displayOrder = min(canonical.displayOrder, duplicate.displayOrder)
+        merged.jiraTicketKey = preferredOptional(primary: canonical.jiraTicketKey, secondary: duplicate.jiraTicketKey)
+        merged.taskDescription = preferredOptional(primary: canonical.taskDescription, secondary: duplicate.taskDescription)
+        merged.localFileSyncEntriesSnapshot = canonical.localFileSyncEntriesSnapshot ?? duplicate.localFileSyncEntriesSnapshot
+        merged.hasEverDoneWork = canonical.hasEverDoneWork || duplicate.hasEverDoneWork
+        merged.signEmoji = preferredOptional(primary: canonical.signEmoji, secondary: duplicate.signEmoji)
+        merged.archivedAt = nil
+
+        merged.sessionConversationIDs = mergeDictionaries(
+            canonical.sessionConversationIDs,
+            duplicate.sessionConversationIDs
+        )
+        merged.sessionAgentTypes = mergeDictionaries(
+            canonical.sessionAgentTypes,
+            duplicate.sessionAgentTypes
+        )
+        merged.submittedPromptsBySession = mergePromptHistory(
+            canonical: canonical.submittedPromptsBySession,
+            duplicate: duplicate.submittedPromptsBySession
+        )
+        merged.customTabNames = mergeDictionaries(
+            canonical.customTabNames,
+            duplicate.customTabNames
+        )
+        merged.persistedWebTabs = mergeWebTabs(
+            canonical: canonical.persistedWebTabs,
+            duplicate: duplicate.persistedWebTabs
+        )
+        merged.persistedDraftTabs = mergeDraftTabs(
+            canonical: canonical.persistedDraftTabs,
+            duplicate: duplicate.persistedDraftTabs
+        )
+
+        if canonical.isThreadIconManuallySet {
+            merged.threadIcon = canonical.threadIcon
+            merged.isThreadIconManuallySet = true
+        } else if duplicate.isThreadIconManuallySet {
+            merged.threadIcon = duplicate.threadIcon
+            merged.isThreadIconManuallySet = true
+        } else {
+            merged.threadIcon = canonical.threadIcon != .other ? canonical.threadIcon : duplicate.threadIcon
+            merged.isThreadIconManuallySet = false
+        }
+
+        merged.lastSelectedTabIdentifier = resolvedLastSelectedTabIdentifier(
+            canonical: canonical,
+            duplicate: duplicate,
+            merged: merged
+        )
+
+        pruneMergedThreadSessionState(&merged)
+        deduplicateMergedTerminalTabTitles(&merged)
+        return merged
+    }
+
+    private func preferredThreadName(primary: String, secondary: String) -> String {
+        let normalizedPrimary = primary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedPrimary.lowercased() == "main" {
+            return normalizedPrimary
+        }
+
+        let normalizedSecondary = secondary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedSecondary.lowercased() == "main" {
+            return normalizedSecondary
+        }
+
+        return preferredNonEmpty(primary: primary, secondary: secondary)
+    }
+
+    private func preferredNonEmpty(primary: String, secondary: String) -> String {
+        let normalizedPrimary = primary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedPrimary.isEmpty {
+            return primary
+        }
+        return secondary
+    }
+
+    private func preferredOptional(primary: String?, secondary: String?) -> String? {
+        if let primary, !primary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return primary
+        }
+        if let secondary, !secondary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return secondary
+        }
+        return primary ?? secondary
+    }
+
+    private func appendUnique(_ lhs: [String], _ rhs: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in lhs + rhs where seen.insert(value).inserted {
+            result.append(value)
+        }
+        return result
+    }
+
+    private func mergeDictionaries<Value>(
+        _ canonical: [String: Value],
+        _ duplicate: [String: Value]
+    ) -> [String: Value] {
+        var merged = canonical
+        for (key, value) in duplicate where merged[key] == nil {
+            merged[key] = value
+        }
+        return merged
+    }
+
+    private func mergePromptHistory(
+        canonical: [String: [String]],
+        duplicate: [String: [String]]
+    ) -> [String: [String]] {
+        var merged = canonical
+        for (sessionName, prompts) in duplicate {
+            var existing = merged[sessionName] ?? []
+            for prompt in prompts where !existing.contains(prompt) {
+                existing.append(prompt)
+            }
+            merged[sessionName] = existing
+        }
+        return merged
+    }
+
+    private func mergeWebTabs(
+        canonical: [PersistedWebTab],
+        duplicate: [PersistedWebTab]
+    ) -> [PersistedWebTab] {
+        var seen = Set<String>()
+        var merged: [PersistedWebTab] = []
+        for tab in canonical + duplicate where seen.insert(tab.identifier).inserted {
+            merged.append(tab)
+        }
+        return merged
+    }
+
+    private func mergeDraftTabs(
+        canonical: [PersistedDraftTab],
+        duplicate: [PersistedDraftTab]
+    ) -> [PersistedDraftTab] {
+        var seen = Set<String>()
+        var merged: [PersistedDraftTab] = []
+        for tab in canonical + duplicate where seen.insert(tab.identifier).inserted {
+            merged.append(tab)
+        }
+        return merged
+    }
+
+    private func resolvedLastSelectedTabIdentifier(
+        canonical: MagentThread,
+        duplicate: MagentThread,
+        merged: MagentThread
+    ) -> String? {
+        let validIdentifiers = Set(merged.tmuxSessionNames)
+            .union(merged.persistedWebTabs.map(\.identifier))
+            .union(merged.persistedDraftTabs.map(\.identifier))
+
+        if let selected = canonical.lastSelectedTabIdentifier, validIdentifiers.contains(selected) {
+            return selected
+        }
+        if let selected = duplicate.lastSelectedTabIdentifier, validIdentifiers.contains(selected) {
+            return selected
+        }
+        return merged.tmuxSessionNames.first
+            ?? merged.persistedWebTabs.first?.identifier
+            ?? merged.persistedDraftTabs.first?.identifier
+    }
+
+    private func pruneMergedThreadSessionState(_ thread: inout MagentThread) {
+        let validTerminalSessions = Set(thread.tmuxSessionNames)
+        let validAgentSessions = Set(thread.agentTmuxSessions).intersection(validTerminalSessions)
+
+        thread.agentTmuxSessions = thread.tmuxSessionNames.filter { validAgentSessions.contains($0) }
+        thread.pinnedTmuxSessions = thread.pinnedTmuxSessions.filter { validTerminalSessions.contains($0) }
+        thread.protectedTmuxSessions = thread.protectedTmuxSessions.intersection(validTerminalSessions)
+        thread.unreadCompletionSessions = thread.unreadCompletionSessions.intersection(validTerminalSessions)
+        thread.sessionConversationIDs = thread.sessionConversationIDs.filter { validAgentSessions.contains($0.key) }
+        thread.sessionAgentTypes = thread.sessionAgentTypes.filter { validAgentSessions.contains($0.key) }
+        thread.submittedPromptsBySession = thread.submittedPromptsBySession.filter { validAgentSessions.contains($0.key) }
+        thread.customTabNames = thread.customTabNames.filter { validTerminalSessions.contains($0.key) }
+    }
+
+    private func deduplicateMergedTerminalTabTitles(_ thread: inout MagentThread) {
+        var usedNames = Set<String>()
+
+        for (index, sessionName) in thread.tmuxSessionNames.enumerated() {
+            let preferredName = thread.displayName(for: sessionName, at: index)
+            let uniqueName = makeUniqueTerminalTabTitle(
+                preferredName,
+                usedNames: &usedNames
+            )
+
+            if uniqueName == MagentThread.defaultDisplayName(at: index) {
+                thread.customTabNames.removeValue(forKey: sessionName)
+            } else {
+                thread.customTabNames[sessionName] = uniqueName
+            }
+        }
+    }
+
+    private func makeUniqueTerminalTabTitle(
+        _ baseName: String,
+        usedNames: inout Set<String>
+    ) -> String {
+        let trimmedBaseName = baseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedBaseName = trimmedBaseName.isEmpty ? "Tab" : trimmedBaseName
+        let normalizedBaseName = resolvedBaseName.lowercased()
+
+        if usedNames.insert(normalizedBaseName).inserted {
+            return resolvedBaseName
+        }
+
+        var suffix = 2
+        while !usedNames.insert("\(normalizedBaseName)-\(suffix)").inserted {
+            suffix += 1
+        }
+        return "\(resolvedBaseName)-\(suffix)"
     }
 
     private func presentIncompleteSettingsAlert() -> Bool {
