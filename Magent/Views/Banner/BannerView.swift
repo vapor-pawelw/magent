@@ -96,6 +96,8 @@ struct BannerConfig {
 
 /// Transparent container that passes through mouse events unless they hit a banner child.
 final class BannerOverlayView: NSView {
+    override var mouseDownCanMoveWindow: Bool { false }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
@@ -120,6 +122,8 @@ final class BannerOverlayView: NSView {
 }
 
 private final class BannerButton: NSButton {
+    override var mouseDownCanMoveWindow: Bool { false }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
@@ -128,6 +132,7 @@ private final class BannerButton: NSButton {
 // MARK: - BannerView
 
 final class BannerView: NSView, NSGestureRecognizerDelegate {
+    override var mouseDownCanMoveWindow: Bool { false }
 
     private let config: BannerConfig
     var onDismiss: (() -> Void)?

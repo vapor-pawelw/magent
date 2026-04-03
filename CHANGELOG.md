@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - Fixed embedded terminal banners ignoring button and dismiss clicks, including recovered unsubmitted prompt banners shown inside a thread.
 - Banner swipe-to-dismiss now ignores taps that start on banner controls, so action buttons remain clickable even on dismissible banners.
 - Banner buttons now accept the first click and hit-test correctly inside the overlay, so banner actions respond immediately when the app is inactive.
+- Top-of-window banners now remain clickable under the transparent title bar instead of occasionally starting a window drag when you click a banner action or dismiss button.
 
 ### General
 - External web actions can now open in either the default browser or a Magent web tab by default, configurable in `Settings > General > Links`. PR/Jira buttons and matching thread menu actions follow that preference, while middle-click still opens the opposite destination as a quick override.
