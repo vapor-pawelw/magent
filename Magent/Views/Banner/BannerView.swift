@@ -105,13 +105,12 @@ final class BannerOverlayView: NSView {
             return nil
         }
 
-        let localPoint = convert(point, from: superview)
-        guard bounds.contains(localPoint) else { return nil }
+        guard bounds.contains(point) else { return nil }
 
         // Walk front-to-back so overlapping views keep their expected z-order.
         for subview in subviews.reversed() {
             guard !subview.isHidden, subview.alphaValue > 0 else { continue }
-            let subviewPoint = subview.convert(localPoint, from: self)
+            let subviewPoint = subview.convert(point, from: self)
             if let hit = subview.hitTest(subviewPoint) {
                 return hit
             }
