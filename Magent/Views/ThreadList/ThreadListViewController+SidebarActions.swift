@@ -512,6 +512,12 @@ extension ThreadListViewController {
                    !desc.isEmpty {
                     try? self.threadManager.setTaskDescription(threadId: created.id, description: desc)
                 }
+                // Unblock the + button as soon as the thread exists — the rename
+                // below is a background nicety that shouldn't gate new-thread creation.
+                await MainActor.run {
+                    self.isCreatingThread = false
+                    self.reloadData()
+                }
                 // Trigger auto-rename from the draft prompt text after the draft-only
                 // thread has been created and persisted.
                 if let draftPrompt {
@@ -522,10 +528,6 @@ extension ThreadListViewController {
                             prompt: trimmedPrompt
                         )
                     }
-                }
-                await MainActor.run {
-                    self.isCreatingThread = false
-                    self.reloadData()
                 }
             } catch {
                 await MainActor.run {
