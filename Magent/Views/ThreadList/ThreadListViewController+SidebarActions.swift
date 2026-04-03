@@ -358,7 +358,7 @@ extension ThreadListViewController {
         AgentMenuBuilder.populate(
             menu: submenu,
             menuTitle: "New Thread in \(project.name)",
-            defaultAgentName: threadManager.effectiveAgentType(for: project.id)?.displayName,
+            defaultAgentType: threadManager.effectiveAgentType(for: project.id),
             activeAgents: activeAgents,
             target: self,
             action: #selector(projectAgentMenuItemSelected(_:)),

@@ -11,12 +11,15 @@ enum AgentMenuBuilder {
     ///
     /// Each item's `representedObject` is `[String: String]` with keys:
     ///   - `"mode"`: `"default"`, `"agent"`, or `"terminal"`
-    ///   - `"agentRaw"`: raw value when mode is `"agent"`
+    ///   - `"agentRaw"`: raw value when mode is `"agent"` or `"default"`
     ///   - Plus any entries from `extraData`.
+    ///
+    /// The default agent type is listed first with a "(Default)" suffix.
+    /// Each agent shows its last-used model/reasoning formatted like tab names.
     static func populate(
         menu: NSMenu,
         menuTitle: String? = nil,
-        defaultAgentName: String?,
+        defaultAgentType: AgentType?,
         activeAgents: [AgentType],
         includeTerminal: Bool = true,
         target: AnyObject,
@@ -35,22 +38,34 @@ enum AgentMenuBuilder {
             menu.addItem(.separator())
         }
 
-        if let name = defaultAgentName {
-            let item = NSMenuItem(
-                title: "Use Project Default (\(name))",
-                action: action,
-                keyEquivalent: ""
-            )
-            item.target = target
-            item.representedObject = extraData.merging(["mode": "default"]) { _, new in new }
-            menu.addItem(item)
+        // Sort agents: default first
+        let sortedAgents: [AgentType]
+        if let defaultType = defaultAgentType {
+            sortedAgents = [defaultType] + activeAgents.filter { $0 != defaultType }
+        } else {
+            sortedAgents = activeAgents
         }
 
-        for agent in activeAgents {
-            let item = NSMenuItem(title: agent.displayName, action: action, keyEquivalent: "")
+        for agent in sortedAgents {
+            let isDefault = agent == defaultAgentType
+            let modelId = AgentLastSelectionStore.lastModel(for: agent)
+            let modelLabel = modelId.flatMap { id in
+                AgentModelsService.shared.config(for: agent)?.models.first(where: { $0.id == id })?.label
+            }
+            let reasoning = AgentLastSelectionStore.lastReasoning(for: agent, modelId: modelId)
+
+            let baseName = TmuxSessionNaming.defaultTabDisplayName(
+                for: agent,
+                modelLabel: modelLabel,
+                reasoningLevel: reasoning
+            )
+            let title = isDefault ? "\(baseName) (Default)" : baseName
+
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = target
+            let mode = isDefault ? "default" : "agent"
             item.representedObject = extraData.merging([
-                "mode": "agent",
+                "mode": mode,
                 "agentRaw": agent.rawValue,
             ]) { _, new in new }
             menu.addItem(item)

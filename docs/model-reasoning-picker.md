@@ -102,6 +102,8 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 
 Uses last-selected model + reasoning for the relevant agent. No sheet shown. Equivalent to accepting the sheet with last-used values.
 
+The right-click context menu on the "+" (new tab) button and the sidebar "New Thread" submenu list agent types directly — the default agent appears first with a "(Default)" suffix. Each agent's menu item shows its last-used model and reasoning formatted like tab names (e.g., `Claude (Sonnet, H) (Default)`, `Codex`). This gives immediate visibility into what configuration each agent will launch with.
+
 ### Draft Tabs
 
 Draft tabs reuse the same picker semantics as the launch sheet:

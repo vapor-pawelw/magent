@@ -1315,7 +1315,7 @@ extension ThreadDetailViewController: NSMenuDelegate {
         AgentMenuBuilder.populate(
             menu: menu,
             menuTitle: "New Tab",
-            defaultAgentName: threadManager.effectiveAgentType(for: thread.projectId)?.displayName,
+            defaultAgentType: threadManager.effectiveAgentType(for: thread.projectId),
             activeAgents: settings.availableActiveAgents,
             target: self,
             action: #selector(addTabContextMenuItemSelected(_:))
