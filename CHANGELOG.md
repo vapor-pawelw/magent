@@ -31,6 +31,7 @@ All notable changes to this project will be documented in this file.
 - Discarding a file in the CHANGES panel now refreshes the panel immediately, and queues a follow-up refresh if another git refresh is already in progress so the file state does not stay stale.
 
 ### Thread
+- The main worktree context menu no longer shows the "Fork Thread" option.
 - Fixed draft threads sometimes restoring as terminal/Codex tabs from stale tmux sessions. Draft-only threads now stay non-terminal until you explicitly start the agent.
 
 ### Tab

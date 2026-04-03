@@ -320,9 +320,6 @@ extension ThreadListViewController {
         menu.addItem(finderItem)
 
         let settings = persistence.loadSettings()
-        if let createFromBranchItem = createThreadFromBaseMenuItem(for: thread, settings: settings) {
-            menu.addItem(createFromBranchItem)
-        }
 
         // Open project (if Xcode is installed and project has xcworkspace/xcodeproj)
         if let projectPath = xcodeProjectPath(for: thread), let xcodePath = urlForXcodeProjectOpeningApp(for: projectPath) {
