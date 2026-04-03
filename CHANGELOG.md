@@ -44,6 +44,7 @@ All notable changes to this project will be documented in this file.
 ### Thread
 - New threads now appear at the top of their section instead of the bottom, making the latest work immediately visible without scrolling.
 - The main worktree context menu no longer shows the "Fork Thread" option.
+- Fixed draft and web threads showing an indefinite busy spinner after creation since thread setup cleanup is now properly handled in non-terminal threads.
 - Fixed draft threads sometimes restoring as terminal/Codex tabs from stale tmux sessions. Draft-only threads now stay non-terminal until you explicitly start the agent.
 - The thread context menu now groups "Rename with Prompt", "Set Description", and "Rename Branch" under a single "Rename" submenu for better organization.
 
