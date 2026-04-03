@@ -643,6 +643,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         submittedPromptsBySession = completed.submittedPromptsBySession
         localFileSyncEntriesSnapshot = completed.localFileSyncEntriesSnapshot
         persistedWebTabs = completed.persistedWebTabs
+        persistedDraftTabs = completed.persistedDraftTabs
     }
 
     public func withProjectId(_ newProjectId: UUID) -> MagentThread {
