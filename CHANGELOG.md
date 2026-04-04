@@ -42,6 +42,7 @@ All notable changes to this project will be documented in this file.
 - Discarding a file in the CHANGES panel now refreshes the panel immediately, and queues a follow-up refresh if another git refresh is already in progress so the file state does not stay stale.
 
 ### Thread
+- Rate limit icons now distinguish between direct limits (red hourglass) and propagated limits from other sessions (orange hourglass), making it clearer when the block is in this thread's session vs inherited from another agent/session.
 - New threads now appear at the top of their section instead of the bottom, making the latest work immediately visible without scrolling.
 - The main worktree context menu no longer shows the "Fork Thread" option.
 - Fixed draft and web threads showing an indefinite busy spinner after creation since thread setup cleanup is now properly handled in non-terminal threads.

@@ -63,9 +63,11 @@ Newer pane output such as `/status` must not auto-clear an already-anchored limi
 - **Bottom status bar**: Shows a global rate-limit countdown (e.g. "⏳ Claude: 19m · Codex: 3h 5m") on the right side. Right-click offers:
   - Lift Claude/Codex limit now
   - Lift + ignore currently visible fingerprints for Claude/Codex (so only future/new messages are tracked)
-- **Thread list**: Red hourglass icon on threads where all agent tabs are rate-limited
-- **Tab bar**: Red hourglass on individual rate-limited tabs
-- **Tooltips**: Show the exact reset time (e.g., "Rate limit reached. Resets Mar 2, 2026 at 8:00 PM")
+- **Thread list**: Hourglass icon on threads with active rate limits:
+  - **Red hourglass** (⏳): Direct rate limit detected in this thread's session(s)
+  - **Orange hourglass** (⏳): Propagated from another session/agent (global account limit, but detected elsewhere)
+- **Tab bar**: Same hourglass distinction for individual rate-limited tabs
+- **Tooltips**: Show the exact reset time (e.g., "Rate limit reached. Resets Mar 2, 2026 at 8:00 PM") and whether the limit is direct or propagated
 - **Notifications**: Optional system notification when a rate limit lifts (configurable in Settings)
 
 ## Settings
