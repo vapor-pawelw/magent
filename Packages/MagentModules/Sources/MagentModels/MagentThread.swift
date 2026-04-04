@@ -55,17 +55,22 @@ public nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
     /// wait for limit to reset"). These are managed by syncBusySessionsFromProcessState
     /// and should not be cleared by checkForRateLimitedSessions.
     public var isPromptBased: Bool = false
+    /// True when this marker was propagated from a global agent rate limit rather than
+    /// directly detected in this session's pane output.
+    public var isPropagated: Bool = false
 
     public init(
         resetAt: Date,
         resetDescription: String? = nil,
         detectedAt: Date,
-        isPromptBased: Bool = false
+        isPromptBased: Bool = false,
+        isPropagated: Bool = false
     ) {
         self.resetAt = resetAt
         self.resetDescription = resetDescription
         self.detectedAt = detectedAt
         self.isPromptBased = isPromptBased
+        self.isPropagated = isPropagated
     }
 }
 
@@ -503,6 +508,15 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var rateLimitLiftDescription: String? {
         guard let latest = rateLimitLiftAt else { return nil }
         return "Resets \(latest.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    /// True when the thread is blocked by rate limits but all markers are propagated (none
+    /// were directly detected in this thread's sessions). Used to show a subtler icon.
+    public var isRateLimitPropagatedOnly: Bool {
+        guard isBlockedByRateLimit else { return false }
+        return agentTmuxSessions.allSatisfy { session in
+            rateLimitedSessions[session]?.isPropagated == true
+        }
     }
 
     /// True when the thread is technically rate-limited but the concrete reset time has already passed,

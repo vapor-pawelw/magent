@@ -85,12 +85,15 @@ private struct ThreadStatusSummaryDescriptor: Equatable {
 private struct ThreadStatusPopoverEntry {
     let thread: MagentThread
     let addedAt: Date
+    /// For rate-limited entries: true when all markers are propagated (not directly detected).
+    var isPropagatedOnly: Bool = false
 }
 
 private final class ThreadStatusPopoverRowView: NSView {
     private let thread: MagentThread
     private let addedAt: Date
     private let projectName: String
+    private let isPropagatedOnly: Bool
     private let onSelect: (UUID) -> Void
     private var trackingArea: NSTrackingArea?
     private var isHovered = false {
@@ -103,11 +106,13 @@ private final class ThreadStatusPopoverRowView: NSView {
         thread: MagentThread,
         addedAt: Date,
         projectName: String,
+        isPropagatedOnly: Bool = false,
         onSelect: @escaping (UUID) -> Void
     ) {
         self.thread = thread
         self.addedAt = addedAt
         self.projectName = projectName
+        self.isPropagatedOnly = isPropagatedOnly
         self.onSelect = onSelect
         super.init(frame: .zero)
         setupViews()
@@ -209,7 +214,9 @@ private final class ThreadStatusPopoverRowView: NSView {
         textStack.addArrangedSubview(branchLabel)
 
         let addedText = Self.relativeTimeString(from: addedAt)
-        let metaLabel = NSTextField(labelWithString: "\(projectName) · \(addedText)")
+        var metaSegments = [projectName, addedText]
+        if isPropagatedOnly { metaSegments.append("propagated") }
+        let metaLabel = NSTextField(labelWithString: metaSegments.joined(separator: " · "))
         metaLabel.font = .systemFont(ofSize: 10)
         metaLabel.textColor = NSColor(resource: .textSecondary)
         metaLabel.lineBreakMode = .byTruncatingTail
@@ -356,6 +363,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
                 thread: entry.thread,
                 addedAt: entry.addedAt,
                 projectName: projectsById[entry.thread.projectId] ?? "Unknown Project",
+                isPropagatedOnly: entry.isPropagatedOnly,
                 onSelect: onSelectThread
             )
             row.translatesAutoresizingMaskIntoConstraints = false
@@ -876,10 +884,15 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             newestFirst = threads.map { thread in
                 ThreadStatusPopoverEntry(
                     thread: thread,
-                    addedAt: addedAtById[thread.id] ?? thread.createdAt
+                    addedAt: addedAtById[thread.id] ?? thread.createdAt,
+                    isPropagatedOnly: status == .rateLimited && thread.isRateLimitPropagatedOnly
                 )
             }
             .sorted { lhs, rhs in
+                // For rate-limited threads, prioritize source-detected over propagated
+                if status == .rateLimited {
+                    if lhs.isPropagatedOnly != rhs.isPropagatedOnly { return !lhs.isPropagatedOnly }
+                }
                 if lhs.addedAt != rhs.addedAt { return lhs.addedAt > rhs.addedAt }
                 return lhs.thread.createdAt > rhs.thread.createdAt
             }

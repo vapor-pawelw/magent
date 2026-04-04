@@ -895,6 +895,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     isDirty: thread.isDirty,
                     isBlockedByRateLimit: thread.isBlockedByRateLimit,
                     isRateLimitExpiredAndResumable: thread.isRateLimitExpiredAndResumable,
+                    isRateLimitPropagatedOnly: thread.isRateLimitPropagatedOnly,
                     rateLimitTooltip: thread.rateLimitLiftDescription.map { "Rate limit reached. \($0)" },
                     currentBranch: currentBranch,
                     busyStateSince: thread.busyStateSince,

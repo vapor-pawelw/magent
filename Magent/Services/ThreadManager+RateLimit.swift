@@ -298,10 +298,17 @@ extension ThreadManager {
         if existing.isPromptBased != candidate.isPromptBased {
             return existing.isPromptBased ? candidate : existing
         }
+        var result: AgentRateLimitInfo
         if candidate.resetAt != existing.resetAt {
-            return candidate.resetAt > existing.resetAt ? candidate : existing
+            result = candidate.resetAt > existing.resetAt ? candidate : existing
+        } else {
+            result = candidate.detectedAt >= existing.detectedAt ? candidate : existing
         }
-        return candidate.detectedAt >= existing.detectedAt ? candidate : existing
+        // A directly-detected (non-propagated) marker wins over a propagated one.
+        if !existing.isPropagated || !candidate.isPropagated {
+            result.isPropagated = false
+        }
+        return result
     }
 
     private func activeGlobalRateLimit(for agent: AgentType, now: Date) -> AgentRateLimitInfo? {
@@ -341,17 +348,22 @@ extension ThreadManager {
         changedThreadIds: inout Set<UUID>
     ) -> Bool {
         var changed = false
+        // Markers applied through fan-out are propagated unless the session
+        // already has a directly-detected (non-propagated) marker.
+        var propagatedInfo = info
+        propagatedInfo.isPropagated = true
 
         for i in threads.indices where !threads[i].isArchived {
             var updatedRateLimits = threads[i].rateLimitedSessions
 
             for sessionName in threads[i].agentTmuxSessions {
                 guard agentType(for: threads[i], sessionName: sessionName) == agent else { continue }
+                let candidate = propagatedInfo
                 let nextInfo: AgentRateLimitInfo
                 if let existing = updatedRateLimits[sessionName] {
-                    nextInfo = mergedRateLimitInfo(existing: existing, candidate: info)
+                    nextInfo = mergedRateLimitInfo(existing: existing, candidate: candidate)
                 } else {
-                    nextInfo = info
+                    nextInfo = candidate
                 }
 
                 if updatedRateLimits[sessionName] != nextInfo {

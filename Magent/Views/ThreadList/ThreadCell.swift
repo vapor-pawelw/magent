@@ -664,8 +664,15 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
-            rateLimitImageView?.image = Self.cachedSymbolImage("hourglass.circle.fill")
-            rateLimitImageView?.contentTintColor = .systemRed
+            if thread.isRateLimitPropagatedOnly {
+                // Propagated from another session — subtler appearance
+                rateLimitImageView?.image = Self.cachedSymbolImage("hourglass")
+                rateLimitImageView?.contentTintColor = .systemOrange
+            } else {
+                // Directly detected in this thread's session(s)
+                rateLimitImageView?.image = Self.cachedSymbolImage("hourglass.circle.fill")
+                rateLimitImageView?.contentTintColor = .systemRed
+            }
             rateLimitImageView?.toolTip = rateLimitTooltip(for: thread)
             rateLimitImageView?.isHidden = false
             completionImageView?.image = nil
@@ -731,6 +738,7 @@ final class ThreadCell: NSTableCellView {
         isDirty: Bool = false,
         isBlockedByRateLimit: Bool = false,
         isRateLimitExpiredAndResumable: Bool = false,
+        isRateLimitPropagatedOnly: Bool = false,
         rateLimitTooltip: String? = nil,
         currentBranch: String? = nil,
         busyStateSince: Date? = nil,
@@ -812,8 +820,13 @@ final class ThreadCell: NSTableCellView {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
-            rateLimitImageView?.image = Self.cachedSymbolImage("hourglass.circle.fill")
-            rateLimitImageView?.contentTintColor = .systemRed
+            if isRateLimitPropagatedOnly {
+                rateLimitImageView?.image = Self.cachedSymbolImage("hourglass")
+                rateLimitImageView?.contentTintColor = .systemOrange
+            } else {
+                rateLimitImageView?.image = Self.cachedSymbolImage("hourglass.circle.fill")
+                rateLimitImageView?.contentTintColor = .systemRed
+            }
             rateLimitImageView?.toolTip = rateLimitTooltip ?? "Rate limit reached"
             rateLimitImageView?.isHidden = false
             completionImageView?.image = nil

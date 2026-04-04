@@ -978,6 +978,7 @@ extension ThreadDetailViewController {
                 tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
                 tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
                 tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
+                tabItems[i].isRateLimitPropagated = thread.rateLimitedSessions[sessionName]?.isPropagated ?? false
                 tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
                 tabItems[i].showKeepAliveIcon = !thread.isKeepAlive
                     && thread.protectedTmuxSessions.contains(sessionName)
@@ -986,6 +987,7 @@ extension ThreadDetailViewController {
                 tabItems[i].hasWaitingForInput = false
                 tabItems[i].hasBusy = false
                 tabItems[i].hasRateLimit = false
+                tabItems[i].isRateLimitPropagated = false
                 tabItems[i].showKeepAliveIcon = false
             }
         }

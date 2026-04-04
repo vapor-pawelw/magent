@@ -49,6 +49,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         didSet { updateIndicator() }
     }
 
+    var isRateLimitPropagated: Bool = false {
+        didSet { updateIndicator() }
+    }
+
     var rateLimitTooltip: String? {
         didSet { updateIndicator() }
     }
@@ -73,6 +77,13 @@ final class TabItemView: NSView, NSMenuDelegate {
             busySpinner.stopAnimation(nil)
             busySpinner.isHidden = true
             completionDot.isHidden = true
+            if isRateLimitPropagated {
+                rateLimitIcon.image = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "Rate limited (propagated)")
+                rateLimitIcon.contentTintColor = .systemOrange
+            } else {
+                rateLimitIcon.image = NSImage(systemSymbolName: "hourglass.circle.fill", accessibilityDescription: "Rate limited")
+                rateLimitIcon.contentTintColor = .systemRed
+            }
             rateLimitIcon.toolTip = rateLimitTooltip ?? "Rate limit reached"
             rateLimitIcon.isHidden = false
         } else if hasUnreadCompletion {

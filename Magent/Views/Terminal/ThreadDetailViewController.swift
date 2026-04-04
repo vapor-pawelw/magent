@@ -782,6 +782,7 @@ final class ThreadDetailViewController: NSViewController {
                     tabItems[i].hasWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
                     tabItems[i].hasBusy = thread.busySessions.contains(sessionName)
                     tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
+                    tabItems[i].isRateLimitPropagated = thread.rateLimitedSessions[sessionName]?.isPropagated ?? false
                     tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
                     tabItems[i].isSessionDead = thread.deadSessions.contains(sessionName)
                 }
@@ -1261,6 +1262,7 @@ final class ThreadDetailViewController: NSViewController {
         for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
             if case .terminal(let sessionName) = slot {
                 tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
+                tabItems[i].isRateLimitPropagated = thread.rateLimitedSessions[sessionName]?.isPropagated ?? false
                 tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
             }
         }
