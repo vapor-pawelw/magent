@@ -233,15 +233,7 @@ final class ThreadDetailViewController: NSViewController {
     static let diffMaxLineCount = 60_000
 
     let prJiraSeparator = VerticalSeparatorView()
-    let pinSeparator: NSView = {
-        let v = NSView()
-        v.wantsLayer = true
-        v.layer?.backgroundColor = NSColor.separatorColor.cgColor
-        v.translatesAutoresizingMaskIntoConstraints = false
-        v.widthAnchor.constraint(equalToConstant: 1).isActive = true
-        v.heightAnchor.constraint(equalToConstant: 18).isActive = true
-        return v
-    }()
+    let pinSeparator = VerticalSeparatorView()
 
     init(thread: MagentThread) {
         self.thread = thread

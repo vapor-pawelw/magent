@@ -18,7 +18,10 @@ extension ThreadDetailViewController {
         }
 
         if pinnedCount > 0 && pinnedCount < tabItems.count {
+            // Extra 4 pt padding on each side of the separator (stack spacing = 4, so total gap = 8)
+            tabBarStack.setCustomSpacing(tabBarStack.spacing + 4, after: tabItems[pinnedCount - 1])
             tabBarStack.addArrangedSubview(pinSeparator)
+            tabBarStack.setCustomSpacing(tabBarStack.spacing + 4, after: pinSeparator)
         }
 
         // Unpinned tabs (any type)
