@@ -11,6 +11,14 @@ All notable changes to this project will be documented in this file.
 - Busy-state duration badge is now a pill sitting on the capsule's top border with a persistent border.
 - Right-clicking a thread no longer flashes an extra selection border.
 - Hidden/archived thread dimming no longer makes badge backgrounds semi-transparent.
+- Waiting-for-input threads now show an orange capsule border and fill, matching the green completion style.
+- Keep-alive indicator moved from trailing stack to a top-border badge.
+- Duration badge moved to bottom-right of capsule.
+- Rate limit badge now shows for all threads (including main), not just non-main.
+- Removed vestigial trailing stack items (PR label, Jira icon, completion dot, rate-limit icon, keep-alive icon).
+- Thread row heights are now dynamic based on actual content (description lines, subtitle, PR/ticket row) with a minimum height matching 2 description lines + 2 metadata labels.
+- Capsule content padding is now consistent: 12pt horizontal and vertical from capsule inner edge.
+- Outline view indentation set to zero so thread cells fill the full row width, eliminating coordinate mismatch between capsule and content.
 - Section header rows no longer receive thread-style capsule borders.
 
 ## 1.5.1 - 2026-04-04

@@ -83,12 +83,14 @@ private final class TopBorderBadge: NSView {
         }
     }
 
-    func updateColors(isRowSelected: Bool, hasCompletionHighlight: Bool, appearance: NSAppearance) {
+    func updateColors(isRowSelected: Bool, hasCompletionHighlight: Bool, hasWaitingHighlight: Bool = false, appearance: NSAppearance) {
         appearance.performAsCurrentDrawingAppearance {
             // Border color mirrors the capsule row border.
             let borderColor: CGColor
             if isRowSelected {
                 borderColor = NSColor.controlAccentColor.cgColor
+            } else if hasWaitingHighlight {
+                borderColor = NSColor.systemOrange.withAlphaComponent(0.5).cgColor
             } else if hasCompletionHighlight {
                 borderColor = NSColor.systemGreen.withAlphaComponent(0.5).cgColor
             } else {
@@ -151,23 +153,22 @@ final class ThreadCell: NSTableCellView {
     private static let statusMarkerSlotWidth: CGFloat = 14
     private static let trailingMarkerSpacing: CGFloat = 4
     private static let primarySecondaryRowSpacing: CGFloat = 1
-    private static let contentVerticalInset: CGFloat = 12
+    /// Total vertical padding from row/cell edge to content (capsule inset + border + content padding).
+    private static let contentVerticalInset: CGFloat =
+        AlwaysEmphasizedRowView.capsuleVerticalInset
+        + AlwaysEmphasizedRowView.capsuleBorderInset
+        + AlwaysEmphasizedRowView.capsuleContentVPadding
 
-    private var prLabel: NSTextField?
     private var subtitleLabel: NSTextField?
     private var jiraTicketLabel: NSTextField?
     private var jiraStatusBadge: StatusBadgeView?
     private var prDotSeparator: NSTextField?
     private var prNumberLabel: NSTextField?
     private var prStatusBadge: StatusBadgeView?
-    private var jiraImageView: NSImageView?
     private var primaryDirtyDot: NSImageView?
     private var secondaryDirtyDot: NSImageView?
     private var pinImageView: NSImageView?
-    private var keepAliveImageView: NSImageView?
     private(set) var archiveButton: NSButton?
-    private var completionImageView: NSImageView?
-    private var rateLimitImageView: NSImageView?
     private var busySpinner: NSProgressIndicator?
     private var trailingStackView: NSStackView?
     private weak var leadingTextStackView: NSStackView?
@@ -181,11 +182,13 @@ final class ThreadCell: NSTableCellView {
     private var currentDurationSince: Date?
     private var topBorderBadgeStack: NSStackView?
     private var rateLimitBadge: TopBorderBadge?
+    private var keepAliveBadge: TopBorderBadge?
     private var pinnedBadge: TopBorderBadge?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
     private var showsRenamePulse = false
     private var hasUnreadCompletion = false
+    private var hasWaitingForInput = false
     private var hasAllDead = false
     private var configuredSectionColor: NSColor?
 
@@ -205,17 +208,43 @@ final class ThreadCell: NSTableCellView {
         ceil(font.ascender - font.descender + font.leading)
     }
 
-    static func uniformSidebarRowHeight(maxDescriptionLines: Int) -> CGFloat {
-        let clampedDescriptionLines = max(1, maxDescriptionLines)
-        let titleBlockHeight = (lineHeight(for: descriptionFont()) * CGFloat(clampedDescriptionLines))
+    static func uniformSidebarRowHeight(maxDescriptionLines: Int, narrowThreads: Bool = false) -> CGFloat {
+        sidebarRowHeight(descriptionLines: max(1, maxDescriptionLines), hasSubtitle: true, hasPRRow: true, narrowThreads: narrowThreads)
+    }
+
+    /// Estimate how many lines the description text will occupy given available width.
+    static func estimatedDescriptionLineCount(text: String, maxLines: Int, availableWidth: CGFloat) -> Int {
+        let font = descriptionFont()
+        let textWidth = (text as NSString).size(withAttributes: [.font: font]).width
+        let lines = max(1, Int(ceil(textWidth / max(1, availableWidth))))
+        return min(lines, max(1, maxLines))
+    }
+
+    /// Minimum content height: description lines (based on narrow setting) + 2 metadata labels.
+    static func minimumContentHeight(narrowThreads: Bool) -> CGFloat {
+        let descLines = narrowThreads ? 1 : 2
+        let minBlock = lineHeight(for: descriptionFont()) * CGFloat(descLines)
             + (lineHeight(for: metadataFont()) * 2)
             + primarySecondaryRowSpacing
-        let contentHeight = max(
-            leadingIconSize,
-            dirtyDotSize,
-            statusMarkerSlotWidth,
-            titleBlockHeight
-        )
+        return max(leadingIconSize, minBlock)
+    }
+
+    /// Compute row height based on actual visible content lines.
+    static func sidebarRowHeight(
+        descriptionLines: Int,
+        hasSubtitle: Bool,
+        hasPRRow: Bool,
+        narrowThreads: Bool = false
+    ) -> CGFloat {
+        let descHeight = lineHeight(for: descriptionFont()) * CGFloat(max(1, descriptionLines))
+        var titleBlockHeight = descHeight
+        if hasSubtitle {
+            titleBlockHeight += lineHeight(for: metadataFont()) + primarySecondaryRowSpacing
+        }
+        if hasPRRow {
+            titleBlockHeight += lineHeight(for: metadataFont()) + primarySecondaryRowSpacing
+        }
+        let contentHeight = max(leadingIconSize, titleBlockHeight, minimumContentHeight(narrowThreads: narrowThreads))
         return ceil(contentHeight + (contentVerticalInset * 2))
     }
 
@@ -224,6 +253,7 @@ final class ThreadCell: NSTableCellView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
     }
+
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
@@ -409,8 +439,9 @@ final class ThreadCell: NSTableCellView {
         NSLayoutConstraint.activate([
             accentBar.leadingAnchor.constraint(
                 equalTo: leadingAnchor,
-                constant: ThreadListViewController.sidebarRowLeadingInset
-                    - ThreadListViewController.outlineIndentationPerLevel
+                constant: CGFloat(AlwaysEmphasizedRowView.capsuleLeadingInset)
+                    + AlwaysEmphasizedRowView.capsuleBorderInset
+                    + 4
             ),
             accentBar.centerYAnchor.constraint(equalTo: leadingTextStackView.centerYAnchor),
             accentBar.widthAnchor.constraint(equalToConstant: 3),
@@ -440,14 +471,13 @@ final class ThreadCell: NSTableCellView {
     private func setDimmedAppearance(isHidden: Bool, isArchiving: Bool) {
         let dimmed = isHidden || isArchiving
         let contentAlpha: CGFloat = dimmed ? 0.5 : 1.0
-        // Dim content subviews individually so that top-border badges keep full
+        // Dim content subviews individually so that border badges keep full
         // opacity and don't visually bleed through the capsule border.
-        for sub in subviews where sub !== topBorderBadgeStack {
+        for sub in subviews where sub !== topBorderBadgeStack && sub !== durationBadge {
             sub.alphaValue = contentAlpha
         }
-        // Reset badges to full opacity (they have their own background that must
-        // stay opaque even when the thread row is dimmed).
         topBorderBadgeStack?.alphaValue = 1.0
+        durationBadge?.alphaValue = 1.0
     }
 
     private func applyRenamePulse(_ active: Bool) {
@@ -475,39 +505,10 @@ final class ThreadCell: NSTableCellView {
 
     private func ensureTrailingStack() {
         guard trailingStackView == nil else { return }
-        let completionIndicatorSize: CGFloat = Self.statusMarkerSlotWidth - 4
-
-        let prTF = NSTextField(labelWithString: "")
-        prTF.translatesAutoresizingMaskIntoConstraints = false
-        prTF.font = .monospacedDigitSystemFont(ofSize: 9, weight: .medium)
-        prTF.textColor = .secondaryLabelColor
-        prTF.setContentHuggingPriority(.required, for: .horizontal)
-        prTF.setContentCompressionResistancePriority(.required, for: .horizontal)
-        prTF.isHidden = true
-
-        let jiraIV = NSImageView()
-        jiraIV.translatesAutoresizingMaskIntoConstraints = false
-        jiraIV.setContentHuggingPriority(.required, for: .horizontal)
-        jiraIV.isHidden = true
 
         let pinIV = NSImageView()
         pinIV.translatesAutoresizingMaskIntoConstraints = false
         pinIV.setContentHuggingPriority(.required, for: .horizontal)
-
-        let keepAliveIV = NSImageView()
-        keepAliveIV.translatesAutoresizingMaskIntoConstraints = false
-        keepAliveIV.setContentHuggingPriority(.required, for: .horizontal)
-        keepAliveIV.isHidden = true
-
-        let completionIV = NSImageView()
-        completionIV.translatesAutoresizingMaskIntoConstraints = false
-        completionIV.setContentHuggingPriority(.required, for: .horizontal)
-        completionIV.isHidden = true
-
-        let rateLimitIV = NSImageView()
-        rateLimitIV.translatesAutoresizingMaskIntoConstraints = false
-        rateLimitIV.setContentHuggingPriority(.required, for: .horizontal)
-        rateLimitIV.isHidden = true
 
         let archiveBtn = NSButton()
         archiveBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -528,10 +529,7 @@ final class ThreadCell: NSTableCellView {
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         spinner.isHidden = true
 
-        // All trailing markers live directly in this stack. detachesHiddenViews = true means
-        // hidden items take no space, so multiple icons (e.g. archive + completion) can appear
-        // side-by-side without a fixed-size slot container.
-        let stack = NSStackView(views: [prTF, jiraIV, archiveBtn, spinner, rateLimitIV, completionIV, keepAliveIV, pinIV])
+        let stack = NSStackView(views: [archiveBtn, spinner, pinIV])
         stack.orientation = .horizontal
         stack.spacing = Self.trailingMarkerSpacing
         stack.distribution = .fill
@@ -542,35 +540,21 @@ final class ThreadCell: NSTableCellView {
         stack.setContentCompressionResistancePriority(.required, for: .horizontal)
         addSubview(stack)
 
-        // Align trailing markers with the top-border badge stack trailing edge.
-        let trailingAlignmentInset = AlwaysEmphasizedRowView.capsuleTrailingInset + 8
+        let trailingAlignmentInset = AlwaysEmphasizedRowView.capsuleTrailingInset + AlwaysEmphasizedRowView.capsuleContentHPadding
 
         NSLayoutConstraint.activate([
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -trailingAlignmentInset),
-            jiraIV.widthAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
-            jiraIV.heightAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
             pinIV.widthAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
             pinIV.heightAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
             archiveBtn.widthAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
             archiveBtn.heightAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
             spinner.widthAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
             spinner.heightAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
-            rateLimitIV.widthAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
-            rateLimitIV.heightAnchor.constraint(equalToConstant: Self.jiraMarkerWidth),
-            completionIV.widthAnchor.constraint(equalToConstant: completionIndicatorSize),
-            completionIV.heightAnchor.constraint(equalToConstant: completionIndicatorSize),
-            keepAliveIV.widthAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
-            keepAliveIV.heightAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
         ])
         trailingStackView = stack
-        prLabel = prTF
-        jiraImageView = jiraIV
         pinImageView = pinIV
-        keepAliveImageView = keepAliveIV
         archiveButton = archiveBtn
-        completionImageView = completionIV
-        rateLimitImageView = rateLimitIV
         busySpinner = spinner
 
         if !hasInstalledTextTrailingConstraint {
@@ -721,6 +705,7 @@ final class ThreadCell: NSTableCellView {
         imageView?.image = Self.cachedSymbolImage(thread.threadIcon.symbolName)
             ?? Self.cachedSymbolImage("terminal")
         hasUnreadCompletion = thread.hasUnreadAgentCompletion
+        hasWaitingForInput = thread.hasWaitingForInput
         hasAllDead = thread.hasAllSessionsDead
         configuredSectionColor = sectionColor
         updateLeadingIconTint()
@@ -737,23 +722,12 @@ final class ThreadCell: NSTableCellView {
             signEmojiLabel?.isHidden = true
         }
 
-        prLabel?.stringValue = ""
-        prLabel?.toolTip = nil
-        prLabel?.isHidden = true
-
-        jiraImageView?.image = nil
-        jiraImageView?.toolTip = nil
-        jiraImageView?.isHidden = true
-
         if thread.isPinned {
-            // Show pin as top-border badge; hide trailing icon.
             ensurePinnedBadge()
             pinnedBadge?.isHidden = false
-            pinImageView?.image = nil
             pinImageView?.isHidden = true
         } else {
             pinnedBadge?.isHidden = true
-            pinImageView?.image = nil
             pinImageView?.isHidden = true
         }
 
@@ -762,104 +736,39 @@ final class ThreadCell: NSTableCellView {
         let showKeepAliveShield = thread.isKeepAlive
             && !(cellSettings.protectPinnedFromEviction && thread.isPinned)
         if showKeepAliveShield {
-            keepAliveImageView?.image = Self.cachedSymbolImage("shield.righthalf.filled")
-            keepAliveImageView?.contentTintColor = .systemCyan
-            keepAliveImageView?.toolTip = "Keep Alive — protected from idle eviction"
-            keepAliveImageView?.isHidden = false
+            ensureKeepAliveBadge()
+            keepAliveBadge?.toolTip = "Keep Alive — protected from idle eviction"
+            keepAliveBadge?.isHidden = false
+            if thread.isPinned { ensurePinnedBadge() }
         } else {
-            keepAliveImageView?.image = nil
-            keepAliveImageView?.toolTip = nil
-            keepAliveImageView?.isHidden = true
+            keepAliveBadge?.isHidden = true
         }
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
-        if thread.isRateLimitExpiredAndResumable {
+        if thread.isRateLimitExpiredAndResumable || thread.isBlockedByRateLimit {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
-            rateLimitImageView?.image = Self.cachedSymbolImage("arrow.clockwise.circle.fill")
-            rateLimitImageView?.contentTintColor = .systemGreen
-            rateLimitImageView?.toolTip = "Rate limit lifted — ready to resume"
-            rateLimitImageView?.isHidden = false
-            completionImageView?.image = nil
-            completionImageView?.toolTip = nil
-            completionImageView?.isHidden = true
-        } else if thread.isBlockedByRateLimit {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-            if thread.isRateLimitPropagatedOnly {
-                // Propagated from another session — subtler appearance
-                rateLimitImageView?.image = Self.cachedSymbolImage("hourglass")
-                rateLimitImageView?.contentTintColor = .systemOrange
-            } else {
-                // Directly detected in this thread's session(s)
-                rateLimitImageView?.image = Self.cachedSymbolImage("hourglass.circle.fill")
-                rateLimitImageView?.contentTintColor = .systemRed
-            }
-            rateLimitImageView?.toolTip = rateLimitTooltip(for: thread)
-            rateLimitImageView?.isHidden = false
-            completionImageView?.image = nil
-            completionImageView?.toolTip = nil
-            completionImageView?.isHidden = true
-        } else if thread.hasWaitingForInput {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-            rateLimitImageView?.image = nil
-            rateLimitImageView?.toolTip = nil
-            rateLimitImageView?.isHidden = true
-            completionImageView?.image = Self.cachedSymbolImage("exclamationmark.circle.fill")
-            completionImageView?.contentTintColor = .systemYellow
-            completionImageView?.toolTip = "Agent needs input"
-            completionImageView?.isHidden = false
         } else if thread.isAnyBusy {
             busySpinner?.isHidden = false
             busySpinner?.startAnimation(nil)
             busySpinner?.toolTip = thread.hasMagentBusy && !thread.hasAgentBusy
                 ? "Setting up..."
                 : "Agent working"
-            rateLimitImageView?.image = nil
-            rateLimitImageView?.toolTip = nil
-            rateLimitImageView?.isHidden = true
-            completionImageView?.image = nil
-            completionImageView?.toolTip = nil
-            completionImageView?.isHidden = true
-        } else if thread.hasUnreadAgentCompletion {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-            rateLimitImageView?.image = nil
-            rateLimitImageView?.toolTip = nil
-            rateLimitImageView?.isHidden = true
-            // Green dot hidden for non-main threads — the capsule border+fill indicates completion.
-            completionImageView?.image = nil
-            completionImageView?.toolTip = nil
-            completionImageView?.isHidden = true
         } else {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
-            rateLimitImageView?.image = nil
-            rateLimitImageView?.toolTip = nil
-            rateLimitImageView?.isHidden = true
-            completionImageView?.image = nil
-            completionImageView?.toolTip = nil
-            completionImageView?.isHidden = true
         }
 
-        // Show rate limit as a top-border badge for non-main threads.
+        // Rate limit shown as top-border badge.
         configureRateLimitBadge(
             isExpiredAndResumable: thread.isRateLimitExpiredAndResumable,
             isBlocked: thread.isBlockedByRateLimit,
             isPropagatedOnly: thread.isRateLimitPropagatedOnly,
             tooltip: rateLimitTooltip(for: thread)
         )
-        // Hide trailing icon when badge is visible to avoid duplication.
-        if rateLimitBadge?.isHidden == false {
-            rateLimitImageView?.isHidden = true
-        }
 
         configureDuration(since: cellSettings.showBusyStateDuration ? thread.busyStateSince : nil)
 
@@ -899,7 +808,6 @@ final class ThreadCell: NSTableCellView {
         textField?.maximumNumberOfLines = 1
 
         pinImageView?.isHidden = true
-        keepAliveImageView?.isHidden = true
         archiveButton?.isHidden = true
 
         let resolvedBranch = currentBranch?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -942,76 +850,27 @@ final class ThreadCell: NSTableCellView {
         primaryDirtyDot?.toolTip = detailedTooltip
         secondaryDirtyDot?.toolTip = detailedTooltip
 
-        if isRateLimitExpiredAndResumable {
+        if isRateLimitExpiredAndResumable || isBlockedByRateLimit {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
-            rateLimitImageView?.image = Self.cachedSymbolImage("arrow.clockwise.circle.fill")
-            rateLimitImageView?.contentTintColor = .systemGreen
-            rateLimitImageView?.toolTip = "Rate limit lifted — ready to resume"
-            rateLimitImageView?.isHidden = false
-            completionImageView?.image = nil
-            completionImageView?.toolTip = nil
-            completionImageView?.isHidden = true
-        } else if isBlockedByRateLimit {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-            if isRateLimitPropagatedOnly {
-                rateLimitImageView?.image = Self.cachedSymbolImage("hourglass")
-                rateLimitImageView?.contentTintColor = .systemOrange
-            } else {
-                rateLimitImageView?.image = Self.cachedSymbolImage("hourglass.circle.fill")
-                rateLimitImageView?.contentTintColor = .systemRed
-            }
-            rateLimitImageView?.toolTip = rateLimitTooltip ?? "Rate limit reached"
-            rateLimitImageView?.isHidden = false
-            completionImageView?.image = nil
-            completionImageView?.toolTip = nil
-            completionImageView?.isHidden = true
-        } else if isWaitingForInput {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-            rateLimitImageView?.image = nil
-            rateLimitImageView?.toolTip = nil
-            rateLimitImageView?.isHidden = true
-            completionImageView?.image = Self.cachedSymbolImage("exclamationmark.circle.fill")
-            completionImageView?.contentTintColor = .systemYellow
-            completionImageView?.toolTip = "Agent needs input"
-            completionImageView?.isHidden = false
         } else if isBusy {
             busySpinner?.isHidden = false
             busySpinner?.startAnimation(nil)
             busySpinner?.toolTip = "Agent working"
-            rateLimitImageView?.image = nil
-            rateLimitImageView?.toolTip = nil
-            rateLimitImageView?.isHidden = true
-            completionImageView?.image = nil
-            completionImageView?.toolTip = nil
-            completionImageView?.isHidden = true
-        } else if isUnreadCompletion {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-            rateLimitImageView?.image = nil
-            rateLimitImageView?.toolTip = nil
-            rateLimitImageView?.isHidden = true
-            completionImageView?.image = Self.cachedSymbolImage("circle.fill")
-            completionImageView?.contentTintColor = .systemGreen
-            completionImageView?.toolTip = "Agent finished"
-            completionImageView?.isHidden = false
         } else {
             busySpinner?.stopAnimation(nil)
             busySpinner?.isHidden = true
             busySpinner?.toolTip = nil
-            rateLimitImageView?.image = nil
-            rateLimitImageView?.toolTip = nil
-            rateLimitImageView?.isHidden = true
-            completionImageView?.image = nil
-            completionImageView?.toolTip = nil
-            completionImageView?.isHidden = true
         }
+
+        // Rate limit shown as top-border badge (same as non-main threads).
+        configureRateLimitBadge(
+            isExpiredAndResumable: isRateLimitExpiredAndResumable,
+            isBlocked: isBlockedByRateLimit,
+            isPropagatedOnly: isRateLimitPropagatedOnly,
+            tooltip: rateLimitTooltip
+        )
 
         let showDuration = PersistenceService.shared.loadSettings().showBusyStateDuration
         configureDuration(since: showDuration ? busyStateSince : nil)
@@ -1038,7 +897,6 @@ final class ThreadCell: NSTableCellView {
         isPropagatedOnly: Bool,
         tooltip: String?
     ) {
-        guard !isConfiguredAsMain else { return }
         let showBadge = isExpiredAndResumable || isBlocked
         guard showBadge else {
             rateLimitBadge?.isHidden = true
@@ -1089,7 +947,7 @@ final class ThreadCell: NSTableCellView {
             stack.centerYAnchor.constraint(equalTo: topAnchor, constant: capsuleTopY),
             stack.trailingAnchor.constraint(
                 equalTo: trailingAnchor,
-                constant: -(AlwaysEmphasizedRowView.capsuleTrailingInset + 8)
+                constant: -(AlwaysEmphasizedRowView.capsuleTrailingInset + AlwaysEmphasizedRowView.capsuleContentHPadding)
             ),
         ])
         topBorderBadgeStack = stack
@@ -1101,22 +959,43 @@ final class ThreadCell: NSTableCellView {
         let badge = TopBorderBadge(bareIcon: true)
         badge.label.isHidden = true
         badge.isHidden = true
-        // Insert at index 0 so it appears left of the duration badge.
         topBorderBadgeStack?.insertArrangedSubview(badge, at: 0)
         rateLimitBadge = badge
     }
 
     private func ensureDurationLabel() {
         guard durationLabel == nil else { return }
-        ensureTopBorderBadgeStack()
 
         let badge = TopBorderBadge()
         badge.iconView.isHidden = true
         badge.isHidden = true
-        topBorderBadgeStack?.addArrangedSubview(badge)
+        addSubview(badge)
+
+        let capsuleBottomY = AlwaysEmphasizedRowView.capsuleVerticalInset
+        NSLayoutConstraint.activate([
+            badge.centerYAnchor.constraint(equalTo: bottomAnchor, constant: -capsuleBottomY),
+            badge.trailingAnchor.constraint(
+                equalTo: trailingAnchor,
+                constant: -(AlwaysEmphasizedRowView.capsuleTrailingInset + AlwaysEmphasizedRowView.capsuleContentHPadding)
+            ),
+        ])
+
         durationBadge = badge
         durationLabel = badge.label
         updateTopBorderBadgeColors()
+    }
+
+    private func ensureKeepAliveBadge() {
+        guard keepAliveBadge == nil else { return }
+        ensureTopBorderBadgeStack()
+        let badge = TopBorderBadge(bareIcon: true)
+        badge.label.isHidden = true
+        badge.iconView.image = Self.cachedSymbolImage("shield.righthalf.filled")
+        badge.iconView.contentTintColor = .systemCyan
+        badge.iconView.isHidden = false
+        badge.isHidden = true
+        topBorderBadgeStack?.addArrangedSubview(badge)
+        keepAliveBadge = badge
     }
 
     private func ensurePinnedBadge() {
@@ -1144,9 +1023,11 @@ final class ThreadCell: NSTableCellView {
     private func updateTopBorderBadgeColors() {
         let rowSelected = (superview as? NSTableRowView)?.isSelected ?? false
         let completion = hasUnreadCompletion && !rowSelected
-        durationBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, appearance: effectiveAppearance)
-        rateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, appearance: effectiveAppearance)
-        pinnedBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, appearance: effectiveAppearance)
+        let waiting = hasWaitingForInput && !hasUnreadCompletion && !rowSelected
+        durationBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        rateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        keepAliveBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        pinnedBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         // Pin icon: primary brand by default, white when selected.
         if let pin = pinnedBadge {
             pin.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
@@ -1223,6 +1104,8 @@ final class ThreadCell: NSTableCellView {
             let isRowSelected = (superview as? NSTableRowView)?.isSelected ?? false
             if isRowSelected {
                 imageView?.contentTintColor = .controlAccentColor
+            } else if hasWaitingForInput {
+                imageView?.contentTintColor = .systemOrange
             } else if hasUnreadCompletion {
                 imageView?.contentTintColor = .systemGreen
             } else {

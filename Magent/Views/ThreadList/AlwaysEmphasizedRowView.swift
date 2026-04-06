@@ -18,13 +18,22 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     static let capsuleLeadingInset: CGFloat = 12
     static let capsuleTrailingInset: CGFloat = 12
     static let capsuleVerticalInset: CGFloat = 8
-    private static let capsuleBorderWidth: CGFloat = 2
+    static let capsuleBorderWidth: CGFloat = 2
+    /// Half the border width — the inset from capsule rect to the border's inner edge.
+    static let capsuleBorderInset: CGFloat = capsuleBorderWidth / 2
     private static let capsuleCornerRadius: CGFloat = 8
+    /// Horizontal content padding from capsule inner edge (inside the border).
+    static let capsuleContentHPadding: CGFloat = 12
+    /// Vertical content padding from capsule inner edge (inside the border).
+    static let capsuleContentVPadding: CGFloat = 12
     private var busyOpacityMaskLayer: CAGradientLayer?
     private weak var maskedContentView: NSView?
     private var archivingOverlay: ArchivingRowOverlayView?
 
     var showsCompletionHighlight = false {
+        didSet { needsDisplay = true }
+    }
+    var showsWaitingHighlight = false {
         didSet { needsDisplay = true }
     }
     var showsSubtleBottomSeparator = false {
@@ -124,6 +133,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         // AppKit's own selection rect (which adds an unwanted border on right-click).
         if isSelected {
             drawCapsuleBorderAndFill(color: .controlAccentColor)
+        } else if showsWaitingHighlight {
+            drawCapsuleBorderAndFill(color: .systemOrange, fillOpacity: 0.06, borderOpacity: 0.5)
         } else if showsCompletionHighlight {
             drawCapsuleBorderAndFill(color: .systemGreen, fillOpacity: 0.06, borderOpacity: 0.5)
         } else {

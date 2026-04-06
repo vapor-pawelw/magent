@@ -380,11 +380,13 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         let rowView = AlwaysEmphasizedRowView()
         if let thread = item as? MagentThread {
             rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion
+            rowView.showsWaitingHighlight = thread.hasWaitingForInput && !thread.hasUnreadAgentCompletion
             rowView.showsSubtleBottomSeparator = false
             rowView.showsBusyShimmer = thread.isAnyBusy
             rowView.showsArchivingOverlay = thread.isArchiving
         } else {
             rowView.showsCompletionHighlight = false
+            rowView.showsWaitingHighlight = false
             rowView.showsSubtleBottomSeparator = false
             rowView.showsBusyShimmer = false
             rowView.showsArchivingOverlay = false
@@ -406,13 +408,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
     }
 
     private func threadLeadingOffset(for thread: MagentThread, in outlineView: NSOutlineView) -> CGFloat {
-        if outlineView.parent(forItem: thread) is SidebarSection {
-            return Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel
-        }
-        if outlineView.parent(forItem: thread) is SidebarProject {
-            return Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel
-        }
-        return Self.sidebarRowLeadingInset
+        // Cell spans full row width (frameOfCell override), so no indentation
+        // compensation needed — capsule padding is applied directly.
+        return 0
     }
 
     private func projectHeaderHitArea(_ project: SidebarProject) -> ProjectHeaderHitArea {
@@ -487,11 +485,46 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarSection {
             return 28
         }
-        if item is MagentThread {
-            // Extra height for capsule vertical inset (top + bottom padding around border).
-            return ThreadCell.uniformSidebarRowHeight(
-                maxDescriptionLines: currentSettings.sidebarDescriptionLineLimit
-            ) + AlwaysEmphasizedRowView.capsuleVerticalInset * 2
+        if let thread = item as? MagentThread {
+            let settings = currentSettings
+            let maxDescLines = settings.sidebarDescriptionLineLimit
+            let trimmedDesc = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasDescription = !(trimmedDesc?.isEmpty ?? true)
+
+            let worktreeName = (thread.worktreePath as NSString).lastPathComponent
+            let branchName = (thread.actualBranch ?? thread.branchName).trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedBranch = branchName.isEmpty ? thread.name : branchName
+            let hasBranchWorktreeMismatch = worktreeName != resolvedBranch
+
+            // Subtitle visible when description exists or branch != worktree.
+            let hasSubtitle = hasDescription || hasBranchWorktreeMismatch
+
+            let jiraEnabled = settings.jiraIntegrationEnabled && settings.jiraTicketDetectionEnabled
+            let hasTicket = jiraEnabled && thread.effectiveJiraTicketKey(settings: settings) != nil
+            let hasPR = thread.pullRequestInfo != nil
+            let hasPRRow = hasTicket || hasPR
+
+            let descLines: Int
+            if hasDescription, let desc = trimmedDesc, maxDescLines > 1 {
+                // Estimate available text width: sidebar width minus icon, spacing, trailing, capsule insets.
+                let sidebarWidth = outlineView.bounds.width
+                let textAvailableWidth = sidebarWidth
+                    - Self.sidebarHorizontalInset  // leading inset
+                    - Self.sidebarTrailingInset     // trailing inset
+                    - 16 - 6                        // icon + spacing
+                    - 30                            // trailing stack allowance
+                descLines = ThreadCell.estimatedDescriptionLineCount(
+                    text: desc, maxLines: maxDescLines, availableWidth: textAvailableWidth
+                )
+            } else {
+                descLines = 1
+            }
+            return ThreadCell.sidebarRowHeight(
+                descriptionLines: descLines,
+                hasSubtitle: hasSubtitle,
+                hasPRRow: hasPRRow,
+                narrowThreads: settings.narrowThreads
+            )
         }
         return 26
     }
@@ -789,7 +822,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     NSLayoutConstraint.activate([
                         iv.leadingAnchor.constraint(
                             equalTo: c.leadingAnchor,
-                            constant: Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel
+                            constant: Self.sidebarRowLeadingInset
                         ),
                         iv.centerYAnchor.constraint(equalTo: c.centerYAnchor),
                         iv.widthAnchor.constraint(equalToConstant: 8),
@@ -903,7 +936,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     rateLimitTooltip: thread.rateLimitLiftDescription.map { "Rate limit reached. \($0)" },
                     currentBranch: currentBranch,
                     busyStateSince: thread.busyStateSince,
-                    leadingOffset: Self.sidebarRowLeadingInset - Self.outlineIndentationPerLevel + 14
+                    leadingOffset: 0
                 )
                 return cell
             }

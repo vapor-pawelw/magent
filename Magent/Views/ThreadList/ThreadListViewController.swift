@@ -90,6 +90,7 @@ final class SidebarOutlineView: NSOutlineView {
         super.concludeDragOperation(sender)
         isDragInteractionActive = false
     }
+
 }
 
 final class ThreadListViewController: NSViewController {
@@ -106,9 +107,17 @@ final class ThreadListViewController: NSViewController {
     static let sectionCountBadgeLabelIdentifier = NSUserInterfaceItemIdentifier("SectionCountBadgeLabel")
     static let sectionInlineRenameFieldIdentifier = NSUserInterfaceItemIdentifier("SectionInlineRenameField")
     static let sectionKeepAliveShieldIdentifier = NSUserInterfaceItemIdentifier("SectionKeepAliveShield")
-    static let sidebarHorizontalInset: CGFloat = 0
+    /// Leading inset from cell edge to content. For indented threads, setLeadingOffset
+    /// subtracts the outline indentation so content aligns to capsule inner edge + padding.
+    static let sidebarHorizontalInset: CGFloat =
+        AlwaysEmphasizedRowView.capsuleLeadingInset
+        + AlwaysEmphasizedRowView.capsuleBorderInset
+        + AlwaysEmphasizedRowView.capsuleContentHPadding
     static let sidebarToolbarRowHeight: CGFloat = 32
-    static let sidebarTrailingInset: CGFloat = 20
+    static let sidebarTrailingInset: CGFloat =
+        AlwaysEmphasizedRowView.capsuleTrailingInset
+        + AlwaysEmphasizedRowView.capsuleBorderInset
+        + AlwaysEmphasizedRowView.capsuleContentHPadding
     static let projectDisclosureTrailingInset: CGFloat = sidebarTrailingInset
     static let outlineIndentationPerLevel: CGFloat = 16
     static let disclosureButtonSize: CGFloat = 16
@@ -121,8 +130,7 @@ final class ThreadListViewController: NSViewController {
     static let projectSpacerDividerVerticalSpacing: CGFloat = 4
     static let projectSpacerDividerHeight: CGFloat = 1
     static let projectSpacerDividerHorizontalInset: CGFloat = 8
-    static let projectSpacerDividerLeadingInset: CGFloat =
-        projectSpacerDividerHorizontalInset - (outlineIndentationPerLevel / 2)
+    static let projectSpacerDividerLeadingInset: CGFloat = projectSpacerDividerHorizontalInset
     static let projectSpacerDividerTrailingInset: CGFloat = sidebarTrailingInset
     static let sidebarRowLeadingInset: CGFloat = projectSpacerDividerLeadingInset
     static let projectHeaderTitleLeadingInset: CGFloat = sidebarRowLeadingInset + 3
@@ -360,7 +368,9 @@ final class ThreadListViewController: NSViewController {
         outlineView.style = .plain
         outlineView.headerView = nil
         outlineView.floatsGroupRows = true
-        outlineView.indentationPerLevel = Self.outlineIndentationPerLevel
+        // Zero indentation — thread cells use capsule-relative padding directly.
+        // Section/project headers add their own leading insets.
+        outlineView.indentationPerLevel = 0
         outlineView.rowSizeStyle = .custom
         outlineView.backgroundColor = .clear
         outlineView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
