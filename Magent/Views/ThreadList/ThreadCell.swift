@@ -111,7 +111,7 @@ final class ThreadCell: NSTableCellView {
     private static let statusMarkerSlotWidth: CGFloat = 14
     private static let trailingMarkerSpacing: CGFloat = 4
     private static let primarySecondaryRowSpacing: CGFloat = 1
-    private static let contentVerticalInset: CGFloat = 9
+    private static let contentVerticalInset: CGFloat = 12
 
     private var prLabel: NSTextField?
     private var subtitleLabel: NSTextField?
@@ -1036,7 +1036,7 @@ final class ThreadCell: NSTableCellView {
             stack.centerYAnchor.constraint(equalTo: topAnchor, constant: capsuleTopY),
             stack.trailingAnchor.constraint(
                 equalTo: trailingAnchor,
-                constant: -(AlwaysEmphasizedRowView.capsuleHorizontalInset + 12)
+                constant: -(AlwaysEmphasizedRowView.capsuleTrailingInset + 8)
             ),
         ])
         topBorderBadgeStack = stack

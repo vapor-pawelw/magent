@@ -15,7 +15,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     private static let busyOpacitySweepAnimationKey = "busy-row-opacity-sweep"
     private static let busyMaskOverscanLeft: CGFloat = 96
     private static let busyMaskOverscanRight: CGFloat = 48
-    static let capsuleHorizontalInset: CGFloat = 4
+    static let capsuleLeadingInset: CGFloat = 12
+    static let capsuleTrailingInset: CGFloat = 12
     static let capsuleVerticalInset: CGFloat = 8
     private static let capsuleBorderWidth: CGFloat = 2
     private static let capsuleCornerRadius: CGFloat = 8
@@ -38,7 +39,12 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
 
     /// The inset rect used for the capsule border/background.
     private var capsuleRect: NSRect {
-        bounds.insetBy(dx: Self.capsuleHorizontalInset, dy: Self.capsuleVerticalInset)
+        NSRect(
+            x: bounds.minX + Self.capsuleLeadingInset,
+            y: bounds.minY + Self.capsuleVerticalInset,
+            width: bounds.width - Self.capsuleLeadingInset - Self.capsuleTrailingInset,
+            height: bounds.height - Self.capsuleVerticalInset * 2
+        )
     }
 
 
