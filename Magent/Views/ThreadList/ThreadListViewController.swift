@@ -221,6 +221,13 @@ final class ThreadListViewController: NSViewController {
         checkForPendingPromptRecovery()
     }
 
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        // On first appearance the scroll view has its final bounds —
+        // force the column width to match so rows don't extend past the trailing edge.
+        refitOutlineColumnIfNeeded(force: true)
+    }
+
     override func viewDidLayout() {
         super.viewDidLayout()
         refitOutlineColumnIfNeeded()
@@ -336,7 +343,11 @@ final class ThreadListViewController: NSViewController {
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("ThreadColumn"))
         column.title = "Threads"
+        // .autoresizingMask lets the column track the outline view width.
         column.resizingMask = .autoresizingMask
+        // Prevent the column from growing wider than the scroll view clip bounds.
+        // Actual width is pinned in refitOutlineColumnIfNeeded().
+        column.minWidth = 10
         outlineView.addTableColumn(column)
         outlineView.outlineTableColumn = column
 
@@ -525,6 +536,7 @@ final class ThreadListViewController: NSViewController {
         let collapsedIds = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
 
         outlineView.reloadData()
+        refitOutlineColumnIfNeeded(force: true)
 
         // Expand projects that are not in the collapsed set; section visibility is
         // controlled by per-project section collapse state.
