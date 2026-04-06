@@ -1,6 +1,75 @@
 import Cocoa
 import MagentCore
 
+/// A small pill badge that sits on the top border of the capsule row.
+/// Hosts either a text label or an icon image view (or both).
+private final class TopBorderBadge: NSView {
+    let label: NSTextField = {
+        let tf = NSTextField(labelWithString: "")
+        tf.translatesAutoresizingMaskIntoConstraints = false
+        tf.font = .monospacedDigitSystemFont(ofSize: 9, weight: .regular)
+        tf.lineBreakMode = .byClipping
+        tf.maximumNumberOfLines = 1
+        tf.setContentHuggingPriority(.required, for: .horizontal)
+        tf.setContentCompressionResistancePriority(.required, for: .horizontal)
+        tf.backgroundColor = .clear
+        tf.isBordered = false
+        tf.isEditable = false
+        return tf
+    }()
+
+    let iconView: NSImageView = {
+        let iv = NSImageView()
+        iv.translatesAutoresizingMaskIntoConstraints = false
+        iv.setContentHuggingPriority(.required, for: .horizontal)
+        iv.setContentCompressionResistancePriority(.required, for: .horizontal)
+        iv.isHidden = true
+        return iv
+    }()
+
+    private let contentStack: NSStackView
+
+    override init(frame frameRect: NSRect) {
+        contentStack = NSStackView(views: [])
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.orientation = .horizontal
+        contentStack.alignment = .centerY
+        contentStack.spacing = 3
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.cornerRadius = 7
+        layer?.borderWidth = 1
+
+        contentStack.addArrangedSubview(iconView)
+        contentStack.addArrangedSubview(label)
+        addSubview(contentStack)
+
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 8),
+            iconView.heightAnchor.constraint(equalToConstant: 8),
+            contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
+            contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
+            contentStack.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func updateColors(isRowSelected: Bool, appearance: NSAppearance) {
+        appearance.performAsCurrentDrawingAppearance {
+            self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+            if isRowSelected {
+                self.layer?.borderColor = NSColor.controlAccentColor.cgColor
+            } else {
+                self.layer?.borderColor = NSColor.white.withAlphaComponent(0.15).cgColor
+            }
+            self.label.textColor = NSColor.secondaryLabelColor
+        }
+    }
+}
+
 final class ThreadCell: NSTableCellView {
 
     // MARK: - SF Symbol Cache
@@ -70,6 +139,8 @@ final class ThreadCell: NSTableCellView {
     private var durationLabel: NSTextField?
     private var durationTimer: Timer?
     private var currentDurationSince: Date?
+    private var topBorderBadgeStack: NSStackView?
+    private var rateLimitBadge: TopBorderBadge?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
     private var showsRenamePulse = false
@@ -119,7 +190,7 @@ final class ThreadCell: NSTableCellView {
     override var backgroundStyle: NSView.BackgroundStyle {
         didSet {
             updateMainTextColorForSelection()
-            updateDurationBadgeColors()
+            updateTopBorderBadgeColors()
         }
     }
 
@@ -725,6 +796,18 @@ final class ThreadCell: NSTableCellView {
             completionImageView?.isHidden = true
         }
 
+        // Show rate limit as a top-border badge for non-main threads.
+        configureRateLimitBadge(
+            isExpiredAndResumable: thread.isRateLimitExpiredAndResumable,
+            isBlocked: thread.isBlockedByRateLimit,
+            isPropagatedOnly: thread.isRateLimitPropagatedOnly,
+            tooltip: rateLimitTooltip(for: thread)
+        )
+        // Hide trailing icon when badge is visible to avoid duplication.
+        if rateLimitBadge?.isHidden == false {
+            rateLimitImageView?.isHidden = true
+        }
+
         configureDuration(since: cellSettings.showBusyStateDuration ? thread.busyStateSince : nil)
 
         syncRowVisibility()
@@ -893,68 +976,100 @@ final class ThreadCell: NSTableCellView {
         prRowStack?.isHidden = !hasJira && !hasPR
     }
 
+    // MARK: - Rate limit badge (top border)
+
+    /// Shows/hides the rate limit badge on the top border. Only for non-main threads.
+    private func configureRateLimitBadge(
+        isExpiredAndResumable: Bool,
+        isBlocked: Bool,
+        isPropagatedOnly: Bool,
+        tooltip: String?
+    ) {
+        guard !isConfiguredAsMain else { return }
+        let showBadge = isExpiredAndResumable || isBlocked
+        guard showBadge else {
+            rateLimitBadge?.isHidden = true
+            return
+        }
+        ensureRateLimitBadge()
+        guard let badge = rateLimitBadge else { return }
+
+        badge.label.isHidden = true
+        badge.iconView.isHidden = false
+
+        if isExpiredAndResumable {
+            badge.iconView.image = Self.cachedSymbolImage("arrow.clockwise.circle.fill")
+            badge.iconView.contentTintColor = .systemGreen
+            badge.toolTip = "Rate limit lifted — ready to resume"
+        } else if isPropagatedOnly {
+            badge.iconView.image = Self.cachedSymbolImage("hourglass")
+            badge.iconView.contentTintColor = .systemOrange
+            badge.toolTip = tooltip ?? "Rate limit reached"
+        } else {
+            badge.iconView.image = Self.cachedSymbolImage("hourglass.circle.fill")
+            badge.iconView.contentTintColor = .systemRed
+            badge.toolTip = tooltip ?? "Rate limit reached"
+        }
+        badge.isHidden = false
+        updateTopBorderBadgeColors()
+    }
+
     // MARK: - Busy-state duration label
 
     private static func durationFont() -> NSFont {
         .monospacedDigitSystemFont(ofSize: 9, weight: .regular)
     }
 
-    private var durationBadgeBackground: NSView?
+    private var durationBadge: TopBorderBadge?
 
-    private func ensureDurationLabel() {
-        guard durationLabel == nil else { return }
+    private func ensureTopBorderBadgeStack() {
+        guard topBorderBadgeStack == nil else { return }
+        let stack = NSStackView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        addSubview(stack)
 
-        // Pill background that straddles the capsule's top border.
-        let pill = NSView()
-        pill.translatesAutoresizingMaskIntoConstraints = false
-        pill.wantsLayer = true
-        pill.layer?.cornerRadius = 7
-        pill.layer?.borderWidth = 1
-        addSubview(pill)
-        durationBadgeBackground = pill
-
-        let label = NSTextField(labelWithString: "")
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.font = Self.durationFont()
-        label.lineBreakMode = .byClipping
-        label.maximumNumberOfLines = 1
-        label.setContentHuggingPriority(.required, for: .horizontal)
-        label.setContentCompressionResistancePriority(.required, for: .horizontal)
-        label.backgroundColor = .clear
-        label.isBordered = false
-        label.isEditable = false
-        label.isHidden = true
-        pill.addSubview(label)
-
-        // Center the pill's vertical midpoint on the capsule's top border line.
         let capsuleTopY = AlwaysEmphasizedRowView.capsuleVerticalInset
         NSLayoutConstraint.activate([
-            pill.centerYAnchor.constraint(equalTo: topAnchor, constant: capsuleTopY),
-            pill.trailingAnchor.constraint(
+            stack.centerYAnchor.constraint(equalTo: topAnchor, constant: capsuleTopY),
+            stack.trailingAnchor.constraint(
                 equalTo: trailingAnchor,
                 constant: -(AlwaysEmphasizedRowView.capsuleHorizontalInset + 12)
             ),
-            label.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 5),
-            label.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -5),
-            label.topAnchor.constraint(equalTo: pill.topAnchor, constant: 1),
-            label.bottomAnchor.constraint(equalTo: pill.bottomAnchor, constant: -1),
         ])
-        durationLabel = label
-        updateDurationBadgeColors()
+        topBorderBadgeStack = stack
     }
 
-    private func updateDurationBadgeColors() {
-        guard let pill = durationBadgeBackground else { return }
+    private func ensureRateLimitBadge() {
+        guard rateLimitBadge == nil else { return }
+        ensureTopBorderBadgeStack()
+        let badge = TopBorderBadge()
+        badge.label.isHidden = true
+        badge.isHidden = true
+        // Insert at index 0 so it appears left of the duration badge.
+        topBorderBadgeStack?.insertArrangedSubview(badge, at: 0)
+        rateLimitBadge = badge
+    }
+
+    private func ensureDurationLabel() {
+        guard durationLabel == nil else { return }
+        ensureTopBorderBadgeStack()
+
+        let badge = TopBorderBadge()
+        badge.iconView.isHidden = true
+        badge.isHidden = true
+        topBorderBadgeStack?.addArrangedSubview(badge)
+        durationBadge = badge
+        durationLabel = badge.label
+        updateTopBorderBadgeColors()
+    }
+
+    private func updateTopBorderBadgeColors() {
         let rowSelected = (superview as? NSTableRowView)?.isSelected ?? false
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            pill.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-            if rowSelected {
-                pill.layer?.borderColor = NSColor.controlAccentColor.cgColor
-            } else {
-                pill.layer?.borderColor = NSColor.white.withAlphaComponent(0.15).cgColor
-            }
-            self.durationLabel?.textColor = NSColor.secondaryLabelColor
-        }
+        durationBadge?.updateColors(isRowSelected: rowSelected, appearance: effectiveAppearance)
+        rateLimitBadge?.updateColors(isRowSelected: rowSelected, appearance: effectiveAppearance)
     }
 
 
@@ -964,12 +1079,12 @@ final class ThreadCell: NSTableCellView {
         if let since {
             refreshDurationText(since: since)
             durationLabel?.isHidden = false
-            durationBadgeBackground?.isHidden = false
+            durationBadge?.isHidden = false
             startDurationTimer()
         } else {
             durationLabel?.stringValue = ""
             durationLabel?.isHidden = true
-            durationBadgeBackground?.isHidden = true
+            durationBadge?.isHidden = true
             stopDurationTimer()
         }
     }
@@ -1033,7 +1148,7 @@ final class ThreadCell: NSTableCellView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateMainTextColorForSelection()
-        updateDurationBadgeColors()
+        updateTopBorderBadgeColors()
     }
 
     private func statusDescriptions(for thread: MagentThread) -> [String] {
