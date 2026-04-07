@@ -35,44 +35,14 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     /// Container layer for the rotating conic gradient border.
     private var busyBorderContainer: CALayer?
 
-    /// Class-level store of animation start times keyed by an opaque phase key
-    /// (typically the thread UUID). When a row view is recreated (e.g. structural
-    /// reload), the new instance picks up the stored start time so the rotation
-    /// resumes at the correct phase instead of jumping to 0.
-    private static var sharedBorderAnimationStartTimes: [AnyHashable: CFTimeInterval] = [:]
+    /// Single shared animation start time so all busy threads rotate and
+    /// shimmer in phase. Set once when any thread first becomes busy;
+    /// never reset (the epoch is meaningless, only the phase matters).
+    private static var sharedAnimationEpoch: CFTimeInterval = 0
 
-    /// Opaque key that ties this row's border animation to the class-level phase
-    /// store. Set from the data source (typically the thread ID) so the animation
-    /// survives row view recreation.
-    var busyBorderPhaseKey: AnyHashable? {
-        didSet {
-            guard busyBorderPhaseKey != oldValue else { return }
-            // If we already have a running animation, migrate its start time
-            // to the new key (or drop it if the key was cleared).
-            if let oldKey = oldValue, busyBorderContainer != nil {
-                let startTime = Self.sharedBorderAnimationStartTimes.removeValue(forKey: oldKey)
-                if let newKey = busyBorderPhaseKey, let startTime {
-                    Self.sharedBorderAnimationStartTimes[newKey] = startTime
-                }
-            }
-        }
-    }
-
-    /// Resolved animation start time — prefers the shared store, falls back to 0.
-    private var busyBorderAnimationStartTime: CFTimeInterval {
-        get {
-            guard let key = busyBorderPhaseKey else { return 0 }
-            return Self.sharedBorderAnimationStartTimes[key] ?? 0
-        }
-        set {
-            guard let key = busyBorderPhaseKey else { return }
-            if newValue == 0 {
-                Self.sharedBorderAnimationStartTimes.removeValue(forKey: key)
-            } else {
-                Self.sharedBorderAnimationStartTimes[key] = newValue
-            }
-        }
-    }
+    /// Legacy property — kept so the data source assignment compiles but
+    /// no longer drives per-thread phase tracking.
+    var busyBorderPhaseKey: AnyHashable?
 
     var showsRateLimitHighlight = false {
         didSet { needsDisplay = true }
@@ -263,12 +233,18 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             let endLocations: [NSNumber] = [1.22, 1.38, 1.47, 1.56, 1.72]
             maskLayer.locations = startLocations
 
+            // Ensure the shared epoch exists so shimmer and border stay in phase.
+            if Self.sharedAnimationEpoch == 0 {
+                Self.sharedAnimationEpoch = CACurrentMediaTime()
+            }
+
             let animation = CABasicAnimation(keyPath: "locations")
             animation.fromValue = startLocations
             animation.toValue = endLocations
             animation.duration = 2.6
             animation.repeatCount = .infinity
             animation.timingFunction = CAMediaTimingFunction(name: .linear)
+            animation.beginTime = Self.sharedAnimationEpoch
             maskLayer.add(animation, forKey: Self.busyOpacitySweepAnimationKey)
         } else {
             stopBusyShimmerAnimation()
@@ -334,7 +310,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         rotation.timingFunction = CAMediaTimingFunction(name: .linear)
         // Pin to the original start time so CA computes the correct phase
         // even when the animation is re-added after being dropped.
-        rotation.beginTime = busyBorderAnimationStartTime
+        rotation.beginTime = Self.sharedAnimationEpoch
         return rotation
     }
 
@@ -393,11 +369,10 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         shapeMask.lineWidth = borderWidth
         container.mask = shapeMask
 
-        // Reuse existing start time if this thread was already animating
-        // (e.g. row view was recreated by a structural reload), otherwise
-        // record a new one.
-        if busyBorderAnimationStartTime == 0 {
-            busyBorderAnimationStartTime = CACurrentMediaTime()
+        // Record a shared epoch the first time any thread starts animating.
+        // All threads use this same epoch so their rotations stay in phase.
+        if Self.sharedAnimationEpoch == 0 {
+            Self.sharedAnimationEpoch = CACurrentMediaTime()
         }
         gradientLayer.add(makeBorderRotationAnimation(), forKey: Self.busyBorderRotationAnimationKey)
 
@@ -444,7 +419,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         guard busyBorderContainer != nil else { return }
         busyBorderContainer?.removeFromSuperlayer()
         busyBorderContainer = nil
-        busyBorderAnimationStartTime = 0
+        // Don't reset sharedAnimationEpoch — other threads may still be
+        // animating and new busy threads should join in phase.
     }
 
     private func layoutBusyBorderLayers() {
