@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Diff panel can now be collapsed to show only branch info, with a chevron toggle at the top-right of the branch info area. Collapsed state is persisted across sessions.
 - Project and section headers now stick to the top of the sidebar while scrolling, so you always know which repo/section the visible threads belong to. Clicking a sticky header smoothly scrolls back to the actual header row.
 - Busy threads now show a rotating gradient border animation instead of a spinner icon.
+- Duration labels now tint with a color gradient based on thread age (light blue for <15 min, green for <8 hrs, yellow for <1 day, orange for <3 days, red for 3+ days), providing at-a-glance visual feedback on activity.
 - Metadata-only sidebar updates (busy state, rate limits, dirty flag, etc.) no longer recreate row views, preserving running animations.
 
 ### CLI

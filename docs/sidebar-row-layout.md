@@ -10,7 +10,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
   - **Waiting for input**: orange border and fill.
   - **Default**: subtle white border and fill.
 - Status badges (pinned, rate-limit, keep-alive) are bare-icon badges sitting on the capsule's top border with a circular background on selected/completed rows.
-- Duration badge is a pill on the capsule's bottom-right with a persistent border.
+- Duration badge is a pill on the capsule's bottom-right with a persistent border. The duration label tints with a color gradient based on thread age: light blue (<15 min), green (<8 hrs), yellow (<1 day), orange (<3 days), red (3+ days). This provides at-a-glance visual feedback on activity age.
 - The `Main worktree` row shows a tinted accent bar at the leading edge (same inset as non-main thread icons).
 - Regular thread rows use a three-line vertical stack:
   - line 1 (primary): task description when set; otherwise the branch name.
