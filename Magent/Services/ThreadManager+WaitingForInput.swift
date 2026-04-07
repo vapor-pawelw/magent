@@ -44,8 +44,14 @@ extension ThreadManager {
                         notifyPairs.append((threadId, session))
                     }
                 } else if !isWaiting && wasWaiting {
-                    // Transition: waiting → cleared (user provided input)
+                    // If this session was marked waiting because a rate limit lifted
+                    // (not because the agent asked a question), keep the indicator until
+                    // the user visits the tab or the agent resumes work.
+                    if rateLimitLiftPendingResumeSessions.contains(session) && !isBusy {
+                        continue
+                    }
                     threads[i].waitingForInputSessions.remove(session)
+                    rateLimitLiftPendingResumeSessions.remove(session)
                     notifiedWaitingSessions.remove(session)
                     changed = true
                     changedThreadIds.insert(threads[i].id)

@@ -838,6 +838,7 @@ extension ThreadManager {
         guard threads[index].waitingForInputSessions.contains(sessionName) else { return }
         threads[index].waitingForInputSessions.remove(sessionName)
         notifiedWaitingSessions.remove(sessionName)
+        rateLimitLiftPendingResumeSessions.remove(sessionName)
         updateDockBadge()
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
@@ -846,10 +847,11 @@ extension ThreadManager {
     func markSessionBusy(threadId: UUID, sessionName: String) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[index].agentTmuxSessions.contains(sessionName) else { return }
-        // Clear waiting/unsubmitted state — user submitted a prompt
+        // Clear waiting/unsubmitted state — user submitted a prompt (or agent auto-resumed)
         threads[index].waitingForInputSessions.remove(sessionName)
         threads[index].hasUnsubmittedInputSessions.remove(sessionName)
         notifiedWaitingSessions.remove(sessionName)
+        rateLimitLiftPendingResumeSessions.remove(sessionName)
         guard !threads[index].busySessions.contains(sessionName) else { return }
         threads[index].busySessions.insert(sessionName)
         delegate?.threadManager(self, didUpdateThreads: threads)

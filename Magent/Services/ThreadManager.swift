@@ -83,6 +83,10 @@ final class ThreadManager {
     var promptRenameResultCache: [UUID: [String: CachedRenameResult]] = [:]
     /// Dedup tracker — prevents repeated "waiting for input" notifications for the same session.
     var notifiedWaitingSessions: Set<String> = []
+    /// Sessions that had a rate limit lifted and still need the user to visit and continue work.
+    /// Protects those entries in waitingForInputSessions from being auto-cleared by
+    /// checkForWaitingForInput (which normally clears on idle prompt, not interactive prompt).
+    var rateLimitLiftPendingResumeSessions: Set<String> = []
     /// Global per-agent rate-limit cache (Claude/Codex), shared across all tabs/threads.
     var globalAgentRateLimits: [AgentType: AgentRateLimitInfo] = [:]
     /// Persisted cache of seen rate-limit fingerprints → concrete resetAt dates.

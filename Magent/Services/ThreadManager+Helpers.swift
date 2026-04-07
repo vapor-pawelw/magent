@@ -1463,15 +1463,21 @@ extension ThreadManager {
             changed = true
         }
 
-        // Keep notification dedup state aligned with waiting sessions after rename.
+        // Keep notification dedup state and rate-limit-resume state aligned with waiting sessions after rename.
         let renamedTargets = Set(sessionRenameMap.values)
         for (oldName, newName) in sessionRenameMap where notifiedWaitingSessions.remove(oldName) != nil {
             if remappedWaiting.contains(newName) {
                 notifiedWaitingSessions.insert(newName)
             }
         }
+        for (oldName, newName) in sessionRenameMap where rateLimitLiftPendingResumeSessions.remove(oldName) != nil {
+            if remappedWaiting.contains(newName) {
+                rateLimitLiftPendingResumeSessions.insert(newName)
+            }
+        }
         for target in renamedTargets where !remappedWaiting.contains(target) {
             notifiedWaitingSessions.remove(target)
+            rateLimitLiftPendingResumeSessions.remove(target)
         }
 
         return changed
