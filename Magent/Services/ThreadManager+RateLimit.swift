@@ -663,6 +663,12 @@ extension ThreadManager {
             return claudePromptDetection
         }
 
+        // Codex shows an interactive model-switch prompt when approaching (not hitting)
+        // rate limits. Skip detection when this prompt is visible — the agent isn't blocked.
+        if agent == .codex, codexHasModelSwitchPrompt(in: tail) {
+            return nil
+        }
+
         guard let indicatorAnchor = latestRateLimitIndicatorAnchor(in: tail) else { return nil }
 
         let focusText = rateLimitFocusText(from: tail, anchorIndex: indicatorAnchor)
@@ -696,6 +702,19 @@ extension ThreadManager {
         let scopedStart = tail.index(after: scopeSeparatorIndex)
         guard scopedStart < tail.endIndex else { return tail }
         return Array(tail[scopedStart...])
+    }
+
+    /// Detects Codex's interactive model-switch prompt that appears when *approaching*
+    /// (not hitting) rate limits. The prompt offers switching to a cheaper model and
+    /// contains "rate limit" text that could otherwise trigger false positive detection.
+    private func codexHasModelSwitchPrompt(in tail: [String]) -> Bool {
+        let recentLines = tail.suffix(15)
+        let hasApproaching = recentLines.contains { $0.lowercased().contains("approaching rate limit") }
+        let hasSwitchOffer = recentLines.contains {
+            let lower = $0.lowercased()
+            return lower.contains("switch to") && (lower.contains("codex") || lower.contains("gpt-"))
+        }
+        return hasApproaching && hasSwitchOffer
     }
 
     private func isRateLimitScopeSeparator(_ line: String) -> Bool {
