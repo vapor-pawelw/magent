@@ -704,22 +704,6 @@ final class ThreadCell: NSTableCellView {
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
-        if thread.isRateLimitExpiredAndResumable || thread.isBlockedByRateLimit {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-        } else if thread.isAnyBusy {
-            busySpinner?.isHidden = false
-            busySpinner?.startAnimation(nil)
-            busySpinner?.toolTip = thread.hasMagentBusy && !thread.hasAgentBusy
-                ? "Setting up..."
-                : "Agent working"
-        } else {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-        }
-
         // Rate limit shown as top-border badge with agent glyph.
         configureRateLimitBadge(
             isExpiredAndResumable: thread.isRateLimitExpiredAndResumable,
@@ -807,20 +791,6 @@ final class ThreadCell: NSTableCellView {
         subtitleLabel?.toolTip = detailedTooltip
         primaryDirtyDot?.toolTip = detailedTooltip
         secondaryDirtyDot?.toolTip = detailedTooltip
-
-        if isRateLimitExpiredAndResumable || isBlockedByRateLimit {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-        } else if isBusy {
-            busySpinner?.isHidden = false
-            busySpinner?.startAnimation(nil)
-            busySpinner?.toolTip = "Agent working"
-        } else {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-        }
 
         // Rate limit shown as top-border badge with agent glyph (same as non-main threads).
         configureRateLimitBadge(
