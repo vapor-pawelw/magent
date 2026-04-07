@@ -28,15 +28,24 @@ When Magent first sees a rate-limit message, it computes a **fingerprint** (norm
 
 Magent also stores a per-agent ignore list for fingerprints you manually dismiss (`ignored-rate-limit-fingerprints.json`).
 
+#### Session & Prompt Anchoring
+
+Rate-limit fingerprints are anchored to:
+- **The session where first detected** — for time-only resets (e.g., "resets 4pm"), the cached limit only matches that same session. A different session's pane may contain identical wording but refers to a different event; only the first session's context is trusted.
+- **The last submitted prompt** — if the user submits new prompts or code, the old cached fingerprint is pruned so it doesn't resurface as a stale marker once the pane scrolls or clears.
+
 On subsequent checks:
-- **Same fingerprint, reset time still in the future** — uses the stored time (no re-parsing, no drift)
-- **Same fingerprint, reset time in the past** — rate limit expired, skips detection
-- **New fingerprint** — parses fresh, stores the new mapping
+- **Same fingerprint, same session, prompt unchanged** — uses the stored time (no re-parsing, no drift)
+- **Same fingerprint, different session** — re-parses fresh (time-only anchoring doesn't transfer across sessions)
+- **Same fingerprint, prompt changed** — cache is pruned; the old limit doesn't resurface
+- **Reset time in the past** — rate limit expired, skips detection
+- **New fingerprint** — parses fresh, stores the new mapping with session/prompt anchors
 
 This persistence means:
 - Restarting Magent doesn't re-detect stale messages as new rate limits
 - Session recreation or app relaunch keeps the same concrete reset deadline for the same fingerprint instead of recalculating from freshly captured text
 - Overnight sessions with old "resets 8 PM" text won't incorrectly show a countdown for today's 8 PM — the cached time points to yesterday's 8 PM, which is already expired
+- Moving on to new code or a fresh prompt clears the old rate limit from the sidebar, even if the old message text lingers in the pane history
 
 ### Bare-Time Cap (8 Hours)
 

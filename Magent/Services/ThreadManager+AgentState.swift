@@ -411,8 +411,9 @@ extension ThreadManager {
                         // and avoids treating stale prompts (e.g. /rate-limit-options
                         // opened after the limit lifted) as active rate limits.
                         let widerContent = await tmux.cachedCapturePane(sessionName: session, lastLines: 120)
+                        let lastPromptForRL = threads.first(where: { $0.id == threadId })?.submittedPromptsBySession[session]?.last
                         let isActiveLimit = widerContent.map {
-                            paneHasActiveNonIgnoredRateLimit(for: .claude, paneContent: $0)
+                            paneHasActiveNonIgnoredRateLimit(for: .claude, paneContent: $0, lastSubmittedPrompt: lastPromptForRL)
                         } ?? false
 
                         if isActiveLimit {

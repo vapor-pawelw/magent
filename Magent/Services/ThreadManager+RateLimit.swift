@@ -163,8 +163,9 @@ extension ThreadManager {
                 }
                 lastRateLimitScanBySession[sessionName] = now
 
+                let lastPrompt = thread.submittedPromptsBySession[sessionName]?.last
                 guard let paneContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 120),
-                      let detection = rateLimitDetection(from: paneContent, now: now, agent: sessionAgent) else {
+                      let detection = rateLimitDetection(from: paneContent, now: now, agent: sessionAgent, lastSubmittedPrompt: lastPrompt) else {
                     if detectionEnabled {
                         let existing = updatedRateLimits[sessionName]
                         // Concrete fingerprint-based limits stay active until
@@ -192,40 +193,107 @@ extension ThreadManager {
 
                 // Check persisted fingerprint cache: if we've seen this exact text before,
                 // use the concrete resetAt from first detection instead of re-parsing.
-                if let cachedResetAt = rateLimitFingerprintCache[detection.fingerprint] {
-                    if cachedResetAt <= now {
-                        // Already expired — skip detection entirely.
-                        if detectionEnabled {
-                            if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
-                                // keep prompt-based marker
-                            } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                if let cached = rateLimitFingerprintCache[detection.fingerprint] {
+                    // Session-anchored entries (time-only resets like "resets 11am"):
+                    // only match against the same session where first detected.
+                    // Different session → treat as cache miss (allow fresh detection).
+                    if let anchorSession = cached.anchorSession {
+                        if anchorSession != sessionName {
+                            // Different session — fall through to fresh detection below.
+                        } else {
+                            // Same session. Check if the prompt changed (user moved on).
+                            let currentPrompt = thread.submittedPromptsBySession[sessionName]?.last
+                            if cached.anchorPrompt != nil && currentPrompt != cached.anchorPrompt {
+                                // Prompt changed — prune stale entry and skip.
+                                rateLimitFingerprintCache.removeValue(forKey: detection.fingerprint)
+                                rateLimitCacheDirty = true
+                                if detectionEnabled {
+                                    if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
+                                        // keep prompt-based marker
+                                    } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                                        changedThreadIds.insert(threadId)
+                                    }
+                                }
+                                continue
+                            }
+                            // Prompt-anchored with nil anchorPrompt (empty TOC at detection):
+                            // if TOC now has prompts, the user interacted — prune.
+                            if cached.anchorPrompt == nil && currentPrompt != nil {
+                                rateLimitFingerprintCache.removeValue(forKey: detection.fingerprint)
+                                rateLimitCacheDirty = true
+                                if detectionEnabled {
+                                    if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
+                                        // keep prompt-based marker
+                                    } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                                        changedThreadIds.insert(threadId)
+                                    }
+                                }
+                                continue
+                            }
+
+                            if cached.resetAt <= now {
+                                // Expired — suppress re-detection for this session.
+                                if detectionEnabled {
+                                    if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
+                                        // keep prompt-based marker
+                                    } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                                        changedThreadIds.insert(threadId)
+                                    }
+                                }
+                                continue
+                            }
+                            // Still active — use cached resetAt.
+                            guard detectionEnabled else { continue }
+                            var info = detection.info
+                            info.resetAt = cached.resetAt
+                            if updatedRateLimits[sessionName] != info {
+                                updatedRateLimits[sessionName] = info
                                 changedThreadIds.insert(threadId)
                             }
+                            updateGlobalRateLimit(
+                                info, for: sessionAgent, now: now,
+                                didChangeGlobalCache: &didChangeGlobalCache,
+                                newlyDetectedAgents: &newlyDetectedAgents
+                            )
+                            continue
                         }
+                    } else {
+                        // Non-anchored (date-anchored) entry — standard path.
+                        if cached.resetAt <= now {
+                            if detectionEnabled {
+                                if let existing = updatedRateLimits[sessionName], existing.isPromptBased {
+                                    // keep prompt-based marker
+                                } else if updatedRateLimits.removeValue(forKey: sessionName) != nil {
+                                    changedThreadIds.insert(threadId)
+                                }
+                            }
+                            continue
+                        }
+                        guard detectionEnabled else { continue }
+                        var info = detection.info
+                        info.resetAt = cached.resetAt
+                        if updatedRateLimits[sessionName] != info {
+                            updatedRateLimits[sessionName] = info
+                            changedThreadIds.insert(threadId)
+                        }
+                        updateGlobalRateLimit(
+                            info, for: sessionAgent, now: now,
+                            didChangeGlobalCache: &didChangeGlobalCache,
+                            newlyDetectedAgents: &newlyDetectedAgents
+                        )
                         continue
                     }
-                    // Fingerprint already cached with valid time — update visible state only.
-                    guard detectionEnabled else { continue }
-                    var info = detection.info
-                    info.resetAt = cachedResetAt
-
-                    if updatedRateLimits[sessionName] != info {
-                        updatedRateLimits[sessionName] = info
-                        changedThreadIds.insert(threadId)
-                    }
-                    updateGlobalRateLimit(
-                        info,
-                        for: sessionAgent,
-                        now: now,
-                        didChangeGlobalCache: &didChangeGlobalCache,
-                        newlyDetectedAgents: &newlyDetectedAgents
-                    )
-                    continue
                 }
 
                 // First time seeing this fingerprint — anchor the resetAt as a concrete date.
                 // Always cache, even when detection is disabled, so re-enabling works correctly.
-                rateLimitFingerprintCache[detection.fingerprint] = detection.info.resetAt
+                // Store session + prompt so stale pane text (relative durations, bare times,
+                // day-relative phrases) doesn't get re-anchored on subsequent scans/days.
+                rateLimitFingerprintCache[detection.fingerprint] = RateLimitCacheEntry(
+                    resetAt: detection.info.resetAt,
+                    anchorSession: sessionName,
+                    anchorPrompt: thread.submittedPromptsBySession[sessionName]?.last
+                )
                 rateLimitCacheDirty = true
 
                 guard detectionEnabled else { continue }
@@ -568,11 +636,12 @@ extension ThreadManager {
         for thread in snapshot {
             for sessionName in thread.agentTmuxSessions {
                 guard agentType(for: thread, sessionName: sessionName) == agent else { continue }
+                let lastPrompt = thread.submittedPromptsBySession[sessionName]?.last
                 guard let paneContent = await tmux.capturePane(sessionName: sessionName, lastLines: 120),
-                      let detection = rateLimitDetection(from: paneContent, now: now, agent: agent) else {
+                      let detection = rateLimitDetection(from: paneContent, now: now, agent: agent, lastSubmittedPrompt: lastPrompt) else {
                     continue
                 }
-                let effectiveResetAt = rateLimitFingerprintCache[detection.fingerprint] ?? detection.info.resetAt
+                let effectiveResetAt = rateLimitFingerprintCache[detection.fingerprint]?.resetAt ?? detection.info.resetAt
                 guard effectiveResetAt > now else { continue }
                 activeFingerprints.insert(detection.fingerprint)
             }
@@ -592,14 +661,19 @@ extension ThreadManager {
         return added
     }
 
-    func paneHasActiveNonIgnoredRateLimit(for agent: AgentType, paneContent: String, now: Date = Date()) -> Bool {
+    func paneHasActiveNonIgnoredRateLimit(
+        for agent: AgentType,
+        paneContent: String,
+        now: Date = Date(),
+        lastSubmittedPrompt: String? = nil
+    ) -> Bool {
         guard isRateLimitTrackable(agent: agent) else { return false }
         ensureRateLimitCachesLoaded()
-        guard let detection = rateLimitDetection(from: paneContent, now: now, agent: agent) else { return false }
+        guard let detection = rateLimitDetection(from: paneContent, now: now, agent: agent, lastSubmittedPrompt: lastSubmittedPrompt) else { return false }
         guard !isIgnoredRateLimitFingerprint(detection.fingerprint, for: agent) else { return false }
 
-        if let cachedResetAt = rateLimitFingerprintCache[detection.fingerprint] {
-            return cachedResetAt > now
+        if let cached = rateLimitFingerprintCache[detection.fingerprint] {
+            return cached.resetAt > now
         }
         return detection.info.resetAt > now
     }
@@ -635,7 +709,8 @@ extension ThreadManager {
             latestPaneContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 120)
         }
         guard let latestPaneContent else { return [] }
-        if paneHasActiveNonIgnoredRateLimit(for: agent, paneContent: latestPaneContent, now: now) {
+        let lastPrompt = thread.submittedPromptsBySession[sessionName]?.last
+        if paneHasActiveNonIgnoredRateLimit(for: agent, paneContent: latestPaneContent, now: now, lastSubmittedPrompt: lastPrompt) {
             return []
         }
 
@@ -656,8 +731,21 @@ extension ThreadManager {
     private static let claudePromptDeadlineLookbackLines = 14
     private static let maxRateLimitFingerprintLength = 512
 
-    private func rateLimitDetection(from paneContent: String, now: Date, agent: AgentType) -> RateLimitDetection? {
-        let tail = rateLimitTail(from: paneContent, agent: agent)
+    private func rateLimitDetection(
+        from paneContent: String,
+        now: Date,
+        agent: AgentType,
+        lastSubmittedPrompt: String? = nil
+    ) -> RateLimitDetection? {
+        var tail = rateLimitTail(from: paneContent, agent: agent)
+
+        // Scope detection to text AFTER the last submitted prompt.
+        // Rate limit text above the user's latest prompt is stale — the agent
+        // has already moved past it.
+        if let lastPrompt = lastSubmittedPrompt {
+            tail = scopeTailAfterLastPrompt(tail, prompt: lastPrompt, agent: agent)
+        }
+
         if agent == .claude,
            let claudePromptDetection = claudeInteractiveRateLimitDetection(in: tail, now: now) {
             return claudePromptDetection
@@ -682,6 +770,27 @@ extension ThreadManager {
             hasRelativeReset: parsed.hasRelativeReset,
             hasExplicitDateAnchor: parsed.hasExplicitDateAnchor
         )
+    }
+
+    /// Scopes the tail to only include lines after the last occurrence of the
+    /// user's most recent submitted prompt. Claude prompts start with ❯, Codex with ›.
+    private func scopeTailAfterLastPrompt(_ tail: [String], prompt: String, agent: AgentType) -> [String] {
+        let promptMarker: Character = agent == .codex ? "\u{203A}" : "\u{276F}"
+
+        // Find the last line that matches "❯ <prompt>" or "› <prompt>".
+        // Search backwards for efficiency.
+        guard let promptIndex = tail.lastIndex(where: { line in
+            let trimmed = line.drop(while: \.isWhitespace)
+            guard trimmed.first == promptMarker else { return false }
+            let afterMarker = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
+            return afterMarker.hasPrefix(prompt.prefix(80))
+        }) else {
+            return tail
+        }
+
+        // Keep everything from the prompt line onward — rate limit text that
+        // appears after this prompt is from the current conversation turn.
+        return Array(tail[promptIndex...])
     }
 
     private func rateLimitTail(from paneContent: String, agent: AgentType) -> [String] {

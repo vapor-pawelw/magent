@@ -24,8 +24,8 @@ All notable changes to this project will be documented in this file.
 - GPT 5.3 is now available as a Codex model option.
 - Fixed agent resume/recovery from incorrectly triggering when a plain terminal fallback session is recreated.
 - Fixed auto-rename-on-first-prompt to trigger immediately when prompts are injected via CLI, instead of waiting for user interaction or bell events.
-
-### Thread Naming
+- Rate limits anchored to your submitting prompt are now pruned when you move on to new code, so old limit messages don't resurface in the sidebar after the pane scrolls.
+- Time-only rate limits (e.g., "resets 4pm") are now session-anchored, preventing cross-session bleed where one session's limit would ghost-appear on another.
 
 ### Status Bar
 - Rate limit summary now shows inline Claude/Codex agent icons before each agent name.
