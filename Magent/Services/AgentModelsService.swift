@@ -150,7 +150,7 @@ final class AgentModelsService: @unchecked Sendable {
                     models: [
                         AgentModel(id: "gpt-5.4", label: "GPT 5.4"),
                         AgentModel(id: "gpt-5.4-mini", label: "GPT 5.4 Mini"),
-                        AgentModel(id: "gpt-5.3", label: "GPT 5.3"),
+                        AgentModel(id: "gpt-5.3-codex", label: "GPT 5.3 Codex"),
                     ],
                     reasoningLevels: ["low", "medium", "high", "xhigh"]
                 ),
