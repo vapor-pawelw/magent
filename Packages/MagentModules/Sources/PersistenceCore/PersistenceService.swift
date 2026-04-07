@@ -4,6 +4,28 @@ import os
 
 private let logger = Logger(subsystem: "com.magent.persistence", category: "PersistenceService")
 
+/// A single entry in the rate-limit fingerprint cache.
+/// For time-only resets (e.g. "resets 11am" with no date), `anchorSession` and
+/// `anchorPrompt` pin the entry to the specific session and prompt where it was
+/// first detected. This prevents stale pane text from being re-anchored daily.
+public struct RateLimitCacheEntry: Codable, Equatable {
+    public var resetAt: Date
+    /// The tmux session where this time-only rate limit was first detected.
+    /// Nil for date-anchored entries. When present, the fingerprint is only
+    /// matched against the same session — other sessions get fresh detection.
+    public var anchorSession: String?
+    /// The latest user prompt (from TOC) when this time-only rate limit was first
+    /// detected. Nil for date-anchored entries or when TOC was empty at detection.
+    /// When the prompt changes, the entry is pruned (user moved on).
+    public var anchorPrompt: String?
+
+    public init(resetAt: Date, anchorSession: String? = nil, anchorPrompt: String? = nil) {
+        self.resetAt = resetAt
+        self.anchorSession = anchorSession
+        self.anchorPrompt = anchorPrompt
+    }
+}
+
 public final class PersistenceService {
 
     public static let shared = PersistenceService()
@@ -622,21 +644,46 @@ public final class PersistenceService {
     }
 
     /// Loads persisted rate limit fingerprints (fingerprint -> concrete resetAt).
-    /// Automatically prunes expired entries on load.
-    public func loadRateLimitCache() -> [String: Date] {
+    /// Automatically prunes expired entries on load, but keeps time-only entries
+    /// as tombstones for 7 days past expiry to prevent re-anchoring stale messages
+    /// (e.g. "resets 11am" being re-interpreted as today's 11am every day).
+    public func loadRateLimitCache() -> [String: RateLimitCacheEntry] {
         let url = rateLimitCacheURL
         guard let data = try? Data(contentsOf: url) else { return [:] }
-        let cache = (try? decoder.decode([String: Date].self, from: data)) ?? [:]
+
+        // Try new format first, fall back to legacy [String: Date] migration.
+        let cache: [String: RateLimitCacheEntry]
+        if let decoded = try? decoder.decode([String: RateLimitCacheEntry].self, from: data) {
+            cache = decoded
+        } else if let legacy = try? decoder.decode([String: Date].self, from: data) {
+            cache = legacy.reduce(into: [:]) { result, entry in
+                result[entry.key] = RateLimitCacheEntry(resetAt: entry.value)
+            }
+        } else {
+            return [:]
+        }
+
         let now = Date()
         let maxFingerprintLength = 512
-        let pruned = cache.reduce(into: [String: Date]()) { result, entry in
+        // Prompt-anchored entries (time-only resets) are kept for 7 days past resetAt
+        // so the prompt comparison at scan time can suppress stale pane text. After 7
+        // days the tmux pane will have long since scrolled past the message.
+        let promptAnchorTTL: TimeInterval = 7 * 86_400
+        let pruned = cache.reduce(into: [String: RateLimitCacheEntry]()) { result, entry in
             let normalizedKey = entry.key.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !normalizedKey.isEmpty,
-                  normalizedKey.count <= maxFingerprintLength,
-                  entry.value > now else {
+                  normalizedKey.count <= maxFingerprintLength else {
                 return
             }
-            result[normalizedKey] = entry.value
+            if entry.value.resetAt > now {
+                // Still active — keep.
+                result[normalizedKey] = entry.value
+            } else if entry.value.anchorSession != nil,
+                      now.timeIntervalSince(entry.value.resetAt) < promptAnchorTTL {
+                // Expired session-anchored entry — keep for scan-time session/prompt comparison.
+                result[normalizedKey] = entry.value
+            }
+            // Otherwise: expired non-anchored entry, or anchor TTL elapsed — prune.
         }
         if pruned != cache {
             saveRateLimitCache(pruned)
@@ -644,7 +691,7 @@ public final class PersistenceService {
         return pruned
     }
 
-    public func saveRateLimitCache(_ cache: [String: Date]) {
+    public func saveRateLimitCache(_ cache: [String: RateLimitCacheEntry]) {
         guard let data = try? encoder.encode(cache) else { return }
         try? data.write(to: rateLimitCacheURL, options: .atomic)
     }

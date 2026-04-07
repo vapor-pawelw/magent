@@ -88,7 +88,9 @@ final class ThreadManager {
     /// Persisted cache of seen rate-limit fingerprints → concrete resetAt dates.
     /// Prevents re-detecting stale messages after restart and anchors relative/bare-time
     /// reset phrases to the concrete Date they were first computed at.
-    var rateLimitFingerprintCache: [String: Date] = [:]
+    /// Time-only entries (no date anchor) are kept as tombstones after expiry to prevent
+    /// stale pane text like "resets 11am" from being re-anchored daily.
+    var rateLimitFingerprintCache: [String: RateLimitCacheEntry] = [:]
     /// Persisted allowlist of fingerprints the user manually ignored per agent.
     var ignoredRateLimitFingerprintsByAgent: [AgentType: Set<String>] = [:]
     var rateLimitCacheLoaded = false
