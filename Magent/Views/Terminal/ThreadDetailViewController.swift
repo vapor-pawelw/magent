@@ -655,7 +655,10 @@ final class ThreadDetailViewController: NSViewController {
                 fallbackName = TmuxSessionNaming.buildSessionName(repoSlug: slug, threadName: thread.name, tabSlug: firstTabSlug)
             }
             sessions = [fallbackName]
-            threadManager.registerFallbackSession(fallbackName, for: thread.id, agentType: defaultAgentType)
+            // Pass nil — this is a plain terminal fallback, not an agent session.
+            // Using defaultAgentType here would cause agent resume/recovery to trigger
+            // incorrectly when this session is recreated.
+            threadManager.registerFallbackSession(fallbackName, for: thread.id, agentType: nil)
             // Refresh local copy after manager update
             if let latest = threadManager.threads.first(where: { $0.id == thread.id }) {
                 thread = latest
