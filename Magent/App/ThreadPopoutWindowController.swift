@@ -174,6 +174,15 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
             name: .magentArchivedThreadsDidChange,
             object: nil
         )
+
+        // Forward tab-returned notifications to detailVC so it can restore
+        // tabs that were detached from this pop-out window.
+        nc.addObserver(
+            self,
+            selector: #selector(handleTabReturnedToThread(_:)),
+            name: .magentTabReturnedToThread,
+            object: nil
+        )
     }
 
     @objc private func refreshInfoStrip() {
@@ -186,6 +195,13 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
         guard let navigateId = notification.userInfo?["threadId"] as? UUID,
               navigateId == threadId else { return }
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func handleTabReturnedToThread(_ notification: Notification) {
+        guard let sessionName = notification.userInfo?["sessionName"] as? String,
+              let returnedThreadId = notification.userInfo?["threadId"] as? UUID,
+              returnedThreadId == threadId else { return }
+        detailVC.returnDetachedTab(sessionName: sessionName)
     }
 
     @objc private func handleArchivedThreadsChanged() {
