@@ -202,6 +202,15 @@ final class DiffPanelView: NSView {
     private var hasMoreCommits = false
     private var forceVisible = false
 
+    // MARK: - Collapse state
+    private static let collapsedKey = "DiffPanelView.collapsed"
+    private var isCollapsed: Bool = UserDefaults.standard.bool(forKey: DiffPanelView.collapsedKey) {
+        didSet { UserDefaults.standard.set(isCollapsed, forKey: Self.collapsedKey) }
+    }
+    private let collapseButton = NSButton()
+    /// Active only in collapsed mode — pins branch info directly below the separator
+    private var collapsedTopConstraint: NSLayoutConstraint!
+
     // MARK: - Commit detail mode
     private var isInCommitDetailMode = false
     private var commitDetailHash: String? = nil
@@ -398,6 +407,23 @@ final class DiffPanelView: NSView {
         remoteStatusLabel.translatesAutoresizingMaskIntoConstraints = false
         remoteStatusLabel.isHidden = true
 
+        // Collapse/expand chevron — sits at the trailing edge of the branch info area
+        let chevronConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
+        // Expanded → chevron.down (click to collapse downward); collapsed → chevron.up (click to expand upward)
+        collapseButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Collapse panel")?.withSymbolConfiguration(chevronConfig)
+        collapseButton.isBordered = false
+        collapseButton.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.6)
+        collapseButton.target = self
+        collapseButton.action = #selector(collapseToggleTapped)
+        collapseButton.translatesAutoresizingMaskIntoConstraints = false
+        collapseButton.setContentHuggingPriority(.required, for: .horizontal)
+        collapseButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        collapseButton.toolTip = "Collapse to show only branch info"
+        // Generous tap target
+        collapseButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 28).isActive = true
+        collapseButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 28).isActive = true
+        addSubview(collapseButton)
+
         branchInfoStack.orientation = .vertical
         branchInfoStack.spacing = 1
         branchInfoStack.alignment = .leading
@@ -474,8 +500,11 @@ final class DiffPanelView: NSView {
             scrollView.bottomAnchor.constraint(equalTo: branchInfoStack.topAnchor, constant: -4),
 
             branchInfoStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            branchInfoStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            branchInfoStack.trailingAnchor.constraint(lessThanOrEqualTo: collapseButton.leadingAnchor, constant: -4),
             branchInfoStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+
+            collapseButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            collapseButton.centerYAnchor.constraint(equalTo: branchInfoStack.centerYAnchor),
 
             commitDetailHeaderView.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4),
             commitDetailHeaderView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -489,12 +518,19 @@ final class DiffPanelView: NSView {
             stackView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
         ])
 
+        // Collapsed-mode constraint: branch info sits right below the separator
+        collapsedTopConstraint = branchInfoStack.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4)
+        collapsedTopConstraint.isActive = false
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDiffViewerScrolledToFile(_:)),
             name: .magentDiffViewerScrolledToFile,
             object: nil
         )
+
+        // Set initial chevron direction from persisted state
+        applyCollapsedState(animated: false)
 
         clear()
     }
@@ -503,7 +539,7 @@ final class DiffPanelView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let location = convert(event.locationInWindow, from: nil)
-        if location.y >= bounds.maxY - 6 {
+        if !isCollapsed, location.y >= bounds.maxY - 6 {
             isDragging = true
             dragStartY = NSEvent.mouseLocation.y
             dragStartHeight = heightConstraint.constant
@@ -913,6 +949,7 @@ final class DiffPanelView: NSView {
         remoteStatusLabel.isHidden = true
         updateTabTitles()
         branchInfoStack.isHidden = true
+        collapseButton.isHidden = true
         setPanelVisible(false)
     }
 
@@ -1509,16 +1546,84 @@ final class DiffPanelView: NSView {
 
     private func setPanelVisible(_ visible: Bool) {
         if visible {
-            let clamped = min(max(expandedHeight, Self.minHeight), Self.maxHeight)
-            expandedHeight = clamped
-            heightConstraint.constant = clamped
+            collapseButton.isHidden = false
+            if isCollapsed {
+                applyCollapsedLayout()
+            } else {
+                let clamped = min(max(expandedHeight, Self.minHeight), Self.maxHeight)
+                expandedHeight = clamped
+                heightConstraint.constant = clamped
+            }
             isHidden = false
         } else {
-            if !isHidden && heightConstraint.constant > 0 {
+            collapseButton.isHidden = true
+            if !isHidden && !isCollapsed && heightConstraint.constant > 0 {
                 expandedHeight = min(max(heightConstraint.constant, Self.minHeight), Self.maxHeight)
             }
             heightConstraint.constant = 0
             isHidden = true
         }
+    }
+
+    // MARK: - Collapse / Expand
+
+    @objc private func collapseToggleTapped() {
+        isCollapsed.toggle()
+        applyCollapsedState(animated: true)
+    }
+
+    /// Collapsed height: handle (6) + gap (4) + branch info intrinsic + bottom (6)
+    private var collapsedHeight: CGFloat {
+        let branchSize = branchInfoStack.fittingSize.height
+        return 6 + 4 + max(branchSize, 24) + 6
+    }
+
+    private func applyCollapsedState(animated: Bool) {
+        let chevronName = isCollapsed ? "chevron.up" : "chevron.down"
+        let chevronConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
+        collapseButton.image = NSImage(systemSymbolName: chevronName, accessibilityDescription: isCollapsed ? "Expand panel" : "Collapse panel")?.withSymbolConfiguration(chevronConfig)
+        collapseButton.toolTip = isCollapsed ? "Expand to show commits and changes" : "Collapse to show only branch info"
+
+        let apply = {
+            if self.isCollapsed {
+                self.applyCollapsedLayout()
+            } else {
+                self.applyExpandedLayout()
+            }
+            self.superview?.layoutSubtreeIfNeeded()
+        }
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                ctx.allowsImplicitAnimation = true
+                apply()
+            }
+        } else {
+            apply()
+        }
+    }
+
+    private func applyCollapsedLayout() {
+        // Keep handleView (separator line) visible; drag is blocked by isCollapsed check
+        tabBarStack.isHidden = true
+        topRightButtonStack.isHidden = true
+        commitContextLabel.isHidden = true
+        scrollView.isHidden = true
+        commitDetailHeaderView.isHidden = true
+        collapsedTopConstraint.isActive = true
+        heightConstraint.constant = collapsedHeight
+    }
+
+    private func applyExpandedLayout() {
+        collapsedTopConstraint.isActive = false
+        tabBarStack.isHidden = false
+        topRightButtonStack.isHidden = false
+        // commitContextLabel visibility is managed by rebuildRows
+        scrollView.isHidden = false
+        // commitDetailHeaderView visibility is managed by commit detail mode
+        let clamped = min(max(expandedHeight, Self.minHeight), Self.maxHeight)
+        expandedHeight = clamped
+        heightConstraint.constant = clamped
     }
 }
