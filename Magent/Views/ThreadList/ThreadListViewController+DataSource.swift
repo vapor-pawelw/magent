@@ -1282,8 +1282,9 @@ extension ThreadListViewController: ThreadManagerDelegate {
             if let rowView = outlineView.rowView(atRow: row, makeIfNecessary: false) as? AlwaysEmphasizedRowView {
                 let isSelected = outlineView.isRowSelected(row)
                 rowView.busyBorderPhaseKey = updated.id
-                rowView.showsCompletionHighlight = updated.hasUnreadAgentCompletion
-                rowView.showsWaitingHighlight = updated.hasWaitingForInput && !updated.hasUnreadAgentCompletion
+                rowView.showsRateLimitHighlight = updated.hasUnreadRateLimit
+                rowView.showsCompletionHighlight = updated.hasUnreadAgentCompletion && !updated.hasUnreadRateLimit
+                rowView.showsWaitingHighlight = updated.hasWaitingForInput && !updated.hasUnreadAgentCompletion && !updated.hasUnreadRateLimit
                 rowView.showsBusyShimmer = updated.isAnyBusy
                 rowView.showsArchivingOverlay = updated.isArchiving
                 rowView.configureSignEmoji(
