@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- _No notable changes yet._
+
+## 1.5.2 - 2026-04-07
+
+
 ### Sidebar
 - Thread rows now use a rounded-border capsule selection style with accent-colored border and subtle fill instead of the full-width highlight.
 - Completed threads show a green capsule border and fill; thread icons tint to accent (selected) or green (completed).
@@ -24,6 +29,7 @@ All notable changes to this project will be documented in this file.
 - Removed separator divider between project groups; inter-project gap increased.
 - Reduced spacing between repo name header and main worktree row.
 - "Add repository" button is now a regular scrollable row at the top of the sidebar instead of a sticky toolbar overlay.
+
 
 ## 1.5.1 - 2026-04-04
 
