@@ -413,6 +413,18 @@ final class ThreadDetailViewController: NSViewController {
     }
 
 
+    /// Clean up views that live outside our own view hierarchy (e.g. on window.contentView)
+    /// before this controller is removed. Called from SplitContentContainerViewController.setContent
+    /// since deinit can't access @MainActor properties.
+    func cleanUpBeforeRemoval() {
+        // DiffImageOverlayView lives on window.contentView, not on our view,
+        // so it survives view controller replacement and blocks all mouse events.
+        diffImageOverlay?.removeFromSuperview()
+        diffImageOverlay = nil
+        loadingOverlay?.removeFromSuperview()
+        loadingOverlay = nil
+    }
+
     deinit {
         promptTOCRefreshTask?.cancel()
         scrollFABRefreshTask?.cancel()

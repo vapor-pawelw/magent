@@ -4,11 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Terminal
+- Fixed terminal becoming unresponsive to mouse clicks. The CAMetalLayer backing the terminal surface was missing `isOpaque`, causing the macOS window server to intermittently route mouse events past the terminal region.
+- Fixed tmux mouse URL capture script blocking all terminal input by running it in the background (`run-shell -b`).
+- Fixed diff image overlay and loading overlay surviving thread switches, permanently blocking mouse events in the terminal area.
+
 ### Sidebar
 - Project and section headers now stick to the top of the sidebar while scrolling, so you always know which repo/section the visible threads belong to. Clicking a sticky header smoothly scrolls back to the actual header row.
 - Busy threads now show a rotating gradient border animation instead of a spinner icon.
 - Metadata-only sidebar updates (busy state, rate limits, dirty flag, etc.) no longer recreate row views, preserving running animations.
-
 ### Agents
 - GPT 5.3 is now available as a Codex model option.
 - Fixed agent resume/recovery from incorrectly triggering when a plain terminal fallback session is recreated.

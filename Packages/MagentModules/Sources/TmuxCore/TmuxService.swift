@@ -129,8 +129,11 @@ public final class TmuxService: Sendable {
     private func configureMouseOpenableURLTracking() async {
         installMouseOpenableURLCaptureScript()
         let emptySentinel = "__MAGENT_EMPTY__"
+        // -b runs the URL capture script in the background so it never blocks tmux's
+        // event loop. Without -b, a synchronous run-shell can freeze ALL input (mouse
+        // and keyboard) if the shell or script stalls even briefly.
         let binding = """
-        run-shell "\(mouseOpenableURLCaptureScriptPath) #{q:session_name} #{?mouse_hyperlink,#{q:mouse_hyperlink},\(emptySentinel)} #{?mouse_word,#{q:mouse_word},\(emptySentinel)} #{?mouse_x,#{mouse_x},-1} #{?mouse_line,#{q:mouse_line},\(emptySentinel)}" ; select-pane -t = ; send-keys -M
+        run-shell -b "\(mouseOpenableURLCaptureScriptPath) #{q:session_name} #{?mouse_hyperlink,#{q:mouse_hyperlink},\(emptySentinel)} #{?mouse_word,#{q:mouse_word},\(emptySentinel)} #{?mouse_x,#{mouse_x},-1} #{?mouse_line,#{q:mouse_line},\(emptySentinel)}" ; select-pane -t = ; send-keys -M
         """
         _ = try? await ShellExecutor.run(
             "tmux bind-key -T root MouseDown1Pane \(shellQuote(binding))"

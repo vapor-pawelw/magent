@@ -130,6 +130,8 @@ libghostty manages Metal rendering internally. The host app only:
 4. Calls `ghostty_surface_set_display_id()` when screen changes
 5. Calls `ghostty_app_tick()` + `ghostty_surface_draw()` in response to wakeup
 
+**Critical: `CAMetalLayer.isOpaque` must be `true`.**  The macOS window server performs compositor-level hit testing before delivering mouse events to the application. If the `CAMetalLayer` region appears transparent (between drawables, during surface re-creation, or when the GPU is busy), the window server routes mouse events to the window behind instead of to our window — making the terminal unresponsive to clicks while non-Metal UI (sidebar, tabs) continues working. Setting `isOpaque = true` in `makeBackingLayer()` prevents this.
+
 ## Platform Selection
 
 mAgent is macOS-only, so use the native macOS path:

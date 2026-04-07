@@ -103,6 +103,12 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     override public func makeBackingLayer() -> CALayer {
         let layer = CAMetalLayer()
         layer.contentsScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        // Mark the layer as opaque so the macOS window server always treats this
+        // region as solid during its hit testing pass. Without this, the compositor
+        // can decide the CAMetalLayer area is transparent (e.g. between drawables
+        // or during surface re-creation) and route mouse events to the window
+        // behind, making the terminal unresponsive to clicks.
+        layer.isOpaque = true
         return layer
     }
 

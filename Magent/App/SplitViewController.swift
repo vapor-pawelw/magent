@@ -13,6 +13,9 @@ private final class SplitContentContainerViewController: NSViewController {
         if currentChild === child { return }
 
         if let currentChild {
+            // Clean up views that live outside the VC's own hierarchy (e.g.
+            // DiffImageOverlayView on window.contentView) before removing.
+            (currentChild as? ThreadDetailViewController)?.cleanUpBeforeRemoval()
             NSLayoutConstraint.deactivate(currentChildConstraints)
             currentChildConstraints.removeAll()
             currentChild.view.removeFromSuperview()
