@@ -69,6 +69,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         didSet { updateAppearance() }
     }
 
+    var isDetached: Bool = false {
+        didSet { updateAppearance() }
+    }
+
     private func updateIndicator() {
         if hasWaitingForInput {
             busySpinner.stopAnimation(nil)

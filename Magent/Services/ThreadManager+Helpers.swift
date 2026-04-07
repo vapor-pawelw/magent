@@ -2177,6 +2177,17 @@ extension Notification.Name {
     static let magentFavoritesChanged = Notification.Name("magentFavoritesChanged")
     /// Posted when tmux zombie summary or recovery state changes.
     static let magentTmuxHealthChanged = Notification.Name("magentTmuxHealthChanged")
+
+    // MARK: - Pop-out Windows
+
+    /// Posted when a thread is returned from a pop-out window to the main window. Carries "threadId" (UUID).
+    static let magentThreadReturnedToMain = Notification.Name("magentThreadReturnedToMain")
+    /// Posted when a detached tab is returned to its parent thread. Carries "sessionName" (String), "threadId" (UUID).
+    static let magentTabReturnedToThread = Notification.Name("magentTabReturnedToThread")
+    /// Posted when a thread is popped out into a separate window. Carries "threadId" (UUID).
+    static let magentThreadPoppedOut = Notification.Name("magentThreadPoppedOut")
+    /// Posted when a tab is detached into a separate window. Carries "sessionName" (String), "threadId" (UUID).
+    static let magentTabDetached = Notification.Name("magentTabDetached")
 }
 
 // MARK: - Errors

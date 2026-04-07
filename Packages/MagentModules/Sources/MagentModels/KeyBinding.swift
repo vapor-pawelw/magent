@@ -7,6 +7,8 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
     case closeTab
     case refreshWebTab
     case hardRefreshWebTab
+    case popOutThread
+    case detachTab
 
     public var displayName: String {
         switch self {
@@ -16,6 +18,8 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
         case .closeTab: "Close Tab"
         case .refreshWebTab: "Refresh Web Tab"
         case .hardRefreshWebTab: "Hard Refresh Web Tab"
+        case .popOutThread: "Pop Out Thread"
+        case .detachTab: "Detach Tab"
         }
     }
 
@@ -27,6 +31,8 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
         case .closeTab: KeyBinding(keyCode: 13, modifiers: [.command]) // Cmd+W
         case .refreshWebTab: KeyBinding(keyCode: 15, modifiers: [.command]) // Cmd+R
         case .hardRefreshWebTab: KeyBinding(keyCode: 15, modifiers: [.command, .shift]) // Cmd+Shift+R
+        case .popOutThread: KeyBinding(keyCode: 31, modifiers: [.command, .shift]) // Cmd+Shift+O
+        case .detachTab: KeyBinding(keyCode: 2, modifiers: [.command, .shift]) // Cmd+Shift+D
         }
     }
 }

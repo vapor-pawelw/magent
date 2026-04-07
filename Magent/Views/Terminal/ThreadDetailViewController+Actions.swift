@@ -905,6 +905,101 @@ extension ThreadDetailViewController {
         }
     }
 
+    // MARK: - Tab Detach
+
+    /// Keyboard entry point for detaching the current tab (Cmd+Shift+D).
+    /// Full implementation wired by the parallel popout-integration agent.
+    func detachCurrentTabFromKeyboard() {
+        let index = currentTabIndex
+        guard index >= 0, index < tabSlots.count else { return }
+        guard case .terminal = tabSlots[index] else { return }
+        detachTab(at: index)
+    }
+
+    /// Detach a terminal tab at the given index into a separate pop-out window.
+    /// Stores the terminal view in cache, shows a placeholder, and creates the pop-out.
+    func detachTab(at index: Int) {
+        guard index >= 0, index < tabSlots.count else { return }
+        guard case .terminal(let sessionName) = tabSlots[index] else { return }
+        guard index < terminalViews.count else { return }
+
+        let tv = terminalViews[index]
+        let reuseKey = terminalReuseKey(for: sessionName)
+        ReusableTerminalViewCache.shared.store(tv, sessionName: sessionName, reuseKey: reuseKey)
+
+        // Show placeholder in the terminal container
+        let placeholder = DetachedTabPlaceholderView(sessionName: sessionName)
+        placeholder.onShowWindow = {
+            PopoutWindowManager.shared.bringToFront(sessionName: sessionName)
+        }
+        placeholder.onReturnToTab = {
+            PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
+        }
+        placeholder.translatesAutoresizingMaskIntoConstraints = false
+        terminalContainer.addSubview(placeholder)
+        NSLayoutConstraint.activate([
+            placeholder.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
+            placeholder.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
+            placeholder.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
+            placeholder.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
+        ])
+        detachedTabPlaceholders[sessionName] = placeholder
+
+        // Hide the terminal view (it's now in the cache)
+        tv.removeFromSuperview()
+
+        // Update tab item indicator
+        if index < tabItems.count {
+            tabItems[index].isDetached = true
+        }
+
+        // Create the pop-out window
+        PopoutWindowManager.shared.detachTab(
+            sessionName: sessionName,
+            thread: thread,
+            from: view.window
+        )
+    }
+
+    /// Return a detached tab from its pop-out window back to this thread's tab bar.
+    func returnDetachedTab(sessionName: String) {
+        guard let placeholder = detachedTabPlaceholders.removeValue(forKey: sessionName) else { return }
+        placeholder.removeFromSuperview()
+
+        // Find the tab slot index for this session
+        guard let slotIndex = tabSlots.firstIndex(where: {
+            if case .terminal(let name) = $0 { return name == sessionName }
+            return false
+        }) else { return }
+
+        // Retrieve terminal view from cache
+        let reuseKey = terminalReuseKey(for: sessionName)
+        if let tv = ReusableTerminalViewCache.shared.take(sessionName: sessionName, reuseKey: reuseKey) {
+            // Replace the terminal view at this index
+            if slotIndex < terminalViews.count {
+                terminalViews[slotIndex] = tv
+            }
+
+            // If this tab is currently selected, show it
+            if slotIndex == currentTabIndex {
+                tv.translatesAutoresizingMaskIntoConstraints = false
+                terminalContainer.addSubview(tv)
+                NSLayoutConstraint.activate([
+                    tv.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
+                    tv.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
+                    tv.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
+                    tv.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
+                ])
+                view.window?.makeFirstResponder(tv)
+            }
+        }
+
+        // Update tab item indicator
+        if slotIndex < tabItems.count {
+            tabItems[slotIndex].isDetached = false
+        }
+    }
+
     // MARK: - Update & Rename
 
     func updateThread(_ updated: MagentThread) {

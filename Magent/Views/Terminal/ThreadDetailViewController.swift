@@ -163,6 +163,8 @@ final class ThreadDetailViewController: NSViewController {
     /// Index of the non-closable "primary" tab. -1 means all tabs are closable (main threads).
     var primaryTabIndex = 0
     var pinnedCount = 0
+    /// Placeholder views shown for detached tabs, keyed by sessionName.
+    var detachedTabPlaceholders: [String: DetachedTabPlaceholderView] = [:]
     var loadingOverlay: NSView?
     var loadingLabel: NSTextField?
     var loadingDetailLabel: NSTextField?
@@ -996,7 +998,7 @@ final class ThreadDetailViewController: NSViewController {
         )
     }
 
-    private func terminalReuseKey(for sessionName: String) -> String {
+    func terminalReuseKey(for sessionName: String) -> String {
         let resolvedThread = latestThreadSnapshot()
         let tmuxCommand = buildTmuxCommand(for: sessionName)
         return "\(resolvedThread.worktreePath)\n\(tmuxCommand)"

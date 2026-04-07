@@ -783,6 +783,21 @@ public final class PersistenceService {
         return !normalized.contains(Self.ignoredRateLimitResetAtPrefix)
     }
 
+    // MARK: - Popout Window State
+
+    private var popoutWindowStateURL: URL {
+        appSupportURL.appendingPathComponent("popout-windows.json")
+    }
+
+    public func loadPopoutWindowState() -> PopoutWindowState? {
+        guard let data = try? Data(contentsOf: popoutWindowStateURL) else { return nil }
+        return try? decoder.decode(PopoutWindowState.self, from: data)
+    }
+
+    public func savePopoutWindowState(_ state: PopoutWindowState) {
+        guard let data = try? encoder.encode(state) else { return }
+        try? data.write(to: popoutWindowStateURL, options: .atomic)
+    }
     public func saveIgnoredRateLimitFingerprints(_ ignored: [AgentType: Set<String>]) {
         var raw: [String: [String]] = [:]
         for (agent, fingerprints) in ignored {
