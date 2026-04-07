@@ -136,6 +136,11 @@ final class ThreadListViewController: NSViewController {
 
     var outlineView: NSOutlineView!
     private var scrollView: NSScrollView!
+    private var stickyHeaderOverlay: StickyHeaderOverlayView!
+    private var stickyHeaderHeightConstraint: NSLayoutConstraint!
+    /// The project/section currently shown in the sticky header, for scroll-on-click.
+    private weak var stickyProject: SidebarProject?
+    private weak var stickySection: SidebarSection?
     let threadManager = ThreadManager.shared
     let persistence = PersistenceService.shared
 
@@ -244,6 +249,15 @@ final class ThreadListViewController: NSViewController {
             object: nil
         )
         checkForPendingPromptRecovery()
+
+        // Observe scroll position to update sticky headers
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(scrollViewDidScroll(_:)),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
     }
 
     override func viewDidAppear() {
@@ -288,6 +302,152 @@ final class ThreadListViewController: NSViewController {
         lastFittedOutlineWidth = targetWidth
         outlineView.noteNumberOfRowsChanged()
         outlineView.layoutSubtreeIfNeeded()
+    }
+
+    // MARK: - Sticky Header Scroll Tracking
+
+    @objc private func scrollViewDidScroll(_ notification: Notification) {
+        updateStickyHeaders()
+    }
+
+    /// Determines which project/section header should be pinned at the top of the
+    /// sidebar based on the current scroll position. A header becomes sticky when
+    /// its actual row has scrolled above the visible area but its children are still
+    /// partially visible.
+    func updateStickyHeaders() {
+        guard let outlineView, let scrollView else { return }
+
+        let clipBounds = scrollView.contentView.bounds
+        let visibleTop = clipBounds.origin.y
+
+        // Walk visible rows from the top to find the first thread row.
+        // From that thread, determine its parent project and section.
+        let visibleRange = outlineView.rows(in: clipBounds)
+        guard visibleRange.length > 0 else {
+            stickyHeaderOverlay.update(state: .hidden)
+            stickyHeaderHeightConstraint.constant = 0
+            return
+        }
+
+        var state = StickyHeaderOverlayView.HeaderState.hidden
+
+        // Find the project whose header should be sticky: walk from the topmost
+        // visible row upward to find the nearest SidebarProject above the viewport.
+        // Also track the nearest section above or at the top of the viewport.
+        var foundProject: SidebarProject?
+        var foundSection: SidebarSection?
+
+        // Check from the first visible row backwards to find the project/section
+        let firstVisibleRow = visibleRange.location
+        for row in stride(from: firstVisibleRow, through: 0, by: -1) {
+            let item = outlineView.item(atRow: row)
+            if foundSection == nil, let section = item as? SidebarSection {
+                // Only sticky-pin the section if its row is above (or at) the visible top
+                let rowRect = outlineView.rect(ofRow: row)
+                if rowRect.origin.y < visibleTop + 1 {
+                    foundSection = section
+                }
+            }
+            if let project = item as? SidebarProject {
+                let rowRect = outlineView.rect(ofRow: row)
+                if rowRect.origin.y < visibleTop + 1 {
+                    foundProject = project
+                }
+                break // project is the top-level parent, stop here
+            }
+        }
+
+        // Only show sticky project header if the project row is scrolled off
+        if let project = foundProject {
+            // Verify the project has visible children below — don't pin if we've
+            // scrolled past all of its children too.
+            let projectRow = outlineView.row(forItem: project)
+            if projectRow >= 0 {
+                let lastChildRow = lastVisibleChildRow(of: project, projectRow: projectRow)
+                let lastChildRect = outlineView.rect(ofRow: lastChildRow)
+                // If the bottom of the last child is still visible, show sticky
+                if lastChildRect.maxY > visibleTop + StickyHeaderOverlayView.projectRowHeight {
+                    state.projectName = project.name
+                    state.projectIsPinned = project.isPinned
+                }
+            }
+        }
+
+        // Only show sticky section header if the section is expanded, its header
+        // row is scrolled off, and its threads are still partially visible.
+        if let section = foundSection,
+           state.projectName != nil,
+           outlineView.isItemExpanded(section) {
+            let sectionRow = outlineView.row(forItem: section)
+            let childCount = outlineView.numberOfChildren(ofItem: section)
+            if sectionRow >= 0, childCount > 0 {
+                let lastThreadRow = sectionRow + childCount
+                if lastThreadRow < outlineView.numberOfRows {
+                    let lastThreadRect = outlineView.rect(ofRow: lastThreadRow)
+                    let stickyBottom = StickyHeaderOverlayView.projectRowHeight + StickyHeaderOverlayView.sectionRowHeight
+                    if lastThreadRect.maxY > visibleTop + stickyBottom {
+                        state.sectionName = section.name
+                        state.sectionColor = section.color
+                    }
+                }
+            }
+        }
+
+        stickyProject = foundProject != nil && state.projectName != nil ? foundProject : nil
+        stickySection = foundSection != nil && state.sectionName != nil ? foundSection : nil
+
+        stickyHeaderOverlay.update(state: state)
+        let height = stickyHeaderOverlay.intrinsicContentSize.height
+        stickyHeaderHeightConstraint.constant = height
+    }
+
+    private func scrollToStickyProject() {
+        guard let project = stickyProject else { return }
+        let row = outlineView.row(forItem: project)
+        guard row >= 0 else { return }
+        scrollOutlineRowToTop(row)
+    }
+
+    private func scrollToStickySection() {
+        guard let section = stickySection else { return }
+        let row = outlineView.row(forItem: section)
+        guard row >= 0 else { return }
+        // Offset by the project header height so the section row sits just
+        // below the sticky project header instead of hidden behind it.
+        scrollOutlineRowToTop(row, topOffset: StickyHeaderOverlayView.projectRowHeight)
+    }
+
+    /// Scrolls the outline view so the given row's top edge aligns with the
+    /// top of the visible clip area (plus an optional offset), with a smooth animation.
+    private func scrollOutlineRowToTop(_ row: Int, topOffset: CGFloat = 0) {
+        let rowRect = outlineView.rect(ofRow: row)
+        let targetY = max(0, rowRect.origin.y - topOffset)
+        let targetOrigin = NSPoint(x: scrollView.contentView.bounds.origin.x, y: targetY)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            scrollView.contentView.animator().setBoundsOrigin(targetOrigin)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+    }
+
+    /// Returns the row index of the last visible child item under the given project.
+    private func lastVisibleChildRow(of project: SidebarProject, projectRow: Int) -> Int {
+        var lastRow = projectRow
+        let totalRows = outlineView.numberOfRows
+        for i in (projectRow + 1)..<totalRows {
+            let item = outlineView.item(atRow: i)
+            // Stop when we hit another project or the add-repo row
+            if item is SidebarProject || item is SidebarAddRepoRow {
+                break
+            }
+            // Skip inter-project spacers (they belong between projects)
+            if item is SidebarSpacer {
+                break
+            }
+            lastRow = i
+        }
+        return lastRow
     }
 
     @objc private func sectionsDidChange() {
@@ -397,9 +557,26 @@ final class ThreadListViewController: NSViewController {
         branchMismatchView = BranchMismatchView()
         view.addSubview(branchMismatchView)
 
+        // Sticky project/section header overlay — added last to sit above scroll view
+        stickyHeaderOverlay = StickyHeaderOverlayView()
+        stickyHeaderOverlay.translatesAutoresizingMaskIntoConstraints = false
+        stickyHeaderOverlay.onProjectClicked = { [weak self] in
+            self?.scrollToStickyProject()
+        }
+        stickyHeaderOverlay.onSectionClicked = { [weak self] in
+            self?.scrollToStickySection()
+        }
+        view.addSubview(stickyHeaderOverlay)
+        stickyHeaderHeightConstraint = stickyHeaderOverlay.heightAnchor.constraint(equalToConstant: 0)
+
         scrollViewTopConstraint = scrollView.topAnchor.constraint(equalTo: view.topAnchor)
 
         NSLayoutConstraint.activate([
+            stickyHeaderOverlay.topAnchor.constraint(equalTo: view.topAnchor),
+            stickyHeaderOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            stickyHeaderOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            stickyHeaderHeightConstraint,
+
             scrollViewTopConstraint!,
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -588,8 +765,10 @@ final class ThreadListViewController: NSViewController {
         }
 
         restoreSidebarScrollSnapshot(scrollSnapshot)
+        updateStickyHeaders()
         DispatchQueue.main.async { [weak self] in
             self?.restoreSidebarScrollSnapshot(scrollSnapshot)
+            self?.updateStickyHeaders()
         }
 
         // Refresh cached remote availability per project (async, non-blocking).

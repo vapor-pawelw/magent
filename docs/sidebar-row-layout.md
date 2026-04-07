@@ -21,6 +21,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - Project repo names use system bold 20pt font.
 - No separator divider between project groups; vertical gap (`projectHeaderInterProjectGap = 24pt`) handles spacing.
 - The global "Add repository" button is a `SidebarAddRepoRow` at the top of the outline view's root items. It scrolls with the rest of the content — there is no sticky toolbar.
+- **Sticky headers**: When the user scrolls past a project or section header, a floating overlay (`StickyHeaderOverlayView`) pins the project name (and current section, if applicable) at the top of the sidebar. A 12pt fade gradient softens the transition into scrolling content. Clicking a sticky header smoothly scrolls the sidebar to reveal the actual header row.
 - The archive icon (`archivebox.fill`) appears in the trailing area. Clicking it must not select the row — `SidebarOutlineView.mouseDown` intercepts clicks on the archive button directly.
 
 ## Implementation Notes
@@ -43,6 +44,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - Dynamic row heights computed in `heightOfRowByItem` using `ThreadCell.estimatedDescriptionLineCount` (text width estimation) and `ThreadCell.sidebarRowHeight(descriptionLines:hasSubtitle:hasPRRow:narrowThreads:)`.
 - The archiving overlay is owned by `AlwaysEmphasizedRowView`, covering the full row bounds.
 - Busy shimmer animation is a `CAGradientLayer` mask on the content view, managed by `AlwaysEmphasizedRowView`.
+- `StickyHeaderOverlayView` is a standalone view added as the topmost subview of `ThreadListViewController.view`. It mirrors project/section header styling (same fonts, insets, colors) without interactive controls (no disclosure/add buttons). The overlay height is managed by an external constraint updated by `updateStickyHeaders()`, which fires on every clip-view bounds change and after `reloadData()`. The overlay includes a `CAGradientLayer` fade below the opaque region. Click targets on the project/section regions fire `onProjectClicked`/`onSectionClicked` callbacks that animate-scroll the outline view to the actual header row (with the section offset by `projectRowHeight` so it sits below the sticky project header).
 
 ## Gotchas
 
@@ -51,3 +53,4 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - `SidebarProjectMainSpacer` is skipped entirely when `projectHeaderToMainRowGap = 0` — inserting a 0-height spacer row crashes `NSOutlineView`.
 - The PR/ticket row (`prRow`) contains `[jiraTicketTF, jiraBadge, dotSep, prNumTF, prBadge]` with `detachesHiddenViews = true`. Never merge branch/worktree and PR/ticket into one secondary line.
 - CALayer colors from dynamic NSColor assets must be resolved inside `performAsCurrentDrawingAppearance` (see AGENTS.md convention).
+- The sticky header's `CAGradientLayer` uses non-flipped CALayer coordinates: `colors[0]` at `startPoint(y=0)` is the visual **bottom** of the layer. So the array must be `[transparent, opaque]` to fade from opaque (top, adjacent to headers) to transparent (bottom).
