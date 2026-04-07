@@ -989,6 +989,11 @@ final class ThreadCell: NSTableCellView {
         let completion = hasUnreadCompletion && !rowSelected
         let waiting = hasWaitingForInput && !hasUnreadCompletion && !rowSelected
         durationBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        // Re-apply elapsed-time tint after updateColors resets label to secondaryLabelColor.
+        if let since = currentDurationSince {
+            let elapsed = max(0, Int(Date().timeIntervalSince(since)))
+            durationLabel?.textColor = Self.durationLabelColor(elapsed: elapsed)
+        }
         claudeRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         codexRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         keepAliveBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
@@ -1029,6 +1034,25 @@ final class ThreadCell: NSTableCellView {
             text = "\(elapsed / 86400)d"
         }
         durationLabel?.stringValue = text
+        durationLabel?.textColor = Self.durationLabelColor(elapsed: elapsed)
+    }
+
+    /// Returns a subtle tint for the duration label based on elapsed seconds.
+    /// Light blue → light green → green → yellow → orange → red as activity ages.
+    private static func durationLabelColor(elapsed: Int) -> NSColor {
+        if elapsed < 900 {           // < 15 min — light blue
+            return NSColor.systemCyan.withAlphaComponent(0.7)
+        } else if elapsed < 7200 {   // < 2 hrs — light green
+            return NSColor.systemMint.withAlphaComponent(0.75)
+        } else if elapsed < 28800 {  // < 8 hrs — green
+            return NSColor.systemGreen.withAlphaComponent(0.7)
+        } else if elapsed < 86400 {  // < 1 day — yellow
+            return NSColor.systemYellow.withAlphaComponent(0.65)
+        } else if elapsed < 259200 { // < 3 days — orange
+            return NSColor.systemOrange.withAlphaComponent(0.65)
+        } else {                     // ≥ 3 days — red
+            return NSColor.systemRed.withAlphaComponent(0.6)
+        }
     }
 
     private func startDurationTimer() {
