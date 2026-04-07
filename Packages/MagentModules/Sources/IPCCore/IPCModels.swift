@@ -23,7 +23,7 @@ public nonisolated struct IPCRequest: Codable, Sendable {
     public var position: Int?
     public var force: Bool?
     public var skipLocalSync: Bool?
-    public var noSelect: Bool?
+    public var select: Bool?
     public var noSubmit: Bool?
     public var remove: Bool?
     public var threads: [IPCBatchThreadSpec]?

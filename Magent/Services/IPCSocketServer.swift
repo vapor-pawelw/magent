@@ -702,7 +702,7 @@ actor IPCSocketServer {
 
         case "$cmd" in
         create-thread)
-            project=""; agent=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""; no_select=""; no_submit=""; from_thread=""
+            project=""; agent=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""; do_select=""; no_submit=""; from_thread=""
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --project)      project="$2"; shift 2 ;;
@@ -715,12 +715,12 @@ actor IPCSocketServer {
                     --base-thread)  base_thread="$2"; shift 2 ;;
                     --base-branch)  base_branch="$2"; shift 2 ;;
                     --from-thread)  from_thread="$2"; shift 2 ;;
-                    --no-select)    no_select=1; shift ;;
+                    --select)       do_select=1; shift ;;
                     --no-submit)    no_submit=1; shift ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--no-select] [--no-submit]"
+            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--select] [--no-submit]"
             [ -z "$base_thread" ] || [ -z "$base_branch" ] || die "Use either --base-thread or --base-branch, not both"
             json="{$(json_kv command create-thread),$(json_kv project "$project")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
@@ -737,7 +737,7 @@ actor IPCSocketServer {
                 # Auto-inject current thread context when running inside a Magent session
                 json="$json,$(json_kv fromThreadId "$MAGENT_THREAD_ID")"
             fi
-            [ "$no_select" = "1" ] && json="$json,\"noSelect\":true"
+            [ "$do_select" = "1" ] && json="$json,\"select\":true"
             [ "$no_submit" = "1" ] && json="$json,\"noSubmit\":true"
             json="$json}"
             send_request "$json" 120
@@ -1248,7 +1248,7 @@ actor IPCSocketServer {
             echo "  magent-cli docs                      (full IPC command reference + usage guidance)"
             echo ""
             echo "Thread commands:"
-            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--no-select] [--no-submit]"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--select] [--no-submit]"
             echo "  batch-create         --project <name> --file <specs.json> [--no-submit]  (parallel thread creation)"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"

@@ -55,7 +55,7 @@ final class ThreadManager {
     var threads: [MagentThread] = []
     var pendingThreadIds: Set<UUID> = []
     /// When true, the next `didCreateThread` delegate call will skip sidebar auto-selection.
-    /// Set by the IPC handler for `--no-select`; consumed and reset by the delegate.
+    /// Set by the IPC handler when `--select` is not passed; consumed and reset by the delegate.
     var skipNextAutoSelect: Bool = false
     var activeThreadId: UUID?
     /// Dedupes completion attention events across legacy bell sources and the

@@ -335,7 +335,7 @@ final class IPCCommandHandler {
                 requestedSectionId: requestedSectionId,
                 insertAfterThreadId: isPinnedSource ? nil : fromThread?.id,
                 insertAtTopOfVisibleGroup: isPinnedSource,
-                skipAutoSelect: request.noSelect == true
+                skipAutoSelect: request.select != true
             )
         } catch {
             return .failure("Failed to create thread: \(error.localizedDescription)", id: request.id)
