@@ -7,6 +7,8 @@ public nonisolated struct IPCRequest: Codable, Sendable {
     public let command: String
     public var project: String?
     public var agentType: String?
+    public var modelId: String?
+    public var reasoningLevel: String?
     public var prompt: String?
     public var threadId: String?
     public var threadName: String?
@@ -38,6 +40,8 @@ public nonisolated struct IPCRequest: Codable, Sendable {
 /// Spec for a single thread inside a `batch-create` request.
 public nonisolated struct IPCBatchThreadSpec: Codable, Sendable {
     public var agentType: String?
+    public var modelId: String?
+    public var reasoningLevel: String?
     public var prompt: String?
     public var newName: String?
     public var description: String?

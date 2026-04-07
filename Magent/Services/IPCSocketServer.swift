@@ -6,7 +6,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v25"
+    private static let cliVersion = "magent-cli-v26"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -702,11 +702,13 @@ actor IPCSocketServer {
 
         case "$cmd" in
         create-thread)
-            project=""; agent=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""; do_select=""; no_submit=""; from_thread=""
+            project=""; agent=""; model=""; reasoning=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""; do_select=""; no_submit=""; from_thread=""
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --project)      project="$2"; shift 2 ;;
                     --agent)        agent="$2"; shift 2 ;;
+                    --model)        model="$2"; shift 2 ;;
+                    --reasoning)    reasoning="$2"; shift 2 ;;
                     --prompt)       prompt="$2"; shift 2 ;;
                     --prompt-file)  [ -f "$2" ] || die "Prompt file not found: $2"; prompt="$(cat "$2")"; shift 2 ;;
                     --name)         name="$2"; shift 2 ;;
@@ -720,10 +722,12 @@ actor IPCSocketServer {
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--select] [--no-submit]"
+            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--select] [--no-submit]"
             [ -z "$base_thread" ] || [ -z "$base_branch" ] || die "Use either --base-thread or --base-branch, not both"
             json="{$(json_kv command create-thread),$(json_kv project "$project")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
+            [ -n "$model" ] && json="$json,$(json_kv modelId "$model")"
+            [ -n "$reasoning" ] && json="$json,$(json_kv reasoningLevel "$reasoning")"
             [ -n "$prompt" ] && json="$json,$(json_kv prompt "$prompt")"
             [ -n "$name" ] && json="$json,$(json_kv newName "$name")"
             [ -n "$desc" ] && json="$json,$(json_kv description "$desc")"
@@ -913,18 +917,22 @@ actor IPCSocketServer {
             fi
             ;;
         create-tab)
-            thread=""; agent=""; prompt=""
+            thread=""; agent=""; model=""; reasoning=""; prompt=""
             while [ $# -gt 0 ]; do
                 case "$1" in
-                    --thread) thread="$2"; shift 2 ;;
-                    --agent)  agent="$2"; shift 2 ;;
-                    --prompt) prompt="$2"; shift 2 ;;
+                    --thread)    thread="$2"; shift 2 ;;
+                    --agent)     agent="$2"; shift 2 ;;
+                    --model)     model="$2"; shift 2 ;;
+                    --reasoning) reasoning="$2"; shift 2 ;;
+                    --prompt)    prompt="$2"; shift 2 ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] || die "Usage: magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]"
+            [ -n "$thread" ] || die "Usage: magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text>]"
             json="{$(json_kv command create-tab),$(json_kv threadName "$thread")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
+            [ -n "$model" ] && json="$json,$(json_kv modelId "$model")"
+            [ -n "$reasoning" ] && json="$json,$(json_kv reasoningLevel "$reasoning")"
             [ -n "$prompt" ] && json="$json,$(json_kv prompt "$prompt")"
             json="$json}"
             send_request "$json" 60
@@ -1248,15 +1256,15 @@ actor IPCSocketServer {
             echo "  magent-cli docs                      (full IPC command reference + usage guidance)"
             echo ""
             echo "Thread commands:"
-            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--select] [--no-submit]"
-            echo "  batch-create         --project <name> --file <specs.json> [--no-submit]  (parallel thread creation)"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--select] [--no-submit]"
+            echo "  batch-create         --project <name> --file <specs.json> [--no-submit]  (parallel thread creation; per-spec keys: agentType, modelId, reasoningLevel, prompt, ...)"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
             echo "  send-prompt          --thread <name> (--prompt <text> | --prompt-file <path>)"
             echo "  archive-thread       --thread <name> [--force] [--skip-local-sync]  (removes worktree, keeps branch)"
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
             echo "  list-tabs            (--thread <name> | --thread-id <id>)"
-            echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]"
+            echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text>]"
             echo "  close-tab            --thread <name> (--index <n> | --session <name>)"
             echo "  current-thread                                               (returns current thread info)"
             echo "  auto-rename-thread   --thread <name> --prompt <text>       (AI-generated branch + description)"

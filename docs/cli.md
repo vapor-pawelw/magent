@@ -37,6 +37,8 @@ magent-cli create-thread --project <name> [options]
 |--------|-------------|
 | `--project <name>` | **Required.** Project to create the thread in. |
 | `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`. Defaults to project/global setting. Errors if the requested agent is disabled in Settings. |
+| `--model <id>` | Model ID to launch the initial tab with (e.g. `claude-opus-4-5`). Falls back to the agent's configured default when omitted. |
+| `--reasoning <level>` | Reasoning level for the initial tab: `low`, `medium`, `high`, `max` (Claude) or `low`, `medium`, `high`, `xhigh` (Codex). Omit to use the agent's default. |
 | `--prompt <text>` | Initial prompt to send to the agent after creation. |
 | `--prompt-file <path>` | Read the initial prompt from a file. Useful for multi-line prompts with special characters. |
 | `--name <slug>` | Exact thread name (must be unique). |
@@ -50,6 +52,8 @@ magent-cli create-thread --project <name> [options]
 
 If neither `--name` nor `--description` is given, a random name is generated.
 `--base-thread` and `--base-branch` are mutually exclusive.
+
+> **Agent selection**: `--agent` determines the agent type for the thread's *initial tab*. If you want a Claude thread, pass `--agent claude` to `create-thread` — do **not** omit `--agent` and follow up with `create-tab --agent claude`. Omitting `--agent` creates the initial tab using the project/global default agent (often `codex` or `terminal`), leaving you with an unwanted extra tab.
 
 **Auto-detection**: When called from inside a Magent session (i.e. `$MAGENT_THREAD_ID` is set), `create-thread` automatically inherits the current thread's branch, section, and sidebar position — as if `--from-thread` were set to the current thread. This means agents and scripts don't need to manually resolve the current context. Use `--from-thread none` to suppress this behavior. Explicit `--base-branch`, `--base-thread`, or `--section` flags always take precedence over the inherited values.
 
@@ -78,6 +82,8 @@ Each element in the specs array is an object with optional keys:
 | `description` | Natural-language description (AI generates slug). |
 | `name` | Exact thread name. |
 | `agentType` | `claude`, `codex`, `custom`, or `terminal`. Errors if the agent is disabled in Settings. |
+| `modelId` | Model ID to launch with (e.g. `claude-opus-4-5`). Falls back to the agent's configured default. |
+| `reasoningLevel` | Reasoning level: `low`, `medium`, `high`, `max` (Claude) or `low`, `medium`, `high`, `xhigh` (Codex). |
 | `sectionName` | Place thread in this section (case-insensitive). |
 | `baseThreadName` | Branch from an existing thread. |
 | `baseBranch` | Branch from an explicit branch. |
@@ -94,6 +100,8 @@ Example `specs.json`:
 ```
 
 The response contains a `threads` array with info for each successfully created thread, and a `warning` field if any failed.
+
+> **Agent selection**: Set `agentType` per-spec to control which agent each thread opens with. Omitting `agentType` falls back to the project/global default (often `codex`/`terminal`). If you want Claude threads, include `"agentType": "claude"` in every spec — do **not** omit it and add tabs afterwards.
 
 The same auto-detection behavior as `create-thread` applies: when called from inside a Magent session, base branch, section, and sidebar position are inherited from the current thread unless overridden.
 
@@ -292,10 +300,17 @@ magent-cli move-thread --thread <name> --section <name>
 Add a tab to an existing thread.
 
 ```bash
-magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--prompt <text>]
+magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text>]
 ```
 
-Use `--agent terminal` for a plain shell tab. If `--agent` is omitted, defaults to the project/global default agent from Settings. Errors if the requested agent is disabled in Settings.
+| Option | Description |
+|--------|-------------|
+| `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`. Defaults to project/global setting. |
+| `--model <id>` | Model ID to launch with. Falls back to the agent's configured default when omitted. |
+| `--reasoning <level>` | Reasoning level: `low`, `medium`, `high`, `max` (Claude) or `low`, `medium`, `high`, `xhigh` (Codex). |
+| `--prompt <text>` | Initial prompt to inject after the agent starts. |
+
+Use `--agent terminal` for a plain shell tab. Errors if the requested agent is disabled in Settings.
 
 ### list-tabs
 

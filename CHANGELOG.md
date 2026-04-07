@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Metadata-only sidebar updates (busy state, rate limits, dirty flag, etc.) no longer recreate row views, preserving running animations.
 
 ### CLI
+- `create-thread`, `create-tab`, and `batch-create` now accept `--model <id>` and `--reasoning <level>` to launch the initial tab with a specific model or reasoning level.
 - `create-thread` no longer switches the GUI to the new thread by default. Use `--select` to opt in. Batch create never switches.
 
 ### Agents

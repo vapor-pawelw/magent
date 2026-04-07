@@ -335,7 +335,9 @@ final class IPCCommandHandler {
                 requestedSectionId: requestedSectionId,
                 insertAfterThreadId: isPinnedSource ? nil : fromThread?.id,
                 insertAtTopOfVisibleGroup: isPinnedSource,
-                skipAutoSelect: request.select != true
+                skipAutoSelect: request.select != true,
+                modelId: request.modelId,
+                reasoningLevel: request.reasoningLevel
             )
         } catch {
             return .failure("Failed to create thread: \(error.localizedDescription)", id: request.id)
@@ -392,6 +394,8 @@ final class IPCCommandHandler {
         struct ResolvedSpec {
             let agentType: AgentType?
             let useAgentCommand: Bool
+            let modelId: String?
+            let reasoningLevel: String?
             let prompt: String?
             let noSubmit: Bool
             let requestedName: String?
@@ -507,6 +511,8 @@ final class IPCCommandHandler {
             resolved.append(ResolvedSpec(
                 agentType: agentType,
                 useAgentCommand: useAgentCommand,
+                modelId: spec.modelId,
+                reasoningLevel: spec.reasoningLevel,
                 prompt: spec.prompt,
                 noSubmit: spec.noSubmit == true || request.noSubmit == true,
                 requestedName: requestedName,
@@ -536,7 +542,9 @@ final class IPCCommandHandler {
                             requestedName: spec.requestedName,
                             requestedBaseBranch: spec.requestedBaseBranch,
                             requestedSectionId: spec.requestedSectionId,
-                            skipAutoSelect: true
+                            skipAutoSelect: true,
+                            modelId: spec.modelId,
+                            reasoningLevel: spec.reasoningLevel
                         )
                         return (i, .success(thread))
                     } catch {
@@ -771,7 +779,9 @@ final class IPCCommandHandler {
                 to: thread,
                 useAgentCommand: useAgent,
                 requestedAgentType: requestedAgent,
-                initialPrompt: initialPrompt
+                initialPrompt: initialPrompt,
+                modelId: request.modelId,
+                reasoningLevel: request.reasoningLevel
             )
             // Finalize session context (legacy pipe cleanup/rollback path, cwd enforcement)
             // — same as UI path.
