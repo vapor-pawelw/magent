@@ -150,7 +150,6 @@ final class ThreadCell: NSTableCellView {
     private static let jiraMarkerWidth: CGFloat = 10
     private static let pinMarkerWidth: CGFloat = 12
     private static let archiveMarkerWidth: CGFloat = 12
-    private static let statusMarkerSlotWidth: CGFloat = 14
     private static let trailingMarkerSpacing: CGFloat = 4
     private static let primarySecondaryRowSpacing: CGFloat = 1
     /// Total vertical padding from row/cell edge to content (capsule inset + border + content padding).
@@ -169,7 +168,6 @@ final class ThreadCell: NSTableCellView {
     private var secondaryDirtyDot: NSImageView?
     private var pinImageView: NSImageView?
     private(set) var archiveButton: NSButton?
-    private var busySpinner: NSProgressIndicator?
     private var trailingStackView: NSStackView?
     private weak var leadingTextStackView: NSStackView?
     private weak var secondaryRowStack: NSStackView?
@@ -270,12 +268,6 @@ final class ThreadCell: NSTableCellView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        // NSProgressIndicator.startAnimation may silently fail when called on a
-        // cell not yet in a window (e.g. during NSOutlineView.reloadData on fresh
-        // launch). Re-apply the animation once the cell enters the hierarchy.
-        if window != nil, let spinner = busySpinner, !spinner.isHidden {
-            spinner.startAnimation(nil)
-        }
         if window != nil, showsRenamePulse {
             applyRenamePulse(true)
         }
@@ -508,15 +500,7 @@ final class ThreadCell: NSTableCellView {
         archiveBtn.action = #selector(archiveButtonClicked)
         archiveBtn.isHidden = true
 
-        let spinner = NSProgressIndicator()
-        spinner.style = .spinning
-        spinner.controlSize = .small
-        spinner.isIndeterminate = true
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        spinner.setContentHuggingPriority(.required, for: .horizontal)
-        spinner.isHidden = true
-
-        let stack = NSStackView(views: [archiveBtn, spinner, pinIV])
+        let stack = NSStackView(views: [archiveBtn, pinIV])
         stack.orientation = .horizontal
         stack.spacing = Self.trailingMarkerSpacing
         stack.distribution = .fill
@@ -536,13 +520,10 @@ final class ThreadCell: NSTableCellView {
             pinIV.heightAnchor.constraint(equalToConstant: Self.pinMarkerWidth),
             archiveBtn.widthAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
             archiveBtn.heightAnchor.constraint(equalToConstant: Self.archiveMarkerWidth),
-            spinner.widthAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
-            spinner.heightAnchor.constraint(equalToConstant: Self.statusMarkerSlotWidth),
         ])
         trailingStackView = stack
         pinImageView = pinIV
         archiveButton = archiveBtn
-        busySpinner = spinner
 
         if !hasInstalledTextTrailingConstraint {
             hasInstalledTextTrailingConstraint = true
@@ -722,22 +703,6 @@ final class ThreadCell: NSTableCellView {
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
-        if thread.isRateLimitExpiredAndResumable || thread.isBlockedByRateLimit {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-        } else if thread.isAnyBusy {
-            busySpinner?.isHidden = false
-            busySpinner?.startAnimation(nil)
-            busySpinner?.toolTip = thread.hasMagentBusy && !thread.hasAgentBusy
-                ? "Setting up..."
-                : "Agent working"
-        } else {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-        }
-
         // Rate limit shown as top-border badge.
         configureRateLimitBadge(
             isExpiredAndResumable: thread.isRateLimitExpiredAndResumable,
@@ -823,20 +788,6 @@ final class ThreadCell: NSTableCellView {
         subtitleLabel?.toolTip = detailedTooltip
         primaryDirtyDot?.toolTip = detailedTooltip
         secondaryDirtyDot?.toolTip = detailedTooltip
-
-        if isRateLimitExpiredAndResumable || isBlockedByRateLimit {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-        } else if isBusy {
-            busySpinner?.isHidden = false
-            busySpinner?.startAnimation(nil)
-            busySpinner?.toolTip = "Agent working"
-        } else {
-            busySpinner?.stopAnimation(nil)
-            busySpinner?.isHidden = true
-            busySpinner?.toolTip = nil
-        }
 
         // Rate limit shown as top-border badge (same as non-main threads).
         configureRateLimitBadge(

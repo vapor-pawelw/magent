@@ -383,6 +383,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         let rowView = AlwaysEmphasizedRowView()
         if let thread = item as? MagentThread {
             let isSelected = outlineView.isRowSelected(outlineView.row(forItem: item))
+            rowView.busyBorderPhaseKey = thread.id
             rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion
             rowView.showsWaitingHighlight = thread.hasWaitingForInput && !thread.hasUnreadAgentCompletion
             rowView.showsSubtleBottomSeparator = false
@@ -1244,19 +1245,13 @@ extension ThreadListViewController: ThreadManagerDelegate {
     }
 
     /// Updates thread cell content in-place without a full reloadData().
-    /// Since SidebarProject and SidebarSection are class objects, we can mutate their
-    /// thread arrays in-place, then call reloadItem(_:reloadChildren:) to refresh cell
-    /// views — which never alters scroll position or expansion state.
+    /// Mutates sidebar model objects, then directly reconfigures existing visible
+    /// row/cell views — avoids reloadItem() which recreates row views and kills
+    /// running CA animations (busy border rotation, shimmer).
     private func updateSidebarInPlace(with updatedThreads: [MagentThread]) {
         let threadById = Dictionary(uniqueKeysWithValues: updatedThreads.map { ($0.id, $0) })
 
-        // reloadItem(_:reloadChildren:true) calls shouldExpandItem for any currently-expanded
-        // sections so NSOutlineView can decide whether to keep them open. The strict guard
-        // in shouldExpandItem returns false unless allowsProgrammaticOutlineDisclosureChanges
-        // is set, which would silently collapse expanded sections on every in-place refresh.
-        allowsProgrammaticOutlineDisclosureChanges = true
-        defer { allowsProgrammaticOutlineDisclosureChanges = false }
-
+        // Phase 1: Update model objects in-place.
         for project in sidebarProjects {
             for i in project.children.indices {
                 if let thread = project.children[i] as? MagentThread,
@@ -1270,17 +1265,76 @@ extension ThreadListViewController: ThreadManagerDelegate {
                     }
                 }
             }
-            outlineView.reloadItem(project, reloadChildren: true)
         }
 
-        // reloadItem(_:reloadChildren:true) clears NSOutlineView's visual selection.
-        // The outlineViewSelectionDidChange guard bails early (selectedThreadFromState()
-        // is still set), so the controller state is intact — just re-sync the highlight.
-        if outlineView.selectedRow < 0, let selectedId = selectedThreadID {
-            for row in 0..<outlineView.numberOfRows {
-                if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == selectedId {
-                    outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-                    break
+        // Phase 2: Reconfigure visible row and cell views directly — no
+        // reloadItem() call, so NSOutlineView keeps existing view instances
+        // and running CA animations survive.
+        let settings = currentSettings
+        for row in 0..<outlineView.numberOfRows {
+            guard let thread = outlineView.item(atRow: row) as? MagentThread,
+                  let updated = threadById[thread.id] else { continue }
+
+            // Reconfigure the row view (shimmer, highlight borders, sign emoji).
+            if let rowView = outlineView.rowView(atRow: row, makeIfNecessary: false) as? AlwaysEmphasizedRowView {
+                let isSelected = outlineView.isRowSelected(row)
+                rowView.busyBorderPhaseKey = updated.id
+                rowView.showsCompletionHighlight = updated.hasUnreadAgentCompletion
+                rowView.showsWaitingHighlight = updated.hasWaitingForInput && !updated.hasUnreadAgentCompletion
+                rowView.showsBusyShimmer = updated.isAnyBusy
+                rowView.showsArchivingOverlay = updated.isArchiving
+                rowView.configureSignEmoji(
+                    updated.signEmoji,
+                    tintColor: updated.signEmoji.flatMap { Self.signEmojiTintColor(for: $0) },
+                    isSelected: isSelected
+                )
+            }
+
+            // Reconfigure the cell view (text, icon, metadata).
+            if let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? ThreadCell {
+                if updated.isMain {
+                    let currentBranch = {
+                        let actualBranch = updated.actualBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        if !actualBranch.isEmpty, actualBranch != "HEAD" {
+                            return actualBranch
+                        }
+                        return updated.branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }()
+                    cell.configureAsMain(
+                        isUnreadCompletion: updated.hasUnreadAgentCompletion,
+                        isBusy: updated.isAnyBusy,
+                        isWaitingForInput: updated.hasWaitingForInput,
+                        isDirty: updated.isDirty,
+                        isBlockedByRateLimit: updated.isBlockedByRateLimit,
+                        isRateLimitExpiredAndResumable: updated.isRateLimitExpiredAndResumable,
+                        isRateLimitPropagatedOnly: updated.isRateLimitPropagatedOnly,
+                        rateLimitTooltip: updated.rateLimitLiftDescription.map { "Rate limit reached. \($0)" },
+                        currentBranch: currentBranch,
+                        busyStateSince: updated.busyStateSince,
+                        leadingOffset: 3 + 6
+                    )
+                } else {
+                    let shouldUseSections = settings.shouldUseThreadSections(for: updated.projectId)
+                    let sectionColor: NSColor?
+                    if shouldUseSections {
+                        let projectSections = settings.sections(for: updated.projectId)
+                        let knownSectionIds = Set(projectSections.map(\.id))
+                        let defaultSectionId = settings.defaultSection(for: updated.projectId)?.id
+                        let resolvedSectionId = updated.resolvedSectionId(
+                            knownSectionIds: knownSectionIds,
+                            fallback: defaultSectionId
+                        )
+                        sectionColor = projectSections.first(where: { $0.id == resolvedSectionId })?.color
+                    } else {
+                        sectionColor = nil
+                    }
+                    cell.configure(
+                        with: updated,
+                        sectionColor: sectionColor,
+                        leadingOffset: threadLeadingOffset(for: updated, in: outlineView),
+                        maxDescriptionLines: settings.sidebarDescriptionLineLimit,
+                        isAutoRenaming: threadManager.autoRenameInProgress.contains(updated.id)
+                    )
                 }
             }
         }

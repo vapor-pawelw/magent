@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 - Project and section headers now stick to the top of the sidebar while scrolling, so you always know which repo/section the visible threads belong to. Clicking a sticky header smoothly scrolls back to the actual header row.
+- Busy threads now show a rotating gradient border animation instead of a spinner icon.
+- Metadata-only sidebar updates (busy state, rate limits, dirty flag, etc.) no longer recreate row views, preserving running animations.
 
 ### Agents
 - GPT 5.3 is now available as a Codex model option.
