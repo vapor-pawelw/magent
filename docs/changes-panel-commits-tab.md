@@ -18,6 +18,17 @@
 - A small refresh button sits in the panel's top-right corner next to the `ⓘ` legend button. Tapping it manually refreshes branch state, dirty status, delivery/base-branch-derived git state, and then reloads the panel's commits and changes without resetting the current tab or pagination.
 - The `ⓘ` color-legend button is hidden while the COMMITS tab is active.
 
+### Collapse / Expand
+
+- A small **chevron toggle** button sits in the top-right corner of the branch info area (next to the base branch button), allowing the panel to collapse to show only branch info.
+- **Collapsed state** hides the tab bar, commits/changes list, and diff viewer, leaving only the branch info (branch name + base branch) and the separator handle visible.
+- **Expanded state** shows the full panel: tab bar, commits/changes list, diff viewer.
+- The **chevron icon changes direction**: `chevron.down` when expanded (click to collapse), `chevron.up` when collapsed (click to expand).
+- Dragging from the separator is disabled while collapsed.
+- Collapsed state is **persisted in `UserDefaults`** (`DiffPanelView.collapsed`) so it survives between sessions.
+- Collapse/expand transitions use a **smooth 0.2-second animation**.
+- Hovering over the chevron shows a helpful tooltip: "Collapse to show only branch info" (expanded) or "Expand to show commits and changes" (collapsed).
+
 ### Commit Detail Mode
 
 Double-tapping a row in the COMMITS tab enters an inline detail mode:
@@ -68,6 +79,17 @@ Double-tapping a row in the COMMITS tab enters an inline detail mode:
 - Branch info at the bottom of the panel uses a two-line vertical layout: line 1 is the current branch name (`branchInfoLabel`), line 2 is a `⤷` arrow (`baseLineLabel`) followed by the clickable base branch button (`baseBranchButton`).
 - `origin/` prefixes are stripped for display in both the footer and the base branch selection menu; internal values (`representedObject`) retain the full ref.
 - `updateBranchInfo(branchName:baseBranch:)` handles the stripping and layout visibility.
+
+### Collapse / Expand Implementation
+- `isCollapsed: Bool` — property backed by `UserDefaults` under key `"DiffPanelView.collapsed"`, persists across sessions.
+- `collapseButton` — NSButton with trailing placement (top-right of branch info), toggle size at 28×28 (minimum), low compression resistance.
+- `collapsedTopConstraint` — NSLayoutConstraint deactivated when expanded, active when collapsed; moves branch info to sit directly below the separator handle.
+- `collapsedHeight` — computed property returns `6 (handle) + 4 (gap) + branchInfoStack.fittingSize.height + 6 (bottom)`.
+- `collapseToggleTapped()` — toggles `isCollapsed`, then calls `applyCollapsedState(animated: true)`.
+- `applyCollapsedState(animated:)` — updates chevron icon direction and tooltip, then calls either `applyCollapsedLayout()` or `applyExpandedLayout()` with optional 0.2s animation context.
+- `applyCollapsedLayout()` — hides `tabBarStack`, `topRightButtonStack`, `commitContextLabel`, `scrollView`, `commitDetailHeaderView`; activates `collapsedTopConstraint`; sets `heightConstraint` to `collapsedHeight`.
+- `applyExpandedLayout()` — deactivates `collapsedTopConstraint`; unhides UI elements; restores `heightConstraint` to `expandedHeight` (clamped to min/max range).
+- `setPanelVisible()` now checks `isCollapsed` before applying dimensions, showing collapsed height when visible and collapsed.
 
 ### Controller Layer
 - `ThreadListViewController.onCommitSelected` is wired in `ThreadListViewController.swift` setup.
