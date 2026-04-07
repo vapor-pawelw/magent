@@ -608,6 +608,12 @@ extension ThreadManager {
                 agentType(for: threads[i], sessionName: sessionName) == agent
             }
             guard !keysToRemove.isEmpty else { continue }
+
+            // Capture isPropagated BEFORE removal — we need it for the resume check below.
+            let removedInfoBySession: [String: AgentRateLimitInfo] = markResumeNeeded
+                ? keysToRemove.reduce(into: [:]) { $0[$1] = filtered[$1] }
+                : [:]
+
             for key in keysToRemove {
                 filtered.removeValue(forKey: key)
             }
@@ -616,9 +622,11 @@ extension ThreadManager {
             changedThreadIds.insert(threads[i].id)
 
             if markResumeNeeded {
-                // Mark cleared sessions as "waiting for resume" so the tab indicator shows.
-                // Skip sessions where the agent is already working again.
+                // Only sessions with a directly-detected (non-propagated) marker were actually
+                // interrupted by the rate limit. Propagated markers are fan-out from the global
+                // limit and may have been applied to idle sessions that have nothing to resume.
                 let toMark = keysToRemove.filter {
+                    removedInfoBySession[$0]?.isPropagated == false &&
                     !threads[i].busySessions.contains($0) &&
                     !threads[i].waitingForInputSessions.contains($0)
                 }
