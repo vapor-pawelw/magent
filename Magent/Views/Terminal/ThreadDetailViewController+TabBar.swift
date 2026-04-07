@@ -198,12 +198,14 @@ extension ThreadDetailViewController {
         refreshInitialPromptFailureBanner()
         refreshPendingPromptBanner()
 
-        // Clear unread completion and waiting dots for this tab
+        // Clear unread completion, waiting, and rate limit indicators for this tab
         guard index < tabItems.count else { return }
         tabItems[index].hasUnreadCompletion = false
         tabItems[index].hasWaitingForInput = false
+        tabItems[index].hasUnreadRateLimit = false
         threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: sessionName)
         threadManager.markSessionWaitingSeen(threadId: thread.id, sessionName: sessionName)
+        threadManager.markSessionRateLimitSeen(threadId: thread.id, sessionName: sessionName)
 
         schedulePromptTOCRefresh()
     }

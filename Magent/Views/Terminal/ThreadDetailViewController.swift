@@ -1266,11 +1266,15 @@ final class ThreadDetailViewController: NSViewController {
               let latest = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
 
         thread.rateLimitedSessions = latest.rateLimitedSessions
+        thread.unreadRateLimitSessions = latest.unreadRateLimitSessions
         for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
             if case .terminal(let sessionName) = slot {
-                tabItems[i].hasRateLimit = thread.rateLimitedSessions[sessionName] != nil
-                tabItems[i].isRateLimitPropagated = thread.rateLimitedSessions[sessionName]?.isPropagated ?? false
+                let info = thread.rateLimitedSessions[sessionName]
+                tabItems[i].hasRateLimit = info != nil
+                tabItems[i].isRateLimitPropagated = info?.isPropagated ?? false
+                tabItems[i].rateLimitAgentType = info?.agentType
                 tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
+                tabItems[i].hasUnreadRateLimit = thread.unreadRateLimitSessions.contains(sessionName)
             }
         }
     }

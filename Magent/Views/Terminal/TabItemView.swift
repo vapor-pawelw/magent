@@ -53,8 +53,16 @@ final class TabItemView: NSView, NSMenuDelegate {
         didSet { updateIndicator() }
     }
 
+    var rateLimitAgentType: AgentType? {
+        didSet { updateIndicator() }
+    }
+
     var rateLimitTooltip: String? {
         didSet { updateIndicator() }
+    }
+
+    var hasUnreadRateLimit: Bool = false {
+        didSet { updateAppearance() }
     }
 
     var isSessionDead: Bool = false {
@@ -77,13 +85,12 @@ final class TabItemView: NSView, NSMenuDelegate {
             busySpinner.stopAnimation(nil)
             busySpinner.isHidden = true
             completionDot.isHidden = true
-            if isRateLimitPropagated {
-                rateLimitIcon.image = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "Rate limited (propagated)")
-                rateLimitIcon.contentTintColor = .systemOrange
-            } else {
-                rateLimitIcon.image = NSImage(systemSymbolName: "hourglass.circle.fill", accessibilityDescription: "Rate limited")
-                rateLimitIcon.contentTintColor = .systemRed
+            let agentIcon: NSImage? = switch rateLimitAgentType {
+            case .claude, .custom, nil: NSImage(resource: .claudeIcon)
+            case .codex: NSImage(resource: .codexIcon)
             }
+            rateLimitIcon.image = agentIcon
+            rateLimitIcon.contentTintColor = .systemRed
             rateLimitIcon.toolTip = rateLimitTooltip ?? "Rate limit reached"
             rateLimitIcon.isHidden = false
         } else if hasUnreadCompletion {
@@ -333,7 +340,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         let deadDimAlpha: CGFloat = isSessionDead ? 0.45 : 1.0
 
         let titleColor: NSColor
-        if isSelected {
+        if hasUnreadRateLimit && !isSelected {
+            titleColor = .systemRed
+            titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        } else if isSelected {
             titleColor = NSColor(resource: .textPrimary)
             titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         } else if isDark {

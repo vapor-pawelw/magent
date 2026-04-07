@@ -15,7 +15,7 @@ Pane content is also cached for up to 5 seconds and shared across all periodic c
 
 ### Agent-Specific Parsing
 
-- **Codex**: Detection is scoped to the latest pane block after the last separator line (`────…`) when present, to avoid stale matches from older output. If no separator is present, Magent scans the full captured tail.
+- **Codex**: Detection is scoped to the latest pane block after the last separator line (`────…`) when present, to avoid stale matches from older output. If no separator is present, Magent scans the full captured tail. **Exception:** When Codex shows an interactive "Approaching rate limits / Switch to model-name?" prompt (not yet blocked, but nearing limits), detection is skipped entirely to avoid false positives from the "rate limit" keyword in the prompt combining with other pane content.
 - **Claude**: Detection does not rely on separator scoping for the interactive limit menu. When the pane shows the numbered wait/switch choices (for example `1. Stop and wait for limit to reset` and `2. Switch to Pro`), Magent treats that menu as an active rate-limit signal and scans the choice line plus nearby context above it to find and parse the reset deadline (for example, `You've hit your limit · resets Mar 6 at 10am`). This still works when the latest visible block shows only the choices and reset line, without repeating broader "rate limit" wording.
 
 ### Mandatory Reset Time

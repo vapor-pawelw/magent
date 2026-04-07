@@ -74,6 +74,9 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         }
     }
 
+    var showsRateLimitHighlight = false {
+        didSet { needsDisplay = true }
+    }
     var showsCompletionHighlight = false {
         didSet { needsDisplay = true }
     }
@@ -184,6 +187,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         // AppKit's own selection rect (which adds an unwanted border on right-click).
         if isSelected {
             drawCapsuleBorderAndFill(color: .controlAccentColor)
+        } else if showsRateLimitHighlight {
+            drawCapsuleBorderAndFill(color: .systemRed, fillOpacity: 0.06, borderOpacity: 0.5)
         } else if showsWaitingHighlight {
             drawCapsuleBorderAndFill(color: .systemOrange, fillOpacity: 0.06, borderOpacity: 0.5)
         } else if showsCompletionHighlight {

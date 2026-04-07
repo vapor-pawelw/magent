@@ -58,19 +58,24 @@ public nonisolated struct AgentRateLimitInfo: Hashable, Sendable {
     /// True when this marker was propagated from a global agent rate limit rather than
     /// directly detected in this session's pane output.
     public var isPropagated: Bool = false
+    /// Which agent type this rate limit applies to. Used to show the correct agent
+    /// glyph (Claude/Codex) in rate limit badges.
+    public var agentType: AgentType?
 
     public init(
         resetAt: Date,
         resetDescription: String? = nil,
         detectedAt: Date,
         isPromptBased: Bool = false,
-        isPropagated: Bool = false
+        isPropagated: Bool = false,
+        agentType: AgentType? = nil
     ) {
         self.resetAt = resetAt
         self.resetDescription = resetDescription
         self.detectedAt = detectedAt
         self.isPromptBased = isPromptBased
         self.isPropagated = isPropagated
+        self.agentType = agentType
     }
 }
 
@@ -369,6 +374,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var hasBranchMismatch: Bool = false
     // Transient (not persisted) — tracks agent rate limit status per session.
     public var rateLimitedSessions: [String: AgentRateLimitInfo] = [:]
+    // Transient (not persisted) — sessions with newly detected rate limits that the user
+    // hasn't acknowledged yet. Cleared when the user selects the tab, same as completions.
+    public var unreadRateLimitSessions: Set<String> = []
     // Transient (not persisted) — detected open PR/MR for this branch.
     public var pullRequestInfo: PullRequestInfo? = nil
     // Transient (not persisted) — whether PR/MR lookup succeeded, failed, or confirmed no PR exists.
@@ -397,6 +405,11 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
 
     public var hasUnreadAgentCompletion: Bool {
         !unreadCompletionSessions.isEmpty
+    }
+
+    /// True when newly detected rate limits haven't been acknowledged by the user yet.
+    public var hasUnreadRateLimit: Bool {
+        !unreadRateLimitSessions.isEmpty
     }
 
     /// Detects a Jira ticket key (e.g. "IP-1234") from the current branch name using
@@ -508,6 +521,19 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var rateLimitLiftDescription: String? {
         guard let latest = rateLimitLiftAt else { return nil }
         return "Resets \(latest.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    /// The distinct agent types that have active rate-limit markers on this thread's sessions.
+    /// Used to show agent-specific glyphs (Claude/Codex) in rate limit badges.
+    public var rateLimitedAgentTypes: Set<AgentType> {
+        guard isBlockedByRateLimit else { return [] }
+        var types = Set<AgentType>()
+        for session in agentTmuxSessions {
+            if let agent = rateLimitedSessions[session]?.agentType {
+                types.insert(agent)
+            }
+        }
+        return types
     }
 
     /// True when the thread is blocked by rate limits but all markers are propagated (none

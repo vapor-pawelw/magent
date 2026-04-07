@@ -384,8 +384,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if let thread = item as? MagentThread {
             let isSelected = outlineView.isRowSelected(outlineView.row(forItem: item))
             rowView.busyBorderPhaseKey = thread.id
-            rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion
-            rowView.showsWaitingHighlight = thread.hasWaitingForInput && !thread.hasUnreadAgentCompletion
+            rowView.showsRateLimitHighlight = thread.hasUnreadRateLimit
+            rowView.showsCompletionHighlight = thread.hasUnreadAgentCompletion && !thread.hasUnreadRateLimit
+            rowView.showsWaitingHighlight = thread.hasWaitingForInput && !thread.hasUnreadAgentCompletion && !thread.hasUnreadRateLimit
             rowView.showsSubtleBottomSeparator = false
             rowView.showsBusyShimmer = thread.isAnyBusy
             rowView.showsArchivingOverlay = thread.isArchiving
@@ -395,6 +396,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                 isSelected: isSelected
             )
         } else {
+            rowView.showsRateLimitHighlight = false
             rowView.showsCompletionHighlight = false
             rowView.showsWaitingHighlight = false
             rowView.showsSubtleBottomSeparator = false
@@ -985,6 +987,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     isRateLimitExpiredAndResumable: thread.isRateLimitExpiredAndResumable,
                     isRateLimitPropagatedOnly: thread.isRateLimitPropagatedOnly,
                     rateLimitTooltip: thread.rateLimitLiftDescription.map { "Rate limit reached. \($0)" },
+                    rateLimitedAgentTypes: thread.rateLimitedAgentTypes,
                     currentBranch: currentBranch,
                     busyStateSince: thread.busyStateSince,
                     leadingOffset: 3 + 6 // accent bar width + spacing (matches icon flow)

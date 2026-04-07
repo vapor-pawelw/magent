@@ -422,7 +422,8 @@ extension ThreadManager {
                                 resetAt: Date.distantFuture,
                                 resetDescription: nil,
                                 detectedAt: Date(),
-                                isPromptBased: true
+                                isPromptBased: true,
+                                agentType: .claude
                             )
                             if applyRateLimitMarker(promptMarker, for: .claude, changedThreadIds: &rateLimitChangedThreadIds) {
                                 changed = true
@@ -819,6 +820,14 @@ extension ThreadManager {
         threads[index].unreadCompletionSessions.remove(sessionName)
         persistence.debouncedSaveActiveThreads(threads)
         updateDockBadge()
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    @MainActor
+    func markSessionRateLimitSeen(threadId: UUID, sessionName: String) {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
+        guard threads[index].unreadRateLimitSessions.contains(sessionName) else { return }
+        threads[index].unreadRateLimitSessions.remove(sessionName)
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 

@@ -1,6 +1,20 @@
 import Cocoa
 import MagentCore
 
+private extension NSImage {
+    /// Returns a copy of the template image filled with the given color.
+    func tinted(with color: NSColor) -> NSImage {
+        let img = self.copy() as! NSImage
+        img.lockFocus()
+        color.set()
+        NSRect(origin: .zero, size: img.size)
+            .fill(using: .sourceAtop)
+        img.unlockFocus()
+        img.isTemplate = false
+        return img
+    }
+}
+
 private enum ThreadStatusSummaryKind: String, CaseIterable {
     case busy
     case waiting
@@ -55,7 +69,7 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
         case .done:
             return .systemGreen
         case .rateLimited:
-            return .systemOrange
+            return .systemRed
         }
     }
 
@@ -918,17 +932,56 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     }
 
     private func updateRateLimitStatus() {
-        let summary = ThreadManager.shared.globalRateLimitSummaryText()
-        if let summary {
-            rateLimitLabel.stringValue = "⏳ \(summary)"
-            rateLimitLabel.textColor = .systemOrange
-            rateLimitLabel.toolTip = summary
-            rateLimitLabel.isHidden = false
-        } else {
+        let entries = ThreadManager.shared.globalRateLimitEntries()
+        guard !entries.isEmpty else {
+            rateLimitLabel.attributedStringValue = NSAttributedString()
             rateLimitLabel.stringValue = ""
             rateLimitLabel.toolTip = nil
             rateLimitLabel.isHidden = true
+            return
         }
+
+        let result = NSMutableAttributedString()
+        let textAttrs: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.systemRed,
+            .font: rateLimitLabel.font ?? NSFont.systemFont(ofSize: 11),
+        ]
+
+        result.append(NSAttributedString(string: "Rate limits: ", attributes: textAttrs))
+
+        for (index, entry) in entries.enumerated() {
+            if index > 0 {
+                result.append(NSAttributedString(string: "  ·  ", attributes: textAttrs))
+            }
+
+            // Inline agent glyph
+            let iconImage: NSImage? = switch entry.agent {
+            case .claude, .custom: NSImage(resource: .claudeIcon)
+            case .codex: NSImage(resource: .codexIcon)
+            }
+            if let icon = iconImage {
+                let attachment = NSTextAttachment()
+                let iconSize: CGFloat = 12
+                icon.isTemplate = true
+                let tintedIcon = icon.tinted(with: .systemRed)
+                attachment.image = tintedIcon
+                // Vertically center the icon relative to the text baseline
+                let font = rateLimitLabel.font ?? NSFont.systemFont(ofSize: 11)
+                let yOffset = (font.capHeight - iconSize) / 2
+                attachment.bounds = CGRect(x: 0, y: yOffset, width: iconSize, height: iconSize)
+                result.append(NSAttributedString(attachment: attachment))
+                result.append(NSAttributedString(string: " ", attributes: textAttrs))
+            }
+
+            result.append(NSAttributedString(
+                string: "\(entry.agent.displayName): \(entry.countdown)",
+                attributes: textAttrs
+            ))
+        }
+
+        rateLimitLabel.attributedStringValue = result
+        rateLimitLabel.toolTip = ThreadManager.shared.globalRateLimitSummaryText()
+        rateLimitLabel.isHidden = false
     }
 
     private var baseSyncTooltip: String {

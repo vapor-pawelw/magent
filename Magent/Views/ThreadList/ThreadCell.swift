@@ -50,7 +50,7 @@ private final class TopBorderBadge: NSView {
 
         if bareIcon {
             // Bare icon: larger icon with circular background when selected.
-            let iconSize: CGFloat = 11
+            let iconSize: CGFloat = 13
             let padding: CGFloat = 3
             NSLayoutConstraint.activate([
                 iconView.widthAnchor.constraint(equalToConstant: iconSize),
@@ -178,7 +178,8 @@ final class ThreadCell: NSTableCellView {
     private var durationTimer: Timer?
     private var currentDurationSince: Date?
     private var topBorderBadgeStack: NSStackView?
-    private var rateLimitBadge: TopBorderBadge?
+    private var claudeRateLimitBadge: TopBorderBadge?
+    private var codexRateLimitBadge: TopBorderBadge?
     private var keepAliveBadge: TopBorderBadge?
     private var pinnedBadge: TopBorderBadge?
     private var hasInstalledTextTrailingConstraint = false
@@ -703,12 +704,29 @@ final class ThreadCell: NSTableCellView {
 
         archiveButton?.isHidden = !thread.showArchiveSuggestion
 
-        // Rate limit shown as top-border badge.
+        if thread.isRateLimitExpiredAndResumable || thread.isBlockedByRateLimit {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
+        } else if thread.isAnyBusy {
+            busySpinner?.isHidden = false
+            busySpinner?.startAnimation(nil)
+            busySpinner?.toolTip = thread.hasMagentBusy && !thread.hasAgentBusy
+                ? "Setting up..."
+                : "Agent working"
+        } else {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
+        }
+
+        // Rate limit shown as top-border badge with agent glyph.
         configureRateLimitBadge(
             isExpiredAndResumable: thread.isRateLimitExpiredAndResumable,
             isBlocked: thread.isBlockedByRateLimit,
             isPropagatedOnly: thread.isRateLimitPropagatedOnly,
-            tooltip: rateLimitTooltip(for: thread)
+            tooltip: rateLimitTooltip(for: thread),
+            rateLimitedAgentTypes: thread.rateLimitedAgentTypes
         )
 
         configureDuration(since: cellSettings.showBusyStateDuration ? thread.busyStateSince : nil)
@@ -727,6 +745,7 @@ final class ThreadCell: NSTableCellView {
         isRateLimitExpiredAndResumable: Bool = false,
         isRateLimitPropagatedOnly: Bool = false,
         rateLimitTooltip: String? = nil,
+        rateLimitedAgentTypes: Set<AgentType> = [],
         currentBranch: String? = nil,
         busyStateSince: Date? = nil,
         leadingOffset: CGFloat = 0
@@ -789,12 +808,27 @@ final class ThreadCell: NSTableCellView {
         primaryDirtyDot?.toolTip = detailedTooltip
         secondaryDirtyDot?.toolTip = detailedTooltip
 
-        // Rate limit shown as top-border badge (same as non-main threads).
+        if isRateLimitExpiredAndResumable || isBlockedByRateLimit {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
+        } else if isBusy {
+            busySpinner?.isHidden = false
+            busySpinner?.startAnimation(nil)
+            busySpinner?.toolTip = "Agent working"
+        } else {
+            busySpinner?.stopAnimation(nil)
+            busySpinner?.isHidden = true
+            busySpinner?.toolTip = nil
+        }
+
+        // Rate limit shown as top-border badge with agent glyph (same as non-main threads).
         configureRateLimitBadge(
             isExpiredAndResumable: isRateLimitExpiredAndResumable,
             isBlocked: isBlockedByRateLimit,
             isPropagatedOnly: isRateLimitPropagatedOnly,
-            tooltip: rateLimitTooltip
+            tooltip: rateLimitTooltip,
+            rateLimitedAgentTypes: rateLimitedAgentTypes
         )
 
         let showDuration = PersistenceService.shared.loadSettings().showBusyStateDuration
@@ -815,38 +849,48 @@ final class ThreadCell: NSTableCellView {
 
     // MARK: - Rate limit badge (top border)
 
-    /// Shows/hides the rate limit badge on the top border. Only for non-main threads.
+    /// Shows/hides rate limit badges on the top border, one per rate-limited agent type.
     private func configureRateLimitBadge(
         isExpiredAndResumable: Bool,
         isBlocked: Bool,
         isPropagatedOnly: Bool,
-        tooltip: String?
+        tooltip: String?,
+        rateLimitedAgentTypes: Set<AgentType> = []
     ) {
         let showBadge = isExpiredAndResumable || isBlocked
         guard showBadge else {
-            rateLimitBadge?.isHidden = true
+            claudeRateLimitBadge?.isHidden = true
+            codexRateLimitBadge?.isHidden = true
             return
         }
-        ensureRateLimitBadge()
-        guard let badge = rateLimitBadge else { return }
 
-        badge.label.isHidden = true
-        badge.iconView.isHidden = false
+        // When we know the agent types, show one badge per agent.
+        // Fall back to showing a single Claude badge when agent type is unknown.
+        let agentsToShow: [AgentType] = rateLimitedAgentTypes.isEmpty
+            ? [.claude]
+            : AgentType.allCases.filter { rateLimitedAgentTypes.contains($0) && $0 != .custom }
 
-        if isExpiredAndResumable {
-            badge.iconView.image = Self.cachedSymbolImage("arrow.clockwise.circle.fill")
-            badge.iconView.contentTintColor = .systemGreen
-            badge.toolTip = "Rate limit lifted — ready to resume"
-        } else if isPropagatedOnly {
-            badge.iconView.image = Self.cachedSymbolImage("hourglass")
-            badge.iconView.contentTintColor = .systemOrange
-            badge.toolTip = tooltip ?? "Rate limit reached"
-        } else {
-            badge.iconView.image = Self.cachedSymbolImage("hourglass.circle.fill")
-            badge.iconView.contentTintColor = .systemRed
-            badge.toolTip = tooltip ?? "Rate limit reached"
+        for agent in [AgentType.claude, .codex] {
+            let badge = ensureRateLimitBadge(for: agent)
+            guard agentsToShow.contains(agent) else {
+                badge.isHidden = true
+                continue
+            }
+
+            badge.label.isHidden = true
+            badge.iconView.isHidden = false
+            badge.iconView.image = Self.agentIconImage(for: agent)
+
+            if isExpiredAndResumable {
+                badge.iconView.contentTintColor = .systemGreen
+                badge.toolTip = "\(agent.displayName) rate limit lifted — ready to resume"
+            } else {
+                badge.iconView.contentTintColor = .systemRed
+                badge.toolTip = tooltip.map { "\(agent.displayName): \($0)" }
+                    ?? "\(agent.displayName) rate limit reached"
+            }
+            badge.isHidden = false
         }
-        badge.isHidden = false
         updateTopBorderBadgeColors()
     }
 
@@ -878,14 +922,39 @@ final class ThreadCell: NSTableCellView {
         topBorderBadgeStack = stack
     }
 
-    private func ensureRateLimitBadge() {
-        guard rateLimitBadge == nil else { return }
+    @discardableResult
+    private func ensureRateLimitBadge(for agent: AgentType) -> TopBorderBadge {
+        switch agent {
+        case .claude:
+            if let existing = claudeRateLimitBadge { return existing }
+        case .codex:
+            if let existing = codexRateLimitBadge { return existing }
+        case .custom:
+            if let existing = claudeRateLimitBadge { return existing }
+        }
+
         ensureTopBorderBadgeStack()
         let badge = TopBorderBadge(bareIcon: true)
         badge.label.isHidden = true
         badge.isHidden = true
         topBorderBadgeStack?.insertArrangedSubview(badge, at: 0)
-        rateLimitBadge = badge
+
+        switch agent {
+        case .claude, .custom:
+            claudeRateLimitBadge = badge
+        case .codex:
+            codexRateLimitBadge = badge
+        }
+        return badge
+    }
+
+    private static func agentIconImage(for agent: AgentType) -> NSImage? {
+        switch agent {
+        case .claude, .custom:
+            return NSImage(resource: .claudeIcon)
+        case .codex:
+            return NSImage(resource: .codexIcon)
+        }
     }
 
     private func ensureDurationLabel() {
@@ -950,7 +1019,8 @@ final class ThreadCell: NSTableCellView {
         let completion = hasUnreadCompletion && !rowSelected
         let waiting = hasWaitingForInput && !hasUnreadCompletion && !rowSelected
         durationBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
-        rateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        claudeRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        codexRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         keepAliveBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         pinnedBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         // Pin icon: primary brand by default, white when selected.
