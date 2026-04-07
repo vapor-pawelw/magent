@@ -2188,6 +2188,8 @@ extension Notification.Name {
     static let magentThreadPoppedOut = Notification.Name("magentThreadPoppedOut")
     /// Posted when a tab is detached into a separate window. Carries "sessionName" (String), "threadId" (UUID).
     static let magentTabDetached = Notification.Name("magentTabDetached")
+    /// Posted to request popping out a specific thread. Carries "threadId" (UUID).
+    static let magentPopOutThreadRequested = Notification.Name("magentPopOutThreadRequested")
 }
 
 // MARK: - Errors

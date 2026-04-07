@@ -2,7 +2,7 @@ import Cocoa
 import MagentCore
 
 private final class SplitContentContainerViewController: NSViewController {
-    private var currentChild: NSViewController?
+    fileprivate var currentChild: NSViewController?
     private var currentChildConstraints: [NSLayoutConstraint] = []
 
     override func loadView() {
@@ -118,6 +118,20 @@ final class SplitViewController: NSSplitViewController {
             name: .magentKeyBindingsDidChange,
             object: nil
         )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleThreadReturnedToMain(_:)),
+            name: .magentThreadReturnedToMain,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePopOutThreadRequested(_:)),
+            name: .magentPopOutThreadRequested,
+            object: nil
+        )
     }
 
     /// Forwarded from the main menu's "New Thread" item (⌘N).
@@ -161,6 +175,12 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func handleKeyEvent(_ event: NSEvent) -> NSEvent? {
+        // Skip if event targets a pop-out window — let the pop-out handle its own shortcuts
+        if let eventWindow = event.window,
+           PopoutWindowManager.shared.isPopoutWindow(eventWindow) {
+            return event
+        }
+
         let eventModifiers = KeyModifiers.from(event.modifierFlags.intersection(.deviceIndependentFlagsMask))
 
         if matchesBinding(.newTab, keyCode: event.keyCode, modifiers: eventModifiers) {
@@ -177,6 +197,10 @@ final class SplitViewController: NSSplitViewController {
         }
         if matchesBinding(.newThread, keyCode: event.keyCode, modifiers: eventModifiers) {
             requestNewThread()
+            return nil
+        }
+        if matchesBinding(.popOutThread, keyCode: event.keyCode, modifiers: eventModifiers) {
+            popOutCurrentThread()
             return nil
         }
 
@@ -492,6 +516,57 @@ final class SplitViewController: NSSplitViewController {
         }
     }
 
+    // MARK: - Pop-out Windows
+
+    private func presentDetachedThreadPlaceholder(_ thread: MagentThread) {
+        currentDetailVC?.cacheTerminalViewsForReuse()
+        currentDetailVC = nil
+        let placeholder = DetachedThreadPlaceholderView(thread: thread)
+        placeholder.onShowWindow = { PopoutWindowManager.shared.bringToFront(threadId: thread.id) }
+        placeholder.onReturnToMain = { [weak self] in
+            PopoutWindowManager.shared.returnThreadToMain(thread.id)
+        }
+        preserveSidebarWidthDuringContentChange {
+            contentContainerVC.setContent(placeholder)
+        }
+    }
+
+    func popOutCurrentThread() {
+        guard let detailVC = currentDetailVC else { return }
+        let thread = detailVC.thread
+        guard !thread.isMain else { return }
+        guard !ThreadManager.shared.pendingThreadIds.contains(thread.id) else { return }
+
+        detailVC.cacheTerminalViewsForReuse()
+        currentDetailVC = nil
+        PopoutWindowManager.shared.popOutThread(thread, from: view.window)
+        presentDetachedThreadPlaceholder(thread)
+    }
+
+    @objc private func handleThreadReturnedToMain(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
+        // If we're currently showing the placeholder for this thread, replace with real detail VC
+        if contentContainerVC.currentChild is DetachedThreadPlaceholderView,
+           let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }),
+           ThreadManager.shared.activeThreadId == threadId {
+            showThread(thread)
+        }
+        // Refresh sidebar to remove badge/tint
+        threadListVC.reloadData()
+    }
+
+    @objc private func handlePopOutThreadRequested(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
+        // If the requested thread is currently shown, pop it out
+        if let detailVC = currentDetailVC, detailVC.thread.id == threadId {
+            popOutCurrentThread()
+        } else if let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) {
+            // Thread is not currently shown — show it first, then pop out
+            showThread(thread)
+            popOutCurrentThread()
+        }
+    }
+
     private func preserveSidebarWidthDuringContentChange(_ change: () -> Void) {
         let preservedWidth = currentSidebarWidth() ?? preferredSidebarWidth
         enforcedSidebarWidth = preservedWidth
@@ -556,7 +631,11 @@ final class SplitViewController: NSSplitViewController {
 extension SplitViewController: ThreadListDelegate {
     func threadList(_ controller: ThreadListViewController, didSelectThread thread: MagentThread) {
         ThreadManager.shared.setActiveThread(thread.id)
-        showThread(thread)
+        if PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
+            presentDetachedThreadPlaceholder(thread)
+        } else {
+            showThread(thread)
+        }
         threadListVC.refreshDiffPanelForSelectedThread()
     }
 

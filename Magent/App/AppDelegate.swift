@@ -131,6 +131,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func applicationWillTerminate(_ notification: Notification) {
         coordinator?.persistMainWindowFrame()
+        PopoutWindowManager.shared.saveState()
         UpdateService.shared.stopPeriodicUpdateChecks()
         NotificationCenter.default.removeObserver(self, name: .magentSettingsDidChange, object: nil)
         if let systemAppearanceObserver {

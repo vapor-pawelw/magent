@@ -117,6 +117,16 @@ final class AppCoordinator {
         self.window = window
         installMainWindowFramePersistenceObservers(for: window)
 
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { _ in
+            PopoutWindowManager.shared.closeAll()
+        }
+
+        PopoutWindowManager.shared.startObserving()
+
         installBannerOverlay(for: window)
 
         if !settings.isConfigured {
@@ -125,6 +135,7 @@ final class AppCoordinator {
             Task {
                 await ThreadManager.shared.restoreThreads()
                 ThreadManager.shared.startSessionMonitor()
+                PopoutWindowManager.shared.restoreState(threads: ThreadManager.shared.threads)
 
                 // Warn about projects with invalid paths
                 let invalidProjects = settings.projects.filter { !$0.isValid }
