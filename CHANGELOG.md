@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Terminal and Web type prompts now display as compact single-line fields with placeholder text ("e.g. vim, htop, ssh user@host" / "https://..."), making the expected input obvious and reducing accidental prompt-in-URL mistakes.
 
 ### Thread
+- Fixed AI Rename sheet hanging (infinite spinner) when typing after clicking at the end of the placeholder text.
 - Improved busy detection for Claude sessions with background tasks. Sessions running `run_in_background` tools or active task spinners are now correctly detected as busy even when the `❯` prompt is visible.
 - Fixed busy detection missing the agent status bar in tall terminal panes. Trailing blank lines in tmux captures are now stripped before analysis, preventing all-blank capture windows.
 
