@@ -450,6 +450,8 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private let acceptButton: NSButton
     private var promptScrollView: NSScrollView!
     private var promptLabel: NSTextField!
+    private var promptHeightConstraint: NSLayoutConstraint?
+    private var promptPlaceholderLabel: NSTextField?
     private var completion: ((AgentLaunchSheetResult?) -> Void)?
     private var didFinish = false
 
@@ -771,6 +773,24 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             promptScrollView.hasVerticalScroller = true
             promptScrollView.autohidesScrollers = true
             promptScrollView.documentView = promptTextView
+
+            // Placeholder label overlaid on the scroll view (stays fixed during horizontal scroll)
+            let placeholder = NSTextField(labelWithString: "")
+            placeholder.font = promptFont
+            placeholder.textColor = .placeholderTextColor
+            placeholder.drawsBackground = false
+            placeholder.isBordered = false
+            placeholder.isEditable = false
+            placeholder.isSelectable = false
+            placeholder.translatesAutoresizingMaskIntoConstraints = false
+            placeholder.isHidden = true
+            promptScrollView.addSubview(placeholder)
+            NSLayoutConstraint.activate([
+                placeholder.leadingAnchor.constraint(equalTo: promptScrollView.leadingAnchor, constant: 12),
+                placeholder.centerYAnchor.constraint(equalTo: promptScrollView.centerYAnchor),
+            ])
+            promptPlaceholderLabel = placeholder
+
             stack.addArrangedSubview(promptScrollView)
             lastFieldView = promptScrollView
 
@@ -804,7 +824,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         }
 
         let lineHeight = promptFont.ascender + abs(promptFont.descender) + promptFont.leading
-        let promptHeight = max((lineHeight * 7) + 20, 130)
+        let agentPromptHeight = max((lineHeight * 7) + 20, 130)
 
         // Title field (for tab title)
         var titleRow: NSStackView?
@@ -972,7 +992,12 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
             NSLayoutConstraint.activate([
                 promptLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
                 promptScrollView.widthAnchor.constraint(equalTo: stack.widthAnchor),
-                promptScrollView.heightAnchor.constraint(equalToConstant: promptHeight),
+                {
+                    let initialHeight = isSingleLinePromptMode ? singleLinePromptHeight : agentPromptHeight
+                    let c = promptScrollView.heightAnchor.constraint(equalToConstant: initialHeight)
+                    promptHeightConstraint = c
+                    return c
+                }(),
             ])
         }
 
@@ -1293,7 +1318,23 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     }
 
     private var promptLabelPlaceholder: String? {
-        currentMode == "web" ? "https://..." : nil
+        switch currentMode {
+        case "web": return "https://..."
+        case "terminal": return "e.g. vim, htop, ssh user@host"
+        default: return nil
+        }
+    }
+
+    private var isSingleLinePromptMode: Bool {
+        currentMode == "terminal" || currentMode == "web"
+    }
+
+    /// Height for single-line prompt fields (terminal command, web URL).
+    private var singleLinePromptHeight: CGFloat {
+        let font = NSFont.systemFont(ofSize: 13)
+        let lineHeight = font.ascender + abs(font.descender) + font.leading
+        // text container inset (8 top + 8 bottom) + border padding
+        return lineHeight + 20
     }
 
     private var currentMode: String {
@@ -1346,6 +1387,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
 
     func textDidChange(_ notification: Notification) {
         persistDraft()
+        updatePlaceholderVisibility()
     }
 
     @objc private func draftCheckboxChanged() {
@@ -1407,7 +1449,50 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         promptTextView.isEditable = true
         promptTextView.alphaValue = 1.0
         promptLabel?.stringValue = promptLabelText
+        updatePromptAreaStyle()
         updateDraftCheckboxVisibility()
+    }
+
+    /// Adjusts prompt area height and scroll behavior for single-line modes (terminal/web)
+    /// vs multi-line agent prompt mode.
+    private func updatePromptAreaStyle() {
+        guard config.showPromptInputArea else { return }
+        let singleLine = isSingleLinePromptMode
+
+        // Update placeholder
+        promptPlaceholderLabel?.stringValue = promptLabelPlaceholder ?? ""
+        updatePlaceholderVisibility()
+
+        if singleLine {
+            promptHeightConstraint?.constant = singleLinePromptHeight
+            promptScrollView?.hasVerticalScroller = false
+            // Prevent wrapping so it scrolls horizontally instead
+            promptTextView.textContainer?.widthTracksTextView = false
+            promptTextView.textContainer?.containerSize = NSSize(
+                width: CGFloat.greatestFiniteMagnitude,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            promptTextView.isHorizontallyResizable = true
+            promptScrollView?.hasHorizontalScroller = false
+        } else {
+            let font = NSFont.systemFont(ofSize: 13)
+            let lineHeight = font.ascender + abs(font.descender) + font.leading
+            let agentHeight = max((lineHeight * 7) + 20, 130)
+            promptHeightConstraint?.constant = agentHeight
+            promptScrollView?.hasVerticalScroller = true
+            promptTextView.textContainer?.widthTracksTextView = true
+            promptTextView.textContainer?.containerSize = NSSize(
+                width: 0,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            promptTextView.isHorizontallyResizable = false
+        }
+    }
+
+    private func updatePlaceholderVisibility() {
+        let hasText = !promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasPlaceholder = promptLabelPlaceholder != nil
+        promptPlaceholderLabel?.isHidden = hasText || !hasPlaceholder
     }
 
     private func updateDraftCheckboxVisibility() {
