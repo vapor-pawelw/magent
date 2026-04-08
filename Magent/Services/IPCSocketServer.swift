@@ -917,7 +917,7 @@ actor IPCSocketServer {
             fi
             ;;
         create-tab)
-            thread=""; agent=""; model=""; reasoning=""; prompt=""
+            thread=""; agent=""; model=""; reasoning=""; prompt=""; title=""; fresh=0
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --thread)    thread="$2"; shift 2 ;;
@@ -925,14 +925,18 @@ actor IPCSocketServer {
                     --model)     model="$2"; shift 2 ;;
                     --reasoning) reasoning="$2"; shift 2 ;;
                     --prompt)    prompt="$2"; shift 2 ;;
+                    --title)     title="$2"; shift 2 ;;
+                    --fresh|--no-resume) fresh=1; shift ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] || die "Usage: magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text>]"
+            [ -n "$thread" ] || die "Usage: magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--title <text>] [--fresh|--no-resume] [--prompt <text>]"
             json="{$(json_kv command create-tab),$(json_kv threadName "$thread")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
             [ -n "$model" ] && json="$json,$(json_kv modelId "$model")"
             [ -n "$reasoning" ] && json="$json,$(json_kv reasoningLevel "$reasoning")"
+            [ -n "$title" ] && json="$json,$(json_kv title "$title")"
+            [ "$fresh" = "1" ] && json="$json,\"fresh\":true"
             [ -n "$prompt" ] && json="$json,$(json_kv prompt "$prompt")"
             json="$json}"
             send_request "$json" 60
@@ -1264,7 +1268,7 @@ actor IPCSocketServer {
             echo "  archive-thread       --thread <name> [--force] [--skip-local-sync]  (removes worktree, keeps branch)"
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
             echo "  list-tabs            (--thread <name> | --thread-id <id>)"
-            echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text>]"
+            echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--title <text>] [--fresh|--no-resume] [--prompt <text>]"
             echo "  close-tab            --thread <name> (--index <n> | --session <name>)"
             echo "  current-thread                                               (returns current thread info)"
             echo "  auto-rename-thread   --thread <name> --prompt <text>       (AI-generated branch + description)"

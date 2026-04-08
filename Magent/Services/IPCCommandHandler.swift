@@ -780,6 +780,8 @@ final class IPCCommandHandler {
                 useAgentCommand: useAgent,
                 requestedAgentType: requestedAgent,
                 initialPrompt: initialPrompt,
+                startFresh: request.fresh == true,
+                customTitle: request.title?.trimmingCharacters(in: .whitespacesAndNewlines),
                 modelId: request.modelId,
                 reasoningLevel: request.reasoningLevel
             )

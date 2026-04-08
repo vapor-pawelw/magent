@@ -180,6 +180,17 @@ final class ThreadManager {
                 threads[i].sessionConversationIDs = filteredConversationIDs
                 didMigrate = true
             }
+            let validSessions = Set(threads[i].tmuxSessionNames)
+            let filteredSessionCreatedAts = threads[i].sessionCreatedAts.filter { validSessions.contains($0.key) }
+            if filteredSessionCreatedAts.count != threads[i].sessionCreatedAts.count {
+                threads[i].sessionCreatedAts = filteredSessionCreatedAts
+                didMigrate = true
+            }
+            let filteredFreshSessions = Set(threads[i].freshAgentSessions.filter { validAgentSessions.contains($0) })
+            if filteredFreshSessions.count != threads[i].freshAgentSessions.count {
+                threads[i].freshAgentSessions = filteredFreshSessions
+                didMigrate = true
+            }
             if await migrateSessionAgentTypes(threadIndex: i) {
                 didMigrate = true
             }

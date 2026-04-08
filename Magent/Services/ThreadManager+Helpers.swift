@@ -1055,6 +1055,54 @@ extension ThreadManager {
         return true
     }
 
+    @discardableResult
+    func remapSessionCreationDates(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
+        guard threads.indices.contains(index) else { return false }
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        let remapped = Dictionary(
+            uniqueKeysWithValues: threads[index].sessionCreatedAts.map { key, value in
+                (sessionRenameMap[key] ?? key, value)
+            }
+        )
+        guard remapped != threads[index].sessionCreatedAts else { return false }
+        threads[index].sessionCreatedAts = remapped
+        return true
+    }
+
+    @discardableResult
+    func pruneSessionCreationDatesToKnownSessions(threadIndex index: Int) -> Bool {
+        guard threads.indices.contains(index) else { return false }
+
+        let validSessions = Set(threads[index].tmuxSessionNames)
+        let filtered = threads[index].sessionCreatedAts.filter { validSessions.contains($0.key) }
+        guard filtered != threads[index].sessionCreatedAts else { return false }
+        threads[index].sessionCreatedAts = filtered
+        return true
+    }
+
+    @discardableResult
+    func remapFreshAgentSessions(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
+        guard threads.indices.contains(index) else { return false }
+        guard !sessionRenameMap.isEmpty else { return false }
+
+        let remapped = Set(threads[index].freshAgentSessions.map { sessionRenameMap[$0] ?? $0 })
+        guard remapped != threads[index].freshAgentSessions else { return false }
+        threads[index].freshAgentSessions = remapped
+        return true
+    }
+
+    @discardableResult
+    func pruneFreshAgentSessionsToKnownSessions(threadIndex index: Int) -> Bool {
+        guard threads.indices.contains(index) else { return false }
+
+        let validAgentSessions = Set(threads[index].agentTmuxSessions)
+        let filtered = Set(threads[index].freshAgentSessions.filter { validAgentSessions.contains($0) })
+        guard filtered != threads[index].freshAgentSessions else { return false }
+        threads[index].freshAgentSessions = filtered
+        return true
+    }
+
     private func inferredStoredAgentType(for thread: MagentThread, sessionName: String) -> AgentType? {
         if let customName = thread.customTabNames[sessionName] {
             let trimmed = customName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -1120,10 +1168,13 @@ extension ThreadManager {
     func refreshAgentConversationID(threadId: UUID, sessionName: String) async {
         guard let threadIndex = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[threadIndex].agentTmuxSessions.contains(sessionName) else { return }
+        guard !threads[threadIndex].freshAgentSessions.contains(sessionName) else { return }
 
         let agentType = agentType(for: threads[threadIndex], sessionName: sessionName)
         let worktreePath = threads[threadIndex].worktreePath
-        let minimumCreatedAt = threads[threadIndex].createdAt.addingTimeInterval(-2)
+        let minimumCreatedAt = (
+            threads[threadIndex].sessionCreatedAts[sessionName] ?? threads[threadIndex].createdAt
+        ).addingTimeInterval(-2)
 
         let conversationID: String?
         switch agentType {

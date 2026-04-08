@@ -300,7 +300,7 @@ magent-cli move-thread --thread <name> --section <name>
 Add a tab to an existing thread.
 
 ```bash
-magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text>]
+magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--title <text>] [--fresh|--no-resume] [--prompt <text>]
 ```
 
 | Option | Description |
@@ -308,9 +308,12 @@ magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--
 | `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`. Defaults to project/global setting. |
 | `--model <id>` | Model ID to launch with. Falls back to the agent's configured default when omitted. |
 | `--reasoning <level>` | Reasoning level: `low`, `medium`, `high`, `max` (Claude) or `low`, `medium`, `high`, `xhigh` (Codex). |
+| `--title <text>` | Optional tab title shown in the tab bar. |
+| `--fresh`, `--no-resume` | Start an isolated Claude/Codex tab that should not adopt an older conversation from the same worktree path during later recovery. |
 | `--prompt <text>` | Initial prompt to inject after the agent starts. |
 
 Use `--agent terminal` for a plain shell tab. Errors if the requested agent is disabled in Settings.
+When the user explicitly names an agent, pass that exact `--agent` value. Do not silently substitute Claude for Codex or vice versa.
 
 ### list-tabs
 

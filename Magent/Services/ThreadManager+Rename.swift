@@ -1015,6 +1015,14 @@ extension ThreadManager {
             threads[index].sessionAgentTypes.removeValue(forKey: sessionName)
             threads[index].sessionAgentTypes[resolvedSessionName] = sessionAgentType
         }
+        if let sessionCreatedAt = currentThread.sessionCreatedAts[sessionName] {
+            threads[index].sessionCreatedAts.removeValue(forKey: sessionName)
+            threads[index].sessionCreatedAts[resolvedSessionName] = sessionCreatedAt
+        }
+        if currentThread.freshAgentSessions.contains(sessionName) {
+            threads[index].freshAgentSessions.remove(sessionName)
+            threads[index].freshAgentSessions.insert(resolvedSessionName)
+        }
         if currentThread.forwardedTmuxSessions.contains(sessionName) {
             threads[index].forwardedTmuxSessions.remove(sessionName)
             threads[index].forwardedTmuxSessions.insert(resolvedSessionName)

@@ -10,6 +10,7 @@ public nonisolated struct IPCRequest: Codable, Sendable {
     public var modelId: String?
     public var reasoningLevel: String?
     public var prompt: String?
+    public var title: String?
     public var threadId: String?
     public var threadName: String?
     public var tabIndex: Int?
@@ -27,6 +28,7 @@ public nonisolated struct IPCRequest: Codable, Sendable {
     public var skipLocalSync: Bool?
     public var select: Bool?
     public var noSubmit: Bool?
+    public var fresh: Bool?
     public var remove: Bool?
     public var threads: [IPCBatchThreadSpec]?
     /// Thread ID to inherit base branch and section from. Injected automatically by

@@ -290,6 +290,7 @@ extension ThreadManager {
                 : "Terminal"
             let firstTabSlug = Self.sanitizeForTmux(firstTabDisplayName)
             let tmuxSessionName = Self.buildSessionName(repoSlug: repoSlug, threadName: name, tabSlug: firstTabSlug)
+            let sessionCreatedAt = Date()
 
             // Pre-trust the worktree directory so the selected agent doesn't show a trust dialog
             trustDirectoryIfNeeded(worktreePath, agentType: selectedAgentType)
@@ -357,6 +358,7 @@ extension ThreadManager {
                 tmuxSessionNames: [tmuxSessionName],
                 agentTmuxSessions: useAgentCommand && selectedAgentType != nil ? [tmuxSessionName] : [],
                 sessionAgentTypes: selectedAgentType.map { [tmuxSessionName: $0] } ?? [:],
+                sessionCreatedAts: [tmuxSessionName: sessionCreatedAt],
                 sectionId: requestedSectionId ?? settings.defaultSection(for: project.id)?.id,
                 lastSelectedTabIdentifier: tmuxSessionName,
                 customTabNames: [tmuxSessionName: firstTabDisplayName],
@@ -384,7 +386,7 @@ extension ThreadManager {
                 // injection or agent-readiness detection for non-prompt threads).
                 threads[idx].magentBusySessions = [tmuxSessionName]
             }
-            sessionLastVisitedAt[tmuxSessionName] = Date()
+            sessionLastVisitedAt[tmuxSessionName] = sessionCreatedAt
 
             try persistence.saveActiveThreads(threads)
             await MainActor.run {
@@ -502,6 +504,7 @@ extension ThreadManager {
             workingDirectory: project.repoPath,
             command: startCmd
         )
+        let sessionCreatedAt = Date()
         // Main thread is always an agent session.
 
         await applySessionEnvironmentVariables(
@@ -518,6 +521,7 @@ extension ThreadManager {
             tmuxSessionNames: [tmuxSessionName],
             agentTmuxSessions: selectedAgentType != nil ? [tmuxSessionName] : [],
             sessionAgentTypes: selectedAgentType.map { [tmuxSessionName: $0] } ?? [:],
+            sessionCreatedAts: [tmuxSessionName: sessionCreatedAt],
             isMain: true,
             lastSelectedTabIdentifier: tmuxSessionName,
             customTabNames: [tmuxSessionName: firstTabDisplayName]
@@ -527,7 +531,7 @@ extension ThreadManager {
         var busyThread = thread
         busyThread.magentBusySessions.insert(tmuxSessionName)
         threads.insert(busyThread, at: 0)
-        sessionLastVisitedAt[tmuxSessionName] = Date()
+        sessionLastVisitedAt[tmuxSessionName] = sessionCreatedAt
         try persistence.saveActiveThreads(threads)
         await MainActor.run {
             delegate?.threadManager(self, didCreateThread: busyThread)
@@ -960,6 +964,8 @@ extension ThreadManager {
             }
             threads[index].tmuxSessionNames = []
             threads[index].sessionConversationIDs = [:]
+            threads[index].sessionCreatedAts = [:]
+            threads[index].freshAgentSessions = []
             threads[index].forwardedTmuxSessions = []
             threads[index].submittedPromptsBySession = [:]
             threads[index].lastSelectedTabIdentifier = nil
@@ -1012,6 +1018,8 @@ extension ThreadManager {
         thread.agentTmuxSessions = []
         thread.sessionConversationIDs = [:]
         thread.sessionAgentTypes = [:]
+        thread.sessionCreatedAts = [:]
+        thread.freshAgentSessions = []
         thread.forwardedTmuxSessions = []
         thread.pinnedTmuxSessions = []
         thread.protectedTmuxSessions = []

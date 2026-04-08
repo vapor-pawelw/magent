@@ -12,6 +12,7 @@ extension ThreadManager {
         initialPrompt: String? = nil,
         shouldSubmitInitialPrompt: Bool = true,
         resumeSessionID: String? = nil,
+        startFresh: Bool = false,
         isForwardedContinuation: Bool = false,
         customTitle: String? = nil,
         tabNameSuffix: String? = nil,
@@ -23,6 +24,7 @@ extension ThreadManager {
             throw ThreadManagerError.threadNotFound
         }
         let currentThread = threads[index]
+        let sessionCreatedAt = Date()
 
         // Find the next unused tab index — check both model and live tmux sessions
         let existingNames = currentThread.tmuxSessionNames
@@ -195,13 +197,17 @@ extension ThreadManager {
         )
 
         threads[index].tmuxSessionNames.append(tmuxSessionName)
-        sessionLastVisitedAt[tmuxSessionName] = Date()
+        sessionLastVisitedAt[tmuxSessionName] = sessionCreatedAt
         threads[index].customTabNames[tmuxSessionName] = tabDisplayName
+        threads[index].sessionCreatedAts[tmuxSessionName] = sessionCreatedAt
         let shouldMarkAsAgentTab = (currentThread.isMain || useAgentCommand) && selectedAgentType != nil
         if shouldMarkAsAgentTab {
             threads[index].agentTmuxSessions.append(tmuxSessionName)
             if let selectedAgentType {
                 threads[index].sessionAgentTypes[tmuxSessionName] = selectedAgentType
+            }
+            if startFresh {
+                threads[index].freshAgentSessions.insert(tmuxSessionName)
             }
             if let resumeSessionID {
                 let trimmedResumeSessionID = resumeSessionID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -241,7 +247,7 @@ extension ThreadManager {
             shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
             agentType: selectedAgentType
         )
-        if initialPrompt?.isEmpty == false, isAgentTab, shouldSubmitInitialPrompt {
+        if initialPrompt?.isEmpty == false, isAgentTab, shouldSubmitInitialPrompt, !startFresh {
             scheduleAgentConversationIDRefresh(threadId: currentThread.id, sessionName: tmuxSessionName)
         }
 
@@ -402,6 +408,8 @@ extension ThreadManager {
         threads[idx].agentTmuxSessions.removeAll { $0 == sessionName }
         threads[idx].sessionConversationIDs.removeValue(forKey: sessionName)
         threads[idx].sessionAgentTypes.removeValue(forKey: sessionName)
+        threads[idx].sessionCreatedAts.removeValue(forKey: sessionName)
+        threads[idx].freshAgentSessions.remove(sessionName)
         threads[idx].forwardedTmuxSessions.remove(sessionName)
         threads[idx].unreadCompletionSessions.remove(sessionName)
         threads[idx].busySessions.remove(sessionName)

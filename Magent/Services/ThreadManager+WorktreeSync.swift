@@ -217,6 +217,14 @@ extension ThreadManager {
                     (renameMap[key] ?? key, value)
                 }
             )
+            threads[i].sessionCreatedAts = Dictionary(
+                uniqueKeysWithValues: threads[i].sessionCreatedAts.map { key, value in
+                    (renameMap[key] ?? key, value)
+                }
+            )
+            threads[i].freshAgentSessions = Set(
+                threads[i].freshAgentSessions.map { renameMap[$0] ?? $0 }
+            )
             _ = remapSubmittedPromptHistory(threadIndex: i, sessionRenameMap: renameMap)
             var newCustomTabNames: [String: String] = [:]
             for (key, value) in threads[i].customTabNames {
