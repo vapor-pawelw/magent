@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.
 
 ### Thread
+- Added question, exclamation, and triple-exclamation sign emojis to thread rows.
 - Fixed archive merge failing when the branch name matches the worktree directory name by using unambiguous `refs/heads/` git references.
 
 ## 1.5.3 - 2026-04-07

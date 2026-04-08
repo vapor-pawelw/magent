@@ -271,6 +271,9 @@ extension ThreadListViewController {
     static let signEmojiOptions: [SignOption] = [
         SignOption(emoji: "↑", label: "High Priority", tintColor: .systemRed),
         SignOption(emoji: "↓", label: "Low Priority", tintColor: .systemGreen),
+        SignOption(emoji: "❓", label: "Question", tintColor: .systemBlue),
+        SignOption(emoji: "❗", label: "Exclamation", tintColor: .systemOrange),
+        SignOption(emoji: "‼️", label: "Triple Exclamation", tintColor: .systemRed),
         SignOption(emoji: "🛑", label: "Stop Sign"),
         SignOption(emoji: "✅", label: "Checkmark"),
         SignOption(emoji: "⏸️", label: "Pause"),

@@ -284,7 +284,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var persistedWebTabs: [PersistedWebTab]
     /// Persisted draft tabs — agent prompts saved for later execution.
     public var persistedDraftTabs: [PersistedDraftTab]
-    /// Optional sign emoji displayed to the left of the thread icon (e.g. 🛑, ✅).
+    /// Optional sign emoji displayed to the left of the thread icon (e.g. 🛑, ✅, ❓).
     public var signEmoji: String?
 
     // MARK: - Computed
