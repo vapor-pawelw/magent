@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - Fixed "Rename from prompt" (TOC and auto-rename) failing silently when the spawned CLI process inherited an invalid stdin from the GUI app. Background `claude -p` and `codex exec` calls now redirect stdin from `/dev/null`, eliminating both the failure and a ~3-second startup delay.
+- Rename failure banners now include a diagnostic reason (timeout, CLI error, empty output, or parse failure) instead of a generic "could not generate" message.
 
 ## 1.5.3 - 2026-04-07
 

@@ -97,9 +97,9 @@ Right-clicking a TOC entry shows a context menu with "Rename thread from this pr
 
 **Agent fallback:** Uses `slugGenerationAgentOrder` (same as auto-rename), which always appends `.claude` as a final fallback even when no trackable agent (Claude/Codex) is configured as active. Since Claude is a prerequisite for the app, this guarantees at least one attempt.
 
-**Slug-generation `claude -p` flags:** The background `claude -p` call that generates the slug uses `--tools ""` and `--setting-sources ""`. This is critical: without `--setting-sources ""`, Claude loads the project's CLAUDE.md/AGENTS.md (and user-level `~/.claude/CLAUDE.md`) as system-prompt context. In projects with large instruction files this regularly pushes the API call past the 30 s (now 60 s) per-agent timeout, causing consistent "rename failed" errors. The flags keep the system prompt minimal so haiku responds in a few seconds.
+**Slug-generation `claude -p` flags:** The background `claude -p` call that generates the slug uses `--tools ""`, `--setting-sources ""`, and `< /dev/null`. This is critical: without `--setting-sources ""`, Claude loads the project's CLAUDE.md/AGENTS.md as system-prompt context, regularly causing timeouts. Without `< /dev/null`, the CLI inherits the GUI app's invalid stdin fd, which can cause hangs or failures (the CLI waits ~3 s for stdin data before proceeding). The flags keep the system prompt minimal and stdin clean so haiku responds in a few seconds.
 
-**Error handling:** If all agents fail, throws `nameGenerationFailed`. The banner reads "Could not generate a thread name. Ensure Claude or Codex is configured and reachable, then try again." (not "unique thread name" — that wording was misleading since the failure here is agent availability, not duplicate names).
+**Error handling:** If all agents fail, throws `nameGenerationFailed(diagnostic:)`. The banner includes a specific failure reason (e.g. timeout, CLI exit code + stderr, empty output, or slug parse failure) instead of a generic message, aiding diagnosis.
 
 ## Five auto-rename trigger paths
 
