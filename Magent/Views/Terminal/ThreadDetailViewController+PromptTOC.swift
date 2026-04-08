@@ -755,17 +755,36 @@ extension ThreadDetailViewController {
 
     private func handlePromptTOCRenameFromEntry(entryIndex: Int) {
         guard entryIndex >= 0, entryIndex < promptTOCEntries.count else { return }
+        guard let parentWindow = view.window else { return }
         let entry = promptTOCEntries[entryIndex]
         let thread = self.thread
-        Task {
-            do {
-                _ = try await threadManager.renameThreadFromPrompt(thread, prompt: entry.fullText)
-            } catch {
-                await MainActor.run {
-                    BannerManager.shared.show(
-                        message: "Rename failed: \(error.localizedDescription)",
-                        style: .error
+
+        let recentPrompts = ThreadListViewController.collectRecentPrompts(for: thread, limit: 10)
+        let config = AIRenameSheetConfig(
+            thread: thread,
+            recentPrompts: recentPrompts,
+            prefillPrompt: entry.fullText
+        )
+
+        let sheet = AIRenameSheetController(config: config)
+        sheet.present(for: parentWindow) { [weak self] result in
+            guard let self, let result else { return }
+            Task {
+                do {
+                    _ = try await self.threadManager.renameThreadFromPrompt(
+                        thread,
+                        prompt: result.prompt,
+                        renameBranch: result.renameBranch,
+                        renameDescription: result.renameDescription,
+                        renameIcon: result.renameIcon
                     )
+                } catch {
+                    await MainActor.run {
+                        BannerManager.shared.show(
+                            message: "AI Rename failed: \(error.localizedDescription)",
+                            style: .error
+                        )
+                    }
                 }
             }
         }
@@ -1612,7 +1631,7 @@ final class PromptTableOfContentsView: NSView {
         menu.addItem(.separator())
 
         let renameItem = NSMenuItem(
-            title: "Rename thread from this prompt",
+            title: "AI Rename…",
             action: #selector(handleRenameFromContextMenu(_:)),
             keyEquivalent: ""
         )

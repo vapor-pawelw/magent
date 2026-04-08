@@ -137,6 +137,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var switchToNewlyCreatedTab: Bool
     public var protectPinnedFromEviction: Bool
     public var maxIdleSessions: Int?
+    public var aiRenameIcon: Bool
+    public var aiRenameDescription: Bool
+    public var aiRenameBranch: Bool
     public var keyBindings: KeyBindingSettings
 
     public init(
@@ -192,6 +195,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
         switchToNewlyCreatedTab: Bool = true,
         protectPinnedFromEviction: Bool = true,
         maxIdleSessions: Int? = 30,
+        aiRenameIcon: Bool = true,
+        aiRenameDescription: Bool = true,
+        aiRenameBranch: Bool = true,
         keyBindings: KeyBindingSettings = KeyBindingSettings()
     ) {
         self.projects = projects
@@ -246,6 +252,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.switchToNewlyCreatedTab = switchToNewlyCreatedTab
         self.protectPinnedFromEviction = protectPinnedFromEviction
         self.maxIdleSessions = maxIdleSessions
+        self.aiRenameIcon = aiRenameIcon
+        self.aiRenameDescription = aiRenameDescription
+        self.aiRenameBranch = aiRenameBranch
         self.keyBindings = keyBindings
     }
 
@@ -306,6 +315,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
         switchToNewlyCreatedTab = try container.decodeIfPresent(Bool.self, forKey: .switchToNewlyCreatedTab) ?? true
         protectPinnedFromEviction = try container.decodeIfPresent(Bool.self, forKey: .protectPinnedFromEviction) ?? true
         maxIdleSessions = try container.decodeIfPresent(Int.self, forKey: .maxIdleSessions)
+        aiRenameIcon = try container.decodeIfPresent(Bool.self, forKey: .aiRenameIcon) ?? true
+        aiRenameDescription = try container.decodeIfPresent(Bool.self, forKey: .aiRenameDescription) ?? true
+        aiRenameBranch = try container.decodeIfPresent(Bool.self, forKey: .aiRenameBranch) ?? true
         keyBindings = try container.decodeIfPresent(KeyBindingSettings.self, forKey: .keyBindings) ?? KeyBindingSettings()
     }
 
@@ -363,6 +375,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(switchToNewlyCreatedTab, forKey: .switchToNewlyCreatedTab)
         try container.encode(protectPinnedFromEviction, forKey: .protectPinnedFromEviction)
         try container.encodeIfPresent(maxIdleSessions, forKey: .maxIdleSessions)
+        try container.encode(aiRenameIcon, forKey: .aiRenameIcon)
+        try container.encode(aiRenameDescription, forKey: .aiRenameDescription)
+        try container.encode(aiRenameBranch, forKey: .aiRenameBranch)
         try container.encode(keyBindings, forKey: .keyBindings)
     }
 
@@ -532,6 +547,9 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case switchToNewlyCreatedTab
         case protectPinnedFromEviction
         case maxIdleSessions
+        case aiRenameIcon
+        case aiRenameDescription
+        case aiRenameBranch
         case keyBindings
 
         // Legacy keys kept for migration.

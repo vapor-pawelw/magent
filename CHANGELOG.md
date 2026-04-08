@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.
 
 ### Thread
+- New "AI Rename" sheet (⌘⇧R) replaces the old single-line rename dialog: multi-line prompt input, recent prompt picker (last 10), and checkboxes to choose which parts to change (icon, description, branch name). Accessible from thread context menu, TOC right-click, and main Thread menu.
 - Added question, exclamation, and triple-exclamation sign emojis to thread rows.
 - Auto-rename now uses all accumulated prompts for context, so if the first prompt gets rate-limited and the user follows up with "continue", the rename model still sees the original task description.
 - Manual "Rename from prompt" now updates the thread description and icon to match the new branch, instead of keeping the stale description from the original auto-rename.

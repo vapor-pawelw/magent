@@ -130,6 +130,16 @@ final class SplitViewController: NSSplitViewController {
         threadListVC.requestNewThreadFromBranch()
     }
 
+    /// Forwarded from the main menu's "AI Rename" item (⌘⇧R).
+    @objc func requestAIRename() {
+        guard let thread = threadListVC.selectedThreadFromState(),
+              !thread.isMain else {
+            NSSound.beep()
+            return
+        }
+        threadListVC.presentAIRenameSheet(for: thread)
+    }
+
     // MARK: - Key Bindings
 
     @objc private func keyBindingsDidChange() {

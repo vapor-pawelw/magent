@@ -201,6 +201,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let threadMenu = NSMenu(title: "Thread")
         threadMenu.addItem(withTitle: "New Thread", action: #selector(SplitViewController.requestNewThread), keyEquivalent: "")
         threadMenu.addItem(withTitle: "Fork Thread", action: #selector(SplitViewController.requestNewThreadFromBranch), keyEquivalent: "")
+        threadMenu.addItem(.separator())
+        let aiRenameItem = threadMenu.addItem(withTitle: "AI Rename…", action: #selector(SplitViewController.requestAIRename), keyEquivalent: "r")
+        aiRenameItem.keyEquivalentModifierMask = [.command, .shift]
         threadMenuItem.submenu = threadMenu
         mainMenu.addItem(threadMenuItem)
 

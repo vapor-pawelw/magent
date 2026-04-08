@@ -335,7 +335,9 @@ extension ThreadManager {
         threadId: UUID,
         generatedTaskDescription: GeneratedTaskDescription?,
         prefixDraft: Bool = false,
-        forceOverwrite: Bool = false
+        forceOverwrite: Bool = false,
+        applyDescription: Bool = true,
+        applyIcon: Bool = true
     ) async -> Bool {
         guard let generatedTaskDescription else { return false }
         guard let currentIndex = threads.firstIndex(where: { $0.id == threadId }) else { return false }
@@ -343,16 +345,24 @@ extension ThreadManager {
         // should always update the description to match the new branch name.
         guard forceOverwrite || threads[currentIndex].taskDescription == nil else { return false }
 
-        let shouldPrefixDraft = prefixDraft || threads[currentIndex].hasDraftTabs
-        let description = shouldPrefixDraft
-            ? Self.draftDescriptionPrefix + generatedTaskDescription.description
-            : generatedTaskDescription.description
-        threads[currentIndex].taskDescription = description
-        let settings = persistence.loadSettings()
-        if settings.autoSetThreadIconFromWorkType,
-           !threads[currentIndex].isThreadIconManuallySet {
-            threads[currentIndex].threadIcon = generatedTaskDescription.suggestedIcon
+        var didApply = false
+        if applyDescription {
+            let shouldPrefixDraft = prefixDraft || threads[currentIndex].hasDraftTabs
+            let description = shouldPrefixDraft
+                ? Self.draftDescriptionPrefix + generatedTaskDescription.description
+                : generatedTaskDescription.description
+            threads[currentIndex].taskDescription = description
+            didApply = true
         }
+        if applyIcon {
+            let settings = persistence.loadSettings()
+            if settings.autoSetThreadIconFromWorkType,
+               !threads[currentIndex].isThreadIconManuallySet {
+                threads[currentIndex].threadIcon = generatedTaskDescription.suggestedIcon
+                didApply = true
+            }
+        }
+        guard didApply else { return false }
         try? persistence.saveActiveThreads(threads)
         await MainActor.run {
             delegate?.threadManager(self, didUpdateThreads: threads)
@@ -363,12 +373,20 @@ extension ThreadManager {
     /// Prompt-based rename (manual trigger): generate slug + description + icon
     /// using the same model prompt as first-prompt auto-rename, without
     /// first-prompt eligibility checks.
+    ///
+    /// - Parameters:
+    ///   - renameBranch: When false, skip the git branch rename. Defaults to true.
+    ///   - renameDescription: When false, skip updating the task description. Defaults to true.
+    ///   - renameIcon: When false, skip updating the thread icon. Defaults to true.
     @discardableResult
     func renameThreadFromPrompt(
         _ thread: MagentThread,
         prompt: String,
         preferredAgent: AgentType? = nil,
-        prefixDraft: Bool = false
+        prefixDraft: Bool = false,
+        renameBranch: Bool = true,
+        renameDescription: Bool = true,
+        renameIcon: Bool = true
     ) async throws -> Bool {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
             throw ThreadManagerError.threadNotFound
@@ -423,23 +441,37 @@ extension ThreadManager {
             throw ThreadManagerError.nameGenerationFailed(diagnostic: reason)
         }
 
-        let candidates = renameCandidates(from: slug).filter { $0 != currentThread.branchName }
-        for candidate in candidates {
-            do {
-                try await renameThread(currentThread, to: candidate, markFirstPromptRenameHandled: false)
-                _ = await applyGeneratedRenameMetadataIfNeeded(
-                    threadId: currentThread.id,
-                    generatedTaskDescription: generatedTaskDescription,
-                    prefixDraft: prefixDraft,
-                    forceOverwrite: true
-                )
-                return true
-            } catch ThreadManagerError.duplicateName {
-                continue
+        if renameBranch {
+            let candidates = renameCandidates(from: slug).filter { $0 != currentThread.branchName }
+            var didRename = false
+            for candidate in candidates {
+                do {
+                    try await renameThread(currentThread, to: candidate, markFirstPromptRenameHandled: false)
+                    didRename = true
+                    break
+                } catch ThreadManagerError.duplicateName {
+                    continue
+                }
+            }
+            if !didRename, renameDescription || renameIcon {
+                // Branch rename failed but we still want metadata — apply it without branch change.
+            } else if !didRename {
+                throw ThreadManagerError.duplicateName
             }
         }
 
-        throw ThreadManagerError.duplicateName
+        if renameDescription || renameIcon {
+            _ = await applyGeneratedRenameMetadataIfNeeded(
+                threadId: currentThread.id,
+                generatedTaskDescription: generatedTaskDescription,
+                prefixDraft: prefixDraft,
+                forceOverwrite: true,
+                applyDescription: renameDescription,
+                applyIcon: renameIcon
+            )
+        }
+
+        return true
     }
 
     /// Renames only the git branch for a thread. The thread name (= worktree directory
