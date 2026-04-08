@@ -312,11 +312,14 @@ extension ThreadManager {
     private func applyGeneratedRenameMetadataIfNeeded(
         threadId: UUID,
         generatedTaskDescription: GeneratedTaskDescription?,
-        prefixDraft: Bool = false
+        prefixDraft: Bool = false,
+        forceOverwrite: Bool = false
     ) async -> Bool {
         guard let generatedTaskDescription else { return false }
         guard let currentIndex = threads.firstIndex(where: { $0.id == threadId }) else { return false }
-        guard threads[currentIndex].taskDescription == nil else { return false }
+        // Skip if description already exists — unless this is a manual rename that
+        // should always update the description to match the new branch name.
+        guard forceOverwrite || threads[currentIndex].taskDescription == nil else { return false }
 
         let shouldPrefixDraft = prefixDraft || threads[currentIndex].hasDraftTabs
         let description = shouldPrefixDraft
@@ -405,7 +408,8 @@ extension ThreadManager {
                 _ = await applyGeneratedRenameMetadataIfNeeded(
                     threadId: currentThread.id,
                     generatedTaskDescription: generatedTaskDescription,
-                    prefixDraft: prefixDraft
+                    prefixDraft: prefixDraft,
+                    forceOverwrite: true
                 )
                 return true
             } catch ThreadManagerError.duplicateName {
