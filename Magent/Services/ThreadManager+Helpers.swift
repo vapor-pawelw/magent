@@ -1529,6 +1529,13 @@ extension ThreadManager {
             notifiedWaitingSessions.remove(target)
         }
 
+        // Re-key runtime agent detection cache so renamed sessions keep their cached type.
+        for (oldName, newName) in sessionRenameMap {
+            if let cached = lastRuntimeDetectedAgentBySession.removeValue(forKey: oldName) {
+                lastRuntimeDetectedAgentBySession[newName] = cached
+            }
+        }
+
         return changed
     }
 

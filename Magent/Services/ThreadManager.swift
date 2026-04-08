@@ -143,6 +143,12 @@ final class ThreadManager {
     /// Pending prompt recoveries for .newTab entries, keyed by thread ID.
     /// Stored at launch and shown as embedded banners when the thread is selected.
     var pendingPromptRecoveriesByThread: [UUID: [PendingPromptRecoveryInfo]] = [:]
+    /// Caches the last runtime-detected agent type per session. When `ps` child-process
+    /// detection transiently fails (e.g. Claude reports its version as `pane_current_command`
+    /// instead of "claude"), this prevents the session from flipping to `nil` and losing busy state.
+    /// Entries expire after `lastRuntimeDetectedAgentTTL` seconds of consecutive nil detections.
+    var lastRuntimeDetectedAgentBySession: [String: (agent: AgentType, detectedAt: Date)] = [:]
+    static let lastRuntimeDetectedAgentTTL: TimeInterval = 60
 
     // MARK: - Lifecycle
 

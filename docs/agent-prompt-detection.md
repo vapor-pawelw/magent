@@ -13,6 +13,7 @@ Detection is agent-specific and handled by `isAgentPromptReady` in `ThreadManage
 - **Layout**: The `❯` appears alone on its own line, surrounded by separator lines (`────...`)
 - **Busy guard**: If `paneContentShowsEscToInterrupt` detects "esc to interrupt" in the last 15 lines, the prompt is considered busy regardless of `❯` visibility
 - **Capture**: Uses plain `capture-pane -p` (no ANSI escapes needed since `❯` is always bare)
+- **Process title**: Claude Code sets its process title to its version number (e.g. `2.1.92`), so tmux's `pane_current_command` does NOT report "claude". Agent detection falls back to child process args via `ps`, and additionally uses a semver heuristic: if `pane_current_command` matches `^\d+\.\d+\.\d+` and the session has a configured agent type in `sessionAgentTypes`, that type is trusted directly. A 60-second runtime detection cache provides a final safety net against transient `ps` failures.
 
 ## Codex
 

@@ -1,7 +1,12 @@
 import AppKit
 import Foundation
+import os
 import UserNotifications
 import MagentCore
+
+private extension Logger {
+    static let busyState = Logger(subsystem: "com.magent.app", category: "BusyState")
+}
 
 extension ThreadManager {
 
@@ -334,13 +339,42 @@ extension ThreadManager {
 
                 if threads[ti].waitingForInputSessions.contains(session) { continue }
 
+                // Detect agent type: first try the pane command name, then child
+                // processes, then a version-number heuristic for agents (like Claude)
+                // that set their process title to a semver string.
                 let children = detectedAgentType(from: paneState.command) == nil
                     ? childProcessesByPid[paneState.pid] ?? []
                     : []
-                let detectedAgent = detectedRunningAgentType(
+                var detectedAgent = detectedRunningAgentType(
                     paneCommand: paneState.command,
                     childProcesses: children
                 )
+
+                // Agents like Claude Code set pane_current_command to their version
+                // (e.g. "2.1.92") which doesn't match "claude"/"codex" by name.
+                // When the command looks like a semver and this session has a known
+                // configured agent type, trust the configured type directly — avoids
+                // depending on the ps child scan for every tick.
+                if detectedAgent == nil,
+                   looksLikeSemver(paneState.command),
+                   let configuredType = threads[ti].sessionAgentTypes[session] {
+                    detectedAgent = configuredType
+                }
+
+                if let agent = detectedAgent {
+                    // Cache successful detection so transient failures on future
+                    // ticks don't flip the session to nil and wipe busy state.
+                    lastRuntimeDetectedAgentBySession[session] = (agent: agent, detectedAt: Date())
+                } else if let cached = lastRuntimeDetectedAgentBySession[session],
+                          Date().timeIntervalSince(cached.detectedAt) < Self.lastRuntimeDetectedAgentTTL {
+                    detectedAgent = cached.agent
+                    Logger.busyState.debug(
+                        "Agent detection nil for \(session, privacy: .public), falling back to cached \(String(describing: cached.agent), privacy: .public) (age: \(Int(Date().timeIntervalSince(cached.detectedAt)))s)"
+                    )
+                } else {
+                    // No detection and no valid cache — genuinely no agent.
+                    lastRuntimeDetectedAgentBySession.removeValue(forKey: session)
+                }
 
                 switch detectedAgent {
                 case .codex?:
@@ -613,6 +647,13 @@ extension ThreadManager {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         return nonEmpty.contains(where: isEscToInterruptStatusLine)
+    }
+
+    /// Returns true when the string looks like a semver version (e.g. "2.1.92").
+    /// Agents like Claude Code set their process title to their version number,
+    /// so tmux's pane_current_command reports "2.1.92" instead of "claude".
+    private func looksLikeSemver(_ string: String) -> Bool {
+        string.range(of: #"^\d+\.\d+\.\d+"#, options: .regularExpression) != nil
     }
 
     private func isEscToInterruptStatusLine(_ line: String) -> Bool {

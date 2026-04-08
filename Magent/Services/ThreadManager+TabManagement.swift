@@ -420,6 +420,7 @@ extension ThreadManager {
         notifiedWaitingSessions.remove(sessionName)
         sessionLastVisitedAt.removeValue(forKey: sessionName)
         sessionLastBusyAt.removeValue(forKey: sessionName)
+        lastRuntimeDetectedAgentBySession.removeValue(forKey: sessionName)
         evictedIdleSessions.remove(sessionName)
         clearTrackedInitialPromptInjection(for: sessionName)
         threads[idx].customTabNames.removeValue(forKey: sessionName)

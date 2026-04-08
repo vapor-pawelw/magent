@@ -55,6 +55,7 @@ All notable changes to this project will be documented in this file.
 - `create-thread` no longer switches the GUI to the new thread by default. Use `--select` to opt in. Batch create never switches.
 
 ### Agents
+- Fixed busy state detection for Claude Code sessions where the agent reports its version number as the process title, causing the sidebar to miss or drop the busy indicator.
 - GPT 5.3 is now available as a Codex model option.
 - Fixed agent resume/recovery from incorrectly triggering when a plain terminal fallback session is recreated.
 - Fixed auto-rename-on-first-prompt to trigger immediately when prompts are injected via CLI, instead of waiting for user interaction or bell events.
