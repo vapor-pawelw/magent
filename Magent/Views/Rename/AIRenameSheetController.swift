@@ -38,9 +38,10 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
     private var completion: ((AIRenameSheetResult?) -> Void)?
     private var didFinish = false
 
-    // Placeholder text shown when the prompt text view is empty.
     private static let placeholderText = "Describe the task for AI rename..."
     private var isShowingPlaceholder = false
+    /// Guard against re-entrant text change notifications while clearing placeholder.
+    private var isClearingPlaceholder = false
 
     init(config: AIRenameSheetConfig) {
         self.config = config
@@ -127,7 +128,7 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
         stack.addArrangedSubview(titleLabel)
 
         // 2. Thread context chip
-        let threadName = config.thread.displayName
+        let threadName = config.thread.taskDescription ?? config.thread.name
         let contextLabel = NSTextField(labelWithString: "Thread: \(threadName)")
         contextLabel.font = .systemFont(ofSize: 11)
         contextLabel.textColor = .secondaryLabelColor
@@ -268,17 +269,21 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
     // MARK: - Placeholder
 
     private func showPlaceholder() {
+        guard !isClearingPlaceholder else { return }
         isShowingPlaceholder = true
         promptTextView.string = Self.placeholderText
         promptTextView.textColor = .placeholderTextColor
+        // Place caret at the beginning so it doesn't appear after placeholder text
+        promptTextView.setSelectedRange(NSRange(location: 0, length: 0))
     }
 
     private func clearPlaceholder() {
-        if isShowingPlaceholder {
-            isShowingPlaceholder = false
-            promptTextView.string = ""
-            promptTextView.textColor = .textColor
-        }
+        guard isShowingPlaceholder, !isClearingPlaceholder else { return }
+        isClearingPlaceholder = true
+        isShowingPlaceholder = false
+        promptTextView.string = ""
+        promptTextView.textColor = .textColor
+        isClearingPlaceholder = false
     }
 
     // MARK: - Prefill & State
@@ -375,8 +380,9 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
 
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-            // Shift+Return inserts a newline; plain Return submits
             if NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
+                // Shift+Return inserts a newline — but clear placeholder first
+                if isShowingPlaceholder { clearPlaceholder() }
                 return false
             }
             renameTapped()
@@ -390,15 +396,27 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
             window?.selectPreviousKeyView(nil)
             return true
         }
+        // Swallow delete/backspace while placeholder is shown
+        if isShowingPlaceholder,
+           commandSelector == #selector(NSResponder.deleteBackward(_:))
+            || commandSelector == #selector(NSResponder.deleteForward(_:)) {
+            return true
+        }
         return false
     }
 
-    func textDidBeginEditing(_ notification: Notification) {
-        clearPlaceholder()
+    func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        if isShowingPlaceholder, let replacement = replacementString, !replacement.isEmpty {
+            // User is typing real content — clear placeholder first, then let the
+            // character land in the now-empty text view.
+            clearPlaceholder()
+        }
+        return true
     }
 
-    func textDidEndEditing(_ notification: Notification) {
-        if promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+    func textDidChange(_ notification: Notification) {
+        guard !isClearingPlaceholder else { return }
+        if !isShowingPlaceholder, promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             showPlaceholder()
         }
     }
