@@ -55,5 +55,13 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - Keep the main-row accent bar at `sidebarHorizontalInset` so it aligns with non-main thread icons.
 - `SidebarProjectMainSpacer` is skipped entirely when `projectHeaderToMainRowGap = 0` — inserting a 0-height spacer row crashes `NSOutlineView`.
 - The PR/ticket row (`prRow`) contains `[jiraTicketTF, jiraBadge, dotSep, prNumTF, prBadge]` with `detachesHiddenViews = true`. Never merge branch/worktree and PR/ticket into one secondary line.
-- CALayer colors from dynamic NSColor assets must be resolved inside `performAsCurrentDrawingAppearance` (see AGENTS.md convention).
+- CALayer colors from dynamic NSColor assets must be resolved inside `performAsCurrentDrawingAppearance`. `NSColor(resource:).withAlphaComponent(_:)` can snapshot the wrong drawing context at call time. Always create derived colors AND access `.cgColor` inside the `effectiveAppearance.performAsCurrentDrawingAppearance { }` block.
 - The sticky header's `CAGradientLayer` uses non-flipped CALayer coordinates: `colors[0]` at `startPoint(y=0)` is the visual **bottom** of the layer. So the array must be `[transparent, opaque]` to fade from opaque (top, adjacent to headers) to transparent (bottom).
+
+## Thread Row Naming/Description Contract
+
+For non-main threads, render description on line 1 only when present; keep branch/worktree info on the branch-facing line with dot-separated segments (`branch · worktree · PR`). Keep dirty dot attached to the branch/worktree line, not the description line. Tooltip sections must skip missing fields/statuses. Generated task descriptions are short (2-8 words) and naturally cased (do not force Title Case).
+
+## Auto Icon Assignment
+
+AI-driven work-type icon assignment is allowed only when `AppSettings.autoSetThreadIconFromWorkType` is enabled and `MagentThread.isThreadIconManuallySet` is false. Any user-triggered icon change must mark `isThreadIconManuallySet = true`, including no-op re-selections of the current icon.

@@ -47,3 +47,9 @@ This doc covers how Magent surfaces unread agent completions outside the main UI
 - Claude completion continues to use the injected Stop hook, but tmux `pipe-pane` bell watchers are now disabled by default.
 - Codex completion attention is now synthesized from the session monitor's busy→idle transition instead of a tmux bell pipe.
 - The legacy tmux bell-pipe path remains behind `TmuxService.legacyAgentBellPipeEnabled` as a one-line rollback switch.
+
+## Per-Session Tracking
+
+- Completion is tracked per-session: `unreadCompletionSessions` set on the thread. `hasUnreadAgentCompletion` checks `!unreadCompletionSessions.isEmpty`.
+- Tab-level green dots react via `magentAgentCompletionDetected` notification. Selecting a tab calls `markSessionCompletionSeen(threadId:sessionName:)` to clear individual sessions.
+- Do not reintroduce tmux `pipe-pane` completion watchers by default. The legacy path is retained only behind `TmuxService.legacyAgentBellPipeEnabled`. `ensureBellPipes()` now serves as upgrade cleanup when the legacy flag is off.

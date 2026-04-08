@@ -94,3 +94,7 @@ When a thread is archived or deleted, `ThreadManager.cleanupPendingPromptRecover
 On submit, both the **current** draft scope (project the user submitted to) and the **original** scope (`config.draftScope`, which may differ if the project picker was used) are cleared. This prevents stale draft text from appearing when the sheet is reopened for the original project.
 
 `AgentLaunchPromptDraftScope` conforms to `Equatable`, so the two scopes are compared with `!=` directly.
+
+## Non-tmux Tab Types
+
+Tab types that don't go through tmux (web tabs, draft tabs, future non-terminal types) must set `pendingPromptFileURL = nil` in `performAccept`. The crash-recovery temp file is only cleaned up by `clearAfterInjection` which listens for `magentAgentKeysInjected` — without the nil-out, the temp file lingers and triggers a stale recovery banner on next launch.

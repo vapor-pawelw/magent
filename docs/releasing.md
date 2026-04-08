@@ -61,3 +61,7 @@ When updating `CHANGELOG.md` for a release or pre-release notes:
    - Keep niche or smaller items shorter and place them near the end.
 7. Within each domain, keep user-facing additions/UX improvements above bug fixes and technical improvements.
 8. Use user-facing wording focused on outcomes, not code internals.
+
+## Feature Flags
+
+For features that should stay in the codebase but not ship yet, add a dedicated `FEATURE_*` active compilation condition in `Project.swift`, gate behavior behind that flag, hide related UI in release builds, and annotate debug-only Settings surfaces with `Debug builds only`.

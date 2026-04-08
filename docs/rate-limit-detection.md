@@ -87,3 +87,9 @@ Rate limit tracking can be toggled in **Settings > Agents > Agent Behavior**:
 - **Play sound when rate limit is lifted** — optional lift sound
 
 When tracking is disabled, the app no longer parses reset times or shows countdowns. However, rate-limit icons still appear temporarily while the agent is at a rate-limit prompt — they disappear automatically once the conversation resumes. The fingerprint cache continues to be populated in the background so that re-enabling tracking handles stale messages correctly.
+
+## Invariants
+
+- **Parsing must be scoped to the latest terminal block**: Only treat rate-limit text as active when detected in the latest pane scope (after the last separator) and near the bottom. Avoid pane-wide keyword scans that can ingest quoted logs/diagnostics and poison `rate-limit-cache.json`.
+- **Concrete fingerprints stay active until expiry/manual lift**: Once a non-ignored fingerprint is anchored to a future `resetAt`, later pane output must not auto-clear the limit just because the newest block no longer repeats the message.
+- **Per-agent limits must fan out to all matching tabs**: `globalAgentRateLimits` alone is not enough — mirror the marker into every session in `rateLimitedSessions` that uses that agent type. Thread row icons, tab badges, status-bar counts, and eviction protections all read per-session markers.

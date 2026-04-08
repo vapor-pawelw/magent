@@ -74,3 +74,15 @@ The comparison normalizes by stripping `origin/` prefixes, since the app stores 
 Migration for threads created before this field existed: `refreshDeliveredStates` checks whether the stored `forkPointCommit` differs from the current HEAD; if so, work was done before the flag existed and it is set retroactively.
 
 The `forkPointCommit` in `WorktreeMetadata` is still recorded at worktree creation time and is used solely for migration. Once `hasEverDoneWork` is set for a thread, `forkPointCommit` is never consulted again.
+
+## Auto-Rename on First Prompt
+
+For non-main worktrees, auto-rename the git branch (not the thread/worktree name) after the first submitted agent prompt. One-time via `didAutoRenameFromFirstPrompt`. Route through `ThreadManager.autoRenameThreadAfterFirstPromptIfNeeded(...)`.
+
+- **Fallback**: Slug/description generation prefers the active session/default agent, then falls back to other built-in generators (Claude/Codex) instead of skipping rename.
+- **Skip custom branches**: If the current branch is already custom (not auto-generated), skip auto-rename quietly and mark handled.
+- **Retarget dependents**: When a branch is renamed, update sibling threads whose stored `baseBranch` or `detectedBaseBranch` still points at the old name.
+
+## Worktree Merge Flow
+
+When merging a thread branch into `main`, do not `git checkout main` from another worktree. Discover the `main` worktree via `git worktree list --porcelain`, ensure it is clean, and run the merge there. Try `git merge --ff-only <branch>` first; only create a merge commit when fast-forward is impossible and the user asked to complete the merge.
