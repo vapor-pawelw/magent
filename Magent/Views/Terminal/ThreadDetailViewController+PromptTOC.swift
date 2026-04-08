@@ -170,11 +170,10 @@ extension ThreadDetailViewController {
         promptTOCEntries = entries
 
         if !thread.didAutoRenameFromFirstPrompt, entries.count > previousEntryCount {
-            // Use the first newly-confirmed entry as the rename prompt, not the most
-            // recent one, so multi-prompt batches still name from the triggering prompt.
-            let firstNewEntry = entries[previousEntryCount]
+            // Pass ALL accumulated prompts so the AI has full context even when the
+            // first prompt was rate-limited and the user followed up with "continue".
             let threadId = thread.id
-            let prompt = firstNewEntry.fullText
+            let prompt = entries.map(\.fullText).joined(separator: "\n")
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 // Only rename when an agent process is actually running in the session.

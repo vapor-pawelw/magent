@@ -16,6 +16,8 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 - Added question, exclamation, and triple-exclamation sign emojis to thread rows.
+- Auto-rename now uses all accumulated prompts for context, so if the first prompt gets rate-limited and the user follows up with "continue", the rename model still sees the original task description.
+- Manual "Rename from prompt" now updates the thread description and icon to match the new branch, instead of keeping the stale description from the original auto-rename.
 - Fixed archive merge failing when the branch name matches the worktree directory name by using unambiguous `refs/heads/` git references.
 
 ## 1.5.3 - 2026-04-07

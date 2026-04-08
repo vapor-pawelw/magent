@@ -1391,16 +1391,20 @@ extension ThreadManager {
         // injection (sendPrompt IPC) or any other path that updates the history
         // without going through ThreadDetailViewController's TOC refresh.
         // All concurrency/duplication guards are enforced inside performAutoRename.
+        //
+        // Pass ALL accumulated prompts (joined) so the AI has full context even when
+        // the first prompt was rate-limited and the user followed up with a short
+        // "continue"/"resume" — the rename model needs the original task description.
         if history.count > previousCount,
            !threads[index].didAutoRenameFromFirstPrompt {
-            let firstNewPrompt = history[previousCount]
+            let allPrompts = history.joined(separator: "\n")
             let capturedId = threadId
             let capturedSession = sessionName
             Task {
                 _ = await self.autoRenameThreadAfterFirstPromptIfNeeded(
                     threadId: capturedId,
                     sessionName: capturedSession,
-                    prompt: firstNewPrompt
+                    prompt: allPrompts
                 )
             }
         }
