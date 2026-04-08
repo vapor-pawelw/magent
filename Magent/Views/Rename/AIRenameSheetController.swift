@@ -29,6 +29,7 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
     private let config: AIRenameSheetConfig
     private let promptTextView = NSTextView()
     private var promptScrollView: NSScrollView!
+    private let placeholderLabel = NSTextField(labelWithString: "Describe the task for AI rename...")
     private let promptPicker = NSPopUpButton()
     private let iconCheckbox = NSButton(checkboxWithTitle: "Icon", target: nil, action: nil)
     private let descriptionCheckbox = NSButton(checkboxWithTitle: "Description", target: nil, action: nil)
@@ -38,17 +39,14 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
     private var completion: ((AIRenameSheetResult?) -> Void)?
     private var didFinish = false
 
-    private static let placeholderText = "Describe the task for AI rename..."
-    private var isShowingPlaceholder = false
-    /// Guard against re-entrant text change notifications while clearing placeholder.
-    private var isClearingPlaceholder = false
-
     init(config: AIRenameSheetConfig) {
         self.config = config
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: Self.sheetContentWidth, height: 1),
-            styleMask: [.titled, .closable],
+            // No .closable — the Cancel button handles dismissal; the system close button
+            // would let users accidentally dismiss after typing content.
+            styleMask: [.titled],
             backing: .buffered,
             defer: false
         )
@@ -84,8 +82,7 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
         DispatchQueue.main.async { [weak self] in
             guard let self, let window = self.window else { return }
             window.makeFirstResponder(self.promptTextView)
-            // Select all text if pre-filled so user can easily replace
-            if !self.isShowingPlaceholder, !self.promptTextView.string.isEmpty {
+            if !self.promptTextView.string.isEmpty {
                 self.promptTextView.selectAll(nil)
             }
         }
@@ -264,40 +261,42 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
         let lineHeight = promptFont.ascender + abs(promptFont.descender) + promptFont.leading
         let promptHeight = max((lineHeight * 5) + 20, 100)
         scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: promptHeight).isActive = true
+
+        // Placeholder label overlaid on the text view, matching its text container inset.
+        // Using a label instead of fake placeholder text in the text view avoids all the
+        // caret-position and text-replacement hacks that come with the latter approach.
+        placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
+        placeholderLabel.font = promptFont
+        placeholderLabel.textColor = .placeholderTextColor
+        placeholderLabel.isEditable = false
+        placeholderLabel.isSelectable = false
+        placeholderLabel.drawsBackground = false
+        placeholderLabel.isBezeled = false
+        // textContainerInset = (width: 8, height: 8); NSTextView adds ~1pt container origin
+        promptTextView.addSubview(placeholderLabel)
+        NSLayoutConstraint.activate([
+            placeholderLabel.topAnchor.constraint(equalTo: promptTextView.topAnchor, constant: 8),
+            placeholderLabel.leadingAnchor.constraint(equalTo: promptTextView.leadingAnchor, constant: 10),
+            placeholderLabel.trailingAnchor.constraint(equalTo: promptTextView.trailingAnchor, constant: -10),
+        ])
     }
 
     // MARK: - Placeholder
 
-    private func showPlaceholder() {
-        guard !isClearingPlaceholder else { return }
-        isShowingPlaceholder = true
-        promptTextView.string = Self.placeholderText
-        promptTextView.textColor = .placeholderTextColor
-        // Place caret at the beginning so it doesn't appear after placeholder text
-        promptTextView.setSelectedRange(NSRange(location: 0, length: 0))
-    }
-
-    private func clearPlaceholder() {
-        guard isShowingPlaceholder, !isClearingPlaceholder else { return }
-        isClearingPlaceholder = true
-        isShowingPlaceholder = false
-        promptTextView.string = ""
-        promptTextView.textColor = .textColor
-        isClearingPlaceholder = false
+    private func updatePlaceholderVisibility() {
+        placeholderLabel.isHidden = !promptTextView.string.isEmpty
     }
 
     // MARK: - Prefill & State
 
     private func applyPrefill() {
         if config.prefillPrompt.isEmpty {
-            showPlaceholder()
+            promptTextView.string = ""
         } else {
             promptTextView.string = config.prefillPrompt
-            promptTextView.textColor = .textColor
-            isShowingPlaceholder = false
-            // Try to select the matching picker item
             selectPickerItem(matching: config.prefillPrompt)
         }
+        updatePlaceholderVisibility()
     }
 
     private func selectPickerItem(matching prompt: String) {
@@ -309,7 +308,6 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
                 return
             }
         }
-        // No match — keep placeholder selected
         promptPicker.selectItem(at: 0)
     }
 
@@ -333,9 +331,8 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
     @objc private func promptPickerChanged() {
         guard let selectedItem = promptPicker.selectedItem,
               let prompt = selectedItem.representedObject as? String else { return }
-        clearPlaceholder()
         promptTextView.string = prompt
-        promptTextView.textColor = .textColor
+        updatePlaceholderVisibility()
         window?.makeFirstResponder(promptTextView)
         promptTextView.selectAll(nil)
     }
@@ -349,19 +346,13 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
     }
 
     @objc private func renameTapped() {
-        let prompt: String
-        if isShowingPlaceholder {
-            prompt = ""
-        } else {
-            prompt = promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
+        let prompt = promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !prompt.isEmpty else {
             NSSound.beep()
             return
         }
 
-        // At least one checkbox must be checked
         guard iconCheckbox.state == .on || descriptionCheckbox.state == .on || branchCheckbox.state == .on else {
             NSSound.beep()
             return
@@ -381,9 +372,7 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
             if NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
-                // Shift+Return inserts a newline — but clear placeholder first
-                if isShowingPlaceholder { clearPlaceholder() }
-                return false
+                return false // Shift+Return inserts a real newline
             }
             renameTapped()
             return true
@@ -396,33 +385,14 @@ final class AIRenameSheetController: NSWindowController, NSWindowDelegate, NSTex
             window?.selectPreviousKeyView(nil)
             return true
         }
-        // Swallow delete/backspace while placeholder is shown
-        if isShowingPlaceholder,
-           commandSelector == #selector(NSResponder.deleteBackward(_:))
-            || commandSelector == #selector(NSResponder.deleteForward(_:)) {
-            return true
-        }
         return false
     }
 
-    func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
-        if isShowingPlaceholder, let replacement = replacementString, !replacement.isEmpty {
-            // User is typing real content — clear placeholder first, then let the
-            // character land in the now-empty text view.
-            clearPlaceholder()
-        }
-        return true
-    }
-
     func textDidChange(_ notification: Notification) {
-        guard !isClearingPlaceholder else { return }
-        if !isShowingPlaceholder {
-            if promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                showPlaceholder()
-            } else {
-                // User typed something manually — reset picker to the placeholder item
-                promptPicker.selectItem(at: 0)
-            }
+        updatePlaceholderVisibility()
+        if !promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // User typed manually — reset picker to the header item
+            promptPicker.selectItem(at: 0)
         }
     }
 
