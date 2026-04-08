@@ -67,7 +67,7 @@ Draft tabs let users save a prompt idea for later without executing it immediate
 - Draft threads remain non-terminal until "Start Agent" is used; creating a draft thread must not also create a tmux/terminal tab behind the draft
 - Terminal overlays (scroll controls, scroll-to-bottom FAB, prompt TOC) are hidden while a draft tab is active
 - **Auto-rename with DRAFT prefix**: When a thread has active draft tabs and auto-rename/description generation triggers, the generated task description is prefixed with "DRAFT: ". The prefix is derived from live draft-tab state (`hasDraftTabs`), so it disappears naturally once the draft is consumed via "Start Agent"
-- **"Rename with prompt" submenu**: Draft tab prompts appear in the context menu's "Rename with prompt" submenu, prefixed with "DRAFT:", with a doc.text icon. Selecting one triggers a rename and prefixes the generated description with "DRAFT: " via the explicit `prefixDraft` parameter
+- **"AI Rename" sheet**: The "AI Rename…" sheet (⌘⇧R) provides multi-line prompt input, a picker with recent prompts, and checkboxes to selectively rename icon, description, and/or branch name. It is accessible from the top-level thread context menu, TOC right-click, and the main Thread menu
 - Display order is decoupled from content arrays via a `TabSlot` indirection layer, allowing free mixing of terminal and web tabs without breaking terminal view indexing
 
 ## Configuration (First Run / Settings)
@@ -194,7 +194,7 @@ For the main thread, the sidebar uses these rules:
 ### Non-Main Thread Rename Actions
 
 - Hidden threads stay at the bottom of their section/list and render with dimmed row content so they read as deprioritized rather than archived.
-- Context menu order for non-main threads starts with `Pin/Unpin`, then `Fork Thread`, then Jira, then `Move to`, then `Hide`, then `Rename...` / description / icon actions, and ends with `Keep Alive` directly above `Kill All Sessions` (when live sessions exist) and `Close This Tab`.
+- Context menu order for non-main threads starts with `Pin/Unpin`, then `Fork Thread`, then Jira, then `AI Rename…` (top-level), `Sign` (top-level), `Configure` submenu (Icon, Description, Branch name, Section), then `Hide/Unhide`, `Keep Alive`, `Kill All Sessions` (when live sessions exist), and ends with `Archive` / `Delete`.
 - `Rename...` is prompt-based: user enters a natural-language task prompt, and Magent generates:
   - branch slug candidate(s)
   - short task description

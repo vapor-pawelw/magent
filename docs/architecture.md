@@ -118,7 +118,7 @@ Tab rename still changes tmux session names (tab-level, not thread-level), which
 
 ### 4.2 Prompt-Based Rename Reuse
 
-Manual `Rename...` from the non-main thread context menu reuses the same model payload path as first-prompt auto-rename so branch slug generation, task description generation, and icon suggestion stay behaviorally aligned.
+The "AI Rename…" sheet (⌘⇧R, also in thread context menu and TOC right-click) reuses the same model payload path as first-prompt auto-rename so branch slug generation, task description generation, and icon suggestion stay behaviorally aligned. The sheet provides a multi-line prompt input, a picker with the last 10 recent prompts, and checkboxes to selectively rename icon, description, and/or branch name (state persisted in `AppSettings.aiRenameIcon/aiRenameDescription/aiRenameBranch`).
 This manual path intentionally skips first-prompt eligibility gates (for example "already auto-renamed") so users can explicitly request a regenerated name/description/icon at any time. It also force-overwrites the existing task description and icon (unless manually set), so the sidebar label always matches the new branch name.
 When parsing combined rename payloads, treat only the first `SLUG:` line as the slug field. Multi-line model replies also include `DESC:` and `TYPE:` lines; only the first line after `SLUG:` is used for the slug.
 Generated descriptions should stay semantically aligned with the slug and read like concrete task labels in the sidebar, not abstract nouns unless the prompt is explicitly about that concept.
