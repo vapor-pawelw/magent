@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - Fixed busy detection missing the agent status bar in tall terminal panes. Trailing blank lines in tmux captures are now stripped before analysis, preventing all-blank capture windows.
 
 ### CLI
+- Fixed multiline prompts sent via `send-prompt` (or agent-to-agent injection) being cut off after the first line. tmux paste-buffer now uses bracketed paste mode so Claude's TUI receives newlines as literal characters rather than Enter keypresses.
 - `create-tab` now accepts `--title` to set the tab name from the CLI and `--fresh`/`--no-resume` to keep isolated review tabs from inheriting older agent history.
 
 ### Agents

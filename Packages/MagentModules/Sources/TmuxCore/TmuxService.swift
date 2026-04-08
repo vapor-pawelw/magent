@@ -554,7 +554,10 @@ public final class TmuxService: Sendable {
 
         _ = try await ShellExecutor.run(
             "tmux load-buffer -b \(shellQuote(bufferName)) \(shellQuote(tempURL.path)); " +
-            "tmux paste-buffer -d -b \(shellQuote(bufferName)) -t \(shellQuote(sessionName))"
+            // -p enables bracketed paste mode (\e[200~...\e[201~), which tells the
+            // receiving app (e.g. Claude TUI) to treat newlines as literals rather
+            // than Enter keypresses — essential for multiline prompt injection.
+            "tmux paste-buffer -p -d -b \(shellQuote(bufferName)) -t \(shellQuote(sessionName))"
         )
     }
 

@@ -57,6 +57,8 @@ This banner is scoped to the affected terminal tab only. Switching to another ta
 
 `TmuxService.sendText` uses a unique named tmux buffer (`-b magent-<uuid>`) for each paste operation rather than the global default buffer. This prevents a race condition where concurrent `load-buffer`/`paste-buffer` calls (e.g., two tabs injecting simultaneously) could collide and silently drop one paste.
 
+`paste-buffer` is invoked with `-p` (bracketed paste mode), which wraps the content in `\e[200~`...`\e[201~` escape sequences. This is required for multiline prompts: without it, Claude Code's TUI interprets raw `\n` bytes as Enter keypresses and submits after the first line, discarding the rest.
+
 ## Recovery on Launch
 
 `ThreadListViewController.checkForPendingPromptRecovery()` runs once in `viewDidAppear`. It scans `/tmp` for leftover `magent-pending-prompt-*.json` files and handles them by scope:
