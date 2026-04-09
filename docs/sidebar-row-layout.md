@@ -17,7 +17,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
   - line 2 (secondary / `subtitleLabel`): branch · worktree when a description is shown; worktree only when no description and the worktree name differs from the branch; hidden otherwise.
   - line 3 (PR/ticket row): `jiraTicketLabel` + `jiraStatusBadge` + dot separator + `prNumberLabel` + `prStatusBadge`. Badges gated by `AppSettings.showJiraStatusBadges` / `showPRStatusBadges`. Ticket display gated by `AppSettings.jiraTicketDetectionEnabled`.
 - Row heights are **dynamic** based on actual content (description lines, subtitle, PR row) with a minimum height matching 2 description lines + 2 metadata labels (1 line + 2 labels when `narrowThreads` is enabled).
-- Sign emoji is rendered at the **row view** level (`AlwaysEmphasizedRowView`), centered on the capsule's leading edge (centerX = `capsuleLeadingInset`, centerY = row center). Not part of `ThreadCell`.
+- Sign emoji is rendered at the **row view** level (`AlwaysEmphasizedRowView`) inside a circular `SignEmojiBadgeView` anchored to the top-left corner of the row (2pt margin from leading and top edges). The badge self-sizes via `intrinsicContentSize` (text size + 4pt padding, high priority) with a required 1:1 width/height ratio to stay circular. Border color and width mirror the capsule's current state. Not part of `ThreadCell`.
 - Project repo names use system bold 20pt font.
 - No separator divider between project groups; vertical gap (`projectHeaderInterProjectGap = 24pt`) handles spacing.
 - The global "Add repository" button is a `SidebarAddRepoRow` at the top of the outline view's root items. It scrolls with the rest of the content — there is no sticky toolbar.

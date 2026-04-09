@@ -30,6 +30,7 @@ All notable changes to this project will be documented in this file.
 - When a rate limit lifts (timer expiry or manual dismiss), threads and tabs where the agent was directly interrupted now show a "waiting for input" indicator so you know which ones to revisit and continue work. The indicator clears as soon as you select the tab or the agent resumes on its own.
 - Fresh Claude/Codex tabs now scope resume discovery to the tab that created them instead of the whole thread age, reducing accidental conversation carryover on older worktrees.
 ### Sidebar
+- Thread sign emojis (↑ ↓ and custom emoji) now appear inside a small circular badge in the top-left corner of the thread row, with a border that matches the row's current highlight color.
 - Right-clicking an unselected thread now briefly highlights its row while the context menu is open, making it clear which thread the action will apply to.
 - Fixed thread row state highlights (busy/completion/waiting/rate-limit) disappearing after scrolling away and back. Reused rows now resolve against the latest thread snapshot before rendering.
 - Fixed branch rename dialog pre-filling with the worktree name instead of the current git branch, and silently doing nothing when the user accepted it.
