@@ -44,6 +44,10 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     /// no longer drives per-thread phase tracking.
     var busyBorderPhaseKey: AnyHashable?
 
+    /// Subtle highlight shown while the context menu for this (unselected) row is open.
+    var showsContextMenuHighlight = false {
+        didSet { needsDisplay = true }
+    }
     var showsRateLimitHighlight = false {
         didSet { needsDisplay = true }
     }
@@ -170,7 +174,9 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 xRadius: Self.capsuleCornerRadius,
                 yRadius: Self.capsuleCornerRadius
             )
-            NSColor.white.withAlphaComponent(0.05).setFill()
+            // Brighten fill slightly when the context menu is open for this row.
+            let fillAlpha: CGFloat = showsContextMenuHighlight ? 0.1 : 0.05
+            NSColor.white.withAlphaComponent(fillAlpha).setFill()
             fillPath.fill()
 
             // Skip static border when the animated busy border is active.
@@ -181,8 +187,9 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                     xRadius: Self.capsuleCornerRadius,
                     yRadius: Self.capsuleCornerRadius
                 )
-                borderPath.lineWidth = 1
-                NSColor.white.withAlphaComponent(0.12).setStroke()
+                borderPath.lineWidth = showsContextMenuHighlight ? Self.capsuleBorderWidth : 1
+                let borderAlpha: CGFloat = showsContextMenuHighlight ? 0.3 : 0.12
+                NSColor.white.withAlphaComponent(borderAlpha).setStroke()
                 borderPath.stroke()
             }
         }

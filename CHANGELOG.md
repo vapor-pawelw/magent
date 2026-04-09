@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - When a rate limit lifts (timer expiry or manual dismiss), threads and tabs where the agent was directly interrupted now show a "waiting for input" indicator so you know which ones to revisit and continue work. The indicator clears as soon as you select the tab or the agent resumes on its own.
 - Fresh Claude/Codex tabs now scope resume discovery to the tab that created them instead of the whole thread age, reducing accidental conversation carryover on older worktrees.
 ### Sidebar
+- Right-clicking an unselected thread now briefly highlights its row while the context menu is open, making it clear which thread the action will apply to.
 - Fixed branch rename dialog pre-filling with the worktree name instead of the current git branch, and silently doing nothing when the user accepted it.
 - Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.
 - Increased thread row vertical spacing so the pin badge is no longer clipped at the top.

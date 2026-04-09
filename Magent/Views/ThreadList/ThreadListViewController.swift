@@ -45,8 +45,16 @@ final class SidebarOutlineView: NSOutlineView {
         _contextMenuRow = row(at: loc)
         defer { _contextMenuRow = -1 }
         if _contextMenuRow >= 0, let menu = self.menu {
+            // Highlight the target row while the menu is open so it's obvious
+            // which (unselected) thread the actions will apply to.
+            let targetRowView = rowView(atRow: _contextMenuRow, makeIfNecessary: false) as? AlwaysEmphasizedRowView
+            if !(targetRowView?.isSelected ?? true) {
+                targetRowView?.showsContextMenuHighlight = true
+            }
             menu.delegate?.menuNeedsUpdate?(menu)
+            // popUpContextMenu is synchronous — it returns only after dismissal.
             NSMenu.popUpContextMenu(menu, with: event, for: self)
+            targetRowView?.showsContextMenuHighlight = false
         } else {
             super.rightMouseDown(with: event)
         }
