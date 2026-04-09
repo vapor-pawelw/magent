@@ -106,40 +106,50 @@ extension ThreadDetailViewController {
             presentManualLocalSyncPicker(for: currentThread, project: project)
             return
         }
-
         guard let event = NSApp.currentEvent else { return }
 
-        let isOptionPressed = event.modifierFlags.contains(.option)
         let thisName = (currentThread.worktreePath as NSString).lastPathComponent
 
-        let syncPath: String?
-        let syncLabel: String
-        if isOptionPressed {
-            // Option held: always sync with main repo
-            syncPath = nil
-            syncLabel = "Repo root"
+        // Default target: base-branch worktree (falls back to repo root).
+        let defaultSyncPath: String?
+        let defaultSyncLabel: String
+        let (resolvedPath, resolvedLabel) = threadManager.resolveBaseBranchSyncTarget(for: currentThread, project: project)
+        if resolvedPath != project.repoPath {
+            defaultSyncPath = resolvedPath
+            defaultSyncLabel = resolvedLabel
         } else {
-            // Default: sync with base branch worktree (falls back to project repo)
-            let (resolvedPath, resolvedLabel) = threadManager.resolveBaseBranchSyncTarget(for: currentThread, project: project)
-            if resolvedPath != project.repoPath {
-                syncPath = resolvedPath
-                syncLabel = resolvedLabel
-            } else {
-                syncPath = nil
-                syncLabel = "Repo root"
-            }
+            defaultSyncPath = nil
+            defaultSyncLabel = "Repo root"
         }
+        // Option target: always repo root.
+        let optionSyncPath: String? = nil
+        let optionSyncLabel = "Repo root"
+        let optionDiffersFromDefault = defaultSyncPath != optionSyncPath || defaultSyncLabel != optionSyncLabel
 
         let menu = NSMenu()
 
         let reconcileItem = NSMenuItem(
-            title: "Reconcile \(thisName) with \(syncLabel)\u{2026}",
+            title: "Reconcile \(thisName) with \(defaultSyncLabel)\u{2026}",
             action: #selector(agenticReconcileTapped(_:)),
             keyEquivalent: ""
         )
         reconcileItem.target = self
-        reconcileItem.representedObject = syncPath
+        reconcileItem.representedObject = defaultSyncPath
         menu.addItem(reconcileItem)
+
+        if optionDiffersFromDefault {
+            let reconcileAltItem = NSMenuItem(
+                title: "Reconcile \(thisName) with \(optionSyncLabel)\u{2026}",
+                action: #selector(agenticReconcileTapped(_:)),
+                keyEquivalent: ""
+            )
+            reconcileAltItem.target = self
+            reconcileAltItem.representedObject = optionSyncPath
+            reconcileAltItem.isAlternate = true
+            reconcileAltItem.keyEquivalentModifierMask = .option
+            menu.addItem(reconcileAltItem)
+        }
+
         menu.addItem(.separator())
 
         let intoWorktreeItem = NSMenuItem(
@@ -148,7 +158,7 @@ extension ThreadDetailViewController {
             keyEquivalent: ""
         )
         intoWorktreeItem.target = self
-        intoWorktreeItem.representedObject = syncPath
+        intoWorktreeItem.representedObject = defaultSyncPath
 
         let fromWorktreeItem = NSMenuItem(
             title: "Push from this worktree",
@@ -156,10 +166,34 @@ extension ThreadDetailViewController {
             keyEquivalent: ""
         )
         fromWorktreeItem.target = self
-        fromWorktreeItem.representedObject = syncPath
+        fromWorktreeItem.representedObject = defaultSyncPath
 
         menu.addItem(intoWorktreeItem)
         menu.addItem(fromWorktreeItem)
+
+        if optionDiffersFromDefault {
+            let intoWorktreeAltItem = NSMenuItem(
+                title: "Pull into this worktree",
+                action: #selector(resyncIntoWorktreeTapped(_:)),
+                keyEquivalent: ""
+            )
+            intoWorktreeAltItem.target = self
+            intoWorktreeAltItem.representedObject = optionSyncPath
+            intoWorktreeAltItem.isAlternate = true
+            intoWorktreeAltItem.keyEquivalentModifierMask = .option
+            menu.addItem(intoWorktreeAltItem)
+
+            let fromWorktreeAltItem = NSMenuItem(
+                title: "Push from this worktree",
+                action: #selector(resyncFromWorktreeTapped(_:)),
+                keyEquivalent: ""
+            )
+            fromWorktreeAltItem.target = self
+            fromWorktreeAltItem.representedObject = optionSyncPath
+            fromWorktreeAltItem.isAlternate = true
+            fromWorktreeAltItem.keyEquivalentModifierMask = .option
+            menu.addItem(fromWorktreeAltItem)
+        }
 
         // Only show "Choose another worktree…" if there are additional worktrees beyond the default sync target
         let otherWorktreeCount = threadManager.threads.filter { thread in
@@ -1030,14 +1064,11 @@ extension ThreadDetailViewController {
             return
         }
 
-        let usesMaxReasoning = NSApp.currentEvent?.modifierFlags.contains(.option) == true
-
         let menu = NSMenu()
         populateReviewMenu(
             menu: menu,
             activeAgents: activeAgents,
-            defaultAgentType: defaultReviewAgentType(from: settings),
-            usesMaxReasoning: usesMaxReasoning
+            defaultAgentType: defaultReviewAgentType(from: settings)
         )
         menu.popUp(positioning: nil, at: NSPoint(x: reviewButton.bounds.minX, y: reviewButton.bounds.minY), in: reviewButton)
     }
@@ -1085,8 +1116,7 @@ extension ThreadDetailViewController {
     private func populateReviewMenu(
         menu: NSMenu,
         activeAgents: [AgentType],
-        defaultAgentType: AgentType?,
-        usesMaxReasoning: Bool
+        defaultAgentType: AgentType?
     ) {
         let title = "Review Changes"
         let headerItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
@@ -1097,18 +1127,6 @@ extension ThreadDetailViewController {
         ]
         headerItem.attributedTitle = NSAttributedString(string: title, attributes: attrs)
         menu.addItem(headerItem)
-
-        if !usesMaxReasoning {
-            let hint = NSMenuItem(title: "Hold Option for Max reasoning", action: nil, keyEquivalent: "")
-            hint.isEnabled = false
-            let hintAttrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-                .foregroundColor: NSColor.tertiaryLabelColor,
-            ]
-            hint.attributedTitle = NSAttributedString(string: hint.title, attributes: hintAttrs)
-            menu.addItem(hint)
-        }
-
         menu.addItem(.separator())
 
         var orderedAgents = activeAgents
@@ -1119,25 +1137,45 @@ extension ThreadDetailViewController {
 
         for agent in orderedAgents {
             let isDefault = agent == defaultAgentType
-            let title = isDefault
-                ? "\(reviewMenuTitle(for: agent, usesMaxReasoning: usesMaxReasoning)) (Default)"
-                : reviewMenuTitle(for: agent, usesMaxReasoning: usesMaxReasoning)
-            let item = NSMenuItem(title: title, action: #selector(reviewMenuItemTapped(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = [
+            let normalItem = NSMenuItem(
+                title: reviewMenuTitle(for: agent, usesMaxReasoning: false, isDefault: isDefault),
+                action: #selector(reviewMenuItemTapped(_:)),
+                keyEquivalent: ""
+            )
+            normalItem.target = self
+            normalItem.representedObject = [
                 "mode": "agent",
                 "agentRaw": agent.rawValue,
-                "reviewReasoningMode": usesMaxReasoning ? "max" : "high",
+                "reviewReasoningMode": "high",
             ]
-            menu.addItem(item)
+            menu.addItem(normalItem)
+
+            // Option-alternate: swap to max-reasoning launch while menu is open.
+            let maxItem = NSMenuItem(
+                title: reviewMenuTitle(for: agent, usesMaxReasoning: true, isDefault: isDefault),
+                action: #selector(reviewMenuItemTapped(_:)),
+                keyEquivalent: ""
+            )
+            maxItem.target = self
+            maxItem.representedObject = [
+                "mode": "agent",
+                "agentRaw": agent.rawValue,
+                "reviewReasoningMode": "max",
+            ]
+            maxItem.isAlternate = true
+            maxItem.keyEquivalentModifierMask = .option
+            menu.addItem(maxItem)
         }
     }
 
-    private func reviewMenuTitle(for agentType: AgentType, usesMaxReasoning: Bool) -> String {
+    private func reviewMenuTitle(for agentType: AgentType, usesMaxReasoning: Bool, isDefault: Bool) -> String {
+        let baseTitle: String
         if usesMaxReasoning, reviewLaunchOverrides(for: agentType, usesMaxReasoning: true).reasoningLevel != nil {
-            return "\(agentType.displayName) (Max reasoning)"
+            baseTitle = "\(agentType.displayName) (Max reasoning)"
+        } else {
+            baseTitle = agentType.displayName
         }
-        return agentType.displayName
+        return isDefault ? "\(baseTitle) (Default)" : baseTitle
     }
 
     private func reviewLaunchOverrides(for agentType: AgentType, usesMaxReasoning: Bool) -> (modelId: String?, reasoningLevel: String?) {

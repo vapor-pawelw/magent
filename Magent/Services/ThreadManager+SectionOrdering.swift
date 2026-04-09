@@ -2,6 +2,14 @@ import AppKit
 import Foundation
 import MagentCore
 
+// Criteria for sidebar sort operations. Used by context-menu sort actions.
+enum ThreadSortCriteria {
+    case description
+    case branchName
+    case priority
+    case lastActivity
+}
+
 extension ThreadManager {
 
     func sidebarGroup(for thread: MagentThread) -> ThreadSidebarListState {
@@ -296,5 +304,118 @@ extension ThreadManager {
         guard changed else { return }
         try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    // MARK: - Sort by Criteria
+
+    /// Sorts threads in a single section (or all threads when sections are disabled) by the given
+    /// criteria, respecting pinned/normal/hidden boundaries. Persists the new display order.
+    @MainActor
+    func sortSection(
+        projectId: UUID,
+        sectionId: UUID?,
+        by criteria: ThreadSortCriteria,
+        descending: Bool
+    ) {
+        let settings = persistence.loadSettings()
+        sortSectionInMemory(projectId: projectId, sectionId: sectionId, by: criteria, descending: descending, settings: settings)
+        try? persistence.saveActiveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    /// Sorts every section in a project independently. When sections are disabled,
+    /// treats all threads as one container (same effect as `sortSection` with `sectionId: nil`).
+    @MainActor
+    func sortAllSections(projectId: UUID, by criteria: ThreadSortCriteria, descending: Bool) {
+        let settings = persistence.loadSettings()
+        if settings.shouldUseThreadSections(for: projectId) {
+            let allSections = settings.sections(for: projectId).sorted { $0.sortOrder < $1.sortOrder }
+            for section in allSections {
+                sortSectionInMemory(projectId: projectId, sectionId: section.id, by: criteria, descending: descending, settings: settings)
+            }
+        } else {
+            sortSectionInMemory(projectId: projectId, sectionId: nil, by: criteria, descending: descending, settings: settings)
+        }
+        try? persistence.saveActiveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    /// Rewrites `displayOrder` for each pinned/normal/hidden group independently without saving.
+    private func sortSectionInMemory(
+        projectId: UUID,
+        sectionId: UUID?,
+        by criteria: ThreadSortCriteria,
+        descending: Bool,
+        settings: AppSettings
+    ) {
+        for group in ThreadSidebarListState.allCases {
+            var groupThreads = displayOrderGroup(
+                projectId: projectId,
+                sidebarGroup: group,
+                sectionId: sectionId,
+                settings: settings
+            )
+            groupThreads.sort { lhs, rhs in
+                let order = threadSortOrder(lhs, rhs, by: criteria, descending: descending)
+                if order != .orderedSame {
+                    return order == .orderedAscending
+                }
+                // Preserve previous relative order for ties to keep sorting stable.
+                return lhs.displayOrder < rhs.displayOrder
+            }
+            for (order, thread) in groupThreads.enumerated() {
+                if let i = threads.firstIndex(where: { $0.id == thread.id }) {
+                    threads[i].displayOrder = order
+                }
+            }
+        }
+    }
+
+    /// Returns ordering for a criteria with optional descending direction.
+    /// Nil values always sort last (for both ascending and descending).
+    private func threadSortOrder(
+        _ lhs: MagentThread,
+        _ rhs: MagentThread,
+        by criteria: ThreadSortCriteria,
+        descending: Bool
+    ) -> ComparisonResult {
+        let result = threadSortAscendingOrder(lhs, rhs, by: criteria)
+        guard descending else { return result }
+        switch result {
+        case .orderedAscending: return .orderedDescending
+        case .orderedDescending: return .orderedAscending
+        case .orderedSame: return .orderedSame
+        }
+    }
+
+    /// Returns ordering in ascending direction for the given criteria.
+    /// Nil values always sort last.
+    private func threadSortAscendingOrder(_ lhs: MagentThread, _ rhs: MagentThread, by criteria: ThreadSortCriteria) -> ComparisonResult {
+        switch criteria {
+        case .description:
+            let l = lhs.taskDescription ?? lhs.name
+            let r = rhs.taskDescription ?? rhs.name
+            return l.localizedStandardCompare(r)
+        case .branchName:
+            return lhs.branchName.localizedStandardCompare(rhs.branchName)
+        case .priority:
+            // nil priority sorts last (after 5)
+            switch (lhs.priority, rhs.priority) {
+            case let (l?, r?) where l < r: return .orderedAscending
+            case let (l?, r?) where l > r: return .orderedDescending
+            case (.some, .none): return .orderedAscending
+            case (.none, .some): return .orderedDescending
+            default: return .orderedSame
+            }
+        case .lastActivity:
+            // nil (no activity) sorts last
+            switch (lhs.lastAgentCompletionAt, rhs.lastAgentCompletionAt) {
+            case let (l?, r?) where l < r: return .orderedAscending
+            case let (l?, r?) where l > r: return .orderedDescending
+            case (.some, .none): return .orderedAscending
+            case (.none, .some): return .orderedDescending
+            default: return .orderedSame
+            }
+        }
     }
 }
