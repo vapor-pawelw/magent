@@ -17,7 +17,11 @@ public final class TmuxService: Sendable {
         "xterm*:hyperlinks",
     ]
     private let agentCompletionEventsPath = "/tmp/magent-agent-completion-events.log"
-    private let mouseOpenableURLStatePath = "/tmp/magent-tmux-mouse-openable-url-state.tsv"
+    // ASCII Record Separator (0x1E): extremely unlikely to appear in URLs, words, or
+    // visible terminal lines, so we use it as the delimiter when packing mouse state
+    // into the @magent_last_mouse tmux user option. Passes through shell/tmux quoting
+    // as a literal byte.
+    private static let mouseOptionFieldSeparator = "\u{1e}"
     private let paneCache = PaneCaptureCache()
     private static let linkBoundaryCharacters = CharacterSet(
         charactersIn: "<>[](){}\"'`.,;:!?"
@@ -112,7 +116,6 @@ public final class TmuxService: Sendable {
     /// Called periodically by the IPC watchdog.
     public func ensureHelperScriptsExist() {
         installBellWatcherScript()
-        installMouseOpenableURLCaptureScript()
     }
 
     private func configureBellMonitoring() async {
@@ -127,13 +130,25 @@ public final class TmuxService: Sendable {
     }
 
     private func configureMouseOpenableURLTracking() async {
-        installMouseOpenableURLCaptureScript()
-        let emptySentinel = "__MAGENT_EMPTY__"
-        // -b runs the URL capture script in the background so it never blocks tmux's
-        // event loop. Without -b, a synchronous run-shell can freeze ALL input (mouse
-        // and keyboard) if the shell or script stalls even briefly.
+        // Store per-click mouse state in a tmux server-scoped user option via
+        // `set-option -gqF`. This runs entirely inside the tmux process — no fork,
+        // no /bin/sh, no zombie children. The previous implementation used
+        // `run-shell -b` on every MouseDown1Pane, which was the dominant source of
+        // zombie-tmux-child buildup once the legacy pipe-pane completion watchers
+        // were disabled: tmux's libevent-driven SIGCHLD reaper can lag under the
+        // SIGCHLD burst rate produced by fast clicking, leaving `<defunct>` /bin/sh
+        // children attached to the tmux server parent. `set-option` has no such
+        // failure mode because it never spawns a child.
+        let sep = Self.mouseOptionFieldSeparator
+        let format = [
+            "#{session_name}",
+            "#{?mouse_hyperlink,#{mouse_hyperlink},}",
+            "#{?mouse_word,#{mouse_word},}",
+            "#{?mouse_x,#{mouse_x},-1}",
+            "#{?mouse_line,#{mouse_line},}",
+        ].joined(separator: sep)
         let binding = """
-        run-shell -b "\(mouseOpenableURLCaptureScriptPath) #{q:session_name} #{?mouse_hyperlink,#{q:mouse_hyperlink},\(emptySentinel)} #{?mouse_word,#{q:mouse_word},\(emptySentinel)} #{?mouse_x,#{mouse_x},-1} #{?mouse_line,#{q:mouse_line},\(emptySentinel)}" ; select-pane -t = ; send-keys -M
+        set-option -gqF @magent_last_mouse "\(format)" ; select-pane -t = ; send-keys -M
         """
         _ = try? await ShellExecutor.run(
             "tmux bind-key -T root MouseDown1Pane \(shellQuote(binding))"
@@ -155,35 +170,43 @@ public final class TmuxService: Sendable {
         }
     }
 
-    public func recentMouseOpenableURL(sessionName: String, maxAge: TimeInterval = 2) -> String? {
-        guard let contents = try? String(contentsOfFile: mouseOpenableURLStatePath, encoding: .utf8) else {
+    /// Returns the URL (if any) under the most recent mouse click in `sessionName`.
+    ///
+    /// Backed by the tmux server option `@magent_last_mouse`, which is rewritten by
+    /// the `MouseDown1Pane` binding on every click. Callers invoke this from their
+    /// own mouseUp handler, so the option value is always fresh for the current
+    /// click — there's no need for a wall-clock freshness check. We still verify
+    /// the stored session name matches the caller to defend against cross-session
+    /// races (e.g. mouseDown in pane A, mouseUp resolved against pane B).
+    public func recentMouseOpenableURL(sessionName: String) async -> String? {
+        guard let raw = try? await ShellExecutor.run(
+            "tmux show-option -gqv @magent_last_mouse"
+        ) else {
             return nil
         }
-        let line = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+        // show-option -qv returns empty string for unset options — not an error,
+        // just "no click recorded yet".
+        let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return nil }
 
-        let parts = line.split(separator: "\t", maxSplits: 5, omittingEmptySubsequences: false)
-        guard parts.count == 6,
-              let timestamp = TimeInterval(parts[0]),
-              parts[1] == Substring(sessionName) else {
+        let parts = line
+            .split(separator: Character(Self.mouseOptionFieldSeparator), omittingEmptySubsequences: false)
+            .map(String.init)
+        guard parts.count == 5,
+              parts[0] == sessionName else {
             return nil
         }
 
-        guard Date().timeIntervalSince1970 - timestamp <= maxAge else { return nil }
-
-        if let hyperlink = normalizedOpenableURL(from: String(parts[2])) {
+        if let hyperlink = normalizedOpenableURL(from: parts[1]) {
             return hyperlink
         }
-        if let word = normalizedOpenableURL(from: String(parts[3])) {
+        if let word = normalizedOpenableURL(from: parts[2]) {
             return word
         }
 
-        let mouseX = Int(parts[4])
-        let lineBase64 = String(parts[5])
-        guard let lineData = Data(base64Encoded: lineBase64),
-              let mouseLine = String(data: lineData, encoding: .utf8) else {
-            return nil
-        }
+        let mouseX = Int(parts[3])
+        let mouseLine = parts[4]
+        guard !mouseLine.isEmpty else { return nil }
         return detectedLink(in: mouseLine, nearColumn: mouseX)
     }
 
@@ -312,54 +335,6 @@ public final class TmuxService: Sendable {
             return point - end
         }
         return 0
-    }
-
-    private var mouseOpenableURLCaptureScriptPath: String {
-        "/tmp/magent-mouse-openable-url-capture.sh"
-    }
-
-    private func installMouseOpenableURLCaptureScript() {
-        let path = mouseOpenableURLCaptureScriptPath
-        let marker = "# magent-mouse-openable-url-capture-v3"
-        if let existing = try? String(contentsOfFile: path, encoding: .utf8), existing.contains(marker) {
-            return
-        }
-
-        let script = """
-        #!/bin/sh
-        \(marker)
-        session_name="$1"
-        mouse_hyperlink="$2"
-        mouse_word="$3"
-        mouse_x="$4"
-        mouse_line="$5"
-
-        if [ "$mouse_hyperlink" = "__MAGENT_EMPTY__" ]; then
-          mouse_hyperlink=""
-        fi
-        if [ "$mouse_word" = "__MAGENT_EMPTY__" ]; then
-          mouse_word=""
-        fi
-        if [ "$mouse_line" = "__MAGENT_EMPTY__" ]; then
-          mouse_line=""
-        fi
-
-        line_base64=$(printf '%s' "$mouse_line" | base64 | tr -d '\n')
-
-        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-          "$(date +%s)" \
-          "$session_name" \
-          "$mouse_hyperlink" \
-          "$mouse_word" \
-          "$mouse_x" \
-          "$line_base64" \
-          > "\(mouseOpenableURLStatePath)"
-        """
-        try? script.write(toFile: path, atomically: true, encoding: .utf8)
-        try? FileManager.default.setAttributes(
-            [.posixPermissions: 0o755],
-            ofItemAtPath: path
-        )
     }
 
     /// Legacy rollback path only: sets up `pipe-pane` on a tmux session to detect

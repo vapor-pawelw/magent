@@ -35,7 +35,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     public var preserveSurfaceOnDetach = false
 
     /// Returns a tmux-reported openable URL under the most recent mouse click for this view's session.
-    public var resolveTmuxMouseOpenableURL: (() -> String?)?
+    public var resolveTmuxMouseOpenableURL: (() async -> String?)?
     /// Resolves a visible URL near the current mouse position using normalized pane coordinates.
     public var resolveTmuxVisibleOpenableURL: ((_ xFraction: Double, _ yFraction: Double) async -> String?)?
     /// Opens a resolved URL. `forceInApp` is used for explicit in-app overrides such as Cmd+middle-click.
@@ -612,12 +612,19 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         guard let surface else { return }
         ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, mods)
 
-        if pendingCommandClick,
-           let url = resolveTmuxMouseOpenableURL?(),
-           shouldAttemptCommandLinkOpen(with: event) {
-            GhosttyAppManager.shared.openURL(url)
-        }
+        // Resolve the tmux mouse URL asynchronously: `recentMouseOpenableURL`
+        // shells out to `tmux show-option`, which must run off the main thread.
+        // We capture the state we need (modifier flags, click location) now so
+        // the Task doesn't touch `event` or `self` on the actor hop.
+        let shouldOpen = pendingCommandClick && shouldAttemptCommandLinkOpen(with: event)
         pendingCommandClick = false
+        if shouldOpen, let resolveURL = resolveTmuxMouseOpenableURL {
+            Task { @MainActor in
+                if let url = await resolveURL() {
+                    GhosttyAppManager.shared.openURL(url)
+                }
+            }
+        }
     }
 
     override public func mouseDragged(with event: NSEvent) {

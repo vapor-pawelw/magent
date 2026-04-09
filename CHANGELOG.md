@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Terminal
+- Eliminated the tmux zombie process buildup that caused the recurring "tmux health issue: N defunct processes" banner. The per-click URL capture binding now stores mouse state in an in-process tmux option (`set-option -gqF`) instead of spawning a shell script via `run-shell -b` on every mouse click, so fast clicking no longer accumulates defunct children under the tmux server.
+
 ### New Thread Sheet
 - Terminal and Web type prompts now display as compact single-line fields with placeholder text ("e.g. vim, htop, ssh user@host" / "https://..."), making the expected input obvious and reducing accidental prompt-in-URL mistakes.
 

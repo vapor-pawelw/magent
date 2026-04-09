@@ -348,7 +348,7 @@ Both require `copiedGhosttyString(pointer, length:)` to read the C string safely
 
 **Cmd+click open flow** (two independent paths):
 - *Direct* (link already detected): `mouseDown` records `pendingLinkOpenURL`; `mouseUp` confirms both Cmd is still held and the cursor is still on the same URL, then calls `GhosttyAppManager.shared.openURL`.
-- *tmux fallback* (no ghostty/rendered-word link): `mouseDown` records `pendingCommandClick`; `mouseUp` calls `TmuxService.recentMouseOpenableURL(sessionName:)` which reads the state file written by the tmux `MouseDown1Pane` binding. This covers plain-text URLs not reported by ghostty.
+- *tmux fallback* (no ghostty/rendered-word link): `mouseDown` records `pendingCommandClick`; `mouseUp` asynchronously calls `TmuxService.recentMouseOpenableURL(sessionName:)`, which reads the tmux server-scoped user option `@magent_last_mouse`. The option is rewritten by the `MouseDown1Pane` binding via `set-option -gqF` — a fork-free, in-process tmux command, deliberately chosen instead of `run-shell -b` so per-click mouse handling cannot spawn `/bin/sh` children that tmux's SIGCHLD reaper may leave as defunct/zombie processes under high-frequency clicking. This covers plain-text URLs not reported by ghostty.
 
 **tmux terminal-features prerequisites**: On startup and on every lazy tmux-server bootstrap path, Magent must ensure its required `terminal-features` entries are present before attaching the client. This preserves truecolor (`*:RGB` for Magent's supported client TERM patterns) and OSC 8 links (`xterm*:hyperlinks`) for embedded Ghostty sessions.
 
