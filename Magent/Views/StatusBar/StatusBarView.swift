@@ -334,6 +334,7 @@ private final class ThreadStatusPopoverRowView: NSView {
 
 private final class ThreadStatusPopoverViewController: NSViewController {
     private static let popoverWidth: CGFloat = 340
+    private static let contentWidth: CGFloat = popoverWidth - 16
 
     private let status: ThreadStatusSummaryKind
     private let onSelectThread: (UUID) -> Void
@@ -419,7 +420,8 @@ private final class ThreadStatusPopoverViewController: NSViewController {
         headerSeparator.translatesAutoresizingMaskIntoConstraints = false
         containerStack.addArrangedSubview(headerSeparator)
         NSLayoutConstraint.activate([
-            headerSeparator.widthAnchor.constraint(equalTo: containerStack.widthAnchor),
+            headerSeparator.widthAnchor.constraint(equalToConstant: Self.contentWidth),
+            headerRow.widthAnchor.constraint(equalToConstant: Self.contentWidth),
         ])
 
         let settings = PersistenceService.shared.loadSettings()
@@ -432,7 +434,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
                 separator.translatesAutoresizingMaskIntoConstraints = false
                 containerStack.addArrangedSubview(separator)
                 NSLayoutConstraint.activate([
-                    separator.widthAnchor.constraint(equalTo: containerStack.widthAnchor),
+                    separator.widthAnchor.constraint(equalToConstant: Self.contentWidth),
                 ])
             }
 
@@ -447,7 +449,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
             row.translatesAutoresizingMaskIntoConstraints = false
             containerStack.addArrangedSubview(row)
             NSLayoutConstraint.activate([
-                row.widthAnchor.constraint(equalTo: containerStack.widthAnchor),
+                row.widthAnchor.constraint(equalToConstant: Self.contentWidth),
             ])
         }
 
@@ -457,7 +459,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
             separator.translatesAutoresizingMaskIntoConstraints = false
             containerStack.addArrangedSubview(separator)
             NSLayoutConstraint.activate([
-                separator.widthAnchor.constraint(equalTo: containerStack.widthAnchor),
+                separator.widthAnchor.constraint(equalToConstant: Self.contentWidth),
             ])
 
             let footer = NSView()
@@ -474,6 +476,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
             containerStack.addArrangedSubview(footer)
 
             NSLayoutConstraint.activate([
+                footer.widthAnchor.constraint(equalToConstant: Self.contentWidth),
                 markAllButton.topAnchor.constraint(equalTo: footer.topAnchor, constant: 8),
                 markAllButton.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -8),
                 markAllButton.bottomAnchor.constraint(equalTo: footer.bottomAnchor, constant: -6),
@@ -870,8 +873,12 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         }
 
         let shouldRebuild = summaries != lastRenderedThreadSummaries || threads.count != lastRenderedThreadCount
+        let isStatusPopoverVisible = activePopover?.isShown == true
 
-        if shouldRebuild {
+        // Rebuilding the status-button stack replaces the anchor button view and
+        // causes AppKit to dismiss an open popover. While any status popover is
+        // visible, keep the stack stable and just refresh popover rows in place.
+        if shouldRebuild, !isStatusPopoverVisible {
             rebuildThreadStatusSegments(summaries: summaries, totalCount: threads.count)
             lastRenderedThreadSummaries = summaries
             lastRenderedThreadCount = threads.count

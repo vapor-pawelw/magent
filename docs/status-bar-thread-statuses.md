@@ -32,3 +32,4 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - Keep the popover scoped to the left-side aggregate status items. The right-side sync/rate-limit controls already use menus and manual actions and should not be converted to the thread-row tooltip behavior.
 - Keep sync failure details sourced from the most recent sync runner output rather than inventing independent UI-only error state, so hover text and the sync context menu stay in sync.
 - For the `done` popover row-level mark-read button, suppress row navigation when the click lands inside the button hit area. Otherwise the click can both mark as read and navigate, which is surprising and can race popover refresh.
+- Keep popover content rows at a fixed width. Long descriptions should truncate, not resize the popover while rows are being marked read.
