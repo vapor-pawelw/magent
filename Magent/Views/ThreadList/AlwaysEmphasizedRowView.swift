@@ -210,6 +210,10 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         let border: NSColor
     }
 
+    private var currentCapsuleBorderWidth: CGFloat {
+        isSelected ? Self.capsuleBorderWidth : 1
+    }
+
     private var currentCapsuleStyle: CapsuleStyle {
         if isSelected {
             return CapsuleStyle(
@@ -240,6 +244,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     }
 
     private func drawCapsuleBorderAndFill(_ style: CapsuleStyle) {
+        let borderWidth = currentCapsuleBorderWidth
         let fillPath = NSBezierPath(
             roundedRect: capsuleRect,
             xRadius: Self.capsuleCornerRadius,
@@ -248,13 +253,13 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         style.fill.setFill()
         fillPath.fill()
 
-        let insetRect = capsuleRect.insetBy(dx: Self.capsuleBorderWidth / 2, dy: Self.capsuleBorderWidth / 2)
+        let insetRect = capsuleRect.insetBy(dx: borderWidth / 2, dy: borderWidth / 2)
         let borderPath = NSBezierPath(
             roundedRect: insetRect,
             xRadius: Self.capsuleCornerRadius,
             yRadius: Self.capsuleCornerRadius
         )
-        borderPath.lineWidth = Self.capsuleBorderWidth
+        borderPath.lineWidth = borderWidth
         style.border.setStroke()
         borderPath.stroke()
     }
@@ -267,7 +272,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         if isSelected || showsRateLimitHighlight || showsWaitingHighlight || showsCompletionHighlight {
             drawCapsuleBorderAndFill(style)
         } else {
-            // Normal: subtle fill + optional 1pt border (thinner than highlighted states).
+            // Normal: subtle fill + optional 1pt border.
             let fillPath = NSBezierPath(
                 roundedRect: capsuleRect,
                 xRadius: Self.capsuleCornerRadius,
@@ -289,7 +294,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                     yRadius: Self.capsuleCornerRadius
                 )
                 if showsContextMenuHighlight {
-                    borderPath.lineWidth = Self.capsuleBorderWidth
+                    borderPath.lineWidth = 1
                     NSColor.white.withAlphaComponent(0.3).setStroke()
                 } else {
                     borderPath.lineWidth = 1
@@ -441,7 +446,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
 
         let rect = capsuleRect
         let cornerRadius = Self.capsuleCornerRadius
-        let borderWidth: CGFloat = Self.capsuleBorderWidth
+        let borderWidth = currentCapsuleBorderWidth
 
         // Container sits behind content but above row background.
         let container = CALayer()
@@ -526,6 +531,9 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         applyBorderGradientColors(gradient, selected: isSelected)
+        if let shapeMask = container.mask as? CAShapeLayer {
+            shapeMask.lineWidth = currentCapsuleBorderWidth
+        }
         CATransaction.commit()
     }
 
@@ -563,6 +571,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 cornerHeight: cornerRadius,
                 transform: nil
             )
+            shapeMask.lineWidth = currentCapsuleBorderWidth
         }
         CATransaction.commit()
     }
@@ -607,10 +616,8 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
         guard let badge = signEmojiBadge, !badge.isHidden else { return }
         badge.capsuleFill = style.fill
         badge.capsuleBorderColor = style.border
-        // Match the capsule border width: 2pt for highlighted/selected, 1pt for normal.
-        badge.capsuleBorderWidth = (isSelected || showsRateLimitHighlight || showsWaitingHighlight || showsCompletionHighlight)
-            ? Self.capsuleBorderWidth
-            : 1
+        // Match capsule border width: 2pt only when selected, 1pt otherwise.
+        badge.capsuleBorderWidth = currentCapsuleBorderWidth
     }
 
     private func ensureSignEmojiBadge() -> SignEmojiBadgeView {
