@@ -361,6 +361,11 @@ extension ThreadListViewController: NSOutlineViewDataSource {
 // MARK: - NSOutlineViewDelegate
 
 extension ThreadListViewController: NSOutlineViewDelegate {
+    /// NSOutlineView can hand us stale value-type `MagentThread` snapshots after
+    /// metadata-only in-place updates. Always resolve by id before configuring UI.
+    private func resolvedThreadSnapshot(for thread: MagentThread) -> MagentThread {
+        threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+    }
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
         if item is SidebarAddRepoRow {
@@ -381,7 +386,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         }
 
         let rowView = AlwaysEmphasizedRowView()
-        if let thread = item as? MagentThread {
+        if let itemThread = item as? MagentThread {
+            let thread = resolvedThreadSnapshot(for: itemThread)
             let isSelected = outlineView.isRowSelected(outlineView.row(forItem: item))
             rowView.busyBorderPhaseKey = thread.id
             rowView.showsRateLimitHighlight = thread.hasUnreadRateLimit
@@ -500,7 +506,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarSection {
             return 28
         }
-        if let thread = item as? MagentThread {
+        if let itemThread = item as? MagentThread {
+            let thread = resolvedThreadSnapshot(for: itemThread)
             let settings = currentSettings
             let maxDescLines = settings.sidebarDescriptionLineLimit
             let trimmedDesc = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -625,7 +632,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             }
             return false
         }
-        if let thread = item as? MagentThread, thread.isArchiving {
+        if let itemThread = item as? MagentThread,
+           resolvedThreadSnapshot(for: itemThread).isArchiving {
             return false
         }
         return item is MagentThread
@@ -950,7 +958,8 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         }
 
         // Level 1 or 2: Thread item
-        if let thread = item as? MagentThread {
+        if let itemThread = item as? MagentThread {
+            let thread = resolvedThreadSnapshot(for: itemThread)
             if thread.isMain {
                 let currentBranch = {
                     let actualBranch = thread.actualBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
