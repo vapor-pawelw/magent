@@ -9,6 +9,22 @@ private extension Logger {
 }
 
 extension ThreadManager {
+#if DEBUG
+    private static let codexBusyHeuristicSelfCheck: Void = {
+        assert(
+            isCodexBusyStatusLine("• esc to interrupt)"),
+            "Codex busy heuristic failed: interrupt marker should be busy"
+        )
+        assert(
+            isCodexBusyStatusLine("Working (35m 47s • esc to interrupt) · 1 background terminal running"),
+            "Codex busy heuristic failed: Working line with background terminal should be busy"
+        )
+        assert(
+            !isCodexBusyStatusLine("› Write tests for @filename"),
+            "Codex busy heuristic failed: prompt line should not be busy"
+        )
+    }()
+#endif
 
     private struct CompletionProcessingResult {
         var changed = false
@@ -364,6 +380,17 @@ extension ThreadManager {
                     detectedAgent = configuredType
                 }
 
+                // Runtime process detection is authoritative, but can transiently fail
+                // while an agent runs tools (e.g. pane command becomes xcodebuild).
+                // Only use persisted session type as a weak hint when pane output
+                // contains evidence for that specific agent.
+                if detectedAgent == nil,
+                   let hintedType = threads[ti].sessionAgentTypes[session],
+                   (hintedType == .claude || hintedType == .codex),
+                   await paneContentSupportsAgentHint(sessionName: session, hintedAgent: hintedType) {
+                    detectedAgent = hintedType
+                }
+
                 if let agent = detectedAgent {
                     // Cache successful detection so transient failures on future
                     // ticks don't flip the session to nil and wipe busy state.
@@ -381,7 +408,8 @@ extension ThreadManager {
 
                 switch detectedAgent {
                 case .codex?:
-                    // Codex: busy only while "• esc to interrupt)" is visible in the latest scope
+                    // Codex: busy while active "Working"/interrupt/background status
+                    // markers are visible in the latest scope.
                     let isBusy = await paneShowsEscToInterrupt(sessionName: session)
                     guard let i = threads.firstIndex(where: { $0.id == threadId }) else { continue }
                     let wasBusy = threads[i].busySessions.contains(session)
@@ -770,12 +798,65 @@ extension ThreadManager {
     }
 
     private func paneShowsEscToInterrupt(sessionName: String) async -> Bool {
-        // Capture enough history to include at least one scope separator so we can
-        // ignore stale matches from older scopes.
-        guard let paneContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 200) else {
+#if DEBUG
+        Self.codexBusyHeuristicSelfCheck
+#endif
+        // Capture fresh pane content for busy checks so cache TTL doesn't delay
+        // spinner transitions during active Codex runs.
+        let freshContent = await tmux.capturePane(sessionName: sessionName, lastLines: 200)
+        let paneContent: String
+        if let freshContent {
+            paneContent = freshContent
+        } else if let cachedContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 200) {
+            paneContent = cachedContent
+        } else {
             return false
         }
 
+        return paneContentShowsCodexBusyStatus(paneContent)
+    }
+
+    private func paneContentSupportsAgentHint(sessionName: String, hintedAgent: AgentType) async -> Bool {
+        guard let paneContent = await tmux.cachedCapturePane(sessionName: sessionName, lastLines: 120) else {
+            return false
+        }
+        switch hintedAgent {
+        case .codex:
+            return paneContentShowsCodexBusyStatus(paneContent) || paneContentShowsCodexPrompt(paneContent)
+        case .claude:
+            return paneContentShowsEscToInterrupt(paneContent) || paneContentShowsClaudePrompt(paneContent)
+        case .custom:
+            return false
+        }
+    }
+
+    private func paneContentShowsCodexBusyStatus(_ paneContent: String) -> Bool {
+        recentNonEmptyLines(from: paneContent, maxLines: 25).contains(where: Self.isCodexBusyStatusLine)
+    }
+
+    private func paneContentShowsCodexPrompt(_ paneContent: String) -> Bool {
+        recentNonEmptyLines(from: paneContent, maxLines: 25).contains { line in
+            line.trimmingCharacters(in: .whitespaces).hasPrefix("\u{203A}") // ›
+        }
+    }
+
+    private func paneContentShowsClaudePrompt(_ paneContent: String) -> Bool {
+        recentNonEmptyLines(from: paneContent, maxLines: 25)
+            .contains(where: { $0.hasPrefix("\u{276F}") }) // ❯
+    }
+
+    private static func isCodexBusyStatusLine(_ line: String) -> Bool {
+        let normalized = line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if normalized.contains("• esc to interrupt)") { return true }
+        if normalized.contains("working (") && normalized.contains("esc to interrupt") { return true }
+        if normalized.contains("working (") && normalized.contains("background terminal running") { return true }
+        if normalized.contains("background terminal running") { return true }
+        return false
+    }
+
+    private func latestScopeLines(from paneContent: String) -> [String] {
         let lines = paneContent
             .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
             .map(String.init)
@@ -787,13 +868,21 @@ extension ThreadManager {
         })
 
         let latestScopeStart = scopeSeparatorIndex.map { lines.index(after: $0) } ?? lines.startIndex
-        let latestScopeLines = lines[latestScopeStart...]
+        return Array(lines[latestScopeStart...])
+    }
 
-        // In Codex output, "• esc to interrupt)" appears inside the active
-        // "Working (...)" status line while the model is processing.
-        return latestScopeLines.contains { line in
-            line.localizedCaseInsensitiveContains("• esc to interrupt)")
+    private func recentNonEmptyLines(from paneContent: String, maxLines: Int) -> [String] {
+        guard maxLines > 0 else { return [] }
+        var lines = latestScopeLines(from: paneContent)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+
+        while let last = lines.last, last.isEmpty {
+            lines.removeLast()
         }
+
+        let nonEmpty = lines.filter { !$0.isEmpty }
+        if nonEmpty.count <= maxLines { return nonEmpty }
+        return Array(nonEmpty.suffix(maxLines))
     }
 
     // MARK: - Unsubmitted Input Detection

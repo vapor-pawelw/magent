@@ -50,7 +50,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Fresh Claude/Codex tabs now scope resume discovery to the tab that created them instead of the whole thread age, reducing accidental conversation carryover on older worktrees.
-
+- Fixed Codex busy indicators dropping during long-running tool commands (for example `xcodebuild`) and occasionally staying busy due to stale pane lines. Busy detection now uses Codex working/background status markers near the bottom of the latest pane scope and only applies stored agent-type fallback when live pane content matches that agent.
 ### Sidebar
 #### Features
 - Right-clicking an unselected thread now briefly highlights its row while the context menu is open, making it clear which thread the action will apply to.
