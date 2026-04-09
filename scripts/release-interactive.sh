@@ -116,6 +116,33 @@ extract_unreleased_notes() {
   ' "$file"
 }
 
+extract_version_notes() {
+  local file="$1"
+  local version="$2"
+  awk -v version="$version" '
+    BEGIN { in_version = 0; found = 0 }
+    $0 ~ ("^## " version " - ") {
+      in_version = 1
+      found = 1
+      print
+      next
+    }
+    /^## / {
+      if (in_version == 1) {
+        exit
+      }
+    }
+    in_version == 1 {
+      print
+    }
+    END {
+      if (found == 0) {
+        exit 2
+      }
+    }
+  ' "$file"
+}
+
 has_meaningful_changelog_notes() {
   local notes_file="$1"
   local count
@@ -399,7 +426,9 @@ main() {
 
   local release_notes_file
   release_notes_file="$(mktemp)"
-  trap 'rm -f "'"$release_notes_file"'"' EXIT
+  local tag_notes_file
+  tag_notes_file="$(mktemp)"
+  trap 'rm -f "'"$release_notes_file"'" "'"$tag_notes_file"'"' EXIT
 
   if ! extract_unreleased_notes "$CHANGELOG_FILE" >"$release_notes_file"; then
     echo "Could not read '## Unreleased' from ${CHANGELOG_FILE}." >&2
@@ -454,9 +483,11 @@ main() {
     exit 1
   fi
 
-  local release_notes
-  release_notes="$(cat "$release_notes_file")"
-  git tag -a "$tag" -m "$release_notes"
+  if ! extract_version_notes "$CHANGELOG_FILE" "$version" >"$tag_notes_file"; then
+    echo "Could not read '## ${version} - <date>' notes from ${CHANGELOG_FILE} after promotion." >&2
+    exit 1
+  fi
+  git tag -a "$tag" -F "$tag_notes_file"
   if ! git push origin "$tag"; then
     echo "Failed to push tag. Cleaning up local tag '$tag'." >&2
     git tag -d "$tag" >/dev/null 2>&1 || true

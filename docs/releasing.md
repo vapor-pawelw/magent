@@ -35,7 +35,7 @@ git push origin v1.2.0
 This triggers a GitHub Actions workflow that:
 
 1. Builds `Magent.app` (unsigned)
-2. Publishes a GitHub Release to `vapor-pawelw/mAgent` with `Magent.dmg`, a compatibility `Magent.zip`, and tag-annotation release notes
+2. Publishes a GitHub Release to `vapor-pawelw/mAgent` with `Magent.dmg`, a compatibility `Magent.zip`, and release notes taken from the matching `CHANGELOG.md` version section (`## <version> - <date>`)
 3. Auto-updates the Homebrew cask formula in `vapor-pawelw/homebrew-tap` with the new version, SHA, and the public release download URL for `Magent.dmg`
 
 The release workflow also rebuilds `Libraries/GhosttyKit.xcframework` using `./scripts/bootstrap-ghosttykit.sh` (instead of relying on git-lfs artifacts).
@@ -44,6 +44,12 @@ Commits on `main` without a tag do **not** produce a release.
 
 Release artifacts are published directly on the source repository `vapor-pawelw/mAgent`. The workflow uses `GITHUB_TOKEN` for creating releases on the same repo, and `HOMEBREW_TAP_TOKEN` for pushing cask updates to `vapor-pawelw/homebrew-tap`.
 
+If previously published releases have incorrect notes, you can backfill them from `CHANGELOG.md`:
+
+```bash
+./scripts/sync-release-notes-from-changelog.sh --from-version 1.2.1
+```
+
 ## Changelog Guidelines
 
 When updating `CHANGELOG.md` for a release or pre-release notes:
@@ -51,16 +57,18 @@ When updating `CHANGELOG.md` for a release or pre-release notes:
 1. Keep pending release notes under `## Unreleased`, then let `./scripts/release-interactive.sh` promote them into the versioned section.
 2. Group notes by domain using `### <Domain>` headings (for example: `Thread`, `Sidebar`, `Settings`, `Agents`).
 3. Omit empty domains; only keep headings that have at least one note.
-4. Include only:
+4. Keep `Thread` as a single top-level domain by default; avoid permanent split domains like `Thread: Rename`.
+5. Within each domain, split entries into `#### Features` and `#### Bug Fixes` when both exist, with bug fixes listed below features.
+6. If one topic dominates in a domain for a specific release, use an optional temporary `##### <Topic>` subheading inside `#### Features`/`#### Bug Fixes` and drop it once no longer needed.
+7. Include only:
    - New features
    - Bug fixes
    - Performance improvements
-5. Omit implementation details, internal refactors, tooling-only changes, and infrastructure-only updates.
-6. Within each domain, order entries by user impact:
-   - Put broad/high-impact features first and describe them at a higher level.
+8. Omit implementation details, internal refactors, tooling-only changes, and infrastructure-only updates.
+9. Within each subsection, order entries by user impact:
+   - Put broad/high-impact items first and describe them at a higher level.
    - Keep niche or smaller items shorter and place them near the end.
-7. Within each domain, keep user-facing additions/UX improvements above bug fixes and technical improvements.
-8. Use user-facing wording focused on outcomes, not code internals.
+10. Use user-facing wording focused on outcomes, not code internals.
 
 ## Feature Flags
 
