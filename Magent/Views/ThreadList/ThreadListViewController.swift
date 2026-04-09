@@ -692,7 +692,15 @@ final class ThreadListViewController: NSViewController {
                     projectRegularThreads,
                     preferRecentCompletions: settings.autoReorderThreadsOnAgentCompletion
                 )
-                children.append(contentsOf: sortedThreads)
+                // Insert visual separators at pinned→normal and normal→hidden transitions.
+                var lastState: ThreadSidebarListState? = nil
+                for thread in sortedThreads {
+                    if let last = lastState, thread.sidebarListState != last {
+                        children.append(SidebarGroupSeparator())
+                    }
+                    children.append(thread)
+                    lastState = thread.sidebarListState
+                }
             }
 
             return SidebarProject(

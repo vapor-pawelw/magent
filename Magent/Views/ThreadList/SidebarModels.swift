@@ -31,8 +31,26 @@ class SidebarSection {
         self.isKeepAlive = isKeepAlive
         self.threads = threads
     }
+
+    /// Thread items interleaved with `SidebarGroupSeparator` at pinned→normal
+    /// and normal→hidden transitions. Used for datasource rendering only —
+    /// all drag-drop / count / filter logic reads `threads` directly.
+    var items: [Any] {
+        var result: [Any] = []
+        var lastState: ThreadSidebarListState? = nil
+        for thread in threads {
+            if let last = lastState, thread.sidebarListState != last {
+                result.append(SidebarGroupSeparator())
+            }
+            result.append(thread)
+            lastState = thread.sidebarListState
+        }
+        return result
+    }
 }
 
 final class SidebarSpacer {}
 final class SidebarProjectMainSpacer {}
 final class SidebarAddRepoRow {}
+/// Visual separator inserted between pinned / normal / hidden thread groups.
+final class SidebarGroupSeparator {}

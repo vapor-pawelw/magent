@@ -12,6 +12,7 @@ This thread changed flat-sidebar behavior so projects whose section grouping is 
 - Dragging still respects the pinned/unpinned split used by the flat list:
   - pinned threads can only move within the pinned block
   - unpinned threads can only move within the unpinned block
+- The sidebar now renders a visual separator between pinned, normal, and hidden thread groups. That divider is present even when section grouping is off, but it does not change any ordering rules.
 - Flat-mode reordering does not rewrite the thread's stored section, so re-enabling section grouping restores the thread under its original section.
 
 ## Implementation Notes
@@ -23,6 +24,7 @@ This thread changed flat-sidebar behavior so projects whose section grouping is 
 - `assignThreadToBottomOfVisiblePinGroup(...)` is used by thread creation, section moves, and pin toggles so flat-mode ordering stays consistent across lifecycle events.
 - `bumpThreadToTopOfSection(...)` now uses the same project-wide ordering scope in flat mode, so agent completions rise within the visible pin group without needing to move sections.
 - `ThreadListViewController+DataSource.swift` handles flat-list drops on `SidebarProject` by computing the insertion index within the visible pin group and calling `reorderThreadInVisibleProjectList(...)`.
+- `SidebarSection.items` interleaves `SidebarGroupSeparator` rows between thread groups for rendering. Section drop validation/reorder code must convert raw outline indices back to thread-only indices before comparing group boundaries or calling `reorderThread(...)`.
 - `SidebarOutlineView` tracks local/destination drag state so `shouldSelectItem`, `shouldExpandItem`, and `shouldCollapseItem` can suppress header disclosure while a drag is active.
 - Persistence still uses the existing `displayOrder` field; there is still no separate flat-order storage model.
 - **Drag-time reload deferral**: `reloadData()` checks `SidebarOutlineView.isDragInteractionActive` at the top and returns early (setting `pendingReloadAfterDrag = true`) for background-triggered reloads that fire during a drag (e.g. tmux state polling, busy-state changes). The `draggingSession endedAt` delegate flushes the pending reload after the drag ends. Reloads triggered by `acceptDrop` itself are allowed through via the `isInsideAcceptDrop` flag, which is set for the duration of the accept-drop call.
