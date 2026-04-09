@@ -17,7 +17,14 @@ extension ThreadListViewController {
 
         // Mark as read (only when the completion highlight is actually visible — suppressed when a rate limit is also active)
         if thread.hasUnreadAgentCompletion && !thread.hasUnreadRateLimit {
-            let markReadItem = NSMenuItem(title: String(localized: .ThreadStrings.threadMarkAsRead), action: #selector(markThreadAsRead(_:)), keyEquivalent: "")
+            let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+            let markReadItem = NSMenuItem(
+                title: isOptionPressed
+                    ? String(localized: .ThreadStrings.threadMarkAllAsRead)
+                    : String(localized: .ThreadStrings.threadMarkAsRead),
+                action: isOptionPressed ? #selector(markAllThreadsAsRead(_:)) : #selector(markThreadAsRead(_:)),
+                keyEquivalent: ""
+            )
             markReadItem.target = self
             markReadItem.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: nil)
             markReadItem.representedObject = thread.id
@@ -897,6 +904,10 @@ extension ThreadListViewController {
     @objc private func markThreadAsRead(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
         threadManager.markThreadCompletionSeen(threadId: threadId)
+    }
+
+    @objc private func markAllThreadsAsRead(_ sender: NSMenuItem) {
+        threadManager.markAllThreadCompletionsSeen()
     }
 
     @objc private func toggleThreadHidden(_ sender: NSMenuItem) {

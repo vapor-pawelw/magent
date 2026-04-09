@@ -73,6 +73,14 @@ All notable changes to this project will be documented in this file.
 - Fixed thread rows appearing simultaneously green (agent completed) and busy. Busy state now takes precedence — completion highlights are suppressed while the thread is busy and reappear once it goes idle.
 - Fixed thread row border widths so only the selected row uses a 2pt border; all non-selected states (including completion, waiting, rate-limit, and busy animation) now use 1pt, and attached sign badges match that width.
 
+### Status Bar
+#### Features
+- The `done` status popover now supports read actions directly: each row has a checkmark button to mark that thread as read, and a footer `Mark All as Read` button clears all unread completions.
+- Right-clicking the `done` status item now opens a one-action context menu with `Mark All as Read`.
+
+#### Bug Fixes
+- Holding `Option` while opening a thread context menu now changes `Mark as Read` to `Mark All as Read`, so bulk-clearing read state is available from the existing thread menu without extra navigation.
+
 ### Distribution
 #### Features
 - Added `scripts/sync-release-notes-from-changelog.sh` to backfill existing GitHub release bodies from matching `CHANGELOG.md` version sections.

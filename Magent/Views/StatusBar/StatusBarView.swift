@@ -15,6 +15,18 @@ private extension NSImage {
     }
 }
 
+private final class StatusSummaryButton: NSButton {
+    var contextMenuProvider: (() -> NSMenu?)?
+
+    override func rightMouseDown(with event: NSEvent) {
+        guard let menu = contextMenuProvider?() else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+}
+
 private enum ThreadStatusSummaryKind: String, CaseIterable {
     case busy
     case waiting
@@ -109,6 +121,8 @@ private final class ThreadStatusPopoverRowView: NSView {
     private let projectName: String
     private let isPropagatedOnly: Bool
     private let onSelect: (UUID) -> Void
+    private let onMarkRead: ((UUID) -> Void)?
+    private weak var markReadButton: NSButton?
     private var trackingArea: NSTrackingArea?
     private var isHovered = false {
         didSet {
@@ -121,12 +135,14 @@ private final class ThreadStatusPopoverRowView: NSView {
         addedAt: Date,
         projectName: String,
         isPropagatedOnly: Bool = false,
+        onMarkRead: ((UUID) -> Void)? = nil,
         onSelect: @escaping (UUID) -> Void
     ) {
         self.thread = thread
         self.addedAt = addedAt
         self.projectName = projectName
         self.isPropagatedOnly = isPropagatedOnly
+        self.onMarkRead = onMarkRead
         self.onSelect = onSelect
         super.init(frame: .zero)
         setupViews()
@@ -163,6 +179,12 @@ private final class ThreadStatusPopoverRowView: NSView {
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         guard bounds.contains(point) else { return }
+        if let markReadButton {
+            let buttonPoint = markReadButton.convert(point, from: self)
+            if markReadButton.bounds.contains(buttonPoint) {
+                return
+            }
+        }
         onSelect(thread.id)
     }
 
@@ -240,7 +262,7 @@ private final class ThreadStatusPopoverRowView: NSView {
         addSubview(iconView)
         addSubview(textStack)
 
-        NSLayoutConstraint.activate([
+        var constraints = [
             iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             iconView.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 10),
             iconView.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -10),
@@ -250,9 +272,44 @@ private final class ThreadStatusPopoverRowView: NSView {
 
             textStack.topAnchor.constraint(equalTo: topAnchor, constant: 9),
             textStack.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 10),
-            textStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             textStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -9),
-        ])
+        ]
+
+        if onMarkRead != nil {
+            let button = NSButton()
+            button.isBordered = false
+            button.bezelStyle = .inline
+            button.image = NSImage(
+                systemSymbolName: "checkmark.circle",
+                accessibilityDescription: String(localized: .ThreadStrings.threadMarkAsRead)
+            )?.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+            button.contentTintColor = .systemGreen
+            button.toolTip = String(localized: .ThreadStrings.threadMarkAsRead)
+            button.target = self
+            button.action = #selector(markReadTapped)
+            button.focusRingType = .none
+            button.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(button)
+            markReadButton = button
+
+            constraints.append(contentsOf: [
+                button.centerYAnchor.constraint(equalTo: centerYAnchor),
+                button.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+                button.widthAnchor.constraint(equalToConstant: 22),
+                button.heightAnchor.constraint(equalToConstant: 22),
+                textStack.trailingAnchor.constraint(equalTo: button.leadingAnchor, constant: -6),
+            ])
+        } else {
+            constraints.append(
+                textStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12)
+            )
+        }
+
+        NSLayoutConstraint.activate(constraints)
+    }
+
+    @objc private func markReadTapped() {
+        onMarkRead?(thread.id)
     }
 
     private func updateLayerColors() {
@@ -280,16 +337,22 @@ private final class ThreadStatusPopoverViewController: NSViewController {
 
     private let status: ThreadStatusSummaryKind
     private let onSelectThread: (UUID) -> Void
+    private let onMarkDoneThreadAsRead: ((UUID) -> Void)?
+    private let onMarkAllDoneAsRead: (() -> Void)?
     private let containerStack = NSStackView()
     private var entries: [ThreadStatusPopoverEntry]
 
     init(
         status: ThreadStatusSummaryKind,
         entries: [ThreadStatusPopoverEntry],
+        onMarkDoneThreadAsRead: ((UUID) -> Void)? = nil,
+        onMarkAllDoneAsRead: (() -> Void)? = nil,
         onSelectThread: @escaping (UUID) -> Void
     ) {
         self.status = status
         self.entries = entries
+        self.onMarkDoneThreadAsRead = onMarkDoneThreadAsRead
+        self.onMarkAllDoneAsRead = onMarkAllDoneAsRead
         self.onSelectThread = onSelectThread
         super.init(nibName: nil, bundle: nil)
     }
@@ -378,6 +441,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
                 addedAt: entry.addedAt,
                 projectName: projectsById[entry.thread.projectId] ?? "Unknown Project",
                 isPropagatedOnly: entry.isPropagatedOnly,
+                onMarkRead: status == .done ? onMarkDoneThreadAsRead : nil,
                 onSelect: onSelectThread
             )
             row.translatesAutoresizingMaskIntoConstraints = false
@@ -387,10 +451,43 @@ private final class ThreadStatusPopoverViewController: NSViewController {
             ])
         }
 
+        if status == .done, !entries.isEmpty {
+            let separator = NSBox()
+            separator.boxType = .separator
+            separator.translatesAutoresizingMaskIntoConstraints = false
+            containerStack.addArrangedSubview(separator)
+            NSLayoutConstraint.activate([
+                separator.widthAnchor.constraint(equalTo: containerStack.widthAnchor),
+            ])
+
+            let footer = NSView()
+            footer.translatesAutoresizingMaskIntoConstraints = false
+            let markAllButton = NSButton(
+                title: String(localized: .ThreadStrings.threadMarkAllAsRead),
+                target: self,
+                action: #selector(markAllAsReadTapped)
+            )
+            markAllButton.bezelStyle = .inline
+            markAllButton.isBordered = true
+            markAllButton.translatesAutoresizingMaskIntoConstraints = false
+            footer.addSubview(markAllButton)
+            containerStack.addArrangedSubview(footer)
+
+            NSLayoutConstraint.activate([
+                markAllButton.topAnchor.constraint(equalTo: footer.topAnchor, constant: 8),
+                markAllButton.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -8),
+                markAllButton.bottomAnchor.constraint(equalTo: footer.bottomAnchor, constant: -6),
+            ])
+        }
+
         view.layoutSubtreeIfNeeded()
         let height = containerStack.fittingSize.height + 16
         preferredContentSize = NSSize(width: Self.popoverWidth, height: height)
         view.setFrameSize(NSSize(width: Self.popoverWidth, height: height))
+    }
+
+    @objc private func markAllAsReadTapped() {
+        onMarkAllDoneAsRead?()
     }
 }
 
@@ -581,6 +678,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private var transientStatusAddedAt: [ThreadStatusSummaryKind: [UUID: Date]] = [:]
     private var activePopoverStatus: ThreadStatusSummaryKind?
     private var activePopover: NSPopover?
+    private let doneStatusContextMenu = NSMenu(title: "Done")
     private var sessionCleanupPopover: NSPopover?
     private var lastRenderedSessionCount: Int = -1
     private var lastRenderedLiveSessionCount: Int = -1
@@ -818,7 +916,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     }
 
     private func makeStatusButton(for summary: ThreadStatusSummaryDescriptor) -> NSButton {
-        let button = NSButton()
+        let button = StatusSummaryButton()
         button.isBordered = false
         button.image = NSImage(
             systemSymbolName: summary.kind.symbolName,
@@ -844,6 +942,11 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         )
         button.setAccessibilityLabel("\(summary.count) \(summary.kind.buttonTitle)")
         button.identifier = NSUserInterfaceItemIdentifier(summary.kind.rawValue)
+        if summary.kind == .done {
+            button.contextMenuProvider = { [weak self] in
+                self?.buildDoneContextMenu()
+            }
+        }
         return button
     }
 
@@ -1293,6 +1396,12 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         popover.contentViewController = ThreadStatusPopoverViewController(
             status: status,
             entries: entries,
+            onMarkDoneThreadAsRead: status == .done
+                ? { [weak self] threadId in self?.markDoneThreadAsRead(threadId) }
+                : nil,
+            onMarkAllDoneAsRead: status == .done
+                ? { [weak self] in self?.markAllCompletedThreadsAsRead(nil) }
+                : nil,
             onSelectThread: { [weak self] threadId in
                 self?.activePopover?.close()
                 let sessionName = self?.navigationSessionName(for: status, threadId: threadId)
@@ -1310,6 +1419,33 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         activePopoverStatus = status
         activePopover = popover
         popover.show(relativeTo: anchorButton.bounds, of: anchorButton, preferredEdge: .maxY)
+    }
+
+    private func buildDoneContextMenu() -> NSMenu? {
+        let hasUnreadDone = ThreadManager.shared.threads.contains { $0.hasUnreadAgentCompletion }
+        guard hasUnreadDone else { return nil }
+
+        doneStatusContextMenu.removeAllItems()
+        doneStatusContextMenu.autoenablesItems = false
+        let markAllItem = NSMenuItem(
+            title: String(localized: .ThreadStrings.threadMarkAllAsRead),
+            action: #selector(markAllCompletedThreadsAsRead(_:)),
+            keyEquivalent: ""
+        )
+        markAllItem.target = self
+        doneStatusContextMenu.addItem(markAllItem)
+        return doneStatusContextMenu
+    }
+
+    private func markDoneThreadAsRead(_ threadId: UUID) {
+        ThreadManager.shared.markThreadCompletionSeen(threadId: threadId)
+        refresh()
+    }
+
+    @objc private func markAllCompletedThreadsAsRead(_ sender: Any?) {
+        let changed = ThreadManager.shared.markAllThreadCompletionsSeen()
+        guard changed > 0 else { return }
+        refresh()
     }
 
     private func navigationSessionName(for status: ThreadStatusSummaryKind, threadId: UUID) -> String? {

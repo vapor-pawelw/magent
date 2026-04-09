@@ -985,6 +985,21 @@ extension ThreadManager {
     }
 
     @MainActor
+    @discardableResult
+    func markAllThreadCompletionsSeen() -> Int {
+        var changedCount = 0
+        for index in threads.indices where !threads[index].unreadCompletionSessions.isEmpty {
+            threads[index].unreadCompletionSessions.removeAll()
+            changedCount += 1
+        }
+        guard changedCount > 0 else { return 0 }
+        persistence.debouncedSaveActiveThreads(threads)
+        updateDockBadge()
+        delegate?.threadManager(self, didUpdateThreads: threads)
+        return changedCount
+    }
+
+    @MainActor
     func markSessionCompletionSeen(threadId: UUID, sessionName: String) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         guard threads[index].unreadCompletionSessions.contains(sessionName) else { return }
