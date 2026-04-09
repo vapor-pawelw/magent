@@ -5,44 +5,64 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Terminal
+#### Bug Fixes
 - Eliminated the tmux zombie process buildup that caused the recurring "tmux health issue: N defunct processes" banner. The per-click URL capture binding now stores mouse state in an in-process tmux option (`set-option -gqF`) instead of spawning a shell script via `run-shell -b` on every mouse click, so fast clicking no longer accumulates defunct children under the tmux server.
 
 ### New Thread Sheet
+#### Features
 - Terminal and Web type prompts now display as compact single-line fields with placeholder text ("e.g. vim, htop, ssh user@host" / "https://..."), making the expected input obvious and reducing accidental prompt-in-URL mistakes.
 
 ### Thread
+#### Features
+- New "AI Rename" sheet (⌘⇧R) replaces the old single-line rename dialog: multi-line prompt input, recent prompt picker (last 10), and checkboxes to choose which parts to change (icon, description, branch name). Accessible as a top-level context menu item, TOC right-click, and main Thread menu.
+- Restructured thread context menu: "AI Rename" and "Sign" are now top-level items; Icon, Description, Branch name, and Section are grouped under a new "Configure" submenu.
+- Added question and exclamation sign emojis to thread rows; trimmed rarely-used signs (Pause, Book, Bolt, Lock).
+- Auto-rename now uses all accumulated prompts for context, so if the first prompt gets rate-limited and the user follows up with "continue", the rename model still sees the original task description.
+- Manual "Rename from prompt" now updates the thread description and icon to match the new branch, instead of keeping the stale description from the original auto-rename.
+- Rename failure banners now include a diagnostic reason (timeout, CLI error, empty output, or parse failure) instead of a generic "could not generate" message.
+
+#### Bug Fixes
 - Fixed AI Rename sheet hanging (infinite spinner) when typing after clicking at the end of the placeholder text.
 - Improved busy detection for Claude sessions with background tasks. Sessions running `run_in_background` tools or active task spinners are now correctly detected as busy even when the `❯` prompt is visible.
 - Fixed busy detection missing the agent status bar in tall terminal panes. Trailing blank lines in tmux captures are now stripped before analysis, preventing all-blank capture windows.
+- Fixed archive merge failing when the branch name matches the worktree directory name by using unambiguous `refs/heads/` git references.
+- Fixed "Rename from prompt" (TOC and auto-rename) failing silently when the spawned CLI process inherited an invalid stdin from the GUI app. Background `claude -p` and `codex exec` calls now redirect stdin from `/dev/null`, eliminating both the failure and a ~3-second startup delay.
 
 ### CLI
-- Fixed multiline prompts sent via `send-prompt` (or agent-to-agent injection) being cut off after the first line. tmux paste-buffer now uses bracketed paste mode so Claude's TUI receives newlines as literal characters rather than Enter keypresses.
+#### Features
 - `create-tab` now accepts `--title` to set the tab name from the CLI and `--fresh`/`--no-resume` to keep isolated review tabs from inheriting older agent history.
+- `batch-create` specs now accept `"promptFile": "/path/to/prompt.txt"` to load the initial prompt from a file, avoiding JSON escaping issues with long or multi-line prompts. `promptFile` takes precedence over `prompt` when both are set.
+
+#### Bug Fixes
+- Fixed multiline prompts sent via `send-prompt` (or agent-to-agent injection) being cut off after the first line. tmux paste-buffer now uses bracketed paste mode so Claude's TUI receives newlines as literal characters rather than Enter keypresses.
 - Fixed `batch-create` silently ignoring the `name` field in specs JSON — the JSON key `"name"` was not mapped to the internal Swift property, so threads were always auto-named from `description`.
 - Fixed `batch-create` failing with "Invalid JSON" when `specs.json` is pretty-printed. The CLI now compacts the array before sending so embedded newlines don't truncate the IPC message.
-- `batch-create` specs now accept `"promptFile": "/path/to/prompt.txt"` to load the initial prompt from a file, avoiding JSON escaping issues with long or multi-line prompts. `promptFile` takes precedence over `prompt` when both are set.
 - Improved IPC JSON parse error messages: errors now report the specific field or mismatch instead of the generic "couldn't be read" Foundation message; `dataCorrupted` errors include a hint about the newline-truncation pitfall.
 
 ### Agents
+#### Features
 - When a rate limit lifts (timer expiry or manual dismiss), threads and tabs where the agent was directly interrupted now show a "waiting for input" indicator so you know which ones to revisit and continue work. The indicator clears as soon as you select the tab or the agent resumes on its own.
+
+#### Bug Fixes
 - Fresh Claude/Codex tabs now scope resume discovery to the tab that created them instead of the whole thread age, reducing accidental conversation carryover on older worktrees.
+
 ### Sidebar
+#### Features
 - Right-clicking an unselected thread now briefly highlights its row while the context menu is open, making it clear which thread the action will apply to.
+
+#### Bug Fixes
 - Fixed thread row state highlights (busy/completion/waiting/rate-limit) disappearing after scrolling away and back. Reused rows now resolve against the latest thread snapshot before rendering.
 - Fixed branch rename dialog pre-filling with the worktree name instead of the current git branch, and silently doing nothing when the user accepted it.
 - Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.
 - Increased thread row vertical spacing so the pin badge is no longer clipped at the top.
 - Fixed "Mark as read" appearing in the context menu for threads that aren't visually highlighted as done (when a rate-limit is also active, suppressing the green highlight).
 
-### Thread
-- New "AI Rename" sheet (⌘⇧R) replaces the old single-line rename dialog: multi-line prompt input, recent prompt picker (last 10), and checkboxes to choose which parts to change (icon, description, branch name). Accessible as a top-level context menu item, TOC right-click, and main Thread menu.
-- Restructured thread context menu: "AI Rename" and "Sign" are now top-level items; Icon, Description, Branch name, and Section are grouped under a new "Configure" submenu.
-- Added question and exclamation sign emojis to thread rows; trimmed rarely-used signs (Pause, Book, Bolt, Lock).
-- Auto-rename now uses all accumulated prompts for context, so if the first prompt gets rate-limited and the user follows up with "continue", the rename model still sees the original task description.
-- Manual "Rename from prompt" now updates the thread description and icon to match the new branch, instead of keeping the stale description from the original auto-rename.
-- Fixed archive merge failing when the branch name matches the worktree directory name by using unambiguous `refs/heads/` git references.
-- Fixed "Rename from prompt" (TOC and auto-rename) failing silently when the spawned CLI process inherited an invalid stdin from the GUI app. Background `claude -p` and `codex exec` calls now redirect stdin from `/dev/null`, eliminating both the failure and a ~3-second startup delay.
-- Rename failure banners now include a diagnostic reason (timeout, CLI error, empty output, or parse failure) instead of a generic "could not generate" message.
+### Distribution
+#### Features
+- Added `scripts/sync-release-notes-from-changelog.sh` to backfill existing GitHub release bodies from matching `CHANGELOG.md` version sections.
+
+#### Bug Fixes
+- GitHub release notes now prefer the matching `CHANGELOG.md` version section (`## <version> - <date>`) instead of falling back to commit-subject-like tag content, so published release pages keep the expected markdown format.
 
 ## 1.5.3 - 2026-04-07
 

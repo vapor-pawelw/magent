@@ -83,32 +83,59 @@ jobs:
           hdiutil create -volname "Magent" -srcfolder "$STAGING_DIR" -ov -format UDZO Magent.dmg
           ditto -c -k --keepParent "$APP_PATH" Magent.zip
 
-      - name: Read release notes from tag annotation
-        id: release_notes
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          NOTES="$(git for-each-ref "refs/tags/${TAG}" --format='%(contents)')"
-          if [ -z "$NOTES" ]; then
-            echo "No tag annotation found for ${TAG}; will use generated release notes."
-            echo "has_notes=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "has_notes=true" >> "$GITHUB_OUTPUT"
-          {
-            echo "body<<EOF"
-            echo "$NOTES"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
           NOTES_FILE=$(mktemp)
-          git for-each-ref "refs/tags/${TAG}" --format='%(contents)' > "$NOTES_FILE"
+          trap 'rm -f "$NOTES_FILE"' EXIT
           HAS_NOTES=false
-          [ -s "$NOTES_FILE" ] && HAS_NOTES=true
+
+          # Preferred source: exact version section from CHANGELOG.md.
+          if [ -f CHANGELOG.md ]; then
+            if awk -v version="$VERSION" '
+              BEGIN { in_version = 0; found = 0 }
+              $0 ~ ("^## " version " - ") {
+                in_version = 1
+                found = 1
+                print
+                next
+              }
+              /^## / {
+                if (in_version == 1) {
+                  exit
+                }
+              }
+              in_version == 1 {
+                print
+              }
+              END {
+                if (found == 0) {
+                  exit 2
+                }
+              }
+            ' CHANGELOG.md > "$NOTES_FILE"; then
+              if [ -s "$NOTES_FILE" ]; then
+                HAS_NOTES=true
+              fi
+            else
+              # Clear partial output if the section is missing.
+              : > "$NOTES_FILE"
+            fi
+          fi
+
+          # Fallback: tag annotation only when this is a real annotated tag.
+          if [ "$HAS_NOTES" != "true" ]; then
+            TAG_OBJECT_TYPE="$(git cat-file -t "refs/tags/${TAG}" 2>/dev/null || true)"
+            if [ "$TAG_OBJECT_TYPE" = "tag" ]; then
+              git for-each-ref "refs/tags/${TAG}" --format='%(contents)' > "$NOTES_FILE"
+              if [ -s "$NOTES_FILE" ]; then
+                HAS_NOTES=true
+              fi
+            fi
+          fi
 
           if gh release view "$TAG" --repo "$RELEASE_REPO" > /dev/null 2>&1; then
             # Release already exists — update notes and upload assets
@@ -129,7 +156,6 @@ jobs:
               --generate-notes \
               Magent.dmg Magent.zip
           fi
-          rm -f "$NOTES_FILE"
 
   update-cask:
     needs: build
