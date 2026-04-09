@@ -113,6 +113,7 @@ extension ThreadManager {
                     summary: ticket.summary,
                     status: ticket.status,
                     statusCategoryKey: ticket.statusCategoryKey,
+                    priority: ticket.priority,
                     verifiedAt: now
                 )
                 jiraTicketCache[ticket.key] = entry
@@ -212,6 +213,7 @@ extension ThreadManager {
                 summary: ticket.summary,
                 status: ticket.status,
                 statusCategoryKey: ticket.statusCategoryKey,
+                priority: ticket.priority,
                 verifiedAt: Date()
             )
 

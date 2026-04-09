@@ -5,7 +5,7 @@ public enum IPCAgentDocs {
 
     /// CLI commands available through magent-cli.
     nonisolated private static let cliCommands = """
-    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--select] [--no-submit]
+    /tmp/magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--priority 1-5] [--select] [--no-submit]
     /tmp/magent-cli batch-create --project <name> --file <specs.json> [--from-thread <name|main|none>] [--no-submit]
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
@@ -20,6 +20,7 @@ public enum IPCAgentDocs {
     /tmp/magent-cli rename-thread --thread <name> --prompt <text>
     /tmp/magent-cli rename-branch --thread <name> --name <text>
     /tmp/magent-cli set-description --thread <name> [--description <text> | --clear]
+    /tmp/magent-cli set-priority --thread <name> (--priority 1-5 | --clear)
     /tmp/magent-cli set-thread-icon --thread <name> --icon <feature|fix|improvement|refactor|test|other>
     /tmp/magent-cli set-base-branch --thread <name> --base-branch <branch>
     /tmp/magent-cli hide-thread --thread <name>
@@ -41,7 +42,7 @@ public enum IPCAgentDocs {
     nonisolated private static let usageNotes = """
     Use current-thread to discover your thread name. The thread/worktree name never changes after creation; only the git branch may be renamed.
     When creating threads for a specific task, ALWAYS provide --description (what the thread is about) and --prompt (the initial task/instructions for the agent). The description appears in the sidebar; the prompt is injected into the agent so it knows what to work on. Only omit --prompt for threads that need no initial task. For multi-line prompts or text with special characters (quotes, dashes, newlines), prefer --prompt-file: write the prompt to a temp file and pass the path. This avoids shell escaping issues that can produce invalid JSON.
-    When spawning many threads at once, use batch-create with --no-submit. This creates all threads in parallel and injects the prompt text without pressing Enter, avoiding CPU spikes from concurrent agents. Users can submit each prompt manually when ready. The specs.json file is a JSON array of objects with keys: prompt, description, name, agentType, modelId, reasoningLevel, sectionName, baseThreadName, baseBranch, fromThreadName, noSubmit.
+    When spawning many threads at once, use batch-create with --no-submit. This creates all threads in parallel and injects the prompt text without pressing Enter, avoiding CPU spikes from concurrent agents. Users can submit each prompt manually when ready. The specs.json file is a JSON array of objects with keys: prompt, description, name, agentType, modelId, reasoningLevel, sectionName, baseThreadName, baseBranch, fromThreadName, noSubmit, priority.
     When creating threads, use --description to name them upfront (AI generates a slug respecting project naming rules). Only use --name when the user explicitly provides a literal name. Omit both for a random name.
     When called from inside a Magent session, create-thread and batch-create automatically inherit the current thread's branch and section (and position the new thread directly below it in the sidebar). This means you do NOT need to manually pass --base-branch or --section in the common case. Use --base-thread or --base-branch only when the user explicitly wants a different base. Use --section only when the user explicitly wants a different section. Use --from-thread none to suppress auto-detection. Use --from-thread main to inherit from the project's main worktree thread instead.
     When the user explicitly names an agent, pass that exact agent in --agent. Do not silently substitute Claude for Codex or vice versa.
@@ -51,6 +52,7 @@ public enum IPCAgentDocs {
     Use rename-branch ONLY when the user gives a literal branch name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about, use auto-rename-thread instead. Only the git branch is renamed; the thread/worktree name stays the same.
     Use set-description to manually set or clear the thread description without renaming the branch.
     Use set-thread-icon to manually set the thread icon type.
+    Thread priority is a 1–5 scale shown as cumulative dots in the sidebar (1 blue = lowest, 5 red = highest). Pass --priority 1-5 to create-thread/batch-create (or set it later with set-priority --priority 1-5) ONLY when the user has given you real signal about urgency/importance for that specific thread — e.g. a Jira priority, an explicit instruction ("this is urgent", "low priority chore"), or a blocker vs. nice-to-have framing. Do NOT guess a priority from the task description alone, do NOT default every thread to 3, and do NOT set priority on exploratory/research threads where the user has not expressed urgency. Use set-priority --clear to remove a priority.
     Use hide-thread / unhide-thread to deprioritize a thread in the sidebar without archiving it.
     Use archive-thread --skip-local-sync to avoid writing local sync path changes into the main worktree during archive.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.

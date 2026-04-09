@@ -720,7 +720,7 @@ actor IPCSocketServer {
 
         case "$cmd" in
         create-thread)
-            project=""; agent=""; model=""; reasoning=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""; do_select=""; no_submit=""; from_thread=""
+            project=""; agent=""; model=""; reasoning=""; prompt=""; name=""; desc=""; section=""; base_thread=""; base_branch=""; do_select=""; no_submit=""; from_thread=""; priority=""
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --project)      project="$2"; shift 2 ;;
@@ -735,13 +735,20 @@ actor IPCSocketServer {
                     --base-thread)  base_thread="$2"; shift 2 ;;
                     --base-branch)  base_branch="$2"; shift 2 ;;
                     --from-thread)  from_thread="$2"; shift 2 ;;
+                    --priority)     priority="$2"; shift 2 ;;
                     --select)       do_select=1; shift ;;
                     --no-submit)    no_submit=1; shift ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--select] [--no-submit]"
+            [ -n "$project" ] || die "Usage: magent-cli create-thread --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--from-thread <name|main|none>] [--priority 1-5] [--select] [--no-submit]"
             [ -z "$base_thread" ] || [ -z "$base_branch" ] || die "Use either --base-thread or --base-branch, not both"
+            if [ -n "$priority" ]; then
+                case "$priority" in
+                    1|2|3|4|5) : ;;
+                    *) die "--priority must be an integer 1-5" ;;
+                esac
+            fi
             json="{$(json_kv command create-thread),$(json_kv project "$project")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
             [ -n "$model" ] && json="$json,$(json_kv modelId "$model")"
@@ -752,6 +759,7 @@ actor IPCSocketServer {
             [ -n "$section" ] && json="$json,$(json_kv sectionName "$section")"
             [ -n "$base_thread" ] && json="$json,$(json_kv baseThreadName "$base_thread")"
             [ -n "$base_branch" ] && json="$json,$(json_kv baseBranch "$base_branch")"
+            [ -n "$priority" ] && json="$json,\"priority\":$priority"
             # --from-thread: explicit name ("main", "none", or thread name)
             if [ -n "$from_thread" ]; then
                 json="$json,$(json_kv fromThreadName "$from_thread")"
@@ -1032,6 +1040,34 @@ actor IPCSocketServer {
             json="$json}"
             send_request "$json"
             ;;
+        set-priority)
+            thread=""; priority=""; clear=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread)   thread="$2"; shift 2 ;;
+                    --priority) priority="$2"; shift 2 ;;
+                    --clear)    clear="1"; shift 1 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli set-priority --thread <name> (--priority 1-5 | --clear)"
+            [ -z "$clear" ] || [ -z "$priority" ] || die "Choose either --priority or --clear"
+            [ -n "$clear" ] || [ -n "$priority" ] || die "Missing --priority <1-5> or --clear"
+            if [ -n "$priority" ]; then
+                case "$priority" in
+                    1|2|3|4|5) : ;;
+                    *) die "--priority must be an integer 1-5" ;;
+                esac
+            fi
+            json="{$(json_kv command set-priority),$(json_kv threadName "$thread")"
+            if [ -n "$clear" ]; then
+                json="$json,\"remove\":true"
+            else
+                json="$json,\"priority\":$priority"
+            fi
+            json="$json}"
+            send_request "$json"
+            ;;
         set-thread-icon)
             thread=""; icon=""
             while [ $# -gt 0 ]; do
@@ -1281,7 +1317,7 @@ actor IPCSocketServer {
             echo "  magent-cli docs                      (full IPC command reference + usage guidance)"
             echo ""
             echo "Thread commands:"
-            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--select] [--no-submit]"
+            echo "  create-thread        --project <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--prompt <text> | --prompt-file <path>] [--name <slug>] [--description <text>] [--section <name>] [--base-thread <name> | --base-branch <name>] [--priority 1-5] [--select] [--no-submit]"
             echo "  batch-create         --project <name> --file <specs.json> [--no-submit]  (parallel thread creation; per-spec keys: agentType, modelId, reasoningLevel, prompt, ...)"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
@@ -1297,6 +1333,7 @@ actor IPCSocketServer {
             echo "  rename-branch        --thread <name> --name <text>         (exact branch name)"
             echo "  rename-thread-exact  --thread <name> --name <text>         (alias for rename-branch)"
             echo "  set-description      --thread <name> [--description <text> | --clear]"
+            echo "  set-priority         --thread <name> (--priority 1-5 | --clear)                (1 lowest, 5 highest)"
             echo "  set-thread-icon      --thread <name> --icon <type>         (set thread icon: feature|fix|improvement|refactor|test|other)"
             echo "  set-base-branch      --thread <name> --base-branch <branch>"
             echo "  hide-thread         --thread <name>                        (move thread to dimmed bottom group)"

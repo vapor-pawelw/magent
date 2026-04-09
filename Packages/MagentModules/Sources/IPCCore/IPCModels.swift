@@ -18,6 +18,8 @@ public nonisolated struct IPCRequest: Codable, Sendable {
     public var newName: String?
     public var icon: String?
     public var description: String?
+    /// Thread priority on a 1–5 scale (1 lowest, 5 highest). `0` clears the priority.
+    public var priority: Int?
     public var baseThreadName: String?
     public var baseBranch: String?
     public var id: String?
@@ -58,13 +60,15 @@ public nonisolated struct IPCBatchThreadSpec: Codable, Sendable {
     /// Per-spec override: thread name to inherit base branch and section from.
     /// `"main"` → project's main thread; `"none"` → suppress auto-detection.
     public var fromThreadName: String?
+    /// Per-spec thread priority on the 1–5 scale. `0` clears the priority.
+    public var priority: Int?
 
     // The public JSON API uses "name" for the exact thread name; internally it's `newName`
     // to avoid shadowing the commonly used `name` property on response types.
     private enum CodingKeys: String, CodingKey {
         case agentType, modelId, reasoningLevel, prompt, promptFile
         case newName = "name"
-        case description, sectionName, baseThreadName, baseBranch, noSubmit, fromThreadName
+        case description, sectionName, baseThreadName, baseBranch, noSubmit, fromThreadName, priority
     }
 }
 

@@ -37,6 +37,8 @@ final class IPCCommandHandler {
             return await renameBranch(request)
         case "set-description":
             return setDescription(request)
+        case "set-priority":
+            return setPriority(request)
         case "set-thread-icon":
             return setThreadIcon(request)
         case "set-base-branch":
@@ -350,6 +352,13 @@ final class IPCCommandHandler {
             try? threadManager.setTaskDescription(threadId: thread.id, description: description)
         }
 
+        // Set priority from --priority if provided. `0` clears; out-of-range values
+        // are clamped inside `setThreadPriority`.
+        if let priority = request.priority {
+            let clamped: Int? = (priority == 0) ? nil : priority
+            try? threadManager.setThreadPriority(threadId: thread.id, priority: clamped)
+        }
+
         let projectNameResolved = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? projectName
         guard let updatedThread = threadManager.threads.first(where: { $0.id == thread.id }) else {
             let info = IPCThreadInfo(thread: thread, projectName: projectNameResolved)
@@ -403,6 +412,7 @@ final class IPCCommandHandler {
             let requestedBaseBranch: String?
             let requestedSectionId: UUID?
             let fromThread: MagentThread?
+            let priority: Int?
         }
 
         var resolved: [ResolvedSpec] = []
@@ -533,7 +543,8 @@ final class IPCCommandHandler {
                 description: spec.description,
                 requestedBaseBranch: baseBranch,
                 requestedSectionId: sectionId,
-                fromThread: specFromThread
+                fromThread: specFromThread,
+                priority: spec.priority
             ))
         }
 
@@ -589,6 +600,10 @@ final class IPCCommandHandler {
                 if let desc = resolved[i].description?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !desc.isEmpty {
                     try? threadManager.setTaskDescription(threadId: thread.id, description: desc)
+                }
+                if let p = resolved[i].priority {
+                    let clamped: Int? = (p == 0) ? nil : p
+                    try? threadManager.setThreadPriority(threadId: thread.id, priority: clamped)
                 }
             }
         }
@@ -909,6 +924,39 @@ final class IPCCommandHandler {
             try threadManager.setTaskDescription(threadId: thread.id, description: request.description)
         } catch {
             return .failure("Failed to set description: \(error.localizedDescription)", id: request.id)
+        }
+
+        let settings = persistence.loadSettings()
+        let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+        guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+            return .success(id: request.id)
+        }
+        let info = IPCThreadInfo(thread: updated, projectName: projectName)
+        return IPCResponse(ok: true, id: request.id, thread: info)
+    }
+
+    private func setPriority(_ request: IPCRequest) -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        // `remove == true` or explicit `0` clears the priority. Otherwise use the
+        // integer value (clamped inside the setter to 1...5).
+        let priority: Int?
+        if request.remove == true {
+            priority = nil
+        } else if let p = request.priority {
+            priority = (p == 0) ? nil : p
+        } else {
+            return .failure("Missing required field: priority (1-5) or --clear", id: request.id)
+        }
+
+        do {
+            try threadManager.setThreadPriority(threadId: thread.id, priority: priority)
+        } catch {
+            return .failure("Failed to set priority: \(error.localizedDescription)", id: request.id)
         }
 
         let settings = persistence.loadSettings()

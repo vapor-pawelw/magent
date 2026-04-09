@@ -25,6 +25,8 @@ All notable changes to this project will be documented in this file.
 #### Features
 - New "AI Rename" sheet (⌘⇧R) replaces the old single-line rename dialog: multi-line prompt input, recent prompt picker (last 10), and checkboxes to choose which parts to change (icon, description, branch name). Accessible as a top-level context menu item, TOC right-click, and main Thread menu.
 - Restructured thread context menu: "AI Rename" and "Sign" are now top-level items; Icon, Description, Branch name, and Section are grouped under a new "Configure" submenu.
+- Added a 1–5 Priority submenu next to Sign. Priority is shown as five cumulative dots on the thread row (immediately left of the busy-state duration), tinted blue → green → yellow → orange → red as the level rises. The ↑ High Priority and ↓ Low Priority sign emojis were removed in favor of this scale; the remaining sign emojis are unchanged.
+- Added "Set priority from Jira ticket" to the Jira submenu in the thread context menu, mirroring the existing "Set description from Jira ticket" action. The action is shown when the detected/linked Jira ticket has a priority that maps to the 1–5 scale (Highest → 5 … Lowest → 1).
 - Added question and exclamation sign emojis to thread rows; trimmed rarely-used signs (Pause, Book, Bolt, Lock).
 - Auto-rename now uses all accumulated prompts for context, so if the first prompt gets rate-limited and the user follows up with "continue", the rename model still sees the original task description.
 - Manual "Rename from prompt" now updates the thread description and icon to match the new branch, instead of keeping the stale description from the original auto-rename.
@@ -41,6 +43,7 @@ All notable changes to this project will be documented in this file.
 #### Features
 - `create-tab` now accepts `--title` to set the tab name from the CLI and `--fresh`/`--no-resume` to keep isolated review tabs from inheriting older agent history.
 - `batch-create` specs now accept `"promptFile": "/path/to/prompt.txt"` to load the initial prompt from a file, avoiding JSON escaping issues with long or multi-line prompts. `promptFile` takes precedence over `prompt` when both are set.
+- Added thread priority support to the CLI: `create-thread --priority 1-5` and a per-spec `"priority"` key for `batch-create` assign the 1–5 priority at creation time. A new `set-priority --thread <name> (--priority 1-5 | --clear)` command updates or clears priority on existing threads.
 
 #### Bug Fixes
 - Fixed multiline prompts sent via `send-prompt` (or agent-to-agent injection) being cut off after the first line. tmux paste-buffer now uses bracketed paste mode so Claude's TUI receives newlines as literal characters rather than Enter keypresses.

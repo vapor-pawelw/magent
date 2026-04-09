@@ -47,6 +47,7 @@ magent-cli create-thread --project <name> [options]
 | `--base-thread <name>` | Use an existing thread's branch as the base for the new thread. |
 | `--base-branch <name>` | Use an explicit branch as the base for the new thread. |
 | `--from-thread <name>` | Inherit base branch and section from the named thread. The new thread is positioned directly below it in the sidebar. Special values: `main` (project's main worktree), `none` (suppress auto-detection). |
+| `--priority <1-5>` | Thread priority on a 1–5 scale (1 lowest, 5 highest). Shown as cumulative dots in the sidebar next to the last-activity time. Only set this when the user has given real urgency/importance signal — don't guess from the task description. |
 | `--select` | Switch the GUI to the newly created thread. By default, CLI-created threads appear in the sidebar without switching focus. |
 | `--no-submit` | Inject the prompt text into the agent input but don't press Enter. The user can review and submit manually. |
 
@@ -89,6 +90,7 @@ Each element in the specs array is an object with optional keys:
 | `baseThreadName` | Branch from an existing thread. |
 | `baseBranch` | Branch from an explicit branch. |
 | `fromThreadName` | Per-spec override for `--from-thread`. |
+| `priority` | Thread priority on a 1–5 scale (1 lowest, 5 highest). Only set when the user has given real urgency signal. |
 | `noSubmit` | Per-thread override for `--no-submit`. |
 
 > **`name` vs `description`**: Use `name` when you want an exact branch name (e.g. `"ip-1234-fix-login"`). Use `description` when you want AI to generate a short slug. If both are provided, `name` wins. The display name in the sidebar is the same as the branch name.
@@ -212,6 +214,17 @@ Set or clear a thread description without renaming the branch.
 magent-cli set-description --thread <name> --description <text>
 magent-cli set-description --thread <name> --clear
 ```
+
+### set-priority
+
+Set or clear the thread priority. Priority is a 1–5 scale (1 blue = lowest, 5 red = highest) shown as cumulative dots in the sidebar.
+
+```bash
+magent-cli set-priority --thread <name> --priority <1-5>
+magent-cli set-priority --thread <name> --clear
+```
+
+**Agent guidance**: Only set priority when the user has given real signal about urgency or importance for that specific thread — e.g. a linked Jira priority, an explicit instruction ("this is urgent", "low priority chore"), or a blocker framing. Do not guess priority from the task description alone, do not default every thread to medium, and do not set priority on exploratory/research threads where the user hasn't expressed urgency. When unsure, leave priority unset.
 
 ### set-thread-icon
 

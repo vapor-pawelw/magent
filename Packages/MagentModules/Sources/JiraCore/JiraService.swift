@@ -24,6 +24,28 @@ public nonisolated struct JiraTicket: Codable, Sendable {
     public let statusCategoryKey: String?
     public let assigneeAccountId: String?
     public let issueId: Int?
+    /// Optional Magent-scale 1–5 priority mapped from Jira's priority field.
+    /// Mapping: Highest → 5, High → 4, Medium → 3, Low → 2, Lowest → 1.
+    /// `nil` when Jira returns no priority (or an unrecognized value).
+    public let priority: Int?
+
+    public init(
+        key: String,
+        summary: String,
+        status: String,
+        statusCategoryKey: String?,
+        assigneeAccountId: String?,
+        issueId: Int?,
+        priority: Int? = nil
+    ) {
+        self.key = key
+        self.summary = summary
+        self.status = status
+        self.statusCategoryKey = statusCategoryKey
+        self.assigneeAccountId = assigneeAccountId
+        self.issueId = issueId
+        self.priority = priority
+    }
 }
 
 /// A Jira project status with its category metadata.
@@ -142,7 +164,7 @@ public final class JiraService: Sendable {
 
         let escapedJQL = shellQuote(jql)
         let result = await ShellExecutor.execute(
-            "acli jira workitem search --jql \(escapedJQL) --json --fields \"key,status,summary,assignee\" --paginate"
+            "acli jira workitem search --jql \(escapedJQL) --json --fields \"key,status,summary,assignee,priority\" --paginate"
         )
         guard result.exitCode == 0 else {
             let error = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -374,14 +396,43 @@ public final class JiraService: Sendable {
             return nil
         }()
 
+        // Extract priority name from top-level, nested, or fields.priority. acli may return
+        // either a flat string or a `{ name: ... }` object depending on the response shape.
+        let priorityName: String? = {
+            if let s = dict["priority"] as? String { return s }
+            if let obj = dict["priority"] as? [String: Any],
+               let name = obj["name"] as? String { return name }
+            if let fields = dict["fields"] as? [String: Any] {
+                if let s = fields["priority"] as? String { return s }
+                if let obj = fields["priority"] as? [String: Any],
+                   let name = obj["name"] as? String { return name }
+            }
+            return nil
+        }()
+        let priority = priorityName.flatMap { Self.mapJiraPriorityNameToScale($0) }
+
         return JiraTicket(
             key: key,
             summary: summary,
             status: status,
             statusCategoryKey: statusCategoryKey,
             assigneeAccountId: assigneeAccountId,
-            issueId: issueId
+            issueId: issueId,
+            priority: priority
         )
+    }
+
+    /// Maps a Jira priority name to Magent's 1–5 scale.
+    /// Returns `nil` for unrecognized values (e.g. custom priorities) so callers can fall through.
+    public static func mapJiraPriorityNameToScale(_ name: String) -> Int? {
+        switch name.lowercased() {
+        case "highest", "blocker", "critical": return 5
+        case "high", "major": return 4
+        case "medium", "normal": return 3
+        case "low", "minor": return 2
+        case "lowest", "trivial": return 1
+        default: return nil
+        }
     }
 
 }
