@@ -913,7 +913,7 @@ extension ThreadListViewController {
             ("By Description", "text.justify.left", .description),
             ("By Branch Name", "arrow.triangle.branch", .branchName),
             ("By Priority", "exclamationmark.2", .priority),
-            ("By Last Activity", "clock", .lastActivity),
+            ("By Last Completion", "clock", .lastActivity),
         ]
 
         for option in options {

@@ -23,7 +23,7 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 #### Features
-- Added "Sort" submenu to section and repo right-click context menus. Sort threads by description, branch name, priority, or last activity. Sorting always respects pinned/normal/hidden boundaries (pinned threads never drop below unpinned). Hold ⌥ Option when opening the context menu to sort descending instead of ascending. Right-clicking the repo name sorts all sections at once; right-clicking a section sorts only that section. When section grouping is disabled, all threads are treated as one container.
+- Added "Sort" submenu to section and repo right-click context menus. Sort threads by description, branch name, priority, or last completion. Sorting always respects pinned/normal/hidden boundaries (pinned threads never drop below unpinned). Hold/release ⌥ Option while the menu is open to live-swap between ascending and descending sort items. Right-clicking the repo name sorts all sections at once (including hidden sections); right-clicking a section sorts only that section. When section grouping is disabled, all threads are treated as one container.
 
 ### Thread
 #### Features
