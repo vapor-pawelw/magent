@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file.
 #### Features
 - New "AI Rename" sheet (⌘⇧R) replaces the old single-line rename dialog: multi-line prompt input, recent prompt picker (last 10), and checkboxes to choose which parts to change (icon, description, branch name). Accessible as a top-level context menu item, TOC right-click, and main Thread menu.
 - Restructured thread context menu: "AI Rename" and "Sign" are now top-level items; Icon, Description, Branch name, and Section are grouped under a new "Configure" submenu.
+- Added a 1–5 Priority submenu next to Sign. Priority is shown as five cumulative dots on the thread row (immediately left of the busy-state duration), tinted blue → green → yellow → orange → red as the level rises. The ↑ High Priority and ↓ Low Priority sign emojis were removed in favor of this scale; the remaining sign emojis are unchanged.
 - Added question and exclamation sign emojis to thread rows; trimmed rarely-used signs (Pause, Book, Bolt, Lock).
 - Auto-rename now uses all accumulated prompts for context, so if the first prompt gets rate-limited and the user follows up with "continue", the rename model still sees the original task description.
 - Manual "Rename from prompt" now updates the thread description and icon to match the new branch, instead of keeping the stale description from the original auto-rename.

@@ -58,6 +58,12 @@ extension ThreadListViewController {
         signItem.submenu = buildSignEmojiSubmenu(for: thread)
         menu.addItem(signItem)
 
+        // Priority (top-level, next to Sign)
+        let priorityItem = NSMenuItem(title: "Priority", action: nil, keyEquivalent: "")
+        priorityItem.image = NSImage(systemSymbolName: "exclamationmark.2", accessibilityDescription: "Priority")
+        priorityItem.submenu = buildPrioritySubmenu(for: thread)
+        menu.addItem(priorityItem)
+
         // Configure submenu (icon, description, branch name, section)
         let configureItem = NSMenuItem(title: "Configure", action: nil, keyEquivalent: "")
         configureItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
@@ -223,8 +229,6 @@ extension ThreadListViewController {
     }
 
     static let signEmojiOptions: [SignOption] = [
-        SignOption(emoji: "↑", label: "High Priority", tintColor: .systemRed),
-        SignOption(emoji: "↓", label: "Low Priority", tintColor: .systemGreen),
         SignOption(emoji: "⏳", label: "In Progress", tintColor: .systemBlue),
         SignOption(emoji: "🛑", label: "Stop Sign"),
         SignOption(emoji: "✅", label: "Checkmark"),
@@ -242,12 +246,7 @@ extension ThreadListViewController {
 
     private func buildSignEmojiSubmenu(for thread: MagentThread) -> NSMenu {
         let submenu = NSMenu()
-        var addedSeparator = false
         for option in Self.signEmojiOptions {
-            if !addedSeparator && option.tintColor == nil {
-                submenu.addItem(.separator())
-                addedSeparator = true
-            }
             let isSelected = thread.signEmoji == option.emoji
             let item = NSMenuItem(title: "\(option.emoji)  \(option.label)", action: #selector(setThreadSignEmoji(_:)), keyEquivalent: "")
             item.target = self
@@ -260,6 +259,60 @@ extension ThreadListViewController {
             item.representedObject = [
                 "threadId": thread.id,
                 "emoji": isSelected ? "" : option.emoji
+            ] as [String: Any]
+            submenu.addItem(item)
+        }
+        return submenu
+    }
+
+    // MARK: - Priority (1–5)
+
+    /// Ordered list of priority levels with label, dot preview string, and tint color.
+    /// Cumulative filled dots (●) and unfilled dots (○). Colors match `ThreadCell.priorityTintColor`.
+    static let priorityOptions: [(level: Int, label: String, dots: String, tint: NSColor)] = [
+        (1, "Priority 1", "●○○○○", NSColor.systemBlue.withAlphaComponent(0.75)),
+        (2, "Priority 2", "●●○○○", NSColor.systemGreen.withAlphaComponent(0.8)),
+        (3, "Priority 3", "●●●○○", NSColor.systemYellow.withAlphaComponent(0.8)),
+        (4, "Priority 4", "●●●●○", NSColor.systemOrange.withAlphaComponent(0.8)),
+        (5, "Priority 5", "●●●●●", NSColor.systemRed.withAlphaComponent(0.75)),
+    ]
+
+    private func buildPrioritySubmenu(for thread: MagentThread) -> NSMenu {
+        let submenu = NSMenu()
+
+        // "None" entry first — clears any existing priority.
+        let noneItem = NSMenuItem(title: "None", action: #selector(setThreadPriority(_:)), keyEquivalent: "")
+        noneItem.target = self
+        noneItem.state = (thread.priority == nil) ? .on : .off
+        noneItem.representedObject = [
+            "threadId": thread.id,
+            "priority": NSNull()
+        ] as [String: Any]
+        submenu.addItem(noneItem)
+
+        submenu.addItem(.separator())
+
+        for option in Self.priorityOptions {
+            let isSelected = thread.priority == option.level
+            let item = NSMenuItem(title: "", action: #selector(setThreadPriority(_:)), keyEquivalent: "")
+            item.target = self
+            item.state = isSelected ? .on : .off
+
+            let menuFont = NSFont.menuFont(ofSize: 0)
+            let attributed = NSMutableAttributedString(
+                string: option.dots,
+                attributes: [.foregroundColor: option.tint, .font: menuFont]
+            )
+            attributed.append(NSAttributedString(
+                string: "  \(option.label)",
+                attributes: [.font: menuFont]
+            ))
+            item.attributedTitle = attributed
+
+            // Toggle behavior: re-selecting the active priority clears it.
+            item.representedObject = [
+                "threadId": thread.id,
+                "priority": isSelected ? NSNull() : (option.level as Any)
             ] as [String: Any]
             submenu.addItem(item)
         }
@@ -1062,6 +1115,24 @@ extension ThreadListViewController {
         } catch {
             let errorAlert = NSAlert()
             errorAlert.messageText = "Could not save sign emoji"
+            errorAlert.informativeText = error.localizedDescription
+            errorAlert.alertStyle = .warning
+            errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
+            errorAlert.runModal()
+        }
+    }
+
+    @objc private func setThreadPriority(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let threadId = info["threadId"] as? UUID else { return }
+        // `priority` is either an Int (1...5) or NSNull (clear). Cast via `as? Int`
+        // so NSNull naturally becomes `nil`, matching the setter's clear semantics.
+        let priority = info["priority"] as? Int
+        do {
+            try threadManager.setThreadPriority(threadId: threadId, priority: priority)
+        } catch {
+            let errorAlert = NSAlert()
+            errorAlert.messageText = "Could not save priority"
             errorAlert.informativeText = error.localizedDescription
             errorAlert.alertStyle = .warning
             errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))

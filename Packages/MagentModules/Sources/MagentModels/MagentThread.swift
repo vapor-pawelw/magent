@@ -292,6 +292,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var persistedDraftTabs: [PersistedDraftTab]
     /// Optional sign emoji displayed to the left of the thread icon (e.g. 🛑, ✅, ❓).
     public var signEmoji: String?
+    /// Optional 1–5 priority. `nil` means no priority is set and nothing renders.
+    /// 1 = lowest weight (blue), 5 = highest (red). Validated/clamped on assignment.
+    public var priority: Int?
 
     // MARK: - Computed
 
@@ -598,6 +601,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case persistedWebTabs
         case persistedDraftTabs
         case signEmoji
+        case priority
         case busyStateSince
     }
 
@@ -642,7 +646,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         hasEverDoneWork: Bool = false,
         persistedWebTabs: [PersistedWebTab] = [],
         persistedDraftTabs: [PersistedDraftTab] = [],
-        signEmoji: String? = nil
+        signEmoji: String? = nil,
+        priority: Int? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -685,6 +690,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.persistedWebTabs = persistedWebTabs
         self.persistedDraftTabs = persistedDraftTabs
         self.signEmoji = signEmoji
+        self.priority = priority.map { max(1, min(5, $0)) }
     }
 
     /// Merges infrastructure fields from a phase-2 thread into this (pending) thread,
@@ -749,7 +755,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             hasEverDoneWork: hasEverDoneWork,
             persistedWebTabs: persistedWebTabs,
             persistedDraftTabs: persistedDraftTabs,
-            signEmoji: signEmoji
+            signEmoji: signEmoji,
+            priority: priority
         )
         copy.busySessions = busySessions
         copy.magentBusySessions = magentBusySessions
@@ -821,6 +828,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         persistedWebTabs = try container.decodeIfPresent([PersistedWebTab].self, forKey: .persistedWebTabs) ?? []
         persistedDraftTabs = try container.decodeIfPresent([PersistedDraftTab].self, forKey: .persistedDraftTabs) ?? []
         signEmoji = try container.decodeIfPresent(String.self, forKey: .signEmoji)
+        // Clamp any stray out-of-range values from older builds or manual edits.
+        priority = try container.decodeIfPresent(Int.self, forKey: .priority).map { max(1, min(5, $0)) }
         busyStateSince = try container.decodeIfPresent(Date.self, forKey: .busyStateSince)
         // On launch all sessions are idle, so seed the debounced state to match.
         // This prevents updateBusyStateDuration() from overwriting the restored timestamp.
@@ -907,6 +916,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             try container.encode(persistedDraftTabs, forKey: .persistedDraftTabs)
         }
         try container.encodeIfPresent(signEmoji, forKey: .signEmoji)
+        try container.encodeIfPresent(priority, forKey: .priority)
         try container.encodeIfPresent(busyStateSince, forKey: .busyStateSince)
     }
 }

@@ -974,6 +974,18 @@ extension ThreadManager {
         delegate?.threadManager(self, didUpdateThreads: threads)
     }
 
+    /// Sets the 1–5 priority on a thread, or `nil` to clear. Values outside 1–5 are clamped.
+    func setThreadPriority(threadId: UUID, priority: Int?) throws {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+        let clamped = priority.map { max(1, min(5, $0)) }
+        guard threads[index].priority != clamped else { return }
+        threads[index].priority = clamped
+        try persistence.saveActiveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
     // MARK: - Rename Tab
 
     func renameTab(threadId: UUID, sessionName: String, newDisplayName: String) async throws {

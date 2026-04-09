@@ -1,6 +1,69 @@
 import Cocoa
 import MagentCore
 
+/// A pill-shaped container for the priority dots label. Paints a
+/// `windowBackgroundColor` background (matching the sidebar area behind the
+/// row capsules) and wears the same 1pt border + 5/2 padding + cornerRadius 7
+/// as `TopBorderBadge` so it visually sits next to the duration badge as a
+/// matching sibling.
+private final class PriorityCapsuleView: NSView {
+    let label: NSTextField = {
+        let tf = NSTextField(labelWithString: "")
+        tf.translatesAutoresizingMaskIntoConstraints = false
+        tf.font = .monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+        tf.backgroundColor = .clear
+        tf.isBordered = false
+        tf.isEditable = false
+        tf.lineBreakMode = .byClipping
+        tf.maximumNumberOfLines = 1
+        tf.setContentHuggingPriority(.required, for: .horizontal)
+        tf.setContentCompressionResistancePriority(.required, for: .horizontal)
+        return tf
+    }()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+        addSubview(label)
+        // Match TopBorderBadge: 5pt horizontal, 2pt vertical inner padding.
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+        ])
+        layer?.cornerRadius = 7
+        layer?.borderWidth = 1
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// Matches the border-color logic of `TopBorderBadge.updateColors(...)` so
+    /// selection, waiting, and completion highlights stay in sync with the
+    /// adjacent duration badge. NSColor dynamic resolution runs inside the
+    /// drawing appearance block per the CALayer convention in AGENTS.md.
+    func updateColors(isRowSelected: Bool, hasCompletionHighlight: Bool, hasWaitingHighlight: Bool, appearance: NSAppearance) {
+        appearance.performAsCurrentDrawingAppearance {
+            let borderColor: CGColor
+            if isRowSelected {
+                borderColor = NSColor.controlAccentColor.cgColor
+            } else if hasWaitingHighlight {
+                borderColor = NSColor.systemOrange.withAlphaComponent(0.5).cgColor
+            } else if hasCompletionHighlight {
+                borderColor = NSColor.systemGreen.withAlphaComponent(0.5).cgColor
+            } else {
+                borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+            }
+            self.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            self.layer?.borderColor = borderColor
+            self.layer?.borderWidth = 1
+        }
+    }
+}
+
 /// A small pill badge that sits on the top border of the capsule row.
 /// Hosts either a text label or an icon image view (or both).
 private final class TopBorderBadge: NSView {
@@ -177,6 +240,9 @@ final class ThreadCell: NSTableCellView {
     private var durationLabel: NSTextField?
     private var durationTimer: Timer?
     private var currentDurationSince: Date?
+    /// 5-dot priority capsule rendered at the bottom border, immediately left of the duration badge.
+    /// Hidden (detached from the stack) when the thread has no priority set.
+    private var priorityCapsule: PriorityCapsuleView?
     private var topBorderBadgeStack: NSStackView?
     private var claudeRateLimitBadge: TopBorderBadge?
     private var codexRateLimitBadge: TopBorderBadge?
@@ -453,11 +519,11 @@ final class ThreadCell: NSTableCellView {
         let contentAlpha: CGFloat = dimmed ? 0.5 : 1.0
         // Dim content subviews individually so that border badges keep full
         // opacity and don't visually bleed through the capsule border.
-        for sub in subviews where sub !== topBorderBadgeStack && sub !== durationBadge {
+        for sub in subviews where sub !== topBorderBadgeStack && sub !== bottomBorderBadgeStack {
             sub.alphaValue = contentAlpha
         }
         topBorderBadgeStack?.alphaValue = 1.0
-        durationBadge?.alphaValue = 1.0
+        bottomBorderBadgeStack?.alphaValue = 1.0
     }
 
     private func applyRenamePulse(_ active: Bool) {
@@ -714,6 +780,7 @@ final class ThreadCell: NSTableCellView {
         )
 
         configureDuration(since: cellSettings.showBusyStateDuration ? thread.busyStateSince : nil)
+        configurePriority(thread.priority)
 
         syncRowVisibility()
         showsRenamePulse = isAutoRenaming
@@ -803,6 +870,8 @@ final class ThreadCell: NSTableCellView {
 
         let showDuration = PersistenceService.shared.loadSettings().showBusyStateDuration
         configureDuration(since: showDuration ? busyStateSince : nil)
+        // The main worktree row doesn't carry a priority.
+        configurePriority(nil)
 
         syncRowVisibility()
     }
@@ -871,6 +940,10 @@ final class ThreadCell: NSTableCellView {
     }
 
     private var durationBadge: TopBorderBadge?
+    /// Holds `[priorityLabel, durationBadge]` anchored to the bottom-border line.
+    /// `detachesHiddenViews = true` so either can collapse independently and the
+    /// surviving one slides to the trailing edge without a phantom gap.
+    private weak var bottomBorderBadgeStack: NSStackView?
 
     private func ensureTopBorderBadgeStack() {
         guard topBorderBadgeStack == nil else { return }
@@ -933,20 +1006,80 @@ final class ThreadCell: NSTableCellView {
         let badge = TopBorderBadge()
         badge.iconView.isHidden = true
         badge.isHidden = true
-        addSubview(badge)
+
+        // Priority dots: wrapped in a pill-shaped container with a
+        // `windowBackgroundColor` fill (matches the sidebar area behind the
+        // row capsules), 2pt inner padding on all edges.
+        let capsule = PriorityCapsuleView()
+        capsule.label.font = Self.priorityDotsFont()
+        capsule.isHidden = true
+
+        let stack = NSStackView(views: [capsule, badge])
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        // Critical: hidden views must collapse so priority can sit flush against
+        // the trailing edge when the duration badge is hidden (and vice versa).
+        stack.detachesHiddenViews = true
+        stack.setContentHuggingPriority(.required, for: .horizontal)
+        stack.setContentCompressionResistancePriority(.required, for: .horizontal)
+        addSubview(stack)
 
         let capsuleBottomY = AlwaysEmphasizedRowView.capsuleVerticalInset
+        let trailingInset = AlwaysEmphasizedRowView.capsuleTrailingInset + AlwaysEmphasizedRowView.capsuleContentHPadding
         NSLayoutConstraint.activate([
-            badge.centerYAnchor.constraint(equalTo: bottomAnchor, constant: -capsuleBottomY),
-            badge.trailingAnchor.constraint(
+            stack.centerYAnchor.constraint(equalTo: bottomAnchor, constant: -capsuleBottomY),
+            stack.trailingAnchor.constraint(
                 equalTo: trailingAnchor,
-                constant: -(AlwaysEmphasizedRowView.capsuleTrailingInset + AlwaysEmphasizedRowView.capsuleContentHPadding)
+                constant: -trailingInset
             ),
         ])
 
+        bottomBorderBadgeStack = stack
         durationBadge = badge
         durationLabel = badge.label
+        priorityCapsule = capsule
+
         updateTopBorderBadgeColors()
+    }
+
+    private static func priorityDotsFont() -> NSFont {
+        // Monospaced so the dot string always occupies the same width regardless of level.
+        .monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+    }
+
+    /// Maps 1–5 priority to a calm tint (blue → green → yellow → orange → red).
+    /// Alpha values are tuned to match the existing duration-label palette.
+    private static func priorityTintColor(forLevel level: Int) -> NSColor {
+        switch level {
+        case 1: return NSColor.systemBlue.withAlphaComponent(0.75)
+        case 2: return NSColor.systemGreen.withAlphaComponent(0.8)
+        case 3: return NSColor.systemYellow.withAlphaComponent(0.8)
+        case 4: return NSColor.systemOrange.withAlphaComponent(0.8)
+        default: return NSColor.systemRed.withAlphaComponent(0.75)
+        }
+    }
+
+    /// Builds the 5-character cumulative dot string for a given priority level.
+    /// ●○○○○, ●●○○○, ●●●○○, ●●●●○, ●●●●●. Empty string for `nil`/out-of-range.
+    private static func priorityDotsString(forLevel level: Int) -> String {
+        let filled = max(0, min(5, level))
+        return String(repeating: "●", count: filled) + String(repeating: "○", count: 5 - filled)
+    }
+
+    private func configurePriority(_ priority: Int?) {
+        ensureDurationLabel()
+        guard let capsule = priorityCapsule else { return }
+        guard let priority, (1...5).contains(priority) else {
+            capsule.label.stringValue = ""
+            capsule.isHidden = true
+            return
+        }
+        capsule.label.stringValue = Self.priorityDotsString(forLevel: priority)
+        capsule.label.textColor = Self.priorityTintColor(forLevel: priority)
+        capsule.isHidden = false
+        capsule.needsDisplay = true
     }
 
     private func ensureKeepAliveBadge() {
@@ -998,6 +1131,7 @@ final class ThreadCell: NSTableCellView {
         codexRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         keepAliveBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         pinnedBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        priorityCapsule?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         // Pin icon: primary brand by default, white when selected.
         if let pin = pinnedBadge {
             pin.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
