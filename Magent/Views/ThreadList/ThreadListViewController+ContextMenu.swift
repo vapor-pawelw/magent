@@ -820,6 +820,15 @@ extension ThreadListViewController {
         pinItem.image = NSImage(systemSymbolName: project.isPinned ? "pin.slash" : "pin", accessibilityDescription: nil)
         pinItem.representedObject = project.projectId
         menu.addItem(pinItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let isDescending = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+        let sortItem = NSMenuItem(title: isDescending ? "Sort All Sections Descending" : "Sort All Sections", action: nil, keyEquivalent: "")
+        sortItem.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
+        sortItem.submenu = buildSortSubmenu(projectId: project.projectId, sectionId: nil, batchAll: true, isDescending: isDescending)
+        menu.addItem(sortItem)
+
         return menu
     }
 
@@ -853,6 +862,19 @@ extension ThreadListViewController {
 
         menu.addItem(NSMenuItem.separator())
 
+        let isDescending = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+        let sortItem = NSMenuItem(title: isDescending ? "Sort Descending" : "Sort", action: nil, keyEquivalent: "")
+        sortItem.image = NSImage(systemSymbolName: "arrow.up.arrow.down", accessibilityDescription: nil)
+        sortItem.submenu = buildSortSubmenu(
+            projectId: section.projectId,
+            sectionId: section.sectionId,
+            batchAll: false,
+            isDescending: isDescending
+        )
+        menu.addItem(sortItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let addItem = NSMenuItem(title: "Add Section…", action: #selector(addSectionFromMenu(_:)), keyEquivalent: "")
         addItem.target = self
         addItem.image = NSImage(systemSymbolName: "plus.circle", accessibilityDescription: nil)
@@ -866,6 +888,64 @@ extension ThreadListViewController {
         menu.addItem(deleteItem)
 
         return menu
+    }
+
+    /// Builds the Sort submenu with four sort criteria. `batchAll` = true means sort all sections
+    /// in the project (used for the project-level context menu). `sectionId` is ignored when
+    /// `batchAll` is true.
+    private func buildSortSubmenu(
+        projectId: UUID,
+        sectionId: UUID?,
+        batchAll: Bool,
+        isDescending: Bool
+    ) -> NSMenu {
+        let submenu = NSMenu()
+
+        let options: [(title: String, symbol: String, criteria: ThreadSortCriteria)] = [
+            ("By Description", "text.justify.left", .description),
+            ("By Branch Name", "arrow.triangle.branch", .branchName),
+            ("By Priority", "exclamationmark.2", .priority),
+            ("By Last Activity", "clock", .lastActivity),
+        ]
+
+        for option in options {
+            let item = NSMenuItem(title: option.title, action: #selector(sortThreadsFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.image = NSImage(systemSymbolName: option.symbol, accessibilityDescription: nil)
+            item.representedObject = [
+                "projectId": projectId,
+                "sectionId": sectionId as Any,
+                "criteria": option.criteria,
+                "descending": isDescending,
+                "batchAll": batchAll,
+            ] as [String: Any]
+            submenu.addItem(item)
+        }
+
+        // Hint about the Option modifier so users discover the descending direction.
+        if !isDescending {
+            submenu.addItem(.separator())
+            let hintItem = NSMenuItem(title: "⌥ Option for descending", action: nil, keyEquivalent: "")
+            hintItem.isEnabled = false
+            submenu.addItem(hintItem)
+        }
+
+        return submenu
+    }
+
+    @objc private func sortThreadsFromMenu(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let projectId = info["projectId"] as? UUID,
+              let criteria = info["criteria"] as? ThreadSortCriteria,
+              let descending = info["descending"] as? Bool,
+              let batchAll = info["batchAll"] as? Bool else { return }
+
+        if batchAll {
+            threadManager.sortAllSections(projectId: projectId, by: criteria, descending: descending)
+        } else {
+            let sectionId = info["sectionId"] as? UUID
+            threadManager.sortSection(projectId: projectId, sectionId: sectionId, by: criteria, descending: descending)
+        }
     }
 
     @objc private func toggleProjectPin(_ sender: NSMenuItem) {

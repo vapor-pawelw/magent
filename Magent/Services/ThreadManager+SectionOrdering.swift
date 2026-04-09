@@ -2,6 +2,14 @@ import AppKit
 import Foundation
 import MagentCore
 
+// Criteria for sidebar sort operations. Used by context-menu sort actions.
+enum ThreadSortCriteria {
+    case description
+    case branchName
+    case priority
+    case lastActivity
+}
+
 extension ThreadManager {
 
     func sidebarGroup(for thread: MagentThread) -> ThreadSidebarListState {
@@ -296,5 +304,94 @@ extension ThreadManager {
         guard changed else { return }
         try? persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    // MARK: - Sort by Criteria
+
+    /// Sorts threads in a single section (or all threads when sections are disabled) by the given
+    /// criteria, respecting pinned/normal/hidden boundaries. Persists the new display order.
+    @MainActor
+    func sortSection(
+        projectId: UUID,
+        sectionId: UUID?,
+        by criteria: ThreadSortCriteria,
+        descending: Bool
+    ) {
+        let settings = persistence.loadSettings()
+        sortSectionInMemory(projectId: projectId, sectionId: sectionId, by: criteria, descending: descending, settings: settings)
+        try? persistence.saveActiveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    /// Sorts every visible section in a project independently. When sections are disabled,
+    /// treats all threads as one container (same effect as `sortSection` with `sectionId: nil`).
+    @MainActor
+    func sortAllSections(projectId: UUID, by criteria: ThreadSortCriteria, descending: Bool) {
+        let settings = persistence.loadSettings()
+        if settings.shouldUseThreadSections(for: projectId) {
+            for section in settings.visibleSections(for: projectId) {
+                sortSectionInMemory(projectId: projectId, sectionId: section.id, by: criteria, descending: descending, settings: settings)
+            }
+        } else {
+            sortSectionInMemory(projectId: projectId, sectionId: nil, by: criteria, descending: descending, settings: settings)
+        }
+        try? persistence.saveActiveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    /// Rewrites `displayOrder` for each pinned/normal/hidden group independently without saving.
+    private func sortSectionInMemory(
+        projectId: UUID,
+        sectionId: UUID?,
+        by criteria: ThreadSortCriteria,
+        descending: Bool,
+        settings: AppSettings
+    ) {
+        for group in ThreadSidebarListState.allCases {
+            var groupThreads = displayOrderGroup(
+                projectId: projectId,
+                sidebarGroup: group,
+                sectionId: sectionId,
+                settings: settings
+            )
+            groupThreads.sort { lhs, rhs in
+                let forward = threadSortAscending(lhs, rhs, by: criteria)
+                return descending ? !forward : forward
+            }
+            for (order, thread) in groupThreads.enumerated() {
+                if let i = threads.firstIndex(where: { $0.id == thread.id }) {
+                    threads[i].displayOrder = order
+                }
+            }
+        }
+    }
+
+    /// Returns true when `lhs` should come before `rhs` in ascending order for the given criteria.
+    /// Nil values always sort last in ascending order.
+    private func threadSortAscending(_ lhs: MagentThread, _ rhs: MagentThread, by criteria: ThreadSortCriteria) -> Bool {
+        switch criteria {
+        case .description:
+            let l = lhs.taskDescription ?? lhs.name
+            let r = rhs.taskDescription ?? rhs.name
+            return l.localizedStandardCompare(r) == .orderedAscending
+        case .branchName:
+            return lhs.branchName.localizedStandardCompare(rhs.branchName) == .orderedAscending
+        case .priority:
+            // nil priority sorts last (after 5)
+            switch (lhs.priority, rhs.priority) {
+            case let (l?, r?): return l < r
+            case (.some, .none): return true
+            case (.none, .some): return false
+            default: return false
+            }
+        case .lastActivity:
+            // nil (no activity) sorts last
+            switch (lhs.lastAgentCompletionAt, rhs.lastAgentCompletionAt) {
+            case let (l?, r?): return l < r
+            case (.some, .none): return true
+            case (.none, .some): return false
+            default: return false
+            }
+        }
     }
 }
