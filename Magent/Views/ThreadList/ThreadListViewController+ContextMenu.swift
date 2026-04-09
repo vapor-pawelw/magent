@@ -521,6 +521,18 @@ extension ThreadListViewController {
             submenu.addItem(descItem)
         }
 
+        if let jiraPriority = thread.verifiedJiraTicket?.priority, (1...5).contains(jiraPriority) {
+            let priorityItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.threadSetPriorityFromJira),
+                action: #selector(setThreadPriorityFromJira(_:)),
+                keyEquivalent: ""
+            )
+            priorityItem.target = self
+            priorityItem.image = NSImage(systemSymbolName: "exclamationmark.2", accessibilityDescription: nil)
+            priorityItem.representedObject = thread
+            submenu.addItem(priorityItem)
+        }
+
         // Change Status submenu
         if let ticketKey = thread.effectiveJiraTicketKey(settings: settings),
            let changeStatusItem = buildChangeStatusSubmenu(for: thread, ticketKey: ticketKey, settings: settings) {
@@ -1265,6 +1277,23 @@ extension ThreadListViewController {
               let jiraSummary = thread.verifiedJiraTicket?.summary, !jiraSummary.isEmpty else { return }
 
         try? threadManager.setTaskDescription(threadId: thread.id, description: jiraSummary)
+    }
+
+    @objc private func setThreadPriorityFromJira(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread,
+              let jiraPriority = thread.verifiedJiraTicket?.priority,
+              (1...5).contains(jiraPriority) else { return }
+
+        do {
+            try threadManager.setThreadPriority(threadId: thread.id, priority: jiraPriority)
+        } catch {
+            let errorAlert = NSAlert()
+            errorAlert.messageText = "Could not save priority"
+            errorAlert.informativeText = error.localizedDescription
+            errorAlert.alertStyle = .warning
+            errorAlert.addButton(withTitle: String(localized: .CommonStrings.commonOk))
+            errorAlert.runModal()
+        }
     }
 
     @objc private func openThreadInFinder(_ sender: NSMenuItem) {

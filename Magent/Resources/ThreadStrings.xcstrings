@@ -881,6 +881,17 @@
         }
       }
     },
+    "threadSetPriorityFromJira": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set priority from Jira ticket"
+          }
+        }
+      }
+    },
     "threadSetDescriptionMessage": {
       "extractionState": "manual",
       "localizations": {
