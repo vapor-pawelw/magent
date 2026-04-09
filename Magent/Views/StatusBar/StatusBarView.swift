@@ -231,8 +231,8 @@ private final class ThreadStatusPopoverRowView: NSView {
         let titleLabel = NSTextField(labelWithString: titleText)
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         titleLabel.textColor = NSColor(resource: .textPrimary)
-        titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.maximumNumberOfLines = 1
+        titleLabel.lineBreakMode = .byWordWrapping
+        titleLabel.maximumNumberOfLines = 2
         textStack.addArrangedSubview(titleLabel)
 
         let worktreeName = (thread.worktreePath as NSString).lastPathComponent
@@ -333,7 +333,7 @@ private final class ThreadStatusPopoverRowView: NSView {
 }
 
 private final class ThreadStatusPopoverViewController: NSViewController {
-    private static let popoverWidth: CGFloat = 340
+    private static let popoverWidth: CGFloat = 510
     private static let contentWidth: CGFloat = popoverWidth - 16
 
     private let status: ThreadStatusSummaryKind
@@ -882,6 +882,10 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             rebuildThreadStatusSegments(summaries: summaries, totalCount: threads.count)
             lastRenderedThreadSummaries = summaries
             lastRenderedThreadCount = threads.count
+        } else if shouldRebuild, isStatusPopoverVisible {
+            refreshStatusButtonCountsInPlace(summaries: summaries)
+            lastRenderedThreadSummaries = summaries
+            lastRenderedThreadCount = threads.count
         }
 
         refreshActivePopover()
@@ -932,21 +936,33 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         button.focusRingType = .none
         button.setButtonType(.momentaryChange)
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.attributedTitle = NSAttributedString(
-            string: "\(summary.count) \(summary.kind.buttonTitle)",
-            attributes: [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: summary.kind.color
-            ]
-        )
-        button.setAccessibilityLabel("\(summary.count) \(summary.kind.buttonTitle)")
         button.identifier = NSUserInterfaceItemIdentifier(summary.kind.rawValue)
+        configureStatusButton(button, summary: summary)
         if summary.kind == .done {
             button.contextMenuProvider = { [weak self] in
                 self?.buildDoneContextMenu()
             }
         }
         return button
+    }
+
+    private func configureStatusButton(_ button: NSButton, summary: ThreadStatusSummaryDescriptor) {
+        button.attributedTitle = NSAttributedString(
+            string: "\(summary.count) \(summary.kind.buttonTitle)",
+            attributes: [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
+                .foregroundColor: summary.kind.color,
+            ]
+        )
+        button.setAccessibilityLabel("\(summary.count) \(summary.kind.buttonTitle)")
+    }
+
+    private func refreshStatusButtonCountsInPlace(summaries: [ThreadStatusSummaryDescriptor]) {
+        let summariesByKind = Dictionary(uniqueKeysWithValues: summaries.map { ($0.kind, $0) })
+        for (kind, button) in statusButtonsByKind {
+            guard let summary = summariesByKind[kind] else { continue }
+            configureStatusButton(button, summary: summary)
+        }
     }
 
     private func makeSeparatorLabel() -> NSTextField {

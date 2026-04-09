@@ -88,7 +88,9 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Holding `Option` while the thread context menu is open now live-switches `Mark as Read` to `Mark All as Read`, so bulk-clearing read state no longer requires reopening the menu.
 - Marking a thread as read from the `done` popover row checkmark now keeps the popover open and refreshes the list in place, so users can clear multiple rows quickly without interruption.
-- Fixed `done` popover width jitter while clearing rows: popover content now keeps a constant row width and truncates long descriptions instead of resizing.
+- Fixed delayed `done` count updates while the `done` popover is open. Counts now refresh immediately after each mark-as-read action without dismissing the popover.
+- Fixed stale completion UI after manual `Mark as Read` / `Mark All as Read` actions by publishing completion-state updates immediately instead of waiting for periodic refresh.
+- Fixed `done` popover width jitter while clearing rows: popover content now keeps a constant row width, the popover is 50% wider, and descriptions can wrap to two lines without resizing.
 
 ### Distribution
 #### Features

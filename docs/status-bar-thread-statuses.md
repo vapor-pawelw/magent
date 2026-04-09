@@ -10,6 +10,7 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - The popover is ordered so the newest matching thread sits closest to the mouse cursor. Because the popover opens above the bottom status bar, that means the newest row is rendered at the bottom.
 - In the `done` popover, each row shows a trailing checkmark button that marks that thread as read without navigating away. The list refreshes immediately to keep showing the newest 3 unread completed threads.
 - Marking rows as read from the `done` popover keeps the popover open and refreshes its content in place, so users can clear multiple rows quickly.
+- While the `done` popover is open, the status-bar `done` count updates immediately after each mark-as-read action.
 - The `done` popover also includes a footer button, `Mark All as Read`, below the thread rows.
 - Right-clicking the status-bar `done` item opens a context menu with a single action: `Mark All as Read`.
 - A session count indicator on the right side shows the number of active tmux sessions (formatted as `live/total` when some are suspended, or just `total` when all are live). Clicking it opens a popover with a breakdown of live, suspended, protected (busy/waiting/shielded/pinned), and total sessions, plus a "Close N idle sessions" button that kills all non-protected live sessions. Clicking the button shows a confirmation alert listing which threads/tabs will be affected (scrollable, grouped by thread). Tab metadata is preserved — sessions are lazily recreated when the user selects the tab.
@@ -24,6 +25,7 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - Session targeting is intentionally best-effort and non-persistent. `StatusBarView` resolves the first matching session from the thread's current in-memory state at click time and passes it through `.magentNavigateToThread`; if no matching session still exists, navigation falls back to thread-only selection.
 - `done` ordering is persistent because unread completion state already survives relaunch via `MagentThread.unreadCompletionSessions`, and its ordering timestamp comes from persisted `MagentThread.lastAgentCompletionAt`.
 - `busy`, `waiting`, and `rate-limited` ordering is in-memory only. Their "added at" timestamps are tracked inside `StatusBarView` for the current app run and reset on relaunch because those statuses themselves are transient.
+- While a status popover is visible, `StatusBarView` avoids rebuilding the status-button stack (to preserve the popover anchor) and updates existing button counts in place.
 
 ## Gotchas
 
@@ -32,4 +34,4 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - Keep the popover scoped to the left-side aggregate status items. The right-side sync/rate-limit controls already use menus and manual actions and should not be converted to the thread-row tooltip behavior.
 - Keep sync failure details sourced from the most recent sync runner output rather than inventing independent UI-only error state, so hover text and the sync context menu stay in sync.
 - For the `done` popover row-level mark-read button, suppress row navigation when the click lands inside the button hit area. Otherwise the click can both mark as read and navigate, which is surprising and can race popover refresh.
-- Keep popover content rows at a fixed width. Long descriptions should truncate, not resize the popover while rows are being marked read.
+- Keep popover content rows at a fixed width. The popover width is constant; description text may wrap up to two lines, but content must never change the popover width while rows are being marked read.

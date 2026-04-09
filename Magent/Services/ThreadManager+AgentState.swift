@@ -987,20 +987,28 @@ extension ThreadManager {
         persistence.debouncedSaveActiveThreads(threads)
         updateDockBadge()
         delegate?.threadManager(self, didUpdateThreads: threads)
+        postCompletionChangedNotification(for: threads[index])
     }
 
     @MainActor
     @discardableResult
     func markAllThreadCompletionsSeen() -> Int {
+        var changedThreadIds = [UUID]()
         var changedCount = 0
         for index in threads.indices where !threads[index].unreadCompletionSessions.isEmpty {
             threads[index].unreadCompletionSessions.removeAll()
+            changedThreadIds.append(threads[index].id)
             changedCount += 1
         }
         guard changedCount > 0 else { return 0 }
         persistence.debouncedSaveActiveThreads(threads)
         updateDockBadge()
         delegate?.threadManager(self, didUpdateThreads: threads)
+        for threadId in changedThreadIds {
+            if let index = threads.firstIndex(where: { $0.id == threadId }) {
+                postCompletionChangedNotification(for: threads[index])
+            }
+        }
         return changedCount
     }
 
@@ -1012,6 +1020,7 @@ extension ThreadManager {
         persistence.debouncedSaveActiveThreads(threads)
         updateDockBadge()
         delegate?.threadManager(self, didUpdateThreads: threads)
+        postCompletionChangedNotification(for: threads[index])
     }
 
     @MainActor
@@ -1058,6 +1067,18 @@ extension ThreadManager {
             userInfo: [
                 "threadId": thread.id,
                 "busySessions": thread.busySessions
+            ]
+        )
+    }
+
+    @MainActor
+    private func postCompletionChangedNotification(for thread: MagentThread) {
+        NotificationCenter.default.post(
+            name: .magentAgentCompletionDetected,
+            object: self,
+            userInfo: [
+                "threadId": thread.id,
+                "unreadSessions": thread.unreadCompletionSessions,
             ]
         )
     }
