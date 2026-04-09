@@ -421,6 +421,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             rowView.showsSubtleBottomSeparator = false
             rowView.showsBusyShimmer = false
             rowView.showsArchivingOverlay = false
+            rowView.showsPopoutTint = false
         }
         return rowView
     }
