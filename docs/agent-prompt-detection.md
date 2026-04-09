@@ -57,6 +57,7 @@ Falls back to a content-volume heuristic: the pane is considered ready when it h
 
 - **Magent busy vs agent busy**: `magentBusySessions` tracks Magent's own setup/injection work. `busySessions` tracks the agent's working state. Sidebar shows spinner when either is active (`isAnyBusy`). Use `threadSetupSentinel` for thread-level creation busy (before any tmux session). `clearMagentBusy(sessionName:)` must be called at every exit point of `injectAfterStart`.
 - **Runtime process detection**: `syncBusySessionsFromProcessState` detects the running agent per-session from `pane_current_command` and child process args, not from the configured agent type (which can misclassify). Claude idle: `❯` (U+276F); Codex idle: `›` (U+203A). Sessions with no detected agent are treated as not busy.
+- **Evidence-gated configured-type fallback**: when runtime detection is temporarily nil (for example while Codex is running `xcodebuild` in the pane), Magent may use stored `sessionAgentTypes` only as a weak hint. The hint is accepted only if recent pane content matches that agent (Codex markers for Codex, Claude markers for Claude). If pane evidence does not match, the session stays classified as plain terminal.
 - **Session rename/migration**: When tmux session names change, re-key transient per-session sets (`busySessions`, `waitingForInputSessions`, `magentBusySessions`, notification dedupe state) so indicators don't get stuck on stale names.
 
 ## Session Busy/Idle Detection (Polling)
@@ -79,6 +80,19 @@ Claude can show the `❯` prompt while background tools or tasks are still runni
 - **`✳` (U+2733) at line start** — active task/thinking block (`✳ Building and running tests… (44m 41s · ...)`)
 
 If either is found → session is busy despite the visible prompt.
+
+### Codex busy status markers
+
+Codex busy detection is scoped to the **latest pane scope** (content after the last horizontal separator line) and then narrowed to a **recent bottom window** (last 25 non-empty lines). This prevents stale status text higher in scrollback from latching busy state.
+
+In that recent window, any of the following marks Codex busy:
+
+- `• esc to interrupt)`
+- `Working (... esc to interrupt ...)`
+- `Working (... background terminal running ...)`
+- `background terminal running`
+
+Busy polling prefers a fresh pane capture (`capturePane`) for Codex checks and falls back to cached capture only when the fresh read fails, reducing visible busy/idle lag from cache TTL.
 
 ### Tall pane trailing-blank fix
 

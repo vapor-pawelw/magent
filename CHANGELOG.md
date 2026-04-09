@@ -29,6 +29,7 @@ All notable changes to this project will be documented in this file.
 ### Agents
 - When a rate limit lifts (timer expiry or manual dismiss), threads and tabs where the agent was directly interrupted now show a "waiting for input" indicator so you know which ones to revisit and continue work. The indicator clears as soon as you select the tab or the agent resumes on its own.
 - Fresh Claude/Codex tabs now scope resume discovery to the tab that created them instead of the whole thread age, reducing accidental conversation carryover on older worktrees.
+- Fixed Codex busy indicators dropping during long-running tool commands (for example `xcodebuild`) and occasionally staying busy due to stale pane lines. Busy detection now uses Codex working/background status markers near the bottom of the latest pane scope and only applies stored agent-type fallback when live pane content matches that agent.
 ### Sidebar
 - Right-clicking an unselected thread now briefly highlights its row while the context menu is open, making it clear which thread the action will apply to.
 - Fixed thread row state highlights (busy/completion/waiting/rate-limit) disappearing after scrolling away and back. Reused rows now resolve against the latest thread snapshot before rendering.
