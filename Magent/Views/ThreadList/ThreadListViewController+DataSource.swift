@@ -81,6 +81,13 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         }
     }
 
+    /// Converts a raw NSOutlineView child index within a section (which accounts
+    /// for inserted `SidebarGroupSeparator` items) to the logical thread-only index.
+    private func adjustedDropIndex(_ rawIndex: Int, in section: SidebarSection) -> Int {
+        let separatorsBefore = section.items.prefix(rawIndex).filter { $0 is SidebarGroupSeparator }.count
+        return rawIndex - separatorsBefore
+    }
+
     private func groupRelativeDropIndex(
         _ index: Int,
         for group: ThreadSidebarListState,
@@ -159,7 +166,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         if item == nil { return sidebarRootItems.count }
         if let project = item as? SidebarProject { return project.children.count }
         if let section = item as? SidebarSection {
-            return isSectionCollapsed(section) ? 0 : section.threads.count
+            return isSectionCollapsed(section) ? 0 : section.items.count
         }
         return 0
     }
@@ -167,7 +174,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
     func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
         if item == nil { return sidebarRootItems[index] }
         if let project = item as? SidebarProject { return project.children[index] }
-        if let section = item as? SidebarSection { return section.threads[index] }
+        if let section = item as? SidebarSection { return section.items[index] }
         fatalError("Unexpected item")
     }
 
@@ -249,9 +256,10 @@ extension ThreadListViewController: NSOutlineViewDataSource {
         }
 
         // Drop at specific index → reorder within section while preserving the
-        // pinned / visible / hidden group boundaries.
+        // pinned / visible / hidden group boundaries. Adjust for inserted separators.
         let counts = threadGroupCounts(in: section)
-        guard validDropIndex(index, for: thread.sidebarListState, in: counts) else { return [] }
+        let threadIndex = adjustedDropIndex(index, in: section)
+        guard validDropIndex(threadIndex, for: thread.sidebarListState, in: counts) else { return [] }
 
         return .move
     }
@@ -328,9 +336,10 @@ extension ThreadListViewController: NSOutlineViewDataSource {
             threadManager.moveThread(thread, toSection: section.sectionId)
         }
 
-        // Calculate group-relative index for the reorder.
+        // Calculate group-relative index for the reorder. Adjust for inserted separators.
         let counts = threadGroupCounts(in: section)
-        let groupIndex = groupRelativeDropIndex(index, for: thread.sidebarListState, in: counts)
+        let threadIndex = adjustedDropIndex(index, in: section)
+        let groupIndex = groupRelativeDropIndex(threadIndex, for: thread.sidebarListState, in: counts)
         threadManager.reorderThread(thread.id, toIndex: groupIndex, inSection: section.sectionId)
         reloadData()
         return true
@@ -375,6 +384,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             return SidebarSpacerRowView()
         }
         if item is SidebarProjectMainSpacer {
+            return SidebarSpacerRowView()
+        }
+        if item is SidebarGroupSeparator {
             return SidebarSpacerRowView()
         }
         if item is SidebarProject {
@@ -500,6 +512,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarProjectMainSpacer {
             return Self.projectHeaderToMainRowGap
         }
+        if item is SidebarGroupSeparator {
+            return 12
+        }
         if item is SidebarProject {
             return Self.projectHeaderRowHeight
         }
@@ -586,6 +601,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             return false
         }
         if item is SidebarProjectMainSpacer {
+            return false
+        }
+        if item is SidebarGroupSeparator {
             return false
         }
         if let project = item as? SidebarProject {
@@ -690,6 +708,16 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
                 ?? {
                     let c = NSTableCellView()
+                    c.identifier = identifier
+                    return c
+                }()
+            return cell
+        }
+        if item is SidebarGroupSeparator {
+            let identifier = NSUserInterfaceItemIdentifier("GroupSeparatorCell")
+            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? SidebarGroupSeparatorCellView
+                ?? {
+                    let c = SidebarGroupSeparatorCellView()
                     c.identifier = identifier
                     return c
                 }()

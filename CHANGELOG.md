@@ -902,6 +902,7 @@ All notable changes to this project will be documented in this file.
 - All thread rows now use the same measured height as description rows, so the sidebar stays visually even even when some threads only render a single text line.
 - Threads can now be hidden to the bottom of their section/list and appear dimmed, with matching right-click and CLI hide/unhide actions so inactive work stays visible without competing with active threads.
 - When section grouping is disabled, the flat sidebar now behaves like one combined section: new threads land at the bottom, agent-completed threads jump to the top of their pin group, and manual reordering works without changing each thread's stored section.
+- Sidebar thread groups now have a clearer visual separator between pinned, normal, and hidden rows, with a bit more vertical breathing room around the divider.
 - Fixed sidebar background refreshes from auto-scrolling the thread list while you were browsing older rows, including cases where Magent was restoring the current selection.
 - Added a fixed 8 pt gap between each repository header and its `Main worktree` row for clearer visual separation.
 - Fixed a sidebar row-jump case where selecting threads could make non-description rows expand/collapse; compact rows now keep a stable one-line height.

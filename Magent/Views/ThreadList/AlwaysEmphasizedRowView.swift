@@ -721,3 +721,48 @@ final class SidebarSpacerCellView: NSTableCellView {
         fatalError("init(coder:) has not been implemented")
     }
 }
+
+/// Cell view for `SidebarGroupSeparator` rows. Draws a hairline separator line
+/// inset to the capsule edges, separating pinned / normal / hidden thread groups.
+final class SidebarGroupSeparatorCellView: NSTableCellView {
+    private let lineLayer = CALayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.addSublayer(lineLayer)
+        updateLineColor()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let lineY = floor((bounds.height - 1) / 2)
+        lineLayer.frame = CGRect(
+            x: AlwaysEmphasizedRowView.capsuleLeadingInset,
+            y: lineY,
+            width: max(0, bounds.width - AlwaysEmphasizedRowView.capsuleLeadingInset - AlwaysEmphasizedRowView.capsuleTrailingInset),
+            height: 1
+        )
+        CATransaction.commit()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateLineColor()
+    }
+
+    private func updateLineColor() {
+        // Match the stronger separator treatment used in the top-bar chrome, and
+        // resolve cgColor inside performAsCurrentDrawingAppearance for appearance safety.
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            self.lineLayer.backgroundColor = NSColor.tertiaryLabelColor.cgColor
+        }
+    }
+}
