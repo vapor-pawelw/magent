@@ -43,6 +43,7 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
     private let backButton: NSButton
     private let forwardButton: NSButton
     private let refreshButton: NSButton
+    private let openInBrowserButton: NSButton
     private let addressField: NSTextField
     let tabIdentifier: String
     let initialURL: URL
@@ -66,6 +67,7 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         backButton = NSButton(image: NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Back")!, target: nil, action: nil)
         forwardButton = NSButton(image: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: "Forward")!, target: nil, action: nil)
         refreshButton = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")!, target: nil, action: nil)
+        openInBrowserButton = NSButton(image: NSImage(systemSymbolName: "safari", accessibilityDescription: "Open in Browser")!, target: nil, action: nil)
 
         addressField = NSTextField()
         addressField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
@@ -89,7 +91,7 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
 
         wantsLayer = true
 
-        for btn in [backButton, forwardButton, refreshButton] {
+        for btn in [backButton, forwardButton, refreshButton, openInBrowserButton] {
             btn.bezelStyle = .texturedSquare
             btn.isBordered = true
             btn.controlSize = .small
@@ -104,6 +106,9 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         forwardButton.action = #selector(goForward)
         refreshButton.target = self
         refreshButton.action = #selector(reload)
+        openInBrowserButton.target = self
+        openInBrowserButton.action = #selector(openInExternalBrowser)
+        openInBrowserButton.toolTip = "Open in Browser"
 
         addressField.delegate = self
 
@@ -111,6 +116,7 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         toolbar.addArrangedSubview(forwardButton)
         toolbar.addArrangedSubview(addressField)
         toolbar.addArrangedSubview(refreshButton)
+        toolbar.addArrangedSubview(openInBrowserButton)
 
         addSubview(toolbar)
         addSubview(webView)
@@ -127,6 +133,8 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
             forwardButton.heightAnchor.constraint(equalTo: forwardButton.widthAnchor),
             refreshButton.widthAnchor.constraint(equalToConstant: 28),
             refreshButton.heightAnchor.constraint(equalTo: refreshButton.widthAnchor),
+            openInBrowserButton.widthAnchor.constraint(equalToConstant: 28),
+            openInBrowserButton.heightAnchor.constraint(equalTo: openInBrowserButton.widthAnchor),
 
             webView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 2),
             webView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -185,6 +193,11 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
 
     func hardRefresh() {
         webView.reloadFromOrigin()
+    }
+
+    @objc private func openInExternalBrowser() {
+        guard let url = webView.url ?? URL(string: addressField.stringValue) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func updateNavButtons() {

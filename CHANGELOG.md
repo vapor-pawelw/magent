@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 - Fixed rare crashes when opening repository/worktree folder pickers before the Settings/Configuration view had an attached window.
 - App updates now use a clear staged action in Settings: `Download` first, disabled `Downloading...` while transfer/prep runs, then `Install & Relaunch` once the update is ready. Prepared downloads are recovered from `/tmp` after app restarts, so you can still install without downloading again.
 
+### Web Tab
+#### Features
+- Added "Open in Browser" button (Safari icon) to the web tab toolbar. Opens the current page in your default browser.
+
 ### Terminal
 #### Bug Fixes
 - Hardened embedded terminal display-link callbacks to safely ignore missing runtime userdata instead of crashing on pointer unwrap.
