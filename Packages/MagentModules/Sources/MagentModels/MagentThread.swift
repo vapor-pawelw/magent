@@ -272,6 +272,10 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var unreadCompletionSessions: Set<String>
     public var didAutoRenameFromFirstPrompt: Bool
     public var customTabNames: [String: String]
+    /// Session names the user has explicitly renamed via the rename dialog.
+    /// Auto-model-detection will not overwrite these, even if the stored name
+    /// happens to look like an auto-generated default.
+    public var manuallyRenamedTabs: Set<String>
     public var baseBranch: String?
     public var displayOrder: Int
     public var jiraTicketKey: String?
@@ -590,6 +594,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case hasUnreadAgentCompletion // migration only
         case didAutoRenameFromFirstPrompt
         case customTabNames
+        case manuallyRenamedTabs
         case baseBranch
         case displayOrder
         case jiraTicketKey
@@ -639,6 +644,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         unreadCompletionSessions: Set<String> = [],
         didAutoRenameFromFirstPrompt: Bool = false,
         customTabNames: [String: String] = [:],
+        manuallyRenamedTabs: Set<String> = [],
         baseBranch: String? = nil,
         displayOrder: Int = 0,
         jiraTicketKey: String? = nil,
@@ -684,6 +690,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.unreadCompletionSessions = unreadCompletionSessions
         self.didAutoRenameFromFirstPrompt = didAutoRenameFromFirstPrompt
         self.customTabNames = customTabNames
+        self.manuallyRenamedTabs = manuallyRenamedTabs
         self.baseBranch = baseBranch
         self.displayOrder = displayOrder
         self.jiraTicketKey = jiraTicketKey
@@ -820,6 +827,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         lastAgentCompletionAt = try container.decodeIfPresent(Date.self, forKey: .lastAgentCompletionAt)
         didAutoRenameFromFirstPrompt = try container.decodeIfPresent(Bool.self, forKey: .didAutoRenameFromFirstPrompt) ?? false
         customTabNames = try container.decodeIfPresent([String: String].self, forKey: .customTabNames) ?? [:]
+        // Defaults to empty — existing threads have no manual rename history, so they
+        // rely solely on looksLikeDefaultTabName() for migration-safe auto-update guards.
+        manuallyRenamedTabs = try container.decodeIfPresent(Set<String>.self, forKey: .manuallyRenamedTabs) ?? []
         baseBranch = try container.decodeIfPresent(String.self, forKey: .baseBranch)
         displayOrder = try container.decodeIfPresent(Int.self, forKey: .displayOrder) ?? 0
         jiraTicketKey = try container.decodeIfPresent(String.self, forKey: .jiraTicketKey)

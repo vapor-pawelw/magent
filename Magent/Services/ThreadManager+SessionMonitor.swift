@@ -86,6 +86,8 @@ extension ThreadManager {
                 await refreshDirtyStates()
                 await refreshDeliveredStates()
                 await refreshBranchStates()
+                // Sync tab names with the model/effort the user switched to via /model.
+                await syncTabNamesFromModelChanges()
             }
 
             // Jira sync every 60th tick (~5 minutes)
