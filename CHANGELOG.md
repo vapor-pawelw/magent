@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### General
+#### Bug Fixes
+- Fixed Magent unexpectedly switching macOS Spaces/desktops during display-topology updates. Screen-parameter handling now refreshes off-screen recovery without activating or focusing the app window.
+- Improved multi-monitor launch restore reliability. Magent now persists the main window's last display ID on quit and prefers reopening on that display at next launch (with active-screen fallback when the saved display is unavailable).
+
 ### Settings
 - Fixed rare crashes when opening repository/worktree folder pickers before the Settings/Configuration view had an attached window.
 - App updates now use a clear staged action in Settings: `Download` first, disabled `Downloading...` while transfer/prep runs, then `Install & Relaunch` once the update is ready. Prepared downloads are recovered from `/tmp` after app restarts, so you can still install without downloading again.

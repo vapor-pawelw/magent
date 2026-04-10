@@ -130,6 +130,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        coordinator?.persistMainWindowFrame()
         UpdateService.shared.stopPeriodicUpdateChecks()
         NotificationCenter.default.removeObserver(self, name: .magentSettingsDidChange, object: nil)
         if let systemAppearanceObserver {
@@ -154,7 +155,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationDidChangeScreenParameters(_ notification: Notification) {
-        coordinator?.showMainWindow()
+        coordinator?.refreshMainWindowForScreenChanges()
     }
 
     func applicationWillResignActive(_ notification: Notification) {

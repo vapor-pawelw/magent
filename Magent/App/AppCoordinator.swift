@@ -4,6 +4,7 @@ import MagentCore
 final class AppCoordinator {
 
     private static let mainWindowAutosaveName = NSWindow.FrameAutosaveName("MagentMainWindow")
+    private static let mainWindowScreenIDDefaultsKey = "MagentMainWindowScreenID"
     private static let offScreenRecoveryDelay: TimeInterval = 1.0
 
     private var window: NSWindow?
@@ -81,7 +82,8 @@ final class AppCoordinator {
 
         // Default size: 75% of screen. setFrameAutosaveName restores the previous
         // session's size/position on subsequent launches automatically.
-        let screenFrame = (NSScreen.screens.first ?? NSScreen.main)?.visibleFrame
+        let launchScreen = preferredLaunchScreen()
+        let screenFrame = launchScreen?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
         let w = screenFrame.width * 0.75
         let h = screenFrame.height * 0.75
@@ -105,7 +107,9 @@ final class AppCoordinator {
         // On first launch (no saved frame), it uses the contentRect above.
         let restoredFrame = window.setFrameAutosaveName(Self.mainWindowAutosaveName)
         if !restoredFrame {
-            window.center()
+            centerWindow(window, on: launchScreen)
+        } else {
+            moveWindowToPreferredLaunchScreenIfNeeded(window)
         }
         ensureWindowIsVisibleOnCurrentScreens(window)
         window.makeKeyAndOrderFront(nil)
@@ -165,6 +169,17 @@ final class AppCoordinator {
         ensureWindowIsVisibleOnCurrentScreens(window)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+    }
+
+    func refreshMainWindowForScreenChanges() {
+        guard let window else { return }
+        ensureWindowIsVisibleOnCurrentScreens(window)
+    }
+
+    func persistMainWindowFrame() {
+        guard let window else { return }
+        window.saveFrame(usingName: Self.mainWindowAutosaveName)
+        persistMainWindowScreenID(for: window)
     }
 
     func presentConfiguration(over viewController: NSViewController) {
@@ -588,6 +603,75 @@ final class AppCoordinator {
         }
         pendingOffScreenRecovery = recoveryWorkItem
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.offScreenRecoveryDelay, execute: recoveryWorkItem)
+    }
+
+    private func preferredLaunchScreen() -> NSScreen? {
+        if let persistedScreenID = persistedMainWindowScreenID(),
+           let persistedScreen = screen(displayID: persistedScreenID) {
+            return persistedScreen
+        }
+        let mouseLocation = NSEvent.mouseLocation
+        if let mouseScreen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) {
+            return mouseScreen
+        }
+        return NSScreen.main ?? NSScreen.screens.first
+    }
+
+    private func centerWindow(_ window: NSWindow, on screen: NSScreen?) {
+        guard let targetFrame = screen?.visibleFrame else {
+            window.center()
+            return
+        }
+
+        let origin = NSPoint(
+            x: targetFrame.midX - (window.frame.width / 2),
+            y: targetFrame.midY - (window.frame.height / 2)
+        )
+        window.setFrameOrigin(origin)
+    }
+
+    private func moveWindowToPreferredLaunchScreenIfNeeded(_ window: NSWindow) {
+        guard let preferredScreen = preferredLaunchScreen(),
+              let preferredDisplayID = displayID(for: preferredScreen),
+              let currentScreen = window.screen,
+              let currentDisplayID = displayID(for: currentScreen),
+              currentDisplayID != preferredDisplayID else {
+            return
+        }
+        centerWindow(window, on: preferredScreen)
+    }
+
+    private func persistMainWindowScreenID(for window: NSWindow) {
+        guard let screen = window.screen,
+              let displayID = displayID(for: screen) else {
+            return
+        }
+        UserDefaults.standard.set(Int(displayID), forKey: Self.mainWindowScreenIDDefaultsKey)
+    }
+
+    private func persistedMainWindowScreenID() -> CGDirectDisplayID? {
+        guard let storedValue = UserDefaults.standard.object(forKey: Self.mainWindowScreenIDDefaultsKey) else {
+            return nil
+        }
+
+        if let intValue = storedValue as? Int, intValue >= 0 {
+            return CGDirectDisplayID(intValue)
+        }
+        if let numberValue = storedValue as? NSNumber {
+            return CGDirectDisplayID(numberValue.uint32Value)
+        }
+        return nil
+    }
+
+    private func screen(displayID targetDisplayID: CGDirectDisplayID) -> NSScreen? {
+        NSScreen.screens.first { displayID(for: $0) == targetDisplayID }
+    }
+
+    private func displayID(for screen: NSScreen) -> CGDirectDisplayID? {
+        guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            return nil
+        }
+        return CGDirectDisplayID(number.uint32Value)
     }
 
     private func recoverOffScreenWindowIfNeeded(_ window: NSWindow) {

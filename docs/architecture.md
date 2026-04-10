@@ -209,6 +209,13 @@ The main window's sidebar/detail `NSSplitView` structure should remain stable wh
 - Keep trailing marker layout width-stable by reserving a fixed status slot and keeping pin as the rightmost marker. Marker visibility changes must not change available description width.
 - Refit the sidebar outline from the scroll view's visible clip width when sidebar width changes; `NSOutlineView` can retain a stale frame width across startup restores, which leaves trailing controls misaligned until a manual resize. Still avoid forcing `noteHeightOfRows(...)` on every layout pass; that introduced visible lag/flicker during divider drags.
 
+### 4.6.1 Main Window Space/Screen Behavior
+
+- Display-topology callbacks (for example `applicationDidChangeScreenParameters`) must not call app-activation paths (`NSApp.activate`, `makeKeyAndOrderFront`) because those can pull the user to another macOS Space unexpectedly.
+- Keep screen-change handling limited to non-focus side effects (for example off-screen frame recovery) so background monitor or display events never steal focus.
+- Persist both the main-window frame autosave entry and the last display identifier on quit. At launch, restore frame first, then prefer the persisted display when available; only fall back to the active/mouse display if the saved display no longer exists.
+- If a restored frame lands on a different display than the persisted preferred display, re-center on the preferred display before showing the window.
+
 ### 4.7 Release-Gated Local Features
 
 Some features need to stay in the codebase before they are ready to ship. Those features are release-gated with dedicated `FEATURE_*` active compilation conditions in `Project.swift`.
