@@ -43,6 +43,7 @@ Tabs can also display in-app web content (WKWebView) alongside terminal tabs:
 - **"Web" type** in the New Thread and New Tab sheets creates a web tab. Threads created with Web type get a worktree and branch but no tmux session. URL is optional — blank creates an empty web tab with an address bar.
 - **Option-click** on the Jira or PR toolbar button opens the opposite destination (browser vs Magent web tab) from the current preference.
 - `Settings > General > Links` lets the user choose whether Magent opens supported web targets in the default browser or in a Magent web tab by default. PR/Jira toolbar buttons and matching thread menu actions follow that preference, and Option-click on those toolbar buttons opens the opposite destination as a quick override.
+- The `Settings > General > Links` selection must persist across relaunches (no reset to default).
 - In terminal tabs, **Cmd-click** on a supported link follows the current browser-vs-Magent preference, while **Option-click** opens it in the opposite destination.
 - **Right-click "+"** on the tab bar quick-creates a blank web tab; on the sidebar it opens the thread sheet with Web pre-selected
 - User-created web tabs show a globe icon and auto-update their title from the page hostname on navigation. Jira/PR tabs keep their fixed icons and titles. Renaming a web tab sets a custom title that overrides the auto-update; renaming to empty restores the default hostname-based naming.
@@ -50,7 +51,7 @@ Tabs can also display in-app web content (WKWebView) alongside terminal tabs:
 - Web tabs show an editable URL address bar, with back/forward/refresh navigation controls
 - **CMD+R** refreshes the active web tab; **CMD+SHIFT+R** hard-refreshes (bypasses cache via `reloadFromOrigin`)
 - **CMD+F** opens in-page find in web tabs with next/previous controls; Enter jumps to next result, Esc dismisses find.
-- URL normalization (shared `WebURLNormalizer`): bare hostnames get `https://`, localhost/loopback addresses get `http://`, `host:port` patterns without `://` are detected and normalized
+- URL normalization (shared `WebURLNormalizer`): bare hostnames get `https://`, localhost/loopback addresses get `http://`, `host:port` patterns without `://` are detected and normalized; host:port entries with paths/query/fragment (for example `localhost:3000/docs?q=1#api`) must preserve those components
 - Web tabs are persisted across app restarts but load lazily — the WKWebView is only created when the tab is first selected. The current URL is persisted on every navigation so the tab reopens where the user left off, not at the original URL.
 - Web tabs participate in the same tab bar as terminal tabs: they can be pinned, renamed, drag-reordered, and freely mixed with terminal tabs in both the pinned and unpinned sections
 - Closing a web tab asks for confirmation, matching terminal tab close behavior

@@ -8,6 +8,14 @@ All notable changes to this project will be documented in this file.
 #### Features
 - Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.
 
+### Settings
+#### Bug Fixes
+- Fixed `Settings > General > Links` preference persistence. "Open web links in" now stays on the selected value after relaunch instead of reverting.
+
+### Web Tab
+#### Bug Fixes
+- Fixed host:port URL parsing in the in-app web view address bar. Entries like `localhost:3000/docs#api` now open as HTTP(S) URLs and preserve query/fragment anchors.
+
 ## 1.5.4 - 2026-04-10
 
 

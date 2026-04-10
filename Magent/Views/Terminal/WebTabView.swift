@@ -6,26 +6,47 @@ import WebKit
 /// Handles bare host:port (e.g. "localhost:3000"), loopback addresses,
 /// and scheme-less hostnames. Returns nil for empty or unparseable input.
 enum WebURLNormalizer {
+    private static let bareHostPortRegex: NSRegularExpression = {
+        // Treat host:port (with optional path/query/fragment) as a web URL, not a custom scheme.
+        try! NSRegularExpression(
+            pattern: #"^(localhost|127\.0\.0\.1|\[::1\]|[A-Za-z0-9.-]+):\d+(?:[/?#].*)?$"#,
+            options: [.caseInsensitive]
+        )
+    }()
+
     static func normalize(_ input: String) -> URL? {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        if let url = URL(string: trimmed), let scheme = url.scheme, !scheme.isEmpty {
-            // URL(string:) parses "localhost:3000" as scheme="localhost" host=nil —
-            // detect that case: a real scheme won't have digits-only as the path-like part
-            let looksLikeBareHostPort = url.host == nil && url.port == nil && scheme.allSatisfy(\.isLetter)
-                && trimmed.hasPrefix("\(scheme):") && !trimmed.hasPrefix("\(scheme)://")
-                && trimmed.dropFirst(scheme.count + 1).allSatisfy({ $0.isNumber || $0 == "/" })
+        if !trimmed.contains("://"),
+           let normalizedBareHostPort = normalizedBareHostPortURL(from: trimmed) {
+            return normalizedBareHostPort
+        }
 
-            if !looksLikeBareHostPort {
-                return url
-            }
+        if let url = URL(string: trimmed), let scheme = url.scheme, !scheme.isEmpty {
+            return url
         }
 
         // No scheme — prepend http:// for localhost/loopback, https:// otherwise
-        let prefix = (trimmed.hasPrefix("localhost") || trimmed.hasPrefix("127.0.0.1") || trimmed.hasPrefix("[::1]"))
+        let lower = trimmed.lowercased()
+        let prefix = (lower.hasPrefix("localhost") || lower.hasPrefix("127.0.0.1") || lower.hasPrefix("[::1]"))
             ? "http://" : "https://"
         return URL(string: prefix + trimmed)
+    }
+
+    private static func normalizedBareHostPortURL(from input: String) -> URL? {
+        let range = NSRange(input.startIndex..<input.endIndex, in: input)
+        guard bareHostPortRegex.firstMatch(in: input, options: [], range: range) != nil else {
+            return nil
+        }
+
+        let lower = input.lowercased()
+        let isLocal =
+            lower.hasPrefix("localhost:") ||
+            lower.hasPrefix("127.0.0.1:") ||
+            lower.hasPrefix("[::1]:")
+        let prefix = isLocal ? "http://" : "https://"
+        return URL(string: prefix + input)
     }
 
     static func shortHost(from url: URL) -> String? {

@@ -391,6 +391,7 @@ final class SettingsGeneralViewController: NSViewController {
     @objc private func externalLinkPreferenceChanged() {
         let index = externalLinkPreferencePopup.indexOfSelectedItem
         guard ExternalLinkOpenPreference.allCases.indices.contains(index) else { return }
+        settings = persistence.loadSettings()
         settings.externalLinkOpenPreference = ExternalLinkOpenPreference.allCases[index]
         try? persistence.saveSettings(settings)
         NotificationCenter.default.post(name: .magentSettingsDidChange, object: nil)
