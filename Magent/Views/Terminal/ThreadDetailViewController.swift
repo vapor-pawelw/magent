@@ -816,7 +816,16 @@ final class ThreadDetailViewController: NSViewController {
                 // Resolve the display index from session name — web tab restoration may have
                 // shifted indices since initialIndex was computed.
                 let resolvedIndex = displayIndex(forSession: initialSessionName) ?? initialIndex
-                selectPreparedTab(at: resolvedIndex)
+                let selected = selectPreparedTab(at: resolvedIndex)
+                if !selected {
+                    // Do not leave a blank terminal area on startup if the initial
+                    // prepared attach misses. Keep loading visible and retry through
+                    // the full selection path, which revalidates/recreates as needed.
+                    loadingLabel?.stringValue = "Preparing terminal session..."
+                    updateLoadingOverlayDetail("Initial terminal attach missed; retrying tmux/session validation.")
+                    selectTab(at: resolvedIndex)
+                    return
+                }
                 let keepStartupOverlay = recreatedInitialSession || consumeStartupOverlayRequirement(for: initialSessionName)
                 if !keepStartupOverlay {
                     dismissLoadingOverlay()

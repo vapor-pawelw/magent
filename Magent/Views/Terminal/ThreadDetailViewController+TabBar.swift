@@ -117,7 +117,15 @@ extension ThreadDetailViewController {
                     }
                     return
                 }
-                self.selectPreparedTab(at: currentDisplayIndex)
+                let selected = self.selectPreparedTab(at: currentDisplayIndex)
+                if !selected {
+                    // Keep the loading UI visible and fall back to the full select path
+                    // instead of leaving the terminal area blank on a missed attach.
+                    self.loadingLabel?.stringValue = "Preparing terminal session..."
+                    self.updateLoadingOverlayDetail("Terminal view attach failed; retrying tmux/session validation.")
+                    self.selectTab(at: currentDisplayIndex)
+                    return
+                }
                 // After session recreation the tmux pane may not have rendered
                 // its full scrollback yet, so the immediate TOC refresh inside
                 // selectPreparedTab can capture an empty pane (showing 0 entries).
@@ -134,13 +142,14 @@ extension ThreadDetailViewController {
             return
         }
 
-        selectPreparedTab(at: index)
+        _ = selectPreparedTab(at: index)
     }
 
-    func selectPreparedTab(at index: Int) {
-        guard index < tabSlots.count else { return }
-        guard case .terminal(let sessionName) = tabSlots[index] else { return }
-        guard let tv = terminalView(forSession: sessionName) else { return }
+    @discardableResult
+    func selectPreparedTab(at index: Int) -> Bool {
+        guard index < tabSlots.count else { return false }
+        guard case .terminal(let sessionName) = tabSlots[index] else { return false }
+        guard let tv = terminalView(forSession: sessionName) else { return false }
 
         hideActiveWebTab()
         hideActiveDraftTab()
@@ -199,7 +208,7 @@ extension ThreadDetailViewController {
         refreshPendingPromptBanner()
 
         // Clear unread completion, waiting, and rate limit indicators for this tab
-        guard index < tabItems.count else { return }
+        guard index < tabItems.count else { return true }
         tabItems[index].hasUnreadCompletion = false
         tabItems[index].hasWaitingForInput = false
         tabItems[index].hasUnreadRateLimit = false
@@ -208,6 +217,7 @@ extension ThreadDetailViewController {
         threadManager.markSessionRateLimitSeen(threadId: thread.id, sessionName: sessionName)
 
         schedulePromptTOCRefresh()
+        return true
     }
 
     func rateLimitTooltip(for sessionName: String) -> String? {

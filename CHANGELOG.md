@@ -50,6 +50,7 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Fixed AI Rename sheet hanging (infinite spinner) when typing after clicking at the end of the placeholder text.
 - Reduced unnecessary `Starting agent...` flashes when revisiting recently used tabs. Healthy sessions now fast-path across view-controller rebuilds, the loading overlay reveal is debounced for quick switches, and repeated tmux readiness polling during startup tracking was removed.
+- Fixed occasional blank thread view on open when a "prepared" terminal tab failed to attach on the first pass. Startup/tab selection now keeps a visible loading state and retries full tmux/session validation instead of leaving an empty panel.
 - Improved busy detection for Claude sessions with background tasks. Sessions running `run_in_background` tools or active task spinners are now correctly detected as busy even when the `❯` prompt is visible.
 - Fixed busy detection missing the agent status bar in tall terminal panes. Trailing blank lines in tmux captures are now stripped before analysis, preventing all-blank capture windows.
 - Fixed archive merge failing when the branch name matches the worktree directory name by using unambiguous `refs/heads/` git references.
