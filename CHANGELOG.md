@@ -64,6 +64,7 @@ All notable changes to this project will be documented in this file.
 - Added a 1–5 Priority submenu next to Sign. Priority is shown as five cumulative dots on the thread row (immediately left of the busy-state duration), tinted blue → green → yellow → orange → red as the level rises. The ↑ High Priority and ↓ Low Priority sign emojis were removed in favor of this scale; the remaining sign emojis are unchanged.
 - Added "Set priority from Jira ticket" to the Jira submenu in the thread context menu, mirroring the existing "Set description from Jira ticket" action. The action is shown when the detected/linked Jira ticket has a priority that maps to the 1–5 scale (Highest → 5 … Lowest → 1).
 - Added question and exclamation sign emojis to thread rows; trimmed rarely-used signs (Pause, Book, Bolt, Lock).
+- Added ballot box with check (`☑️`) to thread sign emojis (next to the existing checkmark option) for finer task-state labeling.
 - Auto-rename now uses all accumulated prompts for context, so if the first prompt gets rate-limited and the user follows up with "continue", the rename model still sees the original task description.
 - Manual "Rename from prompt" now updates the thread description and icon to match the new branch, instead of keeping the stale description from the original auto-rename.
 - Rename failure banners now include a diagnostic reason (timeout, CLI error, empty output, or parse failure) instead of a generic "could not generate" message.

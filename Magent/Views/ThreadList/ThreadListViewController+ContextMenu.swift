@@ -279,6 +279,7 @@ extension ThreadListViewController {
         SignOption(emoji: "⏳", label: "In Progress", tintColor: .systemBlue),
         SignOption(emoji: "🛑", label: "Stop Sign"),
         SignOption(emoji: "✅", label: "Checkmark"),
+        SignOption(emoji: "☑️", label: "Ballot Box"),
         SignOption(emoji: "⚠️", label: "Warning"),
         SignOption(emoji: "🔥", label: "Fire"),
         SignOption(emoji: "🔍", label: "Magnifying Glass"),
