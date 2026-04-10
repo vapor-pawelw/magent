@@ -49,7 +49,7 @@ extension ThreadDetailViewController {
                     try await TmuxService.shared.scrollToBottom(sessionName: sessionName)
                     try? await Task.sleep(nanoseconds: 80_000_000)
                     await MainActor.run {
-                        self.terminalView(forSession: sessionName)?.bindingAction("scroll_to_bottom")
+                        _ = self.terminalView(forSession: sessionName)?.bindingAction("scroll_to_bottom")
                     }
                 }
                 await MainActor.run {
@@ -921,29 +921,12 @@ extension ThreadDetailViewController {
     func detachTab(at index: Int) {
         guard index >= 0, index < tabSlots.count else { return }
         guard case .terminal(let sessionName) = tabSlots[index] else { return }
-        guard index < terminalViews.count else { return }
+        guard let terminalIndex = thread.tmuxSessionNames.firstIndex(of: sessionName),
+              terminalIndex < terminalViews.count else { return }
 
-        let tv = terminalViews[index]
+        let tv = terminalViews[terminalIndex]
         let reuseKey = terminalReuseKey(for: sessionName)
         ReusableTerminalViewCache.shared.store(tv, sessionName: sessionName, reuseKey: reuseKey)
-
-        // Show placeholder in the terminal container
-        let placeholder = DetachedTabPlaceholderView(sessionName: sessionName)
-        placeholder.onShowWindow = {
-            PopoutWindowManager.shared.bringToFront(sessionName: sessionName)
-        }
-        placeholder.onReturnToTab = {
-            PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
-        }
-        placeholder.translatesAutoresizingMaskIntoConstraints = false
-        terminalContainer.addSubview(placeholder)
-        NSLayoutConstraint.activate([
-            placeholder.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
-            placeholder.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
-            placeholder.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
-            placeholder.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
-        ])
-        detachedTabPlaceholders[sessionName] = placeholder
 
         // Hide the terminal view (it's now in the cache)
         tv.removeFromSuperview()
@@ -959,12 +942,17 @@ extension ThreadDetailViewController {
             thread: thread,
             from: view.window
         )
+
+        if index == currentTabIndex {
+            selectTab(at: index)
+        }
     }
 
     /// Return a detached tab from its pop-out window back to this thread's tab bar.
     func returnDetachedTab(sessionName: String) {
-        guard let placeholder = detachedTabPlaceholders.removeValue(forKey: sessionName) else { return }
-        placeholder.removeFromSuperview()
+        if let placeholder = detachedTabPlaceholders.removeValue(forKey: sessionName) {
+            placeholder.removeFromSuperview()
+        }
 
         // Find the tab slot index for this session
         guard let slotIndex = tabSlots.firstIndex(where: {
@@ -976,8 +964,9 @@ extension ThreadDetailViewController {
         let reuseKey = terminalReuseKey(for: sessionName)
         if let tv = ReusableTerminalViewCache.shared.take(sessionName: sessionName, reuseKey: reuseKey) {
             // Replace the terminal view at this index
-            if slotIndex < terminalViews.count {
-                terminalViews[slotIndex] = tv
+            if let terminalIndex = thread.tmuxSessionNames.firstIndex(of: sessionName),
+               terminalIndex < terminalViews.count {
+                terminalViews[terminalIndex] = tv
             }
 
             // If this tab is currently selected, show it
@@ -990,7 +979,12 @@ extension ThreadDetailViewController {
                     tv.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
                     tv.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
                 ])
+                for termView in terminalViews {
+                    termView.isHidden = (termView !== tv)
+                }
                 view.window?.makeFirstResponder(tv)
+                updateTerminalScrollControlsState()
+                schedulePromptTOCRefresh()
             }
         }
 

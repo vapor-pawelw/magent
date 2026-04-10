@@ -101,6 +101,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Fixed missing branch-name compatibility symlinks for some worktrees. Non-main worktrees now auto-create and maintain `<worktrees-base>/<current-branch>` symlinks during branch-state refresh, branch-accept, and branch-rename flows.
+- Detached tabs now reopen with their live terminal session instead of a blank window, including after app relaunch, and the main-window `Detach Tab` shortcut now routes correctly.
 - Fixed AI Rename sheet hanging (infinite spinner) when typing after clicking at the end of the placeholder text.
 - Reduced unnecessary `Starting agent...` flashes when revisiting recently used tabs. Healthy sessions now fast-path across view-controller rebuilds, the loading overlay reveal is debounced for quick switches, and repeated tmux readiness polling during startup tracking was removed.
 - Fixed occasional blank thread view on open when a "prepared" terminal tab failed to attach on the first pass. Startup/tab selection now keeps a visible loading state and retries full tmux/session validation instead of leaving an empty panel.

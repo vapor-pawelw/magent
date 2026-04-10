@@ -67,32 +67,22 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
         infoStrip.configureForTab(thread: thread, sessionName: sessionName)
         rootView.addSubview(infoStrip)
 
-        // Retrieve terminal view from cache (stored by the source ThreadDetailVC before detach)
-        let reuseKey = "\(thread.worktreePath)-\(sessionName)"
-        if let tv = ReusableTerminalViewCache.shared.take(sessionName: sessionName, reuseKey: reuseKey) {
-            tv.translatesAutoresizingMaskIntoConstraints = false
-            rootView.addSubview(tv)
-            self.terminalView = tv
+        let tv = makeTerminalView(thread: thread, sessionName: sessionName)
+        tv.translatesAutoresizingMaskIntoConstraints = false
+        rootView.addSubview(tv)
+        self.terminalView = tv
 
-            NSLayoutConstraint.activate([
-                infoStrip.topAnchor.constraint(equalTo: rootView.topAnchor),
-                infoStrip.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
-                infoStrip.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
-                infoStrip.heightAnchor.constraint(equalToConstant: 48),
+        NSLayoutConstraint.activate([
+            infoStrip.topAnchor.constraint(equalTo: rootView.topAnchor),
+            infoStrip.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
+            infoStrip.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
+            infoStrip.heightAnchor.constraint(equalToConstant: 48),
 
-                tv.topAnchor.constraint(equalTo: infoStrip.bottomAnchor),
-                tv.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
-                tv.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
-                tv.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
-            ])
-        } else {
-            NSLayoutConstraint.activate([
-                infoStrip.topAnchor.constraint(equalTo: rootView.topAnchor),
-                infoStrip.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
-                infoStrip.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
-                infoStrip.heightAnchor.constraint(equalToConstant: 48),
-            ])
-        }
+            tv.topAnchor.constraint(equalTo: infoStrip.bottomAnchor),
+            tv.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
+            tv.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
+            tv.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
+        ])
 
         window.contentView = rootView
     }
@@ -101,10 +91,65 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
 
     func cacheTerminalViewForReuse() {
         guard let tv = terminalView else { return }
-        let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId })
-        let reuseKey = "\(thread?.worktreePath ?? "")-\(sessionName)"
+        guard let thread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) else { return }
+        let reuseKey = ThreadDetailViewController.terminalReuseKey(for: thread, sessionName: sessionName)
         ReusableTerminalViewCache.shared.store(tv, sessionName: sessionName, reuseKey: reuseKey)
         self.terminalView = nil
+    }
+
+    private func makeTerminalView(thread: MagentThread, sessionName: String) -> TerminalSurfaceView {
+        let reuseKey = ThreadDetailViewController.terminalReuseKey(for: thread, sessionName: sessionName)
+        let view: TerminalSurfaceView
+        if let cachedView = ReusableTerminalViewCache.shared.take(sessionName: sessionName, reuseKey: reuseKey) {
+            view = cachedView
+        } else {
+            let tmuxCommand = ThreadDetailViewController.buildTmuxCommand(for: sessionName, in: thread)
+            view = TerminalSurfaceView(
+                workingDirectory: thread.worktreePath,
+                command: tmuxCommand
+            )
+        }
+        configureTerminalViewHandlers(view, threadId: thread.id, sessionName: sessionName)
+        return view
+    }
+
+    private func configureTerminalViewHandlers(
+        _ view: TerminalSurfaceView,
+        threadId: UUID,
+        sessionName: String
+    ) {
+        view.onCopy = { [sessionName = sessionName] in
+            Task { await TmuxService.shared.copySelectionToClipboard(sessionName: sessionName) }
+        }
+        view.resolveTmuxMouseOpenableURL = { [sessionName = sessionName] in
+            await TmuxService.shared.recentMouseOpenableURL(sessionName: sessionName)
+        }
+        view.resolveTmuxVisibleOpenableURL = { [sessionName = sessionName] xFraction, yFraction in
+            await TmuxService.shared.visibleOpenableURL(
+                sessionName: sessionName,
+                xFraction: xFraction,
+                yFraction: yFraction
+            )
+        }
+        view.openURLHandler = { [threadId] url, forceInApp in
+            let prefersInApp = PersistenceService.shared.loadSettings().externalLinkOpenPreference == .inApp
+            let supportsInApp = ["http", "https"].contains(url.scheme?.lowercased() ?? "")
+            if (forceInApp || prefersInApp) && supportsInApp {
+                NotificationCenter.default.post(
+                    name: .magentOpenExternalLinkInApp,
+                    object: nil,
+                    userInfo: [
+                        "threadId": threadId,
+                        "url": url,
+                        "identifier": "web:\(url.absoluteString)",
+                        "title": WebURLNormalizer.shortHost(from: url) ?? url.absoluteString,
+                        "iconType": WebTabIconType.web.rawValue,
+                    ]
+                )
+            } else {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 
     // MARK: - Notification Observers

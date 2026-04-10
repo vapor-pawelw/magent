@@ -270,16 +270,18 @@ final class PopoutWindowManager: PopoutStateProviding {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self else { return }
-            let currentThreadIds = Set(ThreadManager.shared.threads.map(\.id))
-            for threadId in self.threadWindows.keys {
-                if !currentThreadIds.contains(threadId) {
-                    self.returnThreadToMain(threadId)
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let currentThreadIds = Set(ThreadManager.shared.threads.map(\.id))
+                for threadId in self.threadWindows.keys {
+                    if !currentThreadIds.contains(threadId) {
+                        self.returnThreadToMain(threadId)
+                    }
                 }
-            }
-            for (sessionName, controller) in self.tabWindows {
-                if !currentThreadIds.contains(controller.threadId) {
-                    self.returnTabToThread(sessionName: sessionName)
+                for (sessionName, controller) in self.tabWindows {
+                    if !currentThreadIds.contains(controller.threadId) {
+                        self.returnTabToThread(sessionName: sessionName)
+                    }
                 }
             }
         }
@@ -289,10 +291,13 @@ final class PopoutWindowManager: PopoutStateProviding {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self,
-                  let sessionName = notification.userInfo?["sessionName"] as? String else { return }
-            if self.tabWindows[sessionName] != nil {
-                self.returnTabToThread(sessionName: sessionName)
+            let sessionName = notification.userInfo?["sessionName"] as? String
+            MainActor.assumeIsolated {
+                guard let self,
+                      let sessionName else { return }
+                if self.tabWindows[sessionName] != nil {
+                    self.returnTabToThread(sessionName: sessionName)
+                }
             }
         }
     }

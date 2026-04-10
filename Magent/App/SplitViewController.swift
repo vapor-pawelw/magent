@@ -203,6 +203,10 @@ final class SplitViewController: NSSplitViewController {
             popOutCurrentThread()
             return nil
         }
+        if matchesBinding(.detachTab, keyCode: event.keyCode, modifiers: eventModifiers) {
+            currentDetailVC?.detachCurrentTabFromKeyboard()
+            return nil
+        }
 
         return event
     }
@@ -523,7 +527,7 @@ final class SplitViewController: NSSplitViewController {
         currentDetailVC = nil
         let placeholder = DetachedThreadPlaceholderView(thread: thread)
         placeholder.onShowWindow = { PopoutWindowManager.shared.bringToFront(threadId: thread.id) }
-        placeholder.onReturnToMain = { [weak self] in
+        placeholder.onReturnToMain = {
             PopoutWindowManager.shared.returnThreadToMain(thread.id)
         }
         preserveSidebarWidthDuringContentChange {

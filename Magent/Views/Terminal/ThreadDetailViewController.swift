@@ -1008,26 +1008,32 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     func terminalReuseKey(for sessionName: String) -> String {
-        let resolvedThread = latestThreadSnapshot()
-        let tmuxCommand = buildTmuxCommand(for: sessionName)
-        return "\(resolvedThread.worktreePath)\n\(tmuxCommand)"
+        Self.terminalReuseKey(for: latestThreadSnapshot(), sessionName: sessionName)
     }
 
     private func latestThreadSnapshot() -> MagentThread {
         threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
     }
 
-    private func buildTmuxCommand(for sessionName: String) -> String {
-        let resolvedThread = latestThreadSnapshot()
-        let settings = PersistenceService.shared.loadSettings()
-        let isAgentSession = resolvedThread.agentTmuxSessions.contains(sessionName)
-        let selectedAgentType = threadManager.agentType(for: resolvedThread, sessionName: sessionName)
+    static func terminalReuseKey(for thread: MagentThread, sessionName: String) -> String {
+        "\(thread.worktreePath)\n\(buildTmuxCommand(for: sessionName, in: thread))"
+    }
 
-        let project = settings.projects.first(where: { $0.id == resolvedThread.projectId })
+    private func buildTmuxCommand(for sessionName: String) -> String {
+        Self.buildTmuxCommand(for: sessionName, in: latestThreadSnapshot())
+    }
+
+    static func buildTmuxCommand(for sessionName: String, in thread: MagentThread) -> String {
+        let threadManager = ThreadManager.shared
+        let settings = PersistenceService.shared.loadSettings()
+        let isAgentSession = thread.agentTmuxSessions.contains(sessionName)
+        let selectedAgentType = threadManager.agentType(for: thread, sessionName: sessionName)
+
+        let project = settings.projects.first(where: { $0.id == thread.projectId })
         let projectName = project?.name ?? "project"
-        let wd = resolvedThread.worktreePath
+        let wd = thread.worktreePath
         let projectPath: String
-        if resolvedThread.isMain {
+        if thread.isMain {
             projectPath = wd
         } else {
             projectPath = project?.repoPath ?? wd
@@ -1036,13 +1042,13 @@ final class ThreadDetailViewController: NSViewController {
         var envParts = [
             "export MAGENT_PROJECT_PATH=\(projectPath)",
             "export MAGENT_PROJECT_NAME=\(projectName)",
-            "export MAGENT_THREAD_ID=\(resolvedThread.id.uuidString)",
+            "export MAGENT_THREAD_ID=\(thread.id.uuidString)",
         ]
-        if resolvedThread.isMain {
+        if thread.isMain {
             envParts.append("export MAGENT_WORKTREE_NAME=main")
         } else {
             envParts.append("export MAGENT_WORKTREE_PATH=\(wd)")
-            envParts.append("export MAGENT_WORKTREE_NAME=\(resolvedThread.name)")
+            envParts.append("export MAGENT_WORKTREE_NAME=\(thread.name)")
         }
         if let selectedAgentType {
             envParts.append("export MAGENT_AGENT_TYPE=\(selectedAgentType.rawValue)")
@@ -1053,10 +1059,10 @@ final class ThreadDetailViewController: NSViewController {
 
         let startCmd: String
         if isAgentSession, let selectedAgentType {
-            let resumeSessionID = resolvedThread.sessionConversationIDs[sessionName]
+            let resumeSessionID = thread.sessionConversationIDs[sessionName]
             startCmd = threadManager.agentStartCommand(
                 settings: settings,
-                projectId: resolvedThread.projectId,
+                projectId: thread.projectId,
                 agentType: selectedAgentType,
                 envExports: envExportsWithSocket,
                 workingDirectory: wd,

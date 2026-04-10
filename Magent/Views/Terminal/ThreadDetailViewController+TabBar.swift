@@ -369,10 +369,10 @@ extension ThreadDetailViewController {
                 let isForwardedContinuation = thread.forwardedTmuxSessions.contains(sessionName)
                 item.isDetached = PopoutWindowManager.shared.isTabDetached(sessionName: sessionName)
                 item.onDetach = { [weak self] in self?.detachTab(at: i) }
-                item.onShowDetachedWindow = { [weak self] in
+                item.onShowDetachedWindow = {
                     PopoutWindowManager.shared.bringToFront(sessionName: sessionName)
                 }
-                item.onReturnDetachedTab = { [weak self] in
+                item.onReturnDetachedTab = {
                     PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
                 }
                 item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }

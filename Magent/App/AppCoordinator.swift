@@ -122,7 +122,10 @@ final class AppCoordinator {
             object: window,
             queue: .main
         ) { _ in
-            PopoutWindowManager.shared.closeAll()
+            MainActor.assumeIsolated {
+                PopoutWindowManager.shared.saveState()
+                PopoutWindowManager.shared.closeAll()
+            }
         }
 
         PopoutWindowManager.shared.startObserving()
