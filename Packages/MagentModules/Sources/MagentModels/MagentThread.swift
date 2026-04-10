@@ -272,6 +272,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var unreadCompletionSessions: Set<String>
     public var didAutoRenameFromFirstPrompt: Bool
     public var customTabNames: [String: String]
+    /// Monotonic per-base counters for auto-deduplicated tab display names.
+    /// Keys are normalized base names (lowercased, suffix-stripped).
+    public var tabNameSuffixCounters: [String: Int]
     /// Session names the user has explicitly renamed via the rename dialog.
     /// Auto-model-detection will not overwrite these, even if the stored name
     /// happens to look like an auto-generated default.
@@ -594,6 +597,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case hasUnreadAgentCompletion // migration only
         case didAutoRenameFromFirstPrompt
         case customTabNames
+        case tabNameSuffixCounters
         case manuallyRenamedTabs
         case baseBranch
         case displayOrder
@@ -644,6 +648,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         unreadCompletionSessions: Set<String> = [],
         didAutoRenameFromFirstPrompt: Bool = false,
         customTabNames: [String: String] = [:],
+        tabNameSuffixCounters: [String: Int] = [:],
         manuallyRenamedTabs: Set<String> = [],
         baseBranch: String? = nil,
         displayOrder: Int = 0,
@@ -690,6 +695,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.unreadCompletionSessions = unreadCompletionSessions
         self.didAutoRenameFromFirstPrompt = didAutoRenameFromFirstPrompt
         self.customTabNames = customTabNames
+        self.tabNameSuffixCounters = tabNameSuffixCounters
         self.manuallyRenamedTabs = manuallyRenamedTabs
         self.baseBranch = baseBranch
         self.displayOrder = displayOrder
@@ -719,6 +725,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         forwardedTmuxSessions = completed.forwardedTmuxSessions
         lastSelectedTabIdentifier = completed.lastSelectedTabIdentifier
         customTabNames = completed.customTabNames
+        tabNameSuffixCounters = completed.tabNameSuffixCounters
         baseBranch = completed.baseBranch
         submittedPromptsBySession = completed.submittedPromptsBySession
         localFileSyncEntriesSnapshot = completed.localFileSyncEntriesSnapshot
@@ -759,6 +766,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             unreadCompletionSessions: unreadCompletionSessions,
             didAutoRenameFromFirstPrompt: didAutoRenameFromFirstPrompt,
             customTabNames: customTabNames,
+            tabNameSuffixCounters: tabNameSuffixCounters,
             baseBranch: baseBranch,
             displayOrder: displayOrder,
             jiraTicketKey: jiraTicketKey,
@@ -827,6 +835,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         lastAgentCompletionAt = try container.decodeIfPresent(Date.self, forKey: .lastAgentCompletionAt)
         didAutoRenameFromFirstPrompt = try container.decodeIfPresent(Bool.self, forKey: .didAutoRenameFromFirstPrompt) ?? false
         customTabNames = try container.decodeIfPresent([String: String].self, forKey: .customTabNames) ?? [:]
+        tabNameSuffixCounters = try container.decodeIfPresent([String: Int].self, forKey: .tabNameSuffixCounters) ?? [:]
         // Defaults to empty — existing threads have no manual rename history, so they
         // rely solely on looksLikeDefaultTabName() for migration-safe auto-update guards.
         manuallyRenamedTabs = try container.decodeIfPresent(Set<String>.self, forKey: .manuallyRenamedTabs) ?? []
@@ -916,6 +925,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encode(didAutoRenameFromFirstPrompt, forKey: .didAutoRenameFromFirstPrompt)
         if !customTabNames.isEmpty {
             try container.encode(customTabNames, forKey: .customTabNames)
+        }
+        if !tabNameSuffixCounters.isEmpty {
+            try container.encode(tabNameSuffixCounters, forKey: .tabNameSuffixCounters)
         }
         try container.encodeIfPresent(baseBranch, forKey: .baseBranch)
         try container.encode(displayOrder, forKey: .displayOrder)

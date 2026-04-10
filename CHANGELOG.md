@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 #### Features
 - Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.
 
+### Tab
+#### Bug Fixes
+- Fixed tab-name deduplication when cloning/resuming/renaming tabs. Names now use a single monotonic suffix sequence per base name (`Codex`, `Codex-1`, `Codex-2`, ...), preventing chained names like `Codex-1-1` and avoiding suffix reuse after deletions.
+
 ## 1.5.4 - 2026-04-10
 
 

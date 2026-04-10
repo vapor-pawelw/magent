@@ -997,13 +997,18 @@ extension ThreadManager {
             throw ThreadManagerError.invalidTabIndex
         }
 
-        let trimmed = newDisplayName.trimmingCharacters(in: .whitespaces)
+        let trimmed = newDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             throw ThreadManagerError.invalidName
         }
+        let resolvedDisplayName = allocateUniqueTabDisplayName(
+            requestedName: trimmed,
+            threadIndex: index,
+            excludingSessionName: sessionName
+        )
 
         // Compute new tmux session name
-        let sanitizedTabName = Self.sanitizeForTmux(trimmed)
+        let sanitizedTabName = Self.sanitizeForTmux(resolvedDisplayName)
         let settings = persistence.loadSettings()
         let slug = Self.repoSlug(from:
             settings.projects.first(where: { $0.id == currentThread.projectId })?.name ?? "project"
@@ -1018,7 +1023,7 @@ extension ThreadManager {
         // Check uniqueness
         guard newSessionName != sessionName else {
             // Display name changed but session name is the same — just update the display name
-            threads[index].customTabNames[sessionName] = trimmed
+            threads[index].customTabNames[sessionName] = resolvedDisplayName
             threads[index].manuallyRenamedTabs.insert(sessionName)
             try persistence.saveActiveThreads(threads)
             await MainActor.run {
@@ -1109,7 +1114,7 @@ extension ThreadManager {
 
         // Update custom tab names: remove old key, store under new key
         threads[index].customTabNames.removeValue(forKey: sessionName)
-        threads[index].customTabNames[resolvedSessionName] = trimmed
+        threads[index].customTabNames[resolvedSessionName] = resolvedDisplayName
 
         // Legacy rollback path only: if tmux bell pipes are re-enabled, rename must
         // also retarget the pipe so any fallback completion events keep the new name.

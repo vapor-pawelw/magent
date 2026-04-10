@@ -88,8 +88,11 @@ extension ThreadManager {
                 requestedTabBaseName = "Terminal"
             }
 
-            tabDisplayName = customTitle.map { uniqueTabDisplayName(baseName: $0, in: currentThread) }
-                ?? uniqueTabDisplayName(baseName: requestedTabBaseName + (tabNameSuffix ?? ""), in: currentThread)
+            tabDisplayName = customTitle.map { allocateUniqueTabDisplayName(requestedName: $0, threadIndex: index) }
+                ?? allocateUniqueTabDisplayName(
+                    requestedName: requestedTabBaseName + (tabNameSuffix ?? ""),
+                    threadIndex: index
+                )
             let tabSlug = Self.sanitizeForTmux(tabDisplayName)
             let baseName = Self.buildSessionName(repoSlug: repoSlug, threadName: nil, tabSlug: tabSlug)
             var candidate = baseName
@@ -146,8 +149,11 @@ extension ThreadManager {
                 requestedTabBaseName = "Terminal"
             }
 
-            tabDisplayName = customTitle.map { uniqueTabDisplayName(baseName: $0, in: currentThread) }
-                ?? uniqueTabDisplayName(baseName: requestedTabBaseName + (tabNameSuffix ?? ""), in: currentThread)
+            tabDisplayName = customTitle.map { allocateUniqueTabDisplayName(requestedName: $0, threadIndex: index) }
+                ?? allocateUniqueTabDisplayName(
+                    requestedName: requestedTabBaseName + (tabNameSuffix ?? ""),
+                    threadIndex: index
+                )
             let tabSlug = Self.sanitizeForTmux(tabDisplayName)
             let baseName = Self.buildSessionName(repoSlug: repoSlug, threadName: currentThread.name, tabSlug: tabSlug)
             var candidate = baseName
@@ -256,24 +262,79 @@ extension ThreadManager {
 
     // MARK: - Tab Display Name Helpers
 
-    private func uniqueTabDisplayName(baseName: String, in thread: MagentThread) -> String {
+    /// Returns a unique tab display name using per-thread monotonic suffix counters.
+    /// If `requestedName` already exists, append/increment `-N` where N only increases.
+    /// Examples: "Codex" -> "Codex-1", "Codex-1" -> "Codex-2".
+    func allocateUniqueTabDisplayName(
+        requestedName: String,
+        threadIndex: Int,
+        excludingSessionName: String? = nil
+    ) -> String {
+        let trimmed = requestedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawName = trimmed.isEmpty ? "Tab" : trimmed
+
+        guard threadIndex >= 0, threadIndex < threads.count else { return rawName }
+
+        let thread = threads[threadIndex]
         let usedNames = Set(
-            thread.tmuxSessionNames.enumerated().map { index, sessionName in
-                thread.displayName(for: sessionName, at: index).lowercased()
+            thread.tmuxSessionNames.enumerated().compactMap { index, sessionName -> String? in
+                if let excludingSessionName, sessionName == excludingSessionName {
+                    return nil
+                }
+                return thread.displayName(for: sessionName, at: index).lowercased()
             }
         )
-        if !usedNames.contains(baseName.lowercased()) {
-            return baseName
+
+        let (baseName, requestedSuffix) = splitTabNameSuffix(rawName)
+        let normalizedBase = normalizeTabNameBase(baseName)
+        let knownCounter = thread.tabNameSuffixCounters[normalizedBase] ?? 0
+        let maxExistingSuffix = maxObservedSuffix(for: normalizedBase, usedNames: usedNames)
+
+        if !usedNames.contains(rawName.lowercased()) {
+            let seededCounter = max(knownCounter, maxExistingSuffix, requestedSuffix ?? 0)
+            if seededCounter > knownCounter {
+                threads[threadIndex].tabNameSuffixCounters[normalizedBase] = seededCounter
+            }
+            return rawName
         }
 
-        for suffix in 1...999 {
-            let candidate = "\(baseName)-\(suffix)"
-            if !usedNames.contains(candidate.lowercased()) {
-                return candidate
+        var suffix = max(knownCounter, maxExistingSuffix, requestedSuffix ?? 0) + 1
+        var candidate = "\(baseName)-\(suffix)"
+        while usedNames.contains(candidate.lowercased()) {
+            suffix += 1
+            candidate = "\(baseName)-\(suffix)"
+        }
+
+        threads[threadIndex].tabNameSuffixCounters[normalizedBase] = suffix
+        return candidate
+    }
+
+    private func splitTabNameSuffix(_ name: String) -> (base: String, suffix: Int?) {
+        let parts = name.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count >= 2, let last = parts.last, let parsed = Int(last), parsed >= 0 else {
+            return (name, nil)
+        }
+        let base = parts.dropLast().joined(separator: "-")
+        guard !base.isEmpty else { return (name, nil) }
+        return (base, parsed)
+    }
+
+    private func normalizeTabNameBase(_ base: String) -> String {
+        base.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func maxObservedSuffix(for normalizedBase: String, usedNames: Set<String>) -> Int {
+        var maxSuffix = 0
+        for lowerName in usedNames {
+            let (base, suffix) = splitTabNameSuffix(lowerName)
+            if normalizeTabNameBase(base) != normalizedBase { continue }
+            if let suffix {
+                maxSuffix = max(maxSuffix, suffix)
+            } else {
+                maxSuffix = max(maxSuffix, 0)
             }
         }
-
-        return "\(baseName)-\(Int(Date().timeIntervalSince1970))"
+        return maxSuffix
     }
 
     // MARK: - Tab Ordering & Registration
