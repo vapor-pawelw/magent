@@ -134,7 +134,8 @@ extension ThreadDetailViewController {
                 if recreated || wasEvicted {
                     self.schedulePromptTOCRefresh(after: 0.5)
                 }
-                let keepStartupOverlay = recreated || self.consumeStartupOverlayRequirement(for: sessionName)
+                let keepStartupOverlay = sessionAgentType != nil
+                    && (recreated || self.consumeStartupOverlayRequirement(for: sessionName))
                 if !keepStartupOverlay {
                     self.dismissLoadingOverlay()
                 }

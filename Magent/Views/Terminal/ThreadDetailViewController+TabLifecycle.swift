@@ -335,19 +335,23 @@ extension ThreadDetailViewController {
         loadingOverlayWaitingForInjection = false
 
         ensureLoadingOverlay()
-        loadingLabel?.stringValue = String(localized: .ThreadStrings.tabStartingAgent)
-
-        guard thread.agentTmuxSessions.contains(sessionName), let agentType else {
-            dismissLoadingOverlay()
-            return
-        }
+        loadingLabel?.stringValue = agentType == nil
+            ? "Preparing terminal session..."
+            : String(localized: .ThreadStrings.tabStartingAgent)
+        loadingOverlaySessionName = sessionName
 
         // Debounced reveal: if prep resolves within the window, the overlay
         // never shows. Dismiss path cancels the timer.
         revealLoadingOverlay(after: 0.25)
         loadingDetailLabel?.stringValue = ""
         loadingDetailLabel?.isHidden = true
-        loadingOverlaySessionName = sessionName
+
+        guard thread.agentTmuxSessions.contains(sessionName), let agentType else {
+            // Non-agent tabs still need feedback during slow tmux/session checks.
+            // Keep the overlay debounced and auto-dismissed by the caller once
+            // session preparation resolves.
+            return
+        }
 
         // Observe injection lifecycle: keep overlay alive until keys are actually sent
         let startedObs = NotificationCenter.default.addObserver(
