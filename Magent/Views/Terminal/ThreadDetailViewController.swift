@@ -1129,6 +1129,7 @@ final class ThreadDetailViewController: NSViewController {
         thread.tmuxSessionNames.removeAll { $0 == sessionName }
         thread.pinnedTmuxSessions.removeAll { $0 == sessionName }
         thread.customTabNames.removeValue(forKey: sessionName)
+        thread.manuallyRenamedTabs.remove(sessionName)
         thread.agentTmuxSessions.removeAll { $0 == sessionName }
         thread.unreadCompletionSessions.remove(sessionName)
         thread.busySessions.remove(sessionName)

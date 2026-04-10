@@ -1019,6 +1019,7 @@ extension ThreadManager {
         guard newSessionName != sessionName else {
             // Display name changed but session name is the same — just update the display name
             threads[index].customTabNames[sessionName] = trimmed
+            threads[index].manuallyRenamedTabs.insert(sessionName)
             try persistence.saveActiveThreads(threads)
             await MainActor.run {
                 delegate?.threadManager(self, didUpdateThreads: threads)
@@ -1055,6 +1056,10 @@ extension ThreadManager {
             threads[index].protectedTmuxSessions.remove(sessionName)
             threads[index].protectedTmuxSessions.insert(resolvedSessionName)
         }
+        // Re-key the manual-rename flag to the new session name and mark the rename.
+        // This prevents auto-model-detection from overwriting a tab the user explicitly named.
+        threads[index].manuallyRenamedTabs.remove(sessionName)
+        threads[index].manuallyRenamedTabs.insert(resolvedSessionName)
         if currentThread.lastSelectedTabIdentifier == sessionName {
             threads[index].lastSelectedTabIdentifier = resolvedSessionName
         }

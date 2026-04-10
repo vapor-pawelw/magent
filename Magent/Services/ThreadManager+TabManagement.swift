@@ -425,6 +425,7 @@ extension ThreadManager {
         evictedIdleSessions.remove(sessionName)
         clearTrackedInitialPromptInjection(for: sessionName)
         threads[idx].customTabNames.removeValue(forKey: sessionName)
+        threads[idx].manuallyRenamedTabs.remove(sessionName)
         threads[idx].submittedPromptsBySession.removeValue(forKey: sessionName)
         threads[idx].tmuxSessionNames.removeAll { $0 == sessionName }
         if threads[idx].lastSelectedTabIdentifier == sessionName {

@@ -28,6 +28,7 @@ All notable changes to this project will be documented in this file.
 
 ### Tab
 #### Features
+- Tab names now automatically reflect the active Claude model and effort when you switch with `/model` (e.g. "Claude" → "Claude (Sonnet 4.6, H)"). Tabs you've manually renamed are never touched.
 - Double-clicking a terminal session tab now opens the existing "Rename Tab" prompt directly.
 
 ### Terminal

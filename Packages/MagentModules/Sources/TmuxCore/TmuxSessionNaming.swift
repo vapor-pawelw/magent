@@ -105,6 +105,28 @@ public enum TmuxSessionNaming {
         return "Review (\(defaultTabDisplayName(for: agentType)))"
     }
 
+    /// Returns true if `name` looks like an auto-generated default tab name for `agentType`.
+    ///
+    /// Used as a migration-safe guard before auto-updating a tab name based on detected
+    /// model changes: tabs whose names don't match the auto-generated pattern were manually
+    /// named and must not be overwritten.
+    ///
+    /// Matches:
+    ///   - Exact base name: "Claude", "Codex", "Terminal", "Custom"
+    ///   - Base + parenthesised details: "Claude (M)", "Claude (Sonnet 4.6)", "Claude (Sonnet 4.6, H)"
+    ///   Details may contain alphanumerics, spaces, commas, dots, and hyphens only — a
+    ///   character set that covers all model labels and effort abbreviations but excludes
+    ///   anything a human would type as a meaningful custom name.
+    public static func looksLikeDefaultTabName(_ name: String, for agentType: AgentType?) -> Bool {
+        let base = defaultTabDisplayName(for: agentType)
+        if name == base { return true }
+        guard name.hasPrefix(base + " (") && name.hasSuffix(")") else { return false }
+        let inner = name.dropFirst(base.count + 2).dropLast() // strip "<base> (" and trailing ")"
+        guard !inner.isEmpty else { return false }
+        let validChars = CharacterSet.alphanumerics.union(.init(charactersIn: " ,-."))
+        return inner.unicodeScalars.allSatisfy { validChars.contains($0) }
+    }
+
     public static func isMagentSession(_ name: String) -> Bool {
         name.hasPrefix("ma-") || name.hasPrefix("magent-")
     }

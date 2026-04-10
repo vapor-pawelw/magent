@@ -79,6 +79,26 @@ If the user's last-selected model no longer exists in the current JSON (after a 
 
 When a new thread or agent tab is created without an explicit custom title, Magent keeps the default title focused on the agent name and appends a single suffix for any visible model label plus reasoning. Built-in reasoning labels are abbreviated to `L`, `M`, `H`, `xH`, and `Max`; any other value is left as-is.
 
+## Auto-Sync Tab Name from `/model` Output
+
+When a user runs `/model` inside Claude Code to switch models or effort, the terminal outputs a line like:
+
+```
+  ⎿  Set model to Opus 4.6
+  ⎿  Set model to Sonnet 4.6 with high effort
+```
+
+`ThreadManager+ModelDetection.swift` scans for this pattern on the session monitor's 10-tick cadence (~50 s) and updates the tab display name to match (e.g. `"Claude"` → `"Claude (Sonnet 4.6, H)"`), reusing `TmuxSessionNaming.defaultTabDisplayName(for:modelLabel:reasoningLevel:)`.
+
+### Guard: `manuallyRenamedTabs`
+
+`MagentThread` carries a persisted `manuallyRenamedTabs: Set<String>` field. Auto-sync is skipped for any session in this set. The set is populated in two ways:
+
+1. **On rename** — `renameTab()` inserts the session (both the display-name-only path and the full tmux rename path).
+2. **Startup migration** — on first launch after this field was introduced, `ThreadManager` iterates all threads and inserts any session whose stored `customTabNames` entry doesn't match `TmuxSessionNaming.looksLikeDefaultTabName(_:for:)`. This protects tabs that were manually named before the feature shipped, with no separate migration flag needed (the set itself is idempotent once persisted).
+
+The set is re-keyed on session rename and cleaned up on tab close, consistent with other per-session sets.
+
 ## UI: Launch Sheet
 
 Type, Model, and Reasoning pickers share a **single row** in `AgentLaunchPromptSheetController`:
