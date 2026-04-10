@@ -298,6 +298,7 @@ extension ThreadDetailViewController {
                 let resumeID = threadManager.conversationID(for: thread.id, sessionName: sessionName)
                 let isForwardedContinuation = thread.forwardedTmuxSessions.contains(sessionName)
                 item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
+                item.allowsDoubleClickRename = true
                 item.onResumeAgentInNewTab = agentType?.supportsResume == true
                     ? { [weak self] in self?.resumeAgentSessionInNewTab(at: i) }
                     : nil
@@ -317,6 +318,7 @@ extension ThreadDetailViewController {
                 item.typeIcon.isHidden = !isForwardedContinuation
             case .web:
                 item.onRename = { [weak self] in self?.showWebTabRenameDialog(at: i) }
+                item.allowsDoubleClickRename = false
                 item.onResumeAgentInNewTab = nil
                 item.canResumeAgentInNewTab = false
                 item.onContinueIn = nil
@@ -327,6 +329,7 @@ extension ThreadDetailViewController {
                 item.showKeepAliveIcon = false
             case .draft:
                 item.onRename = nil
+                item.allowsDoubleClickRename = false
                 item.onResumeAgentInNewTab = nil
                 item.canResumeAgentInNewTab = false
                 item.onContinueIn = nil

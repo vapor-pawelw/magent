@@ -118,6 +118,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onClose: (() -> Void)?
     var onForceClose: (() -> Void)?
     var onRename: (() -> Void)?
+    var allowsDoubleClickRename: Bool = false
     var onPin: (() -> Void)?
     var onKeepAlive: (() -> Void)?
     var onResumeAgentInNewTab: (() -> Void)?
@@ -280,6 +281,9 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     override func mouseDown(with event: NSEvent) {
         onSelect?()
+        if event.clickCount == 2, allowsDoubleClickRename {
+            onRename?()
+        }
     }
 
     override func otherMouseDown(with event: NSEvent) {

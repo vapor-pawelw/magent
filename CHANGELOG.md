@@ -25,6 +25,10 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Reopening Jira/PR tabs from the top-right buttons now resets the tab to the canonical Jira/PR URL and clears prior navigation history instead of keeping the last navigated page.
 
+### Tab
+#### Features
+- Double-clicking a terminal session tab now opens the existing "Rename Tab" prompt directly.
+
 ### Terminal
 #### Bug Fixes
 - Hardened embedded terminal display-link callbacks to safely ignore missing runtime userdata instead of crashing on pointer unwrap.

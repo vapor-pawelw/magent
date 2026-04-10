@@ -34,6 +34,7 @@ Each tab within a thread:
 - Operates in the same worktree directory as the thread
 - Starts in the thread worktree/repo directory on first session creation, but switching back to an already-running tab must not reset the shell's current directory
 - `Continue in...` context handoff must not create tracked or untracked files in the repo/worktree root; any transient handoff file should live outside the repo, use a unique filename so concurrent transfers do not collide, and expire automatically after a short retention window
+- Double-clicking a terminal session tab opens the same rename prompt as the tab context-menu "Rename Tab..." action
 
 ### Web Tabs
 
