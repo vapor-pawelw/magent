@@ -215,6 +215,8 @@ final class ThreadListViewController: NSViewController {
     /// Prevents stale Tasks from running when reloadData() is called rapidly.
     private var remoteCheckGeneration: Int = 0
     private(set) var selectedThreadID: UUID?
+    private var hasSidebarAppeared = false
+    private var didCenterInitialSelectedThreadOnLaunch = false
 
     private struct SidebarScrollSnapshot {
         let origin: NSPoint
@@ -284,9 +286,11 @@ final class ThreadListViewController: NSViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
+        hasSidebarAppeared = true
         // On first appearance the scroll view has its final bounds —
         // force the column width to match so rows don't extend past the trailing edge.
         refitOutlineColumnIfNeeded(force: true)
+        scheduleInitialSelectedThreadCenteringIfNeeded()
     }
 
     override func viewDidLayout() {
@@ -876,6 +880,7 @@ final class ThreadListViewController: NSViewController {
             self?.restoreSidebarScrollSnapshot(scrollSnapshot)
             self?.updateStickyHeaders()
             self?.updateSelectedThreadJumpCapsuleVisibility()
+            self?.scheduleInitialSelectedThreadCenteringIfNeeded()
         }
 
         // Refresh cached remote availability per project (async, non-blocking).
@@ -898,6 +903,50 @@ final class ThreadListViewController: NSViewController {
                 guard self?.remoteCheckGeneration == gen else { return }
                 self?.projectsWithValidRemotes = validIds
             }
+        }
+    }
+
+    private func scheduleInitialSelectedThreadCenteringIfNeeded() {
+        guard hasSidebarAppeared else { return }
+        guard !didCenterInitialSelectedThreadOnLaunch else { return }
+        guard selectedThreadID != nil else {
+            didCenterInitialSelectedThreadOnLaunch = true
+            return
+        }
+        attemptInitialSelectedThreadCentering(remainingAttempts: 6)
+    }
+
+    private func attemptInitialSelectedThreadCentering(remainingAttempts: Int) {
+        guard !didCenterInitialSelectedThreadOnLaunch else { return }
+        guard hasSidebarAppeared else { return }
+        guard let selectedThreadID else {
+            didCenterInitialSelectedThreadOnLaunch = true
+            return
+        }
+
+        refreshSidebarLayout(forceColumnRefit: true)
+        expandAncestorsIfNeeded(for: selectedThreadID)
+
+        guard scrollView.contentView.bounds.height > 0, outlineView.numberOfRows > 0 else {
+            guard remainingAttempts > 0 else { return }
+            DispatchQueue.main.async { [weak self] in
+                self?.attemptInitialSelectedThreadCentering(remainingAttempts: remainingAttempts - 1)
+            }
+            return
+        }
+
+        for row in 0..<outlineView.numberOfRows {
+            guard let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == selectedThreadID else { continue }
+            centerOutlineRowInViewport(row) { [weak self] in
+                self?.didCenterInitialSelectedThreadOnLaunch = true
+                self?.updateSelectedThreadJumpCapsuleVisibility()
+            }
+            return
+        }
+
+        guard remainingAttempts > 0 else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.attemptInitialSelectedThreadCentering(remainingAttempts: remainingAttempts - 1)
         }
     }
 

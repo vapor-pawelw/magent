@@ -8,6 +8,9 @@ All notable changes to this project will be documented in this file.
 #### Features
 - Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.
 
+#### Bug Fixes
+- Fixed launch-time thread navigation so the selected thread is centered only after the sidebar has fully loaded and laid out, avoiding premature scroll jumps during startup.
+
 ### Settings
 #### Bug Fixes
 - Fixed `Settings > General > Links` preference persistence. "Open web links in" now stays on the selected value after relaunch instead of reverting.
