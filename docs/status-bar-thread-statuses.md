@@ -12,6 +12,7 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - In the `done` popover, each row shows a trailing checkmark button that marks that thread as read without navigating away. The list refreshes immediately to keep showing the newest 3 unread completed threads.
 - Marking rows as read from the `done` popover keeps the popover open and refreshes its content in place, so users can clear multiple rows quickly.
 - While the `done` popover is open, the status-bar `done` count updates immediately after each mark-as-read action.
+- Using the `done` popover footer `Mark All as Read` action updates the status bar immediately too; if that clears all done threads, the popover closes right away.
 - The `done` popover also includes a footer button, `Mark All as Read`, below the thread rows.
 - Right-clicking the status-bar `done` item opens a context menu with a single action: `Mark All as Read`.
 - Clicking `X favorites` opens a favorites popover (same visual style as `done`) listing all favorite threads in chronological favorite order.
@@ -32,6 +33,7 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - `busy`, `waiting`, and `rate-limited` ordering is in-memory only. Their "added at" timestamps are tracked inside `StatusBarView` for the current app run and reset on relaunch because those statuses themselves are transient.
 - Favorites ordering uses persisted `MagentThread.favoritedAt` (fallback `createdAt`) and is not capped to 3 rows like status summaries.
 - While a status popover is visible, `StatusBarView` avoids rebuilding the status-button stack (to preserve the popover anchor) and updates existing button counts in place.
+- If a read action clears the currently open status entirely (for example, `done` goes to zero after `Mark All as Read`), `StatusBarView` must close that popover and rebuild the status-button stack immediately so stale `done` UI does not linger.
 
 ## Gotchas
 

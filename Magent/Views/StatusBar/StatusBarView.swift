@@ -962,6 +962,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
         let shouldRebuild = summaries != lastRenderedThreadSummaries || threads.count != lastRenderedThreadCount
         let isStatusPopoverVisible = activePopover?.isShown == true
+        let activeStatusStillPresent = activePopoverStatus.map { status in
+            summaries.contains { $0.kind == status }
+        } ?? false
 
         // Rebuilding the status-button stack replaces the anchor button view and
         // causes AppKit to dismiss an open popover. While any status popover is
@@ -974,6 +977,14 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             refreshStatusButtonCountsInPlace(summaries: summaries)
             lastRenderedThreadSummaries = summaries
             lastRenderedThreadCount = threads.count
+
+            // If the active status disappeared entirely (for example, "done"
+            // was cleared via Mark All as Read), close the stale popover and
+            // rebuild immediately so the status bar reflects the user action.
+            if !activeStatusStillPresent {
+                activePopover?.close()
+                rebuildThreadStatusSegments(summaries: summaries, totalCount: threads.count)
+            }
         }
 
         refreshActivePopover()
