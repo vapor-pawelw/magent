@@ -32,6 +32,7 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
     case waiting
     case done
     case rateLimited
+    case favorites
 
     var buttonTitle: String {
         switch self {
@@ -43,6 +44,8 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
             return "done"
         case .rateLimited:
             return "rate-limited"
+        case .favorites:
+            return "favorites"
         }
     }
 
@@ -56,6 +59,8 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
             return "Completed Threads"
         case .rateLimited:
             return "Rate-Limited Threads"
+        case .favorites:
+            return "Favorite Threads"
         }
     }
 
@@ -69,6 +74,8 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
             return "checkmark.circle.fill"
         case .rateLimited:
             return "hourglass"
+        case .favorites:
+            return "heart.fill"
         }
     }
 
@@ -82,6 +89,8 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
             return .systemGreen
         case .rateLimited:
             return .systemRed
+        case .favorites:
+            return NSColor(resource: .primaryBrand)
         }
     }
 
@@ -95,11 +104,17 @@ private enum ThreadStatusSummaryKind: String, CaseIterable {
             return thread.hasUnreadAgentCompletion
         case .rateLimited:
             return thread.isBlockedByRateLimit
+        case .favorites:
+            return thread.isFavorite
         }
     }
 
     var usesPersistentAddedAt: Bool {
-        self == .done
+        self == .done || self == .favorites
+    }
+
+    var showsInStatusSummaryStack: Bool {
+        self != .favorites
     }
 }
 
@@ -115,14 +130,21 @@ private struct ThreadStatusPopoverEntry {
     var isPropagatedOnly: Bool = false
 }
 
+private struct ThreadStatusPopoverRowTrailingAction {
+    let symbolName: String
+    let tintColor: NSColor
+    let tooltip: String
+}
+
 private final class ThreadStatusPopoverRowView: NSView {
     private let thread: MagentThread
     private let addedAt: Date
     private let projectName: String
     private let isPropagatedOnly: Bool
     private let onSelect: (UUID) -> Void
-    private let onMarkRead: ((UUID) -> Void)?
-    private weak var markReadButton: NSButton?
+    private let trailingAction: ThreadStatusPopoverRowTrailingAction?
+    private let onTrailingAction: ((UUID) -> Void)?
+    private weak var trailingActionButton: NSButton?
     private var trackingArea: NSTrackingArea?
     private var isHovered = false {
         didSet {
@@ -135,14 +157,16 @@ private final class ThreadStatusPopoverRowView: NSView {
         addedAt: Date,
         projectName: String,
         isPropagatedOnly: Bool = false,
-        onMarkRead: ((UUID) -> Void)? = nil,
+        trailingAction: ThreadStatusPopoverRowTrailingAction? = nil,
+        onTrailingAction: ((UUID) -> Void)? = nil,
         onSelect: @escaping (UUID) -> Void
     ) {
         self.thread = thread
         self.addedAt = addedAt
         self.projectName = projectName
         self.isPropagatedOnly = isPropagatedOnly
-        self.onMarkRead = onMarkRead
+        self.trailingAction = trailingAction
+        self.onTrailingAction = onTrailingAction
         self.onSelect = onSelect
         super.init(frame: .zero)
         setupViews()
@@ -179,9 +203,9 @@ private final class ThreadStatusPopoverRowView: NSView {
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         guard bounds.contains(point) else { return }
-        if let markReadButton {
-            let buttonPoint = markReadButton.convert(point, from: self)
-            if markReadButton.bounds.contains(buttonPoint) {
+        if let trailingActionButton {
+            let buttonPoint = trailingActionButton.convert(point, from: self)
+            if trailingActionButton.bounds.contains(buttonPoint) {
                 return
             }
         }
@@ -275,22 +299,22 @@ private final class ThreadStatusPopoverRowView: NSView {
             textStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -9),
         ]
 
-        if onMarkRead != nil {
+        if let trailingAction {
             let button = NSButton()
             button.isBordered = false
             button.bezelStyle = .inline
             button.image = NSImage(
-                systemSymbolName: "checkmark.circle",
-                accessibilityDescription: String(localized: .ThreadStrings.threadMarkAsRead)
+                systemSymbolName: trailingAction.symbolName,
+                accessibilityDescription: trailingAction.tooltip
             )?.withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
-            button.contentTintColor = .systemGreen
-            button.toolTip = String(localized: .ThreadStrings.threadMarkAsRead)
+            button.contentTintColor = trailingAction.tintColor
+            button.toolTip = trailingAction.tooltip
             button.target = self
-            button.action = #selector(markReadTapped)
+            button.action = #selector(trailingActionTapped)
             button.focusRingType = .none
             button.translatesAutoresizingMaskIntoConstraints = false
             addSubview(button)
-            markReadButton = button
+            trailingActionButton = button
 
             constraints.append(contentsOf: [
                 button.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -308,8 +332,8 @@ private final class ThreadStatusPopoverRowView: NSView {
         NSLayoutConstraint.activate(constraints)
     }
 
-    @objc private func markReadTapped() {
-        onMarkRead?(thread.id)
+    @objc private func trailingActionTapped() {
+        onTrailingAction?(thread.id)
     }
 
     private func updateLayerColors() {
@@ -338,22 +362,28 @@ private final class ThreadStatusPopoverViewController: NSViewController {
 
     private let status: ThreadStatusSummaryKind
     private let onSelectThread: (UUID) -> Void
-    private let onMarkDoneThreadAsRead: ((UUID) -> Void)?
+    private let trailingAction: ThreadStatusPopoverRowTrailingAction?
+    private let onRowTrailingAction: ((UUID) -> Void)?
     private let onMarkAllDoneAsRead: (() -> Void)?
+    private let limitReachedMessage: String?
     private let containerStack = NSStackView()
     private var entries: [ThreadStatusPopoverEntry]
 
     init(
         status: ThreadStatusSummaryKind,
         entries: [ThreadStatusPopoverEntry],
-        onMarkDoneThreadAsRead: ((UUID) -> Void)? = nil,
+        trailingAction: ThreadStatusPopoverRowTrailingAction? = nil,
+        onRowTrailingAction: ((UUID) -> Void)? = nil,
         onMarkAllDoneAsRead: (() -> Void)? = nil,
+        limitReachedMessage: String? = nil,
         onSelectThread: @escaping (UUID) -> Void
     ) {
         self.status = status
         self.entries = entries
-        self.onMarkDoneThreadAsRead = onMarkDoneThreadAsRead
+        self.trailingAction = trailingAction
+        self.onRowTrailingAction = onRowTrailingAction
         self.onMarkAllDoneAsRead = onMarkAllDoneAsRead
+        self.limitReachedMessage = limitReachedMessage
         self.onSelectThread = onSelectThread
         super.init(nibName: nil, bundle: nil)
     }
@@ -424,6 +454,47 @@ private final class ThreadStatusPopoverViewController: NSViewController {
             headerRow.widthAnchor.constraint(equalToConstant: Self.contentWidth),
         ])
 
+        if let limitReachedMessage {
+            let infoRow = NSView()
+            infoRow.translatesAutoresizingMaskIntoConstraints = false
+
+            let heart = NSImageView()
+            heart.translatesAutoresizingMaskIntoConstraints = false
+            heart.image = NSImage(systemSymbolName: "heart.fill", accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold))
+            heart.contentTintColor = NSColor(resource: .primaryBrand)
+
+            let infoLabel = NSTextField(labelWithString: limitReachedMessage)
+            infoLabel.translatesAutoresizingMaskIntoConstraints = false
+            infoLabel.font = .systemFont(ofSize: 10)
+            infoLabel.textColor = NSColor(resource: .textSecondary)
+            infoLabel.lineBreakMode = .byWordWrapping
+            infoLabel.maximumNumberOfLines = 2
+
+            infoRow.addSubview(heart)
+            infoRow.addSubview(infoLabel)
+            containerStack.addArrangedSubview(infoRow)
+            NSLayoutConstraint.activate([
+                infoRow.widthAnchor.constraint(equalToConstant: Self.contentWidth),
+                heart.leadingAnchor.constraint(equalTo: infoRow.leadingAnchor, constant: 4),
+                heart.topAnchor.constraint(equalTo: infoRow.topAnchor, constant: 8),
+                heart.widthAnchor.constraint(equalToConstant: 12),
+                heart.heightAnchor.constraint(equalToConstant: 12),
+                infoLabel.leadingAnchor.constraint(equalTo: heart.trailingAnchor, constant: 6),
+                infoLabel.trailingAnchor.constraint(equalTo: infoRow.trailingAnchor, constant: -4),
+                infoLabel.topAnchor.constraint(equalTo: infoRow.topAnchor, constant: 7),
+                infoLabel.bottomAnchor.constraint(equalTo: infoRow.bottomAnchor, constant: -6),
+            ])
+
+            let infoSeparator = NSBox()
+            infoSeparator.boxType = .separator
+            infoSeparator.translatesAutoresizingMaskIntoConstraints = false
+            containerStack.addArrangedSubview(infoSeparator)
+            NSLayoutConstraint.activate([
+                infoSeparator.widthAnchor.constraint(equalToConstant: Self.contentWidth),
+            ])
+        }
+
         let settings = PersistenceService.shared.loadSettings()
         let projectsById = Dictionary(uniqueKeysWithValues: settings.projects.map { ($0.id, $0.name) })
 
@@ -443,7 +514,8 @@ private final class ThreadStatusPopoverViewController: NSViewController {
                 addedAt: entry.addedAt,
                 projectName: projectsById[entry.thread.projectId] ?? "Unknown Project",
                 isPropagatedOnly: entry.isPropagatedOnly,
-                onMarkRead: status == .done ? onMarkDoneThreadAsRead : nil,
+                trailingAction: trailingAction,
+                onTrailingAction: onRowTrailingAction,
                 onSelect: onSelectThread
             )
             row.translatesAutoresizingMaskIntoConstraints = false
@@ -453,7 +525,7 @@ private final class ThreadStatusPopoverViewController: NSViewController {
             ])
         }
 
-        if status == .done, !entries.isEmpty {
+        if status == .done, !entries.isEmpty, onMarkAllDoneAsRead != nil {
             let separator = NSBox()
             separator.boxType = .separator
             separator.translatesAutoresizingMaskIntoConstraints = false
@@ -666,6 +738,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
     private let threadStatusStack = NSStackView()
     private let sessionCountButton = NSButton()
+    private let favoritesButton = NSButton()
     private let rateLimitLabel = NSTextField(labelWithString: "")
     private let syncStatusLabel = NSTextField(labelWithString: "")
     private let syncRefreshButton = NSButton()
@@ -677,6 +750,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private var statusButtonsByKind: [ThreadStatusSummaryKind: NSButton] = [:]
     private var lastRenderedThreadSummaries: [ThreadStatusSummaryDescriptor] = []
     private var lastRenderedThreadCount: Int = -1
+    private var lastRenderedFavoriteCount: Int = -1
     private var transientStatusThreadIds: [ThreadStatusSummaryKind: Set<UUID>] = [:]
     private var transientStatusAddedAt: [ThreadStatusSummaryKind: [UUID: Date]] = [:]
     private var activePopoverStatus: ThreadStatusSummaryKind?
@@ -760,6 +834,16 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         sessionCountButton.translatesAutoresizingMaskIntoConstraints = false
         updateSessionCountButton(total: 0, live: 0, zombieCount: 0, isRecoveringTmux: false)
 
+        favoritesButton.isBordered = false
+        favoritesButton.bezelStyle = .inline
+        favoritesButton.focusRingType = .none
+        favoritesButton.setButtonType(.momentaryChange)
+        favoritesButton.target = self
+        favoritesButton.action = #selector(favoritesTapped)
+        favoritesButton.toolTip = "Favorite threads"
+        favoritesButton.translatesAutoresizingMaskIntoConstraints = false
+        favoritesButton.isHidden = true
+
         configureLabel(rateLimitLabel, size: 11)
         rateLimitLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
 
@@ -779,7 +863,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         syncRefreshButton.toolTip = "Refresh PR and Jira statuses"
         syncRefreshButton.translatesAutoresizingMaskIntoConstraints = false
 
-        let leftStack = NSStackView(views: [sessionCountButton, threadStatusStack])
+        let leftStack = NSStackView(views: [sessionCountButton, favoritesButton, threadStatusStack])
         leftStack.orientation = .horizontal
         leftStack.alignment = .centerY
         leftStack.spacing = 12
@@ -837,6 +921,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         nc.addObserver(self, selector: sel, name: .magentSessionCleanupCompleted, object: nil)
         nc.addObserver(self, selector: sel, name: .magentDeadSessionsDetected, object: nil)
         nc.addObserver(self, selector: sel, name: .magentTmuxHealthChanged, object: nil)
+        nc.addObserver(self, selector: sel, name: .magentFavoritesChanged, object: nil)
 
         statusTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
@@ -854,6 +939,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     // MARK: - Refresh
 
     func refresh() {
+        updateFavoritesStatus()
         updateThreadStatus()
         updateSessionCount()
         updateRateLimitStatus()
@@ -866,7 +952,9 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         let threads = ThreadManager.shared.threads
         syncTransientStatusAddedAt(with: threads)
 
-        let summaries = ThreadStatusSummaryKind.allCases.compactMap { kind -> ThreadStatusSummaryDescriptor? in
+        let summaries = ThreadStatusSummaryKind.allCases
+            .filter(\.showsInStatusSummaryStack)
+            .compactMap { kind -> ThreadStatusSummaryDescriptor? in
             let count = threads.lazy.filter { kind.matches($0) }.count
             guard count > 0 else { return nil }
             return ThreadStatusSummaryDescriptor(kind: kind, count: count)
@@ -889,6 +977,36 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         }
 
         refreshActivePopover()
+    }
+
+    private func updateFavoritesStatus() {
+        let count = ThreadManager.shared.favoriteThreadCount
+        guard count != lastRenderedFavoriteCount else { return }
+        lastRenderedFavoriteCount = count
+
+        guard count > 0 else {
+            favoritesButton.isHidden = true
+            return
+        }
+
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
+        favoritesButton.image = NSImage(
+            systemSymbolName: "heart.fill",
+            accessibilityDescription: "Favorites"
+        )?.withSymbolConfiguration(symbolConfig)
+        favoritesButton.imagePosition = .imageLeading
+        favoritesButton.imageHugsTitle = true
+        favoritesButton.contentTintColor = NSColor(resource: .primaryBrand)
+        favoritesButton.attributedTitle = NSAttributedString(
+            string: "\(count) favorite\(count == 1 ? "" : "s")",
+            attributes: [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
+                .foregroundColor: NSColor(resource: .primaryBrand),
+            ]
+        )
+        favoritesButton.setAccessibilityLabel("\(count) favorite thread\(count == 1 ? "" : "s")")
+        favoritesButton.toolTip = "Favorite threads"
+        favoritesButton.isHidden = false
     }
 
     private func rebuildThreadStatusSegments(summaries: [ThreadStatusSummaryDescriptor], totalCount: Int) {
@@ -998,6 +1116,15 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     }
 
     private func popoverEntries(for status: ThreadStatusSummaryKind) -> [ThreadStatusPopoverEntry] {
+        if status == .favorites {
+            return ThreadManager.shared.favoriteThreadsChronological.map { thread in
+                ThreadStatusPopoverEntry(
+                    thread: thread,
+                    addedAt: thread.favoritedAt ?? thread.createdAt
+                )
+            }
+        }
+
         let threads = ThreadManager.shared.threads.filter { status.matches($0) }
         guard !threads.isEmpty else { return [] }
 
@@ -1397,12 +1524,60 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         showPopover(for: status)
     }
 
+    @objc private func favoritesTapped() {
+        if activePopoverStatus == .favorites, activePopover?.isShown == true {
+            activePopover?.close()
+            return
+        }
+        showPopover(for: .favorites)
+    }
+
     private func showPopover(for status: ThreadStatusSummaryKind) {
         let entries = popoverEntries(for: status)
-        guard !entries.isEmpty,
-              let anchorButton = statusButtonsByKind[status] else { return }
+        guard !entries.isEmpty else { return }
+        let anchorButton: NSButton?
+        if status == .favorites {
+            anchorButton = favoritesButton
+        } else {
+            anchorButton = statusButtonsByKind[status]
+        }
+        guard let anchorButton else { return }
 
         activePopover?.close()
+
+        let trailingAction: ThreadStatusPopoverRowTrailingAction?
+        let onRowTrailingAction: ((UUID) -> Void)?
+        let onMarkAllDoneAsRead: (() -> Void)?
+        let limitReachedMessage: String?
+        switch status {
+        case .done:
+            trailingAction = ThreadStatusPopoverRowTrailingAction(
+                symbolName: "checkmark.circle",
+                tintColor: .systemGreen,
+                tooltip: String(localized: .ThreadStrings.threadMarkAsRead)
+            )
+            onRowTrailingAction = { [weak self] threadId in self?.markDoneThreadAsRead(threadId) }
+            onMarkAllDoneAsRead = { [weak self] in self?.markAllCompletedThreadsAsRead(nil) }
+            limitReachedMessage = nil
+        case .favorites:
+            trailingAction = ThreadStatusPopoverRowTrailingAction(
+                symbolName: "heart.slash.circle",
+                tintColor: NSColor.systemRed.withAlphaComponent(0.9),
+                tooltip: "Remove from Favorites"
+            )
+            onRowTrailingAction = { [weak self] threadId in self?.removeFavoriteThread(threadId) }
+            onMarkAllDoneAsRead = nil
+            if ThreadManager.shared.favoriteThreadCount >= ThreadManager.maxFavoriteThreadCount {
+                limitReachedMessage = "Favorites limit reached (\(ThreadManager.maxFavoriteThreadCount)/\(ThreadManager.maxFavoriteThreadCount)). Remove one to add another."
+            } else {
+                limitReachedMessage = nil
+            }
+        default:
+            trailingAction = nil
+            onRowTrailingAction = nil
+            onMarkAllDoneAsRead = nil
+            limitReachedMessage = nil
+        }
 
         let popover = NSPopover()
         popover.behavior = .transient
@@ -1411,12 +1586,10 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         popover.contentViewController = ThreadStatusPopoverViewController(
             status: status,
             entries: entries,
-            onMarkDoneThreadAsRead: status == .done
-                ? { [weak self] threadId in self?.markDoneThreadAsRead(threadId) }
-                : nil,
-            onMarkAllDoneAsRead: status == .done
-                ? { [weak self] in self?.markAllCompletedThreadsAsRead(nil) }
-                : nil,
+            trailingAction: trailingAction,
+            onRowTrailingAction: onRowTrailingAction,
+            onMarkAllDoneAsRead: onMarkAllDoneAsRead,
+            limitReachedMessage: limitReachedMessage,
             onSelectThread: { [weak self] threadId in
                 self?.activePopover?.close()
                 let sessionName = self?.navigationSessionName(for: status, threadId: threadId)
@@ -1434,6 +1607,11 @@ final class StatusBarView: NSView, NSPopoverDelegate {
         activePopoverStatus = status
         activePopover = popover
         popover.show(relativeTo: anchorButton.bounds, of: anchorButton, preferredEdge: .maxY)
+    }
+
+    private func removeFavoriteThread(_ threadId: UUID) {
+        _ = ThreadManager.shared.toggleThreadFavorite(threadId: threadId)
+        refresh()
     }
 
     private func buildDoneContextMenu() -> NSMenu? {
@@ -1485,6 +1663,8 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             return orderedTerminalSessions.first {
                 thread.rateLimitedSessions[$0] != nil
             }
+        case .favorites:
+            return orderedTerminalSessions.first
         }
     }
 

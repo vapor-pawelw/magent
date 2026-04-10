@@ -135,6 +135,7 @@ public nonisolated struct IPCThreadStatus: Encodable, Sendable {
     public let isFullyDelivered: Bool
     public let showArchiveSuggestion: Bool
     public let isPinned: Bool
+    public let isFavorite: Bool
     public let isSidebarHidden: Bool
     public let isArchived: Bool
     public let isBlockedByRateLimit: Bool
@@ -153,6 +154,7 @@ public nonisolated struct IPCThreadStatus: Encodable, Sendable {
         isFullyDelivered: Bool,
         showArchiveSuggestion: Bool,
         isPinned: Bool,
+        isFavorite: Bool,
         isSidebarHidden: Bool,
         isArchived: Bool,
         isBlockedByRateLimit: Bool,
@@ -170,6 +172,7 @@ public nonisolated struct IPCThreadStatus: Encodable, Sendable {
         self.isFullyDelivered = isFullyDelivered
         self.showArchiveSuggestion = showArchiveSuggestion
         self.isPinned = isPinned
+        self.isFavorite = isFavorite
         self.isSidebarHidden = isSidebarHidden
         self.isArchived = isArchived
         self.isBlockedByRateLimit = isBlockedByRateLimit

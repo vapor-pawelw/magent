@@ -18,7 +18,7 @@ magent-cli attach (--thread <name> | --thread-id <id>) [--index <n>]
 magent-cli docs
 ```
 
-- `interactive`: picker flow `project -> thread (or create) -> tab -> tmux attach`, with ANSI colors when the terminal supports them. Tab rows use real tab names (not `Tab #`). Thread rows show branch/worktree info, PR/Jira details (when present), and live status badges (`done`, `busy`, `input`, `dirty`, `limited`, `delivered`) each on their own line. Threads are grouped by section in sidebar order; if a thread has only one tab the tab step is skipped. The CLI remembers the last attached session context and, on the next interactive run (without `--project`), opens directly in that thread when possible; fallback is last project, then project picker. Uses a numbered list (`1) … 2) …`) without fzf for reliable SSH/phone use.
+- `interactive`: picker flow `project -> thread (or create) -> tab -> tmux attach`, with ANSI colors when the terminal supports them. Tab rows use real tab names (not `Tab #`). Thread rows show branch/worktree info, PR/Jira details (when present), and live status badges (`done`, `busy`, `input`, `dirty`, `limited`, `delivered`, `♥`) each on their own line. Threads are grouped by section in sidebar order; if a thread has only one tab the tab step is skipped. The CLI remembers the last attached session context and, on the next interactive run (without `--project`), opens directly in that thread when possible; fallback is last project, then project picker. Uses a numbered list (`1) … 2) …`) without fzf for reliable SSH/phone use.
 - `ls`: table view (project/thread/branch/type/status/description/session), reusing the same live thread status data
 - `attach`: attach directly by session or by thread + tab index
 - `docs`: full on-demand IPC command reference + usage guidance (for agent/tooling prompts)
@@ -152,6 +152,7 @@ The response includes a `status` object with all UI-visible indicators:
 | `isFullyDelivered` | bool | All commits merged to base branch |
 | `showArchiveSuggestion` | bool | Thread is fully delivered, idle, and has no unsubmitted input |
 | `isPinned` | bool | Thread is pinned to top |
+| `isFavorite` | bool | Thread is marked as favorite |
 | `isSidebarHidden` | bool | Thread is hidden to the bottom of the list and shown dimmed |
 | `isArchived` | bool | Thread has been archived |
 | `isBlockedByRateLimit` | bool | All agent tabs are rate-limited (red hourglass) |
@@ -283,6 +284,22 @@ Restore a hidden thread to the normal sidebar group.
 
 ```bash
 magent-cli unhide-thread --thread <name>
+```
+
+### favorite-thread
+
+Mark a thread as favorite. Favorites are capped at 10.
+
+```bash
+magent-cli favorite-thread --thread <name>
+```
+
+### unfavorite-thread
+
+Remove a thread from favorites.
+
+```bash
+magent-cli unfavorite-thread --thread <name>
 ```
 
 ### archive-thread

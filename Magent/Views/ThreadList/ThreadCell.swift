@@ -247,6 +247,7 @@ final class ThreadCell: NSTableCellView {
     private var claudeRateLimitBadge: TopBorderBadge?
     private var codexRateLimitBadge: TopBorderBadge?
     private var keepAliveBadge: TopBorderBadge?
+    private var favoriteBadge: TopBorderBadge?
     private var pinnedBadge: TopBorderBadge?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
@@ -746,6 +747,13 @@ final class ThreadCell: NSTableCellView {
         updateLeadingIconTint()
 
 
+        if thread.isFavorite {
+            ensureFavoriteBadge()
+            favoriteBadge?.isHidden = false
+        } else {
+            favoriteBadge?.isHidden = true
+        }
+
         if thread.isPinned {
             ensurePinnedBadge()
             pinnedBadge?.isHidden = false
@@ -754,6 +762,7 @@ final class ThreadCell: NSTableCellView {
             pinnedBadge?.isHidden = true
             pinImageView?.isHidden = true
         }
+        updateTopBorderBadgeOrder()
 
         // Show shield when thread has Keep Alive, but hide it when pinned threads
         // are already implicitly protected via the protectPinnedFromEviction setting.
@@ -1095,6 +1104,22 @@ final class ThreadCell: NSTableCellView {
         keepAliveBadge = badge
     }
 
+    private func ensureFavoriteBadge() {
+        ensureTopBorderBadgeStack()
+        if favoriteBadge == nil {
+            let badge = TopBorderBadge(bareIcon: true)
+            badge.label.isHidden = true
+            badge.iconView.image = Self.cachedSymbolImage("heart.fill")
+            badge.iconView.contentTintColor = NSColor(resource: .primaryBrand)
+            badge.iconView.isHidden = false
+            badge.isHidden = true
+            favoriteBadge = badge
+        }
+        if let badge = favoriteBadge, badge.superview !== topBorderBadgeStack {
+            topBorderBadgeStack?.addArrangedSubview(badge)
+        }
+    }
+
     private func ensurePinnedBadge() {
         ensureTopBorderBadgeStack()
         if pinnedBadge == nil {
@@ -1106,14 +1131,36 @@ final class ThreadCell: NSTableCellView {
             badge.isHidden = true
             pinnedBadge = badge
         }
-        // Always re-add at the end so pin is rightmost regardless of creation order.
         if let badge = pinnedBadge, badge.superview !== topBorderBadgeStack {
             topBorderBadgeStack?.addArrangedSubview(badge)
-        } else if let badge = pinnedBadge, let stack = topBorderBadgeStack,
-                  stack.arrangedSubviews.last !== badge {
-            stack.removeArrangedSubview(badge)
-            badge.removeFromSuperview()
-            stack.addArrangedSubview(badge)
+        }
+    }
+
+    private func updateTopBorderBadgeOrder() {
+        guard let stack = topBorderBadgeStack else { return }
+
+        if let favorite = favoriteBadge, favorite.superview === stack,
+           let pin = pinnedBadge, pin.superview === stack {
+            stack.removeArrangedSubview(favorite)
+            favorite.removeFromSuperview()
+            stack.removeArrangedSubview(pin)
+            pin.removeFromSuperview()
+            stack.addArrangedSubview(favorite)
+            stack.addArrangedSubview(pin)
+            return
+        }
+
+        if let pin = pinnedBadge, pin.superview === stack, stack.arrangedSubviews.last !== pin {
+            stack.removeArrangedSubview(pin)
+            pin.removeFromSuperview()
+            stack.addArrangedSubview(pin)
+            return
+        }
+
+        if let favorite = favoriteBadge, favorite.superview === stack, stack.arrangedSubviews.last !== favorite {
+            stack.removeArrangedSubview(favorite)
+            favorite.removeFromSuperview()
+            stack.addArrangedSubview(favorite)
         }
     }
 
@@ -1130,9 +1177,13 @@ final class ThreadCell: NSTableCellView {
         claudeRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         codexRateLimitBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         keepAliveBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        favoriteBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         pinnedBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         priorityCapsule?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
-        // Pin icon: primary brand by default, white when selected.
+        // Pin/favorite icons: primary brand by default, white when selected.
+        if let favorite = favoriteBadge {
+            favorite.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
+        }
         if let pin = pinnedBadge {
             pin.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
         }

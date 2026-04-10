@@ -146,6 +146,53 @@ extension ThreadManager {
     }
 
     @MainActor
+    var favoriteThreadCount: Int {
+        threads.filter { !$0.isArchived && $0.isFavorite }.count
+    }
+
+    @MainActor
+    var favoriteThreadsChronological: [MagentThread] {
+        threads
+            .filter { !$0.isArchived && $0.isFavorite }
+            .sorted { lhs, rhs in
+                let l = lhs.favoritedAt ?? lhs.createdAt
+                let r = rhs.favoritedAt ?? rhs.createdAt
+                if l != r { return l < r }
+                return lhs.createdAt < rhs.createdAt
+            }
+    }
+
+    @MainActor
+    func canAddFavoriteThread(excludingThreadId: UUID? = nil) -> Bool {
+        let count = threads.filter {
+            !$0.isArchived && $0.isFavorite && $0.id != excludingThreadId
+        }.count
+        return count < Self.maxFavoriteThreadCount
+    }
+
+    @MainActor
+    @discardableResult
+    func toggleThreadFavorite(threadId: UUID) -> Bool {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return false }
+
+        if threads[index].isFavorite {
+            threads[index].isFavorite = false
+            threads[index].favoritedAt = nil
+        } else {
+            guard canAddFavoriteThread(excludingThreadId: threadId) else {
+                return false
+            }
+            threads[index].isFavorite = true
+            threads[index].favoritedAt = Date()
+        }
+
+        try? persistence.saveActiveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+        NotificationCenter.default.post(name: .magentFavoritesChanged, object: nil)
+        return true
+    }
+
+    @MainActor
     func toggleThreadHidden(threadId: UUID) {
         guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
         threads[index].isSidebarHidden.toggle()

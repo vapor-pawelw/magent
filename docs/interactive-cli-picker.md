@@ -12,6 +12,7 @@ Each thread row can have up to four lines. Empty lines are omitted.
 2. **Branch/worktree** — `name · branch · worktree · agent` joined with dots. Name is shown only when it differs from the title.
 3. **PR / Jira** — `PR #42 (Open) · IP-123`, shown only when PR info or a Jira ticket key is present.
 4. **Statuses** — `[busy] [dirty] [done] …`, shown only when at least one status badge is active. Idle threads have no status line.
+5. Favorite threads include a heart badge (`[♥]`) in the status line and in `magent-cli ls` status output.
 
 ### Tab rows
 

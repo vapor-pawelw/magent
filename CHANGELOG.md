@@ -59,6 +59,7 @@ All notable changes to this project will be documented in this file.
 - Auto-rename now uses all accumulated prompts for context, so if the first prompt gets rate-limited and the user follows up with "continue", the rename model still sees the original task description.
 - Manual "Rename from prompt" now updates the thread description and icon to match the new branch, instead of keeping the stale description from the original auto-rename.
 - Rename failure banners now include a diagnostic reason (timeout, CLI error, empty output, or parse failure) instead of a generic "could not generate" message.
+- Added thread Favorites: right-click `Add to Favorites` / `Remove from Favorites` action (next to pin), max 10 favorites, and a heart badge on favorite thread rows (positioned immediately left of the pin badge when both are present).
 
 #### Bug Fixes
 - Fixed AI Rename sheet hanging (infinite spinner) when typing after clicking at the end of the placeholder text.
@@ -68,6 +69,7 @@ All notable changes to this project will be documented in this file.
 - Fixed busy detection missing the agent status bar in tall terminal panes. Trailing blank lines in tmux captures are now stripped before analysis, preventing all-blank capture windows.
 - Fixed archive merge failing when the branch name matches the worktree directory name by using unambiguous `refs/heads/` git references.
 - Fixed "Rename from prompt" (TOC and auto-rename) failing silently when the spawned CLI process inherited an invalid stdin from the GUI app. Background `claude -p` and `codex exec` calls now redirect stdin from `/dev/null`, eliminating both the failure and a ~3-second startup delay.
+- Fixed stale thread context-menu state after favorite toggles by building menus from the latest thread snapshot.
 
 ### CLI
 #### Features
@@ -75,6 +77,8 @@ All notable changes to this project will be documented in this file.
 - `batch-create` specs now accept `"promptFile": "/path/to/prompt.txt"` to load the initial prompt from a file, avoiding JSON escaping issues with long or multi-line prompts. `promptFile` takes precedence over `prompt` when both are set.
 - Added thread priority support to the CLI: `create-thread --priority 1-5` and a per-spec `"priority"` key for `batch-create` assign the 1–5 priority at creation time. A new `set-priority --thread <name> (--priority 1-5 | --clear)` command updates or clears priority on existing threads.
 - Interactive CLI now remembers the last attached session context and, on the next run, opens directly in that thread when available. If the thread is gone it falls back to the last project; if the project is gone it falls back to project picker.
+- Added `favorite-thread --thread <name>` and `unfavorite-thread --thread <name>` commands.
+- Interactive picker and `ls` now render favorite threads with a heart status badge (`♥`), and `thread-info`/`list-threads` status now includes `isFavorite`.
 
 #### Bug Fixes
 - Fixed multiline prompts sent via `send-prompt` (or agent-to-agent injection) being cut off after the first line. tmux paste-buffer now uses bracketed paste mode so Claude's TUI receives newlines as literal characters rather than Enter keypresses.
@@ -111,6 +115,7 @@ All notable changes to this project will be documented in this file.
 #### Features
 - The `done` status popover now supports read actions directly: each row has a checkmark button to mark that thread as read, and a footer `Mark All as Read` button clears all unread completions.
 - Right-clicking the `done` status item now opens a one-action context menu with `Mark All as Read`.
+- Added a dedicated favorites status-bar control (`X favorites` with heart icon) shown when favorites exist. Clicking it opens a favorites popover (chronological order) with per-thread remove actions and a limit hint when the 10-favorite cap is reached.
 
 #### Bug Fixes
 - Holding `Option` while the thread context menu is open now live-switches `Mark as Read` to `Mark All as Read`, so bulk-clearing read state no longer requires reopening the menu.

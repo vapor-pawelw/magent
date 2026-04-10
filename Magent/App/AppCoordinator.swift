@@ -361,6 +361,8 @@ final class AppCoordinator {
         merged.isMain = canonical.isMain || duplicate.isMain
         merged.agentHasRun = canonical.agentHasRun || duplicate.agentHasRun
         merged.isPinned = canonical.isPinned || duplicate.isPinned
+        merged.isFavorite = canonical.isFavorite || duplicate.isFavorite
+        merged.favoritedAt = [canonical.favoritedAt, duplicate.favoritedAt].compactMap { $0 }.max()
         merged.isSidebarHidden = canonical.isSidebarHidden && duplicate.isSidebarHidden
         merged.lastAgentCompletionAt = [canonical.lastAgentCompletionAt, duplicate.lastAgentCompletionAt].compactMap { $0 }.max()
         merged.unreadCompletionSessions.formUnion(duplicate.unreadCompletionSessions)

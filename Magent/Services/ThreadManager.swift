@@ -12,6 +12,8 @@ protocol ThreadManagerDelegate: AnyObject {
 }
 
 final class ThreadManager {
+    static let maxFavoriteThreadCount = 10
+
     struct StatusSyncResult {
         let hadErrors: Bool
         let failureSummary: String?

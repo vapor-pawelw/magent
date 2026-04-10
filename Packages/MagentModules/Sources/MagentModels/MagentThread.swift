@@ -265,6 +265,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     public var lastSelectedTabIdentifier: String?
     public var agentHasRun: Bool
     public var isPinned: Bool
+    public var isFavorite: Bool
+    public var favoritedAt: Date?
     public var isSidebarHidden: Bool
     public var lastAgentCompletionAt: Date?
     public var unreadCompletionSessions: Set<String>
@@ -583,7 +585,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case tmuxSessionNames, agentTmuxSessions, sessionConversationIDs, sessionAgentTypes, sessionCreatedAts, freshAgentSessions, forwardedTmuxSessions, pinnedTmuxSessions, protectedTmuxSessions, isKeepAlive, didOfferKeepAlivePromotion
         case createdAt, isArchived, archivedAt, sectionId, isMain
         case lastSelectedTabIdentifier = "lastSelectedTmuxSessionName"
-        case agentHasRun, isPinned, isSidebarHidden, lastAgentCompletionAt
+        case agentHasRun, isPinned, isFavorite, favoritedAt, isSidebarHidden, lastAgentCompletionAt
         case unreadCompletionSessions
         case hasUnreadAgentCompletion // migration only
         case didAutoRenameFromFirstPrompt
@@ -630,6 +632,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         lastSelectedTabIdentifier: String? = nil,
         agentHasRun: Bool = false,
         isPinned: Bool = false,
+        isFavorite: Bool = false,
+        favoritedAt: Date? = nil,
         isSidebarHidden: Bool = false,
         lastAgentCompletionAt: Date? = nil,
         unreadCompletionSessions: Set<String> = [],
@@ -673,6 +677,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.lastSelectedTabIdentifier = lastSelectedTabIdentifier
         self.agentHasRun = agentHasRun
         self.isPinned = isPinned
+        self.isFavorite = isFavorite
+        self.favoritedAt = favoritedAt
         self.isSidebarHidden = isSidebarHidden
         self.lastAgentCompletionAt = lastAgentCompletionAt
         self.unreadCompletionSessions = unreadCompletionSessions
@@ -739,6 +745,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             lastSelectedTabIdentifier: lastSelectedTabIdentifier,
             agentHasRun: agentHasRun,
             isPinned: isPinned,
+            isFavorite: isFavorite,
+            favoritedAt: favoritedAt,
             isSidebarHidden: isSidebarHidden,
             lastAgentCompletionAt: lastAgentCompletionAt,
             unreadCompletionSessions: unreadCompletionSessions,
@@ -806,6 +814,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         lastSelectedTabIdentifier = try container.decodeIfPresent(String.self, forKey: .lastSelectedTabIdentifier)
         agentHasRun = try container.decodeIfPresent(Bool.self, forKey: .agentHasRun) ?? false
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        favoritedAt = try container.decodeIfPresent(Date.self, forKey: .favoritedAt)
         isSidebarHidden = try container.decodeIfPresent(Bool.self, forKey: .isSidebarHidden) ?? false
         lastAgentCompletionAt = try container.decodeIfPresent(Date.self, forKey: .lastAgentCompletionAt)
         didAutoRenameFromFirstPrompt = try container.decodeIfPresent(Bool.self, forKey: .didAutoRenameFromFirstPrompt) ?? false
@@ -888,6 +898,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         try container.encodeIfPresent(lastSelectedTabIdentifier, forKey: .lastSelectedTabIdentifier)
         try container.encode(agentHasRun, forKey: .agentHasRun)
         try container.encode(isPinned, forKey: .isPinned)
+        try container.encode(isFavorite, forKey: .isFavorite)
+        try container.encodeIfPresent(favoritedAt, forKey: .favoritedAt)
         try container.encode(isSidebarHidden, forKey: .isSidebarHidden)
         try container.encodeIfPresent(lastAgentCompletionAt, forKey: .lastAgentCompletionAt)
         try container.encode(unreadCompletionSessions, forKey: .unreadCompletionSessions)
