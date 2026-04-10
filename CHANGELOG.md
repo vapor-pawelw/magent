@@ -29,6 +29,7 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 #### Features
 - Added "Sort" submenu to section and repo right-click context menus. Sort threads by description, branch name, priority, or last completion. Sorting always respects pinned/normal/hidden boundaries (pinned threads never drop below unpinned). Hold/release ⌥ Option while the menu is open to live-swap between ascending and descending sort items. Right-clicking the repo name sorts all sections at once (including hidden sections); right-clicking a section sorts only that section. When section grouping is disabled, all threads are treated as one container.
+- Added a floating "selected thread" jump capsule at the bottom of the thread list that appears only when the current thread is outside the visible sidebar viewport. The capsule shows thread icon + description (or worktree fallback) and a directional arrow, and clicking it scrolls to center the thread row.
 
 ### Thread
 #### Features
@@ -77,6 +78,7 @@ All notable changes to this project will be documented in this file.
 - Right-clicking an unselected thread now briefly highlights its row while the context menu is open, making it clear which thread the action will apply to.
 
 #### Bug Fixes
+- Fixed bottom-of-list overlap with the floating selected-thread capsule by reserving explicit spacer height in the thread list content, so end-of-list spacing stays consistent whether the changes panel is visible or hidden.
 - Fixed thread row state highlights (busy/completion/waiting/rate-limit) disappearing after scrolling away and back. Reused rows now resolve against the latest thread snapshot before rendering.
 - Fixed branch rename dialog pre-filling with the worktree name instead of the current git branch, and silently doing nothing when the user accepted it.
 - Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.

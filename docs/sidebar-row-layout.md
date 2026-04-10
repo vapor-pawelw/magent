@@ -23,6 +23,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - No separator divider between project groups; vertical gap (`projectHeaderInterProjectGap = 24pt`) handles spacing.
 - The global "Add repository" button is a `SidebarAddRepoRow` at the top of the outline view's root items. It scrolls with the rest of the content — there is no sticky toolbar.
 - **Sticky headers**: When the user scrolls past a project or section header, a floating overlay (`StickyHeaderOverlayView`) pins the project name (and current section, if applicable) at the top of the sidebar. A 12pt fade gradient softens the transition into scrolling content. Clicking a sticky header smoothly scrolls the sidebar to reveal the actual header row.
+- **Selected-thread jump capsule**: When the selected thread is outside the visible thread-list viewport, a floating capsule appears near the bottom of the thread list (inside the sidebar's thread area, not over the changes panel). It shows thread icon + title (prefer task description, fallback to worktree name) and a directional arrow (`up`/`down`) indicating where the row is relative to the viewport. Clicking the capsule centers the selected thread row. The capsule fades/slides in/out, and after scrolling completes the target row gets a brief pulse.
 - The archive icon (`archivebox.fill`) appears in the trailing area. Clicking it must not select the row — `SidebarOutlineView.mouseDown` intercepts clicks on the archive button directly.
 
 ## Implementation Notes
@@ -38,6 +39,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
   - `sidebarTrailingInset` — trailing content rail (same derivation from trailing side).
   - `capsuleAlignedLeading` / `capsuleAlignedTrailing` — non-thread row alignment (project/section headers).
   - `addRepoRowHeight` — height for the `SidebarAddRepoRow`.
+- Bottom overlay spacing is reserved via a dedicated `SidebarBottomPadding` root item appended after projects. This keeps end-of-list scroll space deterministic regardless of changes-panel visibility.
 - Outline view uses `indentationPerLevel = 0`. All indentation is managed via capsule-relative padding in `ThreadCell`.
 - `AlwaysEmphasizedRowView.drawBackground(in:)` handles all selection/state drawing (not `drawSelection`). `selectionHighlightStyle = .none` on the outline view suppresses AppKit's own selection rect.
 - `AlwaysEmphasizedRowView.isSelected.didSet` pushes `backgroundStyle` to child cell views and updates sign emoji selection color.
@@ -56,6 +58,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - When displaying branch and worktree names together, check for equality first — if the same, show once.
 - Keep the main-row accent bar at `sidebarHorizontalInset` so it aligns with non-main thread icons.
 - `SidebarProjectMainSpacer` is skipped entirely when `projectHeaderToMainRowGap = 0` — inserting a 0-height spacer row crashes `NSOutlineView`.
+- Do not rely on `NSScrollView.contentInsets` for overlay-aware bottom spacing in this sidebar. Effective behavior changes with sibling panel visibility; use explicit content padding rows (`SidebarBottomPadding`) instead.
 - The PR/ticket row (`prRow`) contains `[jiraTicketTF, jiraBadge, dotSep, prNumTF, prBadge]` with `detachesHiddenViews = true`. Never merge branch/worktree and PR/ticket into one secondary line.
 - CALayer colors from dynamic NSColor assets must be resolved inside `performAsCurrentDrawingAppearance`. `NSColor(resource:).withAlphaComponent(_:)` can snapshot the wrong drawing context at call time. Always create derived colors AND access `.cgColor` inside the `effectiveAppearance.performAsCurrentDrawingAppearance { }` block.
 - The sticky header's `CAGradientLayer` uses non-flipped CALayer coordinates: `colors[0]` at `startPoint(y=0)` is the visual **bottom** of the layer. So the array must be `[transparent, opaque]` to fade from opaque (top, adjacent to headers) to transparent (bottom).

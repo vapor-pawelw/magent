@@ -515,6 +515,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarGroupSeparator {
             return 12
         }
+        if let bottomPadding = item as? SidebarBottomPadding {
+            return bottomPadding.height
+        }
         if item is SidebarProject {
             return Self.projectHeaderRowHeight
         }
@@ -604,6 +607,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             return false
         }
         if item is SidebarGroupSeparator {
+            return false
+        }
+        if item is SidebarBottomPadding {
             return false
         }
         if let project = item as? SidebarProject {
@@ -718,6 +724,16 @@ extension ThreadListViewController: NSOutlineViewDelegate {
             let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? SidebarGroupSeparatorCellView
                 ?? {
                     let c = SidebarGroupSeparatorCellView()
+                    c.identifier = identifier
+                    return c
+                }()
+            return cell
+        }
+        if item is SidebarBottomPadding {
+            let identifier = NSUserInterfaceItemIdentifier("BottomPaddingCell")
+            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
+                ?? {
+                    let c = NSTableCellView()
                     c.identifier = identifier
                     return c
                 }()
@@ -1128,6 +1144,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         }
         let selectionChanged = selectedThreadID != thread.id
         let resolved = recordSelectedThread(thread)
+        updateSelectedThreadJumpCapsuleVisibility()
         if selectionChanged {
             // New thread selected: delegate calls refreshDiffPanelForSelectedThread() which resets
             // the panel. Do NOT also call refreshDiffPanel here — that would create a second
@@ -1224,6 +1241,7 @@ extension ThreadListViewController: ThreadManagerDelegate {
         } else if outlineView.selectedRow < 0 {
             clearSelectedThreadState()
         }
+        updateSelectedThreadJumpCapsuleVisibility()
     }
 
     // MARK: - Structural change detection

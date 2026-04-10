@@ -183,6 +183,19 @@ final class ThreadListViewController: NSViewController {
     var diffPanelCommitLimitByThreadId: [UUID: Int] = [:]
     let diffPanelCommitPageSize = 10
     private var pendingSettingsReloadWorkItem: DispatchWorkItem?
+    private let selectedThreadJumpCapsule = NSView()
+    private let selectedThreadJumpIconView = NSImageView()
+    private let selectedThreadJumpTitleLabel = NSTextField(labelWithString: "")
+    private let selectedThreadJumpDirectionView = NSImageView()
+    private let selectedThreadJumpVisibleBottomInset: CGFloat = 16
+    private let selectedThreadJumpHiddenBottomInset: CGFloat = 4
+    private let selectedThreadJumpHeight: CGFloat = 32
+    private var selectedThreadJumpBottomConstraint: NSLayoutConstraint?
+    private var selectedThreadJumpIsVisible = false
+    private var selectedThreadJumpClickGesture: NSClickGestureRecognizer?
+    private var selectedThreadJumpRequiredListBottomInset: CGFloat {
+        (selectedThreadJumpVisibleBottomInset * 2) + selectedThreadJumpHeight
+    }
     /// Coalesces multiple `didUpdateThreads` delegate calls into a single sidebar
     /// refresh per run-loop cycle. The session monitor can fire several updates within
     /// one tick (busy sync, rate-limit, completions); without coalescing each would
@@ -231,6 +244,7 @@ final class ThreadListViewController: NSViewController {
 
         // Auto-select first selectable item
         autoSelectFirst()
+        updateSelectedThreadJumpCapsuleVisibility()
 
         NotificationCenter.default.addObserver(
             self,
@@ -316,6 +330,7 @@ final class ThreadListViewController: NSViewController {
 
     @objc private func scrollViewDidScroll(_ notification: Notification) {
         updateStickyHeaders()
+        updateSelectedThreadJumpCapsuleVisibility()
     }
 
     /// Determines which project/section header should be pinned at the top of the
@@ -577,6 +592,8 @@ final class ThreadListViewController: NSViewController {
         view.addSubview(stickyHeaderOverlay)
         stickyHeaderHeightConstraint = stickyHeaderOverlay.heightAnchor.constraint(equalToConstant: 0)
 
+        setupSelectedThreadJumpCapsule()
+
         scrollViewTopConstraint = scrollView.topAnchor.constraint(equalTo: view.topAnchor)
 
         NSLayoutConstraint.activate([
@@ -598,6 +615,77 @@ final class ThreadListViewController: NSViewController {
             branchMismatchView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             branchMismatchView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
+    }
+
+    private func setupSelectedThreadJumpCapsule() {
+        selectedThreadJumpCapsule.translatesAutoresizingMaskIntoConstraints = false
+        selectedThreadJumpCapsule.wantsLayer = true
+        selectedThreadJumpCapsule.isHidden = true
+        selectedThreadJumpCapsule.alphaValue = 0
+        selectedThreadJumpCapsule.toolTip = "Scroll to selected thread"
+        let click = NSClickGestureRecognizer(target: self, action: #selector(selectedThreadJumpCapsuleTapped(_:)))
+        selectedThreadJumpCapsule.addGestureRecognizer(click)
+        selectedThreadJumpClickGesture = click
+
+        selectedThreadJumpIconView.translatesAutoresizingMaskIntoConstraints = false
+        selectedThreadJumpIconView.imageScaling = .scaleProportionallyDown
+        selectedThreadJumpIconView.setContentHuggingPriority(.required, for: .horizontal)
+        selectedThreadJumpIconView.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        selectedThreadJumpTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        selectedThreadJumpTitleLabel.font = .systemFont(ofSize: 12.5, weight: .semibold)
+        selectedThreadJumpTitleLabel.textColor = .labelColor
+        selectedThreadJumpTitleLabel.lineBreakMode = .byTruncatingTail
+        selectedThreadJumpTitleLabel.maximumNumberOfLines = 1
+        selectedThreadJumpTitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        selectedThreadJumpDirectionView.translatesAutoresizingMaskIntoConstraints = false
+        selectedThreadJumpDirectionView.imageScaling = .scaleProportionallyDown
+        selectedThreadJumpDirectionView.contentTintColor = .tertiaryLabelColor
+        selectedThreadJumpDirectionView.setContentHuggingPriority(.required, for: .horizontal)
+        selectedThreadJumpDirectionView.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        let capsuleContent = NSStackView(views: [selectedThreadJumpIconView, selectedThreadJumpTitleLabel, selectedThreadJumpDirectionView])
+        capsuleContent.translatesAutoresizingMaskIntoConstraints = false
+        capsuleContent.orientation = .horizontal
+        capsuleContent.alignment = .centerY
+        capsuleContent.spacing = 8
+
+        selectedThreadJumpCapsule.addSubview(capsuleContent)
+        view.addSubview(selectedThreadJumpCapsule)
+
+        selectedThreadJumpBottomConstraint = selectedThreadJumpCapsule.bottomAnchor.constraint(
+            equalTo: scrollView.bottomAnchor,
+            constant: -selectedThreadJumpHiddenBottomInset
+        )
+
+        NSLayoutConstraint.activate([
+            capsuleContent.leadingAnchor.constraint(equalTo: selectedThreadJumpCapsule.leadingAnchor, constant: 12),
+            capsuleContent.trailingAnchor.constraint(equalTo: selectedThreadJumpCapsule.trailingAnchor, constant: -12),
+            capsuleContent.centerYAnchor.constraint(equalTo: selectedThreadJumpCapsule.centerYAnchor),
+            selectedThreadJumpIconView.widthAnchor.constraint(equalToConstant: 14),
+            selectedThreadJumpIconView.heightAnchor.constraint(equalToConstant: 14),
+            selectedThreadJumpDirectionView.widthAnchor.constraint(equalToConstant: 12),
+            selectedThreadJumpDirectionView.heightAnchor.constraint(equalToConstant: 12),
+
+            selectedThreadJumpCapsule.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 16),
+            selectedThreadJumpCapsule.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -16),
+            selectedThreadJumpCapsule.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            selectedThreadJumpCapsule.widthAnchor.constraint(lessThanOrEqualToConstant: 420),
+            selectedThreadJumpCapsule.heightAnchor.constraint(equalToConstant: selectedThreadJumpHeight),
+            selectedThreadJumpBottomConstraint!,
+        ])
+
+        applySelectedThreadJumpCapsuleStyle()
+    }
+
+    private func applySelectedThreadJumpCapsuleStyle() {
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            selectedThreadJumpCapsule.layer?.cornerRadius = 16
+            selectedThreadJumpCapsule.layer?.borderWidth = 1
+            selectedThreadJumpCapsule.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            selectedThreadJumpCapsule.layer?.borderColor = NSColor(resource: .primaryBrand).cgColor
+        }
     }
 
     // MARK: - Data
@@ -718,6 +806,7 @@ final class ThreadListViewController: NSViewController {
             }
             sidebarRootItems.append(project)
         }
+        sidebarRootItems.append(SidebarBottomPadding(height: selectedThreadJumpRequiredListBottomInset))
 
         // Read collapse state before reloadData() — AppKit can fire outlineViewItemDidCollapse
         // for previously-expanded items during the reload, which would corrupt UserDefaults
@@ -782,9 +871,11 @@ final class ThreadListViewController: NSViewController {
 
         restoreSidebarScrollSnapshot(scrollSnapshot)
         updateStickyHeaders()
+        updateSelectedThreadJumpCapsuleVisibility()
         DispatchQueue.main.async { [weak self] in
             self?.restoreSidebarScrollSnapshot(scrollSnapshot)
             self?.updateStickyHeaders()
+            self?.updateSelectedThreadJumpCapsuleVisibility()
         }
 
         // Refresh cached remote availability per project (async, non-blocking).
@@ -956,6 +1047,16 @@ final class ThreadListViewController: NSViewController {
         }
     }
 
+    func centerThreadRow(byId threadId: UUID, completion: (() -> Void)? = nil) {
+        expandAncestorsIfNeeded(for: threadId)
+        for row in 0..<outlineView.numberOfRows {
+            guard let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId else { continue }
+            centerOutlineRowInViewport(row, completion: completion)
+            return
+        }
+        completion?()
+    }
+
     private func expandAncestorsIfNeeded(for threadId: UUID) {
         for project in sidebarProjects {
             if project.children.contains(where: { ($0 as? MagentThread)?.id == threadId }) {
@@ -970,6 +1071,152 @@ final class ThreadListViewController: NSViewController {
                 outlineView.expandItem(section)
                 return
             }
+        }
+    }
+
+    private func centerOutlineRowInViewport(_ row: Int, completion: (() -> Void)? = nil) {
+        guard row >= 0 else { return }
+        let rowRect = outlineView.rect(ofRow: row)
+        guard rowRect.height > 0 else { return }
+
+        let clipView = scrollView.contentView
+        let visibleHeight = clipView.bounds.height
+        guard visibleHeight > 0 else {
+            outlineView.scrollRowToVisible(row)
+            completion?()
+            return
+        }
+
+        let rowMidY = rowRect.midY
+        let targetY = rowMidY - (visibleHeight / 2)
+        let maxOffsetY = max(0, outlineView.bounds.height - visibleHeight)
+        let clampedY = min(max(targetY, 0), maxOffsetY)
+        let targetOrigin = NSPoint(x: clipView.bounds.origin.x, y: clampedY)
+
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            clipView.animator().setBoundsOrigin(targetOrigin)
+            scrollView.reflectScrolledClipView(clipView)
+        }, completionHandler: {
+            completion?()
+        })
+    }
+
+    func updateSelectedThreadJumpCapsuleVisibility() {
+        guard isViewLoaded else { return }
+        guard let selectedThread = selectedThreadFromState() else {
+            setSelectedThreadJumpCapsuleVisible(false)
+            return
+        }
+
+        selectedThreadJumpIconView.image = NSImage(systemSymbolName: selectedThread.threadIcon.symbolName, accessibilityDescription: selectedThread.threadIcon.accessibilityDescription)
+        selectedThreadJumpIconView.contentTintColor = NSColor(resource: .primaryBrand)
+        let description = selectedThread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let worktreeName = (selectedThread.worktreePath as NSString).lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !description.isEmpty {
+            selectedThreadJumpTitleLabel.stringValue = description
+        } else if !worktreeName.isEmpty {
+            selectedThreadJumpTitleLabel.stringValue = worktreeName
+        } else {
+            selectedThreadJumpTitleLabel.stringValue = "Thread"
+        }
+
+        let row = outlineView.row(forItem: selectedThread)
+        let shouldShow: Bool
+        let directionSymbolName: String
+        if row < 0 {
+            shouldShow = true
+            directionSymbolName = "arrow.up.and.down"
+        } else {
+            let rowRect = outlineView.rect(ofRow: row)
+            let visibleRect = scrollView.contentView.bounds
+            shouldShow = !rowRect.intersects(visibleRect)
+            if rowRect.maxY < visibleRect.minY {
+                directionSymbolName = "arrow.up"
+            } else if rowRect.minY > visibleRect.maxY {
+                directionSymbolName = "arrow.down"
+            } else {
+                directionSymbolName = "arrow.up.and.down"
+            }
+        }
+        selectedThreadJumpDirectionView.image = NSImage(
+            systemSymbolName: directionSymbolName,
+            accessibilityDescription: "Scroll direction"
+        )
+
+        setSelectedThreadJumpCapsuleVisible(shouldShow)
+    }
+
+    private func setSelectedThreadJumpCapsuleVisible(_ visible: Bool) {
+        guard visible != selectedThreadJumpIsVisible else { return }
+        selectedThreadJumpIsVisible = visible
+
+        if visible {
+            view.addSubview(selectedThreadJumpCapsule, positioned: .above, relativeTo: nil)
+            selectedThreadJumpCapsule.isHidden = false
+            selectedThreadJumpCapsule.alphaValue = 0
+            selectedThreadJumpBottomConstraint?.constant = -selectedThreadJumpHiddenBottomInset
+            view.layoutSubtreeIfNeeded()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.18
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                selectedThreadJumpCapsule.animator().alphaValue = 1
+                selectedThreadJumpBottomConstraint?.animator().constant = -selectedThreadJumpVisibleBottomInset
+                view.layoutSubtreeIfNeeded()
+            }
+        } else {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.16
+                context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                selectedThreadJumpCapsule.animator().alphaValue = 0
+                selectedThreadJumpBottomConstraint?.animator().constant = -selectedThreadJumpHiddenBottomInset
+                view.layoutSubtreeIfNeeded()
+            }, completionHandler: { [weak self] in
+                guard let self else { return }
+                guard !self.selectedThreadJumpIsVisible else { return }
+                self.selectedThreadJumpCapsule.isHidden = true
+            })
+        }
+    }
+
+    @objc private func selectedThreadJumpCapsuleTapped(_ gesture: NSClickGestureRecognizer) {
+        guard let selectedThreadID else { return }
+        centerThreadRow(byId: selectedThreadID) { [weak self] in
+            self?.pulseThreadRow(threadId: selectedThreadID)
+        }
+    }
+
+    private func pulseThreadRow(threadId: UUID) {
+        for row in 0..<outlineView.numberOfRows {
+            guard let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId else { continue }
+            guard let rowView = outlineView.rowView(atRow: row, makeIfNecessary: true) else { return }
+            rowView.wantsLayer = true
+            guard let layer = rowView.layer else { return }
+            layer.removeAnimation(forKey: "selectedThreadRowPulse")
+
+            // Ensure scaling animates around the visual center (not an edge/corner).
+            let targetAnchor = CGPoint(x: 0.5, y: 0.5)
+            if layer.anchorPoint != targetAnchor {
+                let oldAnchor = layer.anchorPoint
+                let oldPosition = layer.position
+                layer.anchorPoint = targetAnchor
+                let dx = (targetAnchor.x - oldAnchor.x) * layer.bounds.width
+                let dy = (targetAnchor.y - oldAnchor.y) * layer.bounds.height
+                layer.position = CGPoint(x: oldPosition.x + dx, y: oldPosition.y + dy)
+            }
+
+            let pulse = CAKeyframeAnimation(keyPath: "transform.scale")
+            pulse.values = [1.0, 1.05, 1.0]
+            pulse.keyTimes = [0.0, 0.5, 1.0]
+            pulse.duration = 0.3
+            pulse.timingFunctions = [
+                CAMediaTimingFunction(name: .easeOut),
+                CAMediaTimingFunction(name: .easeIn)
+            ]
+            layer.add(pulse, forKey: "selectedThreadRowPulse")
+            return
         }
     }
 
@@ -991,6 +1238,7 @@ final class ThreadListViewController: NSViewController {
         selectedThreadID = nil
         diffPanelView?.clear()
         branchMismatchView?.clear()
+        updateSelectedThreadJumpCapsuleVisibility()
     }
 
 }
