@@ -2161,6 +2161,8 @@ extension Notification.Name {
     static let magentSessionCleanupCompleted = Notification.Name("magentSessionCleanupCompleted")
     /// Posted when Keep Alive protection changes on a thread. Carries "threadId" (UUID).
     static let magentKeepAliveChanged = Notification.Name("magentKeepAliveChanged")
+    /// Posted when thread favorites change.
+    static let magentFavoritesChanged = Notification.Name("magentFavoritesChanged")
     /// Posted when tmux zombie summary or recovery state changes.
     static let magentTmuxHealthChanged = Notification.Name("magentTmuxHealthChanged")
 }

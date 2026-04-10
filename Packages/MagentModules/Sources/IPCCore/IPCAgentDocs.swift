@@ -25,6 +25,8 @@ public enum IPCAgentDocs {
     /tmp/magent-cli set-base-branch --thread <name> --base-branch <branch>
     /tmp/magent-cli hide-thread --thread <name>
     /tmp/magent-cli unhide-thread --thread <name>
+    /tmp/magent-cli favorite-thread --thread <name>
+    /tmp/magent-cli unfavorite-thread --thread <name>
     /tmp/magent-cli keep-alive-thread --thread <name> [--remove]
     /tmp/magent-cli keep-alive-tab --thread <name> --session <name> [--remove]
     /tmp/magent-cli thread-info --thread <name>
@@ -54,6 +56,7 @@ public enum IPCAgentDocs {
     Use set-thread-icon to manually set the thread icon type.
     Thread priority is a 1–5 scale shown as cumulative dots in the sidebar (1 blue = lowest, 5 red = highest). Pass --priority 1-5 to create-thread/batch-create (or set it later with set-priority --priority 1-5) ONLY when the user has given you real signal about urgency/importance for that specific thread — e.g. a Jira priority, an explicit instruction ("this is urgent", "low priority chore"), or a blocker vs. nice-to-have framing. Do NOT guess a priority from the task description alone, do NOT default every thread to 3, and do NOT set priority on exploratory/research threads where the user has not expressed urgency. Use set-priority --clear to remove a priority.
     Use hide-thread / unhide-thread to deprioritize a thread in the sidebar without archiving it.
+    Use favorite-thread / unfavorite-thread to manage Favorites (max 10).
     Use archive-thread --skip-local-sync to avoid writing local sync path changes into the main worktree during archive.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
 

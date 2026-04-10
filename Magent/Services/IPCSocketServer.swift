@@ -326,6 +326,7 @@ actor IPCSocketServer {
             [ "$8" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_MUTED" "[hidden]")")
             [ "$9" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_YELLOW" "[branch?]")")
             [ "${10}" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_RED" "[jira]")")
+            [ "${11}" = "true" ] && badges=$(append_badge "$badges" "$(paint "$ANSI_RED" "[♥]")")
             printf '%s' "$badges"
         }
 
@@ -386,7 +387,7 @@ actor IPCSocketServer {
         }
 
         format_ls_status() {
-            ls_badges=$(format_thread_badges "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}")
+            ls_badges=$(format_thread_badges "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11}")
             printf '%s' "$ls_badges" | sed 's/\[//g; s/\]//g; s/ /,/g'
         }
 
@@ -574,6 +575,7 @@ actor IPCSocketServer {
                         (if (.status.isSidebarHidden // false) then "true" else "false" end),
                         (if (.status.hasBranchMismatch // false) then "true" else "false" end),
                         (if (.status.jiraUnassigned // false) then "true" else "false" end),
+                        (if (.status.isFavorite // false) then "true" else "false" end),
                         (.prLabel // "-"),
                         (.prStatusText // "-"),
                         (.jiraTicketKey // "-")
@@ -584,7 +586,7 @@ actor IPCSocketServer {
             if [ -n "$thread_raw" ]; then
                 thread_tmp=$(mktemp 2>/dev/null || mktemp -t magent-thread-picker)
                 printf '%s\n' "$thread_raw" >"$thread_tmp"
-                thread_lines=$(while IFS="$(printf '\t')" read -r row_type thread_id thread_is_main thread_title thread_name thread_branch thread_worktree thread_agent thread_busy thread_input thread_done thread_dirty thread_limited thread_delivered thread_pinned thread_hidden thread_mismatch thread_jira thread_pr_label thread_pr_status thread_jira_key; do
+                thread_lines=$(while IFS="$(printf '\t')" read -r row_type thread_id thread_is_main thread_title thread_name thread_branch thread_worktree thread_agent thread_busy thread_input thread_done thread_dirty thread_limited thread_delivered thread_pinned thread_hidden thread_mismatch thread_jira thread_favorite thread_pr_label thread_pr_status thread_jira_key; do
                     if [ "$row_type" = "S" ]; then
                         section_color="$thread_is_main"
                         section_bullet=$(paint_hex "$section_color" "●")
@@ -595,7 +597,7 @@ actor IPCSocketServer {
                         thread_label=$(format_picker_title "$thread_is_main" "$thread_title")
                         thread_detail=$(format_picker_detail "$thread_title" "$thread_name" "$thread_branch" "$thread_worktree" "$thread_agent")
                         thread_pr_jira=$(format_picker_pr_jira "$thread_pr_label" "$thread_pr_status" "$thread_jira_key")
-                        thread_badges=$(format_thread_badges "$thread_busy" "$thread_input" "$thread_done" "$thread_dirty" "$thread_limited" "$thread_delivered" "$thread_pinned" "$thread_hidden" "$thread_mismatch" "$thread_jira")
+                        thread_badges=$(format_thread_badges "$thread_busy" "$thread_input" "$thread_done" "$thread_dirty" "$thread_limited" "$thread_delivered" "$thread_pinned" "$thread_hidden" "$thread_mismatch" "$thread_jira" "$thread_favorite")
                         printf '%s%s%s%s%s%s%s%s%s\n' "$thread_id" "$SEP" "$thread_label" "$SEP" "$thread_detail" "$SEP" "$thread_pr_jira" "$SEP" "$thread_badges"
                     fi
                 done <"$thread_tmp")
@@ -780,10 +782,11 @@ actor IPCSocketServer {
                     (if (.status.isPinned // false) then "true" else "false" end),
                     (if (.status.isSidebarHidden // false) then "true" else "false" end),
                     (if (.status.hasBranchMismatch // false) then "true" else "false" end),
-                    (if (.status.jiraUnassigned // false) then "true" else "false" end)
+                    (if (.status.jiraUnassigned // false) then "true" else "false" end),
+                    (if (.status.isFavorite // false) then "true" else "false" end)
                 ] | @tsv' \
-                | while IFS="$(printf '\t')" read -r ls_project_name ls_name ls_branch ls_agent ls_desc ls_session ls_busy ls_input ls_done ls_dirty ls_limited ls_delivered ls_pinned ls_hidden ls_mismatch ls_jira; do
-                    ls_status=$(format_ls_status "$ls_busy" "$ls_input" "$ls_done" "$ls_dirty" "$ls_limited" "$ls_delivered" "$ls_pinned" "$ls_hidden" "$ls_mismatch" "$ls_jira")
+                | while IFS="$(printf '\t')" read -r ls_project_name ls_name ls_branch ls_agent ls_desc ls_session ls_busy ls_input ls_done ls_dirty ls_limited ls_delivered ls_pinned ls_hidden ls_mismatch ls_jira ls_favorite; do
+                    ls_status=$(format_ls_status "$ls_busy" "$ls_input" "$ls_done" "$ls_dirty" "$ls_limited" "$ls_delivered" "$ls_pinned" "$ls_hidden" "$ls_mismatch" "$ls_jira" "$ls_favorite")
                     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ls_project_name" "$ls_name" "$ls_branch" "$ls_agent" "$ls_status" "$ls_desc" "$ls_session"
                 done >"$ls_tmp"
 
@@ -1200,6 +1203,28 @@ actor IPCSocketServer {
             [ -n "$thread" ] || die "Usage: magent-cli unhide-thread --thread <name>"
             send_request "{$(json_kv command unhide-thread),$(json_kv threadName "$thread")}"
             ;;
+        favorite-thread)
+            thread=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli favorite-thread --thread <name>"
+            send_request "{$(json_kv command favorite-thread),$(json_kv threadName "$thread")}"
+            ;;
+        unfavorite-thread)
+            thread=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] || die "Usage: magent-cli unfavorite-thread --thread <name>"
+            send_request "{$(json_kv command unfavorite-thread),$(json_kv threadName "$thread")}"
+            ;;
         thread-info)
             thread=""; thread_id=""
             while [ $# -gt 0 ]; do
@@ -1424,6 +1449,8 @@ actor IPCSocketServer {
             echo "  set-base-branch      --thread <name> --base-branch <branch>"
             echo "  hide-thread         --thread <name>                        (move thread to dimmed bottom group)"
             echo "  unhide-thread       --thread <name>                        (restore thread to normal group)"
+            echo "  favorite-thread     --thread <name>                        (add thread to favorites; max 10)"
+            echo "  unfavorite-thread   --thread <name>                        (remove thread from favorites)"
             echo "  thread-info          (--thread <name> | --thread-id <id>)  (full thread details)"
             echo "  move-thread          --thread <name> --section <name>      (move thread to section)"
             echo ""

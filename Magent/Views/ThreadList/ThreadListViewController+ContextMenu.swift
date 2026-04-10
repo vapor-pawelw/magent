@@ -5,7 +5,12 @@ extension ThreadListViewController {
 
     // MARK: - Context Menu
 
+    private func latestThreadState(for thread: MagentThread) -> MagentThread {
+        threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+    }
+
     private func buildContextMenu(for thread: MagentThread) -> NSMenu {
+        let thread = latestThreadState(for: thread)
         let menu = NSMenu()
 
         // Main threads: limited context menu
@@ -49,6 +54,25 @@ extension ThreadListViewController {
         pinItem.image = NSImage(systemSymbolName: thread.isPinned ? "pin.slash" : "pin", accessibilityDescription: nil)
         pinItem.representedObject = thread.id
         menu.addItem(pinItem)
+
+        let canAddFavorite = thread.isFavorite || threadManager.canAddFavoriteThread(excludingThreadId: thread.id)
+        let favoriteTitle: String
+        if thread.isFavorite {
+            favoriteTitle = "Remove from Favorites"
+        } else if canAddFavorite {
+            favoriteTitle = "Add to Favorites"
+        } else {
+            favoriteTitle = "Add to Favorites (Limit \(ThreadManager.maxFavoriteThreadCount))"
+        }
+        let favoriteItem = NSMenuItem(title: favoriteTitle, action: #selector(toggleThreadFavorite(_:)), keyEquivalent: "")
+        favoriteItem.target = self
+        favoriteItem.image = NSImage(
+            systemSymbolName: thread.isFavorite ? "heart.slash.fill" : "heart.fill",
+            accessibilityDescription: nil
+        )
+        favoriteItem.representedObject = thread.id
+        favoriteItem.isEnabled = canAddFavorite
+        menu.addItem(favoriteItem)
 
         // Fork Thread
         if let createFromBranchItem = createThreadFromBaseMenuItem(for: thread, settings: settings) {
@@ -343,6 +367,7 @@ extension ThreadListViewController {
     }
 
     private func buildMainThreadContextMenu(for thread: MagentThread) -> NSMenu {
+        let thread = latestThreadState(for: thread)
         let menu = NSMenu()
 
         // Mark as read (only when the completion highlight is actually visible — suppressed when a rate limit is also active)
@@ -1010,6 +1035,16 @@ extension ThreadListViewController {
     @objc private func toggleThreadPin(_ sender: NSMenuItem) {
         guard let threadId = sender.representedObject as? UUID else { return }
         threadManager.toggleThreadPin(threadId: threadId)
+    }
+
+    @objc private func toggleThreadFavorite(_ sender: NSMenuItem) {
+        guard let threadId = sender.representedObject as? UUID else { return }
+        let didToggle = threadManager.toggleThreadFavorite(threadId: threadId)
+        guard !didToggle else { return }
+        BannerManager.shared.show(
+            message: "Favorites limit reached (\(ThreadManager.maxFavoriteThreadCount)). Remove a favorite first.",
+            style: .info
+        )
     }
 
     @objc private func toggleThreadKeepAlive(_ sender: NSMenuItem) {
