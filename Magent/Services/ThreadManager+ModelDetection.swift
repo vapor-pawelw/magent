@@ -20,15 +20,12 @@ extension ThreadManager {
             for session in thread.agentTmuxSessions {
                 guard thread.sessionAgentTypes[session] == .claude else { continue }
 
-                // Guard 1: user has explicitly renamed this tab via the rename dialog —
-                // never overwrite their choice.
+                // Skip tabs the user has explicitly renamed — either via the rename dialog
+                // after this feature shipped, or populated by the startup migration for tabs
+                // that carried a non-default name before this feature existed.
                 guard !thread.manuallyRenamedTabs.contains(session) else { continue }
 
-                // Guard 2: only update if the current name looks auto-generated. This
-                // protects tabs that were manually named *before* this feature shipped,
-                // when manuallyRenamedTabs was still empty for all existing threads.
                 let currentName = thread.customTabNames[session] ?? ""
-                guard TmuxSessionNaming.looksLikeDefaultTabName(currentName, for: .claude) else { continue }
 
                 guard let paneContent = await tmux.cachedCapturePane(sessionName: session, lastLines: 80) else { continue }
 

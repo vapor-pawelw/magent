@@ -212,6 +212,19 @@ final class ThreadManager {
             if pruneSubmittedPromptHistoryToKnownSessions(threadIndex: i) {
                 didMigrate = true
             }
+            // Protect pre-existing custom tab names from auto-model-detection rewrites.
+            // manuallyRenamedTabs decodes as [] from older JSON, so this runs once per
+            // session on the first launch after the feature ships and is then a no-op
+            // (the set is persisted and already contains the session on subsequent launches).
+            for session in threads[i].tmuxSessionNames {
+                guard !threads[i].manuallyRenamedTabs.contains(session) else { continue }
+                let agentType = threads[i].sessionAgentTypes[session]
+                let name = threads[i].customTabNames[session] ?? ""
+                if !name.isEmpty && !TmuxSessionNaming.looksLikeDefaultTabName(name, for: agentType) {
+                    threads[i].manuallyRenamedTabs.insert(session)
+                    didMigrate = true
+                }
+            }
         }
 
         // Do NOT prune dead tmux session names — the attach-or-create pattern
