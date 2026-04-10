@@ -61,9 +61,9 @@ This cap does **not** apply when the message includes:
 
 ### Global Rate Limits
 
-Rate limits are tracked **per agent type** (Claude, Codex), not per session. When one session detects a Claude rate limit, the same status is shown across all Claude sessions since rate limits apply at the account level.
+Rate limits are tracked **per agent type** (Claude, Codex), not per session. When one session detects a Claude rate limit, the same status is shown in the global status-bar summary since rate limits apply at the account level.
 
-That propagation is applied to the per-tab/thread markers too, not just the status-bar summary. Once any Claude or Codex session detects a concrete limit, every tab using that agent gets the red hourglass marker until the limit expires or is lifted manually.
+Per-tab/thread markers are propagated more conservatively: Magent fans out a global Claude/Codex limit only to sessions where that agent is currently detected as running (pane command/child process detection, with short-term cached fallback). Tabs that are configured as agent tabs but currently idle at a plain shell are not marked as rate-limited.
 
 Claude's prompt-only blocker follows the same rule: if any Claude session is currently showing the interactive wait/switch prompt **and** the pane's reset time is still in the future, Magent mirrors a prompt-based rate-limit marker onto all Claude tabs for that tick so the thread list, tab bar, and cleanup protection stay in sync. If the reset time has expired (e.g., the user opened `/rate-limit-options` after the limit lifted), the prompt is treated as stale — no markers are applied and the session is treated as idle.
 
@@ -78,6 +78,7 @@ Newer pane output such as `/status` must not auto-clear an already-anchored limi
 - **Thread list**: Hourglass icon on threads with active rate limits:
   - **Red hourglass** (⏳): Direct rate limit detected in this thread's session(s)
   - **Orange hourglass** (⏳): Propagated from another session/agent (global account limit, but detected elsewhere)
+  - **2pt red corner dot on the badge**: At least one currently shown marker for that agent is directly detected on this thread (not propagated-only)
 - **Tab bar**: Same hourglass distinction for individual rate-limited tabs
 - **Tooltips**: Show the exact reset time (e.g., "Rate limit reached. Resets Mar 2, 2026 at 8:00 PM") and whether the limit is direct or propagated
 - **Notifications**: Optional system notification when a rate limit lifts (configurable in Settings)
@@ -106,4 +107,4 @@ When tracking is disabled, the app no longer parses reset times or shows countdo
 
 - **Parsing must be scoped to the latest terminal block**: Only treat rate-limit text as active when detected in the latest pane scope (after the last separator) and near the bottom. Avoid pane-wide keyword scans that can ingest quoted logs/diagnostics and poison `rate-limit-cache.json`.
 - **Concrete fingerprints stay active until expiry/manual lift**: Once a non-ignored fingerprint is anchored to a future `resetAt`, later pane output must not auto-clear the limit just because the newest block no longer repeats the message.
-- **Per-agent limits must fan out to all matching tabs**: `globalAgentRateLimits` alone is not enough — mirror the marker into every session in `rateLimitedSessions` that uses that agent type. Thread row icons, tab badges, status-bar counts, and eviction protections all read per-session markers.
+- **Per-agent limits must fan out to runtime-active matching tabs**: `globalAgentRateLimits` alone is not enough — mirror the marker into per-session `rateLimitedSessions` for sessions where the matching agent is currently running. This keeps thread/tab badges and cleanup protections aligned without incorrectly marking idle shell tabs.

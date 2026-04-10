@@ -1041,6 +1041,7 @@ extension ThreadListViewController: NSOutlineViewDelegate {
                     isRateLimitPropagatedOnly: thread.isRateLimitPropagatedOnly,
                     rateLimitTooltip: thread.rateLimitLiftDescription.map { "Rate limit reached. \($0)" },
                     rateLimitedAgentTypes: thread.rateLimitedAgentTypes,
+                    directlyRateLimitedAgentTypes: thread.directlyRateLimitedAgentTypes,
                     currentBranch: currentBranch,
                     busyStateSince: thread.busyStateSince,
                     leadingOffset: 3 + 6 // accent bar width + spacing (matches icon flow)
@@ -1368,6 +1369,8 @@ extension ThreadListViewController: ThreadManagerDelegate {
                         isRateLimitExpiredAndResumable: updated.isRateLimitExpiredAndResumable,
                         isRateLimitPropagatedOnly: updated.isRateLimitPropagatedOnly,
                         rateLimitTooltip: updated.rateLimitLiftDescription.map { "Rate limit reached. \($0)" },
+                        rateLimitedAgentTypes: updated.rateLimitedAgentTypes,
+                        directlyRateLimitedAgentTypes: updated.directlyRateLimitedAgentTypes,
                         currentBranch: currentBranch,
                         busyStateSince: updated.busyStateSince,
                         leadingOffset: 3 + 6

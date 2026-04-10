@@ -379,7 +379,12 @@ extension ThreadManager {
             }
         }
 
-        propagateActiveGlobalRateLimits(now: now, changedThreadIds: &changedThreadIds)
+        let runtimeActiveSessionsByAgent = await runtimeActiveRateLimitSessionsByAgent(now: now)
+        propagateActiveGlobalRateLimits(
+            now: now,
+            changedThreadIds: &changedThreadIds,
+            runtimeActiveSessionsByAgent: runtimeActiveSessionsByAgent
+        )
 
         if !changedThreadIds.isEmpty {
             await MainActor.run {
@@ -469,6 +474,7 @@ extension ThreadManager {
     func applyRateLimitMarker(
         _ info: AgentRateLimitInfo,
         for agent: AgentType,
+        runtimeActiveSessionsByAgent: [AgentType: Set<String>]? = nil,
         changedThreadIds: inout Set<UUID>
     ) -> Bool {
         var changed = false
@@ -483,6 +489,10 @@ extension ThreadManager {
 
             for sessionName in threads[i].agentTmuxSessions {
                 guard agentType(for: threads[i], sessionName: sessionName) == agent else { continue }
+                if let runtimeActiveSessionsByAgent,
+                   !(runtimeActiveSessionsByAgent[agent]?.contains(sessionName) ?? false) {
+                    continue
+                }
                 let candidate = propagatedInfo
                 let nextInfo: AgentRateLimitInfo
                 if let existing = updatedRateLimits[sessionName] {
@@ -532,10 +542,89 @@ extension ThreadManager {
         return changed
     }
 
-    private func propagateActiveGlobalRateLimits(now: Date, changedThreadIds: inout Set<UUID>) {
+    private func propagateActiveGlobalRateLimits(
+        now: Date,
+        changedThreadIds: inout Set<UUID>,
+        runtimeActiveSessionsByAgent: [AgentType: Set<String>]?
+    ) {
         for agent in [AgentType.claude, .codex] {
             guard let info = activeGlobalRateLimit(for: agent, now: now) else { continue }
-            _ = applyRateLimitMarker(info, for: agent, changedThreadIds: &changedThreadIds)
+            _ = applyRateLimitMarker(
+                info,
+                for: agent,
+                runtimeActiveSessionsByAgent: runtimeActiveSessionsByAgent,
+                changedThreadIds: &changedThreadIds
+            )
+        }
+    }
+
+    /// Detects sessions where a trackable agent process is actively running now.
+    /// This is used to avoid propagating global rate-limit markers onto tabs that
+    /// are merely configured as agent tabs but currently at a plain shell.
+    func runtimeActiveRateLimitSessionsByAgent(now: Date = Date()) async -> [AgentType: Set<String>] {
+        var allAgentSessions = Set<String>()
+        var configuredAgentBySession: [String: AgentType] = [:]
+        for thread in threads where !thread.isArchived {
+            allAgentSessions.formUnion(thread.agentTmuxSessions)
+            for (session, agent) in thread.sessionAgentTypes where thread.agentTmuxSessions.contains(session) {
+                configuredAgentBySession[session] = agent
+            }
+        }
+        guard !allAgentSessions.isEmpty else { return [:] }
+
+        let paneStates = await tmux.activePaneStates(forSessions: allAgentSessions)
+        guard !paneStates.isEmpty else { return [:] }
+
+        let unresolvedPanePids = Set(
+            paneStates.values.compactMap { paneState -> pid_t? in
+                guard paneState.pid > 0 else { return nil }
+                guard detectedAgentType(from: paneState.command) == nil else { return nil }
+                return paneState.pid
+            }
+        )
+        let childProcessesByPid = await tmux.childProcesses(forParents: unresolvedPanePids)
+
+        var activeByAgent: [AgentType: Set<String>] = [:]
+        for sessionName in allAgentSessions {
+            guard let paneState = paneStates[sessionName] else { continue }
+
+            let children = detectedAgentType(from: paneState.command) == nil
+                ? childProcessesByPid[paneState.pid] ?? []
+                : []
+            var detectedAgent = detectedRunningAgentType(
+                paneCommand: paneState.command,
+                childProcesses: children
+            )
+
+            if detectedAgent == nil,
+               looksLikeSemverForRateLimit(paneState.command),
+               let configuredType = configuredAgentBySession[sessionName] {
+                detectedAgent = configuredType
+            }
+
+            if let detectedAgent {
+                lastRuntimeDetectedAgentBySession[sessionName] = (agent: detectedAgent, detectedAt: now)
+            } else if let cached = lastRuntimeDetectedAgentBySession[sessionName],
+                      now.timeIntervalSince(cached.detectedAt) < Self.lastRuntimeDetectedAgentTTL {
+                detectedAgent = cached.agent
+            } else {
+                lastRuntimeDetectedAgentBySession.removeValue(forKey: sessionName)
+            }
+
+            guard let agent = detectedAgent, isRateLimitTrackable(agent: agent) else { continue }
+            activeByAgent[agent, default: []].insert(sessionName)
+        }
+
+        return activeByAgent
+    }
+
+    private func looksLikeSemverForRateLimit(_ string: String) -> Bool {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let parts = trimmed.split(separator: ".")
+        guard parts.count >= 2 && parts.count <= 4 else { return false }
+        return parts.allSatisfy { part in
+            !part.isEmpty && part.allSatisfy(\.isNumber)
         }
     }
 

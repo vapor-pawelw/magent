@@ -94,6 +94,14 @@ private final class TopBorderBadge: NSView {
         return iv
     }()
 
+    private let cornerDot: NSView = {
+        let view = NSView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.wantsLayer = true
+        view.isHidden = true
+        return view
+    }()
+
     private let contentStack: NSStackView
 
     init(bareIcon: Bool = false) {
@@ -110,6 +118,7 @@ private final class TopBorderBadge: NSView {
         contentStack.addArrangedSubview(iconView)
         contentStack.addArrangedSubview(label)
         addSubview(contentStack)
+        addSubview(cornerDot)
 
         if bareIcon {
             // Bare icon: larger icon with circular background when selected.
@@ -122,6 +131,10 @@ private final class TopBorderBadge: NSView {
                 contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding),
                 contentStack.topAnchor.constraint(equalTo: topAnchor, constant: padding),
                 contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -padding),
+                cornerDot.widthAnchor.constraint(equalToConstant: 2),
+                cornerDot.heightAnchor.constraint(equalToConstant: 2),
+                cornerDot.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
+                cornerDot.topAnchor.constraint(equalTo: topAnchor, constant: 1),
             ])
         } else {
             layer?.cornerRadius = 7
@@ -133,6 +146,10 @@ private final class TopBorderBadge: NSView {
                 contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
                 contentStack.topAnchor.constraint(equalTo: topAnchor, constant: 2),
                 contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+                cornerDot.widthAnchor.constraint(equalToConstant: 2),
+                cornerDot.heightAnchor.constraint(equalToConstant: 2),
+                cornerDot.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
+                cornerDot.topAnchor.constraint(equalTo: topAnchor, constant: 1),
             ])
         }
     }
@@ -171,7 +188,13 @@ private final class TopBorderBadge: NSView {
                 self.layer?.borderWidth = 1
             }
             self.label.textColor = NSColor.secondaryLabelColor
+            self.cornerDot.layer?.backgroundColor = NSColor.systemRed.cgColor
+            self.cornerDot.layer?.cornerRadius = 1
         }
+    }
+
+    func setCornerDotVisible(_ isVisible: Bool) {
+        cornerDot.isHidden = !isVisible
     }
 }
 
@@ -800,7 +823,8 @@ final class ThreadCell: NSTableCellView {
             isBlocked: thread.isBlockedByRateLimit,
             isPropagatedOnly: thread.isRateLimitPropagatedOnly,
             tooltip: rateLimitTooltip(for: thread),
-            rateLimitedAgentTypes: thread.rateLimitedAgentTypes
+            rateLimitedAgentTypes: thread.rateLimitedAgentTypes,
+            directlyRateLimitedAgentTypes: thread.directlyRateLimitedAgentTypes
         )
 
         configureDuration(since: cellSettings.showBusyStateDuration ? thread.busyStateSince : nil)
@@ -821,6 +845,7 @@ final class ThreadCell: NSTableCellView {
         isRateLimitPropagatedOnly: Bool = false,
         rateLimitTooltip: String? = nil,
         rateLimitedAgentTypes: Set<AgentType> = [],
+        directlyRateLimitedAgentTypes: Set<AgentType> = [],
         currentBranch: String? = nil,
         busyStateSince: Date? = nil,
         leadingOffset: CGFloat = 0
@@ -889,7 +914,8 @@ final class ThreadCell: NSTableCellView {
             isBlocked: isBlockedByRateLimit,
             isPropagatedOnly: isRateLimitPropagatedOnly,
             tooltip: rateLimitTooltip,
-            rateLimitedAgentTypes: rateLimitedAgentTypes
+            rateLimitedAgentTypes: rateLimitedAgentTypes,
+            directlyRateLimitedAgentTypes: directlyRateLimitedAgentTypes
         )
 
         let showDuration = PersistenceService.shared.loadSettings().showBusyStateDuration
@@ -918,12 +944,15 @@ final class ThreadCell: NSTableCellView {
         isBlocked: Bool,
         isPropagatedOnly: Bool,
         tooltip: String?,
-        rateLimitedAgentTypes: Set<AgentType> = []
+        rateLimitedAgentTypes: Set<AgentType> = [],
+        directlyRateLimitedAgentTypes: Set<AgentType> = []
     ) {
         let showBadge = isExpiredAndResumable || isBlocked
         guard showBadge else {
             claudeRateLimitBadge?.isHidden = true
+            claudeRateLimitBadge?.setCornerDotVisible(false)
             codexRateLimitBadge?.isHidden = true
+            codexRateLimitBadge?.setCornerDotVisible(false)
             return
         }
 
@@ -937,6 +966,7 @@ final class ThreadCell: NSTableCellView {
             let badge = ensureRateLimitBadge(for: agent)
             guard agentsToShow.contains(agent) else {
                 badge.isHidden = true
+                badge.setCornerDotVisible(false)
                 continue
             }
 
@@ -953,6 +983,7 @@ final class ThreadCell: NSTableCellView {
                     ?? "\(agent.displayName) rate limit reached"
             }
             badge.isHidden = false
+            badge.setCornerDotVisible(directlyRateLimitedAgentTypes.contains(agent))
         }
         updateTopBorderBadgeColors()
     }

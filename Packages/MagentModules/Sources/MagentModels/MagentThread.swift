@@ -559,6 +559,20 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         return types
     }
 
+    /// The distinct agent types that currently have at least one directly-detected
+    /// rate-limit marker (not only propagated fan-out markers).
+    public var directlyRateLimitedAgentTypes: Set<AgentType> {
+        guard isBlockedByRateLimit else { return [] }
+        var types = Set<AgentType>()
+        for session in agentTmuxSessions {
+            guard let info = rateLimitedSessions[session], info.isPropagated == false else { continue }
+            if let agent = info.agentType {
+                types.insert(agent)
+            }
+        }
+        return types
+    }
+
     /// True when the thread is blocked by rate limits but all markers are propagated (none
     /// were directly detected in this thread's sessions). Used to show a subtler icon.
     public var isRateLimitPropagatedOnly: Bool {

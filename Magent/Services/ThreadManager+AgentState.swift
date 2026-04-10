@@ -277,6 +277,7 @@ extension ThreadManager {
         var busyChangedThreadIds = Set<UUID>()
         var rateLimitChangedThreadIds = Set<UUID>()
         var agentsWithVisibleRateLimitPrompt = Set<AgentType>()
+        var runtimeActiveRateLimitSessionsByAgent: [AgentType: Set<String>] = [:]
         var implicitCompletionSessions: [String] = []
 
         func publishBusySyncChangesIfNeeded() async {
@@ -395,6 +396,9 @@ extension ThreadManager {
                     // Cache successful detection so transient failures on future
                     // ticks don't flip the session to nil and wipe busy state.
                     lastRuntimeDetectedAgentBySession[session] = (agent: agent, detectedAt: Date())
+                    if agent == .claude || agent == .codex {
+                        runtimeActiveRateLimitSessionsByAgent[agent, default: []].insert(session)
+                    }
                 } else if let cached = lastRuntimeDetectedAgentBySession[session],
                           Date().timeIntervalSince(cached.detectedAt) < Self.lastRuntimeDetectedAgentTTL {
                     detectedAgent = cached.agent
@@ -496,7 +500,12 @@ extension ThreadManager {
                                 isPromptBased: true,
                                 agentType: .claude
                             )
-                            if applyRateLimitMarker(promptMarker, for: .claude, changedThreadIds: &rateLimitChangedThreadIds) {
+                            if applyRateLimitMarker(
+                                promptMarker,
+                                for: .claude,
+                                runtimeActiveSessionsByAgent: runtimeActiveRateLimitSessionsByAgent,
+                                changedThreadIds: &rateLimitChangedThreadIds
+                            ) {
                                 changed = true
                             }
                             if threads[i].busySessions.contains(session) {

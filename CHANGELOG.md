@@ -112,6 +112,8 @@ All notable changes to this project will be documented in this file.
 - When a rate limit lifts (timer expiry or manual dismiss), threads and tabs where the agent was directly interrupted now show a "waiting for input" indicator so you know which ones to revisit and continue work. The indicator clears as soon as you select the tab or the agent resumes on its own.
 
 #### Bug Fixes
+- Fixed active global rate limits incorrectly marking idle shell tabs as limited. Per-tab rate-limit fan-out now applies only to sessions where that agent is currently detected as running.
+- Added a direct-source marker to thread rate-limit badges: a tiny red corner dot now appears when the limit was directly detected on that thread (not only propagated globally).
 - Fresh Claude/Codex tabs now scope resume discovery to the tab that created them instead of the whole thread age, reducing accidental conversation carryover on older worktrees.
 - Fixed Codex busy indicators dropping during long-running tool commands (for example `xcodebuild`) and occasionally staying busy due to stale pane lines. Busy detection now uses Codex working/background status markers near the bottom of the latest pane scope and only applies stored agent-type fallback when live pane content matches that agent.
 - Fixed agent labels in the "+" right-click menu (both new thread and new tab) showing misleading suffixes like "Claude (M)" or "Codex (Codex, M)". The menu now shows the full model and reasoning level verbatim (e.g. `Claude (Opus, high)`, `Codex (GPT 5.3 Codex, xhigh)`), and omits any part set to Auto.
