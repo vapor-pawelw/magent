@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- _No notable changes yet._
+
+## 1.5.4 - 2026-04-10
+
+
 ### General
 #### Bug Fixes
 - Fixed main window size/position resetting on app rerun/relaunch paths that bypass normal app termination. Magent now persists the main-window frame continuously on move/resize/screen changes, so the latest frame restores reliably on next launch.
@@ -131,6 +136,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - GitHub release notes now prefer the matching `CHANGELOG.md` version section (`## <version> - <date>`) instead of falling back to commit-subject-like tag content, so published release pages keep the expected markdown format.
+
 
 ## 1.5.3 - 2026-04-07
 
