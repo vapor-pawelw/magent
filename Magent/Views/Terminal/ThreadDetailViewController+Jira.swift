@@ -6,8 +6,8 @@ final class MiddleClickButton: NSButton {
     var onMiddleClick: (() -> Void)?
 
     override func otherMouseDown(with event: NSEvent) {
-        if event.buttonNumber == 2 {
-            onMiddleClick?()
+        if event.buttonNumber == 2, let onMiddleClick {
+            onMiddleClick()
         } else {
             super.otherMouseDown(with: event)
         }
@@ -152,11 +152,17 @@ extension ThreadDetailViewController {
             title: title,
             icon: icon,
             iconType: .jira,
-            forceInApp: forceInApp
+            forceInApp: forceInApp,
+            resetExistingTabToURL: true
         )
     }
 
     @objc func openInJiraTapped() {
-        openJira(forceInApp: nil)
+        let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+        if isOptionPressed {
+            openJira(forceInApp: !prefersInAppExternalLinks())
+        } else {
+            openJira(forceInApp: nil)
+        }
     }
 }

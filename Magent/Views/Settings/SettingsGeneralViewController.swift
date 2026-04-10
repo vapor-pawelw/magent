@@ -142,7 +142,7 @@ final class SettingsGeneralViewController: NSViewController {
         )
 
         let linksDesc = NSTextField(
-            wrappingLabelWithString: "Primary clicks follow this preference. Middle-click on Magent toolbar link buttons still opens the opposite destination as a quick override."
+            wrappingLabelWithString: "Primary clicks follow this preference. Option-click on Magent toolbar link buttons opens the opposite destination as a quick override."
         )
         linksDesc.font = .systemFont(ofSize: 11)
         linksDesc.textColor = NSColor(resource: .textSecondary)

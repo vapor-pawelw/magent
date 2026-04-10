@@ -5,7 +5,7 @@ import MagentCore
 /// The view is `nil` until the tab is first selected (lazy loading).
 struct WebTabEntry {
     let identifier: String
-    let url: URL
+    var url: URL
     let iconType: WebTabIconType
     var view: WebTabView?
 }
@@ -27,11 +27,19 @@ extension ThreadDetailViewController {
         title: String,
         icon: NSImage? = nil,
         iconType: WebTabIconType = .web,
-        forceInApp: Bool? = nil
+        forceInApp: Bool? = nil,
+        resetExistingTabToURL: Bool = false
     ) {
         let shouldOpenInApp = (forceInApp ?? prefersInAppExternalLinks()) && supportsInAppWebTab(for: url)
         if shouldOpenInApp {
-            openWebTab(url: url, identifier: identifier, title: title, icon: icon, iconType: iconType)
+            openWebTab(
+                url: url,
+                identifier: identifier,
+                title: title,
+                icon: icon,
+                iconType: iconType,
+                resetExistingTabToURL: resetExistingTabToURL
+            )
         } else {
             NSWorkspace.shared.open(url)
         }
@@ -39,8 +47,8 @@ extension ThreadDetailViewController {
 
     func externalLinkTooltip(clickDestinationInApp: Bool) -> String {
         let clickTarget = clickDestinationInApp ? "Magent" : "browser"
-        let middleTarget = clickDestinationInApp ? "browser" : "Magent"
-        return "Click: open in \(clickTarget) · Middle-click: open in \(middleTarget)"
+        let optionTarget = clickDestinationInApp ? "browser" : "Magent"
+        return "Click: open in \(clickTarget) · Option-click: open in \(optionTarget)"
     }
 
     // MARK: - Restore from Persistence
@@ -85,10 +93,21 @@ extension ThreadDetailViewController {
         identifier: String,
         title: String,
         icon: NSImage? = nil,
-        iconType: WebTabIconType = .none
+        iconType: WebTabIconType = .none,
+        resetExistingTabToURL: Bool = false
     ) {
         // Dedup: if a tab with this identifier already exists, select it.
         if let existingIndex = tabSlots.firstIndex(of: .web(identifier: identifier)) {
+            if resetExistingTabToURL,
+               let webIndex = webTabs.firstIndex(where: { $0.identifier == identifier }) {
+                webTabs[webIndex].url = url
+                webTabs[webIndex].view?.removeFromSuperview()
+                webTabs[webIndex].view = nil
+                if let persistedIndex = thread.persistedWebTabs.firstIndex(where: { $0.identifier == identifier }) {
+                    thread.persistedWebTabs[persistedIndex].url = url
+                    persistWebTabs()
+                }
+            }
             selectTab(at: existingIndex)
             return
         }

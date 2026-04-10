@@ -16,7 +16,12 @@ extension ThreadDetailViewController {
     }
 
     @objc func openPRTapped(_ sender: NSButton) {
-        openPR(forceInApp: nil, sender: sender)
+        let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+        if isOptionPressed {
+            openPR(forceInApp: !prefersInAppExternalLinks(), sender: sender)
+        } else {
+            openPR(forceInApp: nil, sender: sender)
+        }
     }
 
     private func openPR(forceInApp: Bool?, sender: NSButton?) {
@@ -33,7 +38,8 @@ extension ThreadDetailViewController {
                         title: title,
                         icon: icon,
                         iconType: .pullRequest,
-                        forceInApp: forceInApp
+                        forceInApp: forceInApp,
+                        resetExistingTabToURL: true
                     )
                 }
             }
@@ -260,7 +266,8 @@ extension ThreadDetailViewController {
             title: title,
             icon: icon,
             iconType: .pullRequest,
-            forceInApp: forceInApp
+            forceInApp: forceInApp,
+            resetExistingTabToURL: true
         )
     }
 
@@ -284,7 +291,8 @@ extension ThreadDetailViewController {
                     title: title,
                     icon: self.openPRButtonImage(for: remote.provider),
                     iconType: .pullRequest,
-                    forceInApp: forceInApp
+                    forceInApp: forceInApp,
+                    resetExistingTabToURL: true
                 )
             }
         }

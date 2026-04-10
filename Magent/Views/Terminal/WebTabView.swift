@@ -45,6 +45,12 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
     private let refreshButton: NSButton
     private let openInBrowserButton: NSButton
     private let addressField: NSTextField
+    private let findBar: NSStackView
+    private let findField: NSSearchField
+    private let findPreviousButton: NSButton
+    private let findNextButton: NSButton
+    private let findDoneButton: NSButton
+    private let findStatusLabel: NSTextField
     let tabIdentifier: String
     let initialURL: URL
 
@@ -54,6 +60,7 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
     var onURLChange: ((URL) -> Void)?
     /// Fires when the current page requests opening a URL in a separate tab.
     var onOpenInNewTab: ((URL) -> Void)?
+    private var settingsObserver: NSObjectProtocol?
 
     init(url: URL, identifier: String) {
         self.tabIdentifier = identifier
@@ -81,6 +88,30 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         addressField.translatesAutoresizingMaskIntoConstraints = false
         addressField.stringValue = url.absoluteString
 
+        findField = NSSearchField()
+        findField.placeholderString = "Find in page"
+        findField.controlSize = .small
+        findField.translatesAutoresizingMaskIntoConstraints = false
+
+        findPreviousButton = NSButton(image: NSImage(systemSymbolName: "chevron.up", accessibilityDescription: "Previous")!, target: nil, action: nil)
+        findNextButton = NSButton(image: NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Next")!, target: nil, action: nil)
+        findDoneButton = NSButton(image: NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: "Done")!, target: nil, action: nil)
+        findStatusLabel = NSTextField(labelWithString: "")
+        findStatusLabel.font = .systemFont(ofSize: 11)
+        findStatusLabel.textColor = .secondaryLabelColor
+        findStatusLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        findBar = NSStackView()
+        findBar.orientation = .horizontal
+        findBar.spacing = 6
+        findBar.alignment = .centerY
+        findBar.translatesAutoresizingMaskIntoConstraints = false
+        findBar.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+        findBar.wantsLayer = true
+        findBar.layer?.cornerRadius = 8
+        findBar.layer?.borderWidth = 1
+        findBar.isHidden = true
+
         toolbar = NSStackView()
         toolbar.orientation = .horizontal
         toolbar.spacing = 8
@@ -92,7 +123,15 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         wantsLayer = true
 
         for btn in [backButton, forwardButton, refreshButton, openInBrowserButton] {
-            btn.bezelStyle = .texturedSquare
+            btn.bezelStyle = .rounded
+            btn.isBordered = true
+            btn.controlSize = .small
+            btn.imageScaling = .scaleProportionallyDown
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            btn.setContentHuggingPriority(.required, for: .horizontal)
+        }
+        for btn in [findPreviousButton, findNextButton, findDoneButton] {
+            btn.bezelStyle = .rounded
             btn.isBordered = true
             btn.controlSize = .small
             btn.imageScaling = .scaleProportionallyDown
@@ -109,8 +148,15 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         openInBrowserButton.target = self
         openInBrowserButton.action = #selector(openInExternalBrowser)
         openInBrowserButton.toolTip = "Open in Browser"
+        findPreviousButton.target = self
+        findPreviousButton.action = #selector(findPrevious)
+        findNextButton.target = self
+        findNextButton.action = #selector(findNext)
+        findDoneButton.target = self
+        findDoneButton.action = #selector(hideFindBar)
 
         addressField.delegate = self
+        findField.delegate = self
 
         toolbar.addArrangedSubview(backButton)
         toolbar.addArrangedSubview(forwardButton)
@@ -118,14 +164,21 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         toolbar.addArrangedSubview(refreshButton)
         toolbar.addArrangedSubview(openInBrowserButton)
 
+        findBar.addArrangedSubview(findField)
+        findBar.addArrangedSubview(findPreviousButton)
+        findBar.addArrangedSubview(findNextButton)
+        findBar.addArrangedSubview(findStatusLabel)
+        findBar.addArrangedSubview(findDoneButton)
+
         addSubview(toolbar)
+        addSubview(findBar)
         addSubview(webView)
 
         NSLayoutConstraint.activate([
-            toolbar.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            toolbar.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             toolbar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             toolbar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            toolbar.heightAnchor.constraint(equalToConstant: 28),
+            toolbar.heightAnchor.constraint(equalToConstant: 30),
 
             backButton.widthAnchor.constraint(equalToConstant: 28),
             backButton.heightAnchor.constraint(equalTo: backButton.widthAnchor),
@@ -136,7 +189,17 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
             openInBrowserButton.widthAnchor.constraint(equalToConstant: 28),
             openInBrowserButton.heightAnchor.constraint(equalTo: openInBrowserButton.widthAnchor),
 
-            webView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 2),
+            findBar.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8),
+            findBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            findField.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
+            findPreviousButton.widthAnchor.constraint(equalToConstant: 24),
+            findPreviousButton.heightAnchor.constraint(equalToConstant: 24),
+            findNextButton.widthAnchor.constraint(equalToConstant: 24),
+            findNextButton.heightAnchor.constraint(equalToConstant: 24),
+            findDoneButton.widthAnchor.constraint(equalToConstant: 24),
+            findDoneButton.heightAnchor.constraint(equalToConstant: 24),
+
+            webView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8),
             webView.leadingAnchor.constraint(equalTo: leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: trailingAnchor),
             webView.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -145,18 +208,57 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15"
+        applyVisualStyling()
+        applyAppearanceMode()
         webView.load(URLRequest(url: url))
         updateNavButtons()
+
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .magentSettingsDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyAppearanceMode()
+        }
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        if let settingsObserver {
+            NotificationCenter.default.removeObserver(settingsObserver)
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyVisualStyling()
+    }
 
     // MARK: - Key Equivalents
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let bindings = PersistenceService.shared.loadSettings().keyBindings
         let modifiers = KeyModifiers.from(event.modifierFlags.intersection(.deviceIndependentFlagsMask))
+        let commandModifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        if event.charactersIgnoringModifiers == "f", commandModifiers == [.command] {
+            showFindBar()
+            return true
+        }
+        if event.charactersIgnoringModifiers == "g", commandModifiers == [.command] {
+            performFind(forward: true)
+            return true
+        }
+        if event.charactersIgnoringModifiers == "g", commandModifiers == [.command, .shift] {
+            performFind(forward: false)
+            return true
+        }
+        if event.keyCode == 53, !findBar.isHidden {
+            hideFindBar()
+            return true
+        }
 
         let hardRefreshBinding = bindings.binding(for: .hardRefreshWebTab)
         if event.keyCode == hardRefreshBinding.keyCode && modifiers == hardRefreshBinding.modifiers {
@@ -207,7 +309,9 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
 
     private func shouldOpenInNewTab(_ navigationAction: WKNavigationAction) -> Bool {
         guard navigationAction.navigationType == .linkActivated else { return false }
-        return navigationAction.buttonNumber == 2 || navigationAction.modifierFlags.contains(.command)
+        return navigationAction.buttonNumber == 1
+            || navigationAction.buttonNumber == 2
+            || navigationAction.modifierFlags.contains(.command)
     }
 
     private func openInNewTabIfPossible(_ navigationAction: WKNavigationAction) -> Bool {
@@ -251,6 +355,7 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         MainActor.assumeIsolated {
             updateNavButtons()
             updateAddressField()
+            applyAppearanceModeToCurrentPage()
             onTitleChange?(webView.title)
         }
     }
@@ -259,6 +364,7 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         MainActor.assumeIsolated {
             updateNavButtons()
             updateAddressField()
+            applyAppearanceModeToCurrentPage()
             if let url = webView.url, url.absoluteString != "about:blank" {
                 onURLChange?(url)
             }
@@ -288,12 +394,112 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         guard let url = WebURLNormalizer.normalize(addressField.stringValue) else { return }
         webView.load(URLRequest(url: url))
     }
+
+    private func applyVisualStyling() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor(resource: .appBackground).cgColor
+            findBar.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.94).cgColor
+            findBar.layer?.borderColor = NSColor.separatorColor.cgColor
+        }
+    }
+
+    private func applyAppearanceMode() {
+        let settings = PersistenceService.shared.loadSettings()
+        switch settings.appAppearanceMode {
+        case .system:
+            webView.appearance = nil
+        case .light:
+            webView.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            webView.appearance = NSAppearance(named: .darkAqua)
+        }
+        applyAppearanceModeToCurrentPage()
+    }
+
+    private func applyAppearanceModeToCurrentPage() {
+        let mode = PersistenceService.shared.loadSettings().appAppearanceMode.rawValue
+        guard let modeLiteral = javaScriptStringLiteral(mode) else { return }
+        let script = """
+        (() => {
+          const mode = \(modeLiteral);
+          window.__MAGENT_APPEARANCE = mode;
+          document.documentElement.setAttribute("data-magent-appearance", mode);
+          const root = document.documentElement;
+          if (mode === "dark") {
+            root.style.colorScheme = "dark";
+          } else if (mode === "light") {
+            root.style.colorScheme = "light";
+          } else {
+            root.style.colorScheme = "light dark";
+          }
+        })();
+        """
+        webView.evaluateJavaScript(script, completionHandler: nil)
+    }
+
+    private func javaScriptStringLiteral(_ value: String) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: [value], options: []),
+              let json = String(data: data, encoding: .utf8),
+              json.count >= 2 else { return nil }
+        return String(json.dropFirst().dropLast())
+    }
+
+    @objc private func showFindBar() {
+        findBar.isHidden = false
+        findStatusLabel.stringValue = ""
+        window?.makeFirstResponder(findField)
+        if !findField.stringValue.isEmpty {
+            performFind(forward: true)
+        }
+    }
+
+    @objc private func hideFindBar() {
+        findBar.isHidden = true
+        findStatusLabel.stringValue = ""
+        window?.makeFirstResponder(webView)
+    }
+
+    @objc private func findNext() {
+        performFind(forward: true)
+    }
+
+    @objc private func findPrevious() {
+        performFind(forward: false)
+    }
+
+    private func performFind(forward: Bool) {
+        let query = findField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty, let queryLiteral = javaScriptStringLiteral(query) else {
+            findStatusLabel.stringValue = ""
+            return
+        }
+
+        let backwards = forward ? "false" : "true"
+        let script = "window.find(\(queryLiteral), false, \(backwards), true, false, true, false);"
+        webView.evaluateJavaScript(script) { [weak self] result, _ in
+            guard let self else { return }
+            let found = (result as? Bool) ?? false
+            self.findStatusLabel.stringValue = found ? "" : "No matches"
+        }
+    }
 }
 
 // MARK: - NSTextFieldDelegate
 
 extension WebTabView: NSTextFieldDelegate {
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if control === findField {
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                let goForward = NSApp.currentEvent?.modifierFlags.contains(.shift) != true
+                performFind(forward: goForward)
+                return true
+            }
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+                hideFindBar()
+                return true
+            }
+        }
+
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
             navigateToAddressFieldValue()
             // Resign first responder so the URL field updates on navigation

@@ -464,7 +464,6 @@ final class ThreadDetailViewController: NSViewController {
         openPRButton.target = self
         openPRButton.action = #selector(openPRTapped(_:))
         openPRButton.toolTip = "Open Pull Request\n\(externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks()))"
-        openPRButton.onMiddleClick = { [weak self] in self?.openPROppositeDestination() }
 
         openInJiraButton.bezelStyle = .texturedRounded
         openInJiraButton.image = jiraButtonImage()
@@ -473,7 +472,6 @@ final class ThreadDetailViewController: NSViewController {
         openInJiraButton.action = #selector(openInJiraTapped)
         openInJiraButton.toolTip = String(localized: .ThreadStrings.threadOpenInJira) + "\n" + externalLinkTooltip(clickDestinationInApp: prefersInAppExternalLinks())
         openInJiraButton.isHidden = true
-        openInJiraButton.onMiddleClick = { [weak self] in self?.openJiraOppositeDestination() }
 
         openInXcodeButton.bezelStyle = .texturedRounded
         openInXcodeButton.imageScaling = .scaleProportionallyDown
@@ -967,18 +965,24 @@ final class ThreadDetailViewController: NSViewController {
                 yFraction: yFraction
             )
         }
-        view.openURLHandler = { [weak self] url, forceInApp in
-            self?.openTerminalLink(url, forceInApp: forceInApp)
+        view.openURLHandler = { [weak self] url, openOppositeDestination in
+            self?.openTerminalLink(url, openOppositeDestination: openOppositeDestination)
         }
     }
 
-    private func openTerminalLink(_ url: URL, forceInApp: Bool) {
+    private func openTerminalLink(_ url: URL, openOppositeDestination: Bool) {
+        let forceInApp: Bool?
+        if openOppositeDestination {
+            forceInApp = !prefersInAppExternalLinks()
+        } else {
+            forceInApp = nil
+        }
         openExternalWebDestination(
             url: url,
             identifier: "web:\(url.absoluteString)",
             title: WebURLNormalizer.shortHost(from: url) ?? url.absoluteString,
             iconType: .web,
-            forceInApp: forceInApp ? true : nil
+            forceInApp: forceInApp
         )
     }
 

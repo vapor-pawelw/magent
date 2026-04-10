@@ -183,7 +183,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoCheckForUpdates: Bool = true,
         skippedUpdateVersion: String? = nil,
         syncLocalPathsOnArchive: Bool = true,
-        externalLinkOpenPreference: ExternalLinkOpenPreference = .browser,
+        externalLinkOpenPreference: ExternalLinkOpenPreference = .inApp,
         appAppearanceMode: AppAppearanceMode = .system,
         terminalMouseWheelBehavior: TerminalMouseWheelBehavior = .magentDefaultScroll,
         showScrollToBottomIndicator: Bool = true,
@@ -303,7 +303,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         autoCheckForUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckForUpdates) ?? true
         skippedUpdateVersion = try container.decodeIfPresent(String.self, forKey: .skippedUpdateVersion)
         syncLocalPathsOnArchive = try container.decodeIfPresent(Bool.self, forKey: .syncLocalPathsOnArchive) ?? true
-        externalLinkOpenPreference = try container.decodeIfPresent(ExternalLinkOpenPreference.self, forKey: .externalLinkOpenPreference) ?? .browser
+        externalLinkOpenPreference = try container.decodeIfPresent(ExternalLinkOpenPreference.self, forKey: .externalLinkOpenPreference) ?? .inApp
         appAppearanceMode = try container.decodeIfPresent(AppAppearanceMode.self, forKey: .appAppearanceMode) ?? .system
         terminalMouseWheelBehavior = try container.decodeIfPresent(TerminalMouseWheelBehavior.self, forKey: .terminalMouseWheelBehavior) ?? .magentDefaultScroll
         showScrollToBottomIndicator = try container.decodeIfPresent(Bool.self, forKey: .showScrollToBottomIndicator) ?? true
@@ -364,6 +364,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(autoCheckForUpdates, forKey: .autoCheckForUpdates)
         try container.encodeIfPresent(skippedUpdateVersion, forKey: .skippedUpdateVersion)
         try container.encode(syncLocalPathsOnArchive, forKey: .syncLocalPathsOnArchive)
+        try container.encode(externalLinkOpenPreference, forKey: .externalLinkOpenPreference)
         try container.encode(appAppearanceMode, forKey: .appAppearanceMode)
         try container.encode(terminalMouseWheelBehavior, forKey: .terminalMouseWheelBehavior)
         try container.encode(showScrollToBottomIndicator, forKey: .showScrollToBottomIndicator)

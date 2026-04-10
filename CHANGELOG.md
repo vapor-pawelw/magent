@@ -12,10 +12,18 @@ All notable changes to this project will be documented in this file.
 ### Settings
 - Fixed rare crashes when opening repository/worktree folder pickers before the Settings/Configuration view had an attached window.
 - App updates now use a clear staged action in Settings: `Download` first, disabled `Downloading...` while transfer/prep runs, then `Install & Relaunch` once the update is ready. Prepared downloads are recovered from `/tmp` after app restarts, so you can still install without downloading again.
+- Link-opening preference is now persisted correctly across launches. `Settings > General > Links` no longer reverts after restart.
 
 ### Web Tab
 #### Features
 - Added "Open in Browser" button (Safari icon) to the web tab toolbar. Opens the current page in your default browser.
+- Default external link destination is now `Magent web tab` for new settings profiles.
+- Added in-page find (`Cmd+F`) in web tabs with next/previous controls; Enter advances and Esc dismisses.
+- Link-opening overrides now use `Option-click` (toolbar buttons and terminal links) for "open in opposite destination".
+- Middle-clicking a link inside the internal webview now opens that link in a new web tab.
+
+#### Bug Fixes
+- Reopening Jira/PR tabs from the top-right buttons now resets the tab to the canonical Jira/PR URL and clears prior navigation history instead of keeping the last navigated page.
 
 ### Terminal
 #### Bug Fixes
