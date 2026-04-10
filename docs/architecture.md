@@ -265,6 +265,11 @@ Agent-backed terminal tabs may expose a `Resume Agent Session in New Tab` contex
 - Route resumed-duplicate tabs through the normal `addTab(...)` flow with an explicit `resumeSessionID` so startup, trust handling, overlay behavior, and persisted session metadata stay consistent with every other agent tab.
 - Persist the copied resume ID onto the new tab's `sessionConversationIDs` entry immediately so later recreation/reopen flows preserve the resumed conversation even before a subsequent refresh discovers the same ID again.
 
+Tab display-name deduplication must use one shared allocator for create, resume-duplicate, and rename flows:
+- Parse incoming names as `<base>-<N>` when the suffix is numeric, and treat that as the same base sequence (for example `Codex-1` belongs to the `Codex` sequence).
+- Keep a persisted per-thread monotonic counter per normalized base name (`MagentThread.tabNameSuffixCounters`), and only ever increment it when a duplicate needs a suffix.
+- Never chain suffixes (`-1-1`) and never backfill gaps after deletions; once `Codex-2` exists, the next duplicate must be `Codex-3` even if `Codex-1` was removed.
+
 The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu. That sheet is agent-only, so it keeps the model picker, title field, model/reasoning controls, and an optional "Extra context" prompt field. The draft checkbox is hidden. When the user provides extra context, it is appended to the transfer prompt as priority instructions for the receiving agent; when left empty, the transfer prompt is unchanged. Tabs created through that flow should persist an explicit forwarded-session marker so the tab bar can show the same forward icon as the header `Continue in...` button even after reload, rename, or session recreation.
 
 Tab context menu ordering should stay stable for muscle memory:
