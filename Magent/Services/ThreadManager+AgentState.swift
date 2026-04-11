@@ -836,9 +836,13 @@ extension ThreadManager {
         }
         switch hintedAgent {
         case .codex:
-            return paneContentShowsCodexBusyStatus(paneContent) || paneContentShowsCodexPrompt(paneContent)
+            // Hinting from idle prompts is too ambiguous (shell themes can use ›/❯).
+            // Only retain a codex hint when active busy markers are visible.
+            return paneContentShowsCodexBusyStatus(paneContent)
         case .claude:
-            return paneContentShowsEscToInterrupt(paneContent) || paneContentShowsClaudePrompt(paneContent)
+            // Hinting from idle prompts is too ambiguous (shell themes can use ›/❯).
+            // Only retain a claude hint when the active busy marker is visible.
+            return paneContentShowsEscToInterrupt(paneContent)
         case .custom:
             return false
         }
@@ -846,17 +850,6 @@ extension ThreadManager {
 
     private func paneContentShowsCodexBusyStatus(_ paneContent: String) -> Bool {
         recentNonEmptyLines(from: paneContent, maxLines: 25).contains(where: Self.isCodexBusyStatusLine)
-    }
-
-    private func paneContentShowsCodexPrompt(_ paneContent: String) -> Bool {
-        recentNonEmptyLines(from: paneContent, maxLines: 25).contains { line in
-            line.trimmingCharacters(in: .whitespaces).hasPrefix("\u{203A}") // ›
-        }
-    }
-
-    private func paneContentShowsClaudePrompt(_ paneContent: String) -> Bool {
-        recentNonEmptyLines(from: paneContent, maxLines: 25)
-            .contains(where: { $0.hasPrefix("\u{276F}") }) // ❯
     }
 
     private static func isCodexBusyStatusLine(_ line: String) -> Bool {
