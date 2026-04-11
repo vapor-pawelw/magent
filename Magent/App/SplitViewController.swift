@@ -392,6 +392,7 @@ final class SplitViewController: NSSplitViewController {
     @objc private func handleNavigateToThread(_ notification: Notification) {
         guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
         let sessionName = notification.userInfo?["sessionName"] as? String
+        let centerInSidebar = notification.userInfo?["centerInSidebar"] as? Bool ?? false
         let alreadyShowing = currentDetailVC?.thread.id == threadId
 
         // Pre-seed UserDefaults so a newly-created ThreadDetailViewController
@@ -402,7 +403,10 @@ final class SplitViewController: NSSplitViewController {
         }
 
         // Select the thread in the sidebar (creates ThreadDetailViewController if needed)
-        threadListVC.selectThread(byId: threadId)
+        threadListVC.selectThread(byId: threadId, scrollRowToVisible: !centerInSidebar)
+        if centerInSidebar {
+            threadListVC.centerAndPulseThreadRow(byId: threadId)
+        }
 
         // If the thread was already showing, tabs are set up — select directly
         if alreadyShowing, let sessionName, let detailVC = currentDetailVC {

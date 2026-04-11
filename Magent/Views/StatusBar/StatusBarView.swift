@@ -1604,13 +1604,17 @@ final class StatusBarView: NSView, NSPopoverDelegate {
             onSelectThread: { [weak self] threadId in
                 self?.activePopover?.close()
                 let sessionName = self?.navigationSessionName(for: status, threadId: threadId)
+                var userInfo: [String: Any] = [
+                    "threadId": threadId,
+                    "sessionName": sessionName as Any
+                ]
+                if status == .favorites {
+                    userInfo["centerInSidebar"] = true
+                }
                 NotificationCenter.default.post(
                     name: .magentNavigateToThread,
                     object: self,
-                    userInfo: [
-                        "threadId": threadId,
-                        "sessionName": sessionName as Any
-                    ]
+                    userInfo: userInfo
                 )
             }
         )

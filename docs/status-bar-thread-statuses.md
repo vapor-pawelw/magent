@@ -16,6 +16,7 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - The `done` popover also includes a footer button, `Mark All as Read`, below the thread rows.
 - Right-clicking the status-bar `done` item opens a context menu with a single action: `Mark All as Read`.
 - Clicking `X favorites` opens a favorites popover (same visual style as `done`) listing all favorite threads in chronological favorite order.
+- Navigating to a thread from the favorites popover now mirrors the sidebar jump-capsule behavior: if the thread row is offscreen, the sidebar scrolls smoothly to center it and applies the same brief row pulse.
 - Favorites popover rows include a trailing remove action (`heart.slash.circle`) that removes that thread from favorites without navigating.
 - The favorites popover does not show `Mark All`/`Read` controls.
 - When the favorites cap is reached, the favorites popover shows an inline limit hint (`10/10`).
@@ -32,6 +33,7 @@ This doc covers the aggregate thread-status controls in the bottom status bar.
 - `done` ordering is persistent because unread completion state already survives relaunch via `MagentThread.unreadCompletionSessions`, and its ordering timestamp comes from persisted `MagentThread.lastAgentCompletionAt`.
 - `busy`, `waiting`, and `rate-limited` ordering is in-memory only. Their "added at" timestamps are tracked inside `StatusBarView` for the current app run and reset on relaunch because those statuses themselves are transient.
 - Favorites ordering uses persisted `MagentThread.favoritedAt` (fallback `createdAt`) and is not capped to 3 rows like status summaries.
+- Favorites row selection posts `.magentNavigateToThread` with `centerInSidebar = true`; `SplitViewController` consumes that hint to suppress immediate `scrollRowToVisible` and call `ThreadListViewController.centerAndPulseThreadRow(byId:)`.
 - While a status popover is visible, `StatusBarView` avoids rebuilding the status-button stack (to preserve the popover anchor) and updates existing button counts in place.
 - If a read action clears the currently open status entirely (for example, `done` goes to zero after `Mark All as Read`), `StatusBarView` must close that popover and rebuild the status-button stack immediately so stale `done` UI does not linger.
 

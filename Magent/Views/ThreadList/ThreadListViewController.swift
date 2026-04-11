@@ -1082,7 +1082,7 @@ final class ThreadListViewController: NSViewController {
         clearSelectedThreadState()
     }
 
-    func selectThread(byId threadId: UUID) {
+    func selectThread(byId threadId: UUID, scrollRowToVisible: Bool = true) {
         expandAncestorsIfNeeded(for: threadId)
         for row in 0..<outlineView.numberOfRows {
             if let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId {
@@ -1090,7 +1090,9 @@ final class ThreadListViewController: NSViewController {
                 let resolved = recordSelectedThread(thread)
                 if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
                 outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-                outlineView.scrollRowToVisible(row)
+                if scrollRowToVisible {
+                    outlineView.scrollRowToVisible(row)
+                }
                 return
             }
         }
@@ -1104,6 +1106,12 @@ final class ThreadListViewController: NSViewController {
             return
         }
         completion?()
+    }
+
+    func centerAndPulseThreadRow(byId threadId: UUID) {
+        centerThreadRow(byId: threadId) { [weak self] in
+            self?.pulseThreadRow(threadId: threadId)
+        }
     }
 
     private func expandAncestorsIfNeeded(for threadId: UUID) {
@@ -1232,9 +1240,7 @@ final class ThreadListViewController: NSViewController {
 
     @objc private func selectedThreadJumpCapsuleTapped(_ gesture: NSClickGestureRecognizer) {
         guard let selectedThreadID else { return }
-        centerThreadRow(byId: selectedThreadID) { [weak self] in
-            self?.pulseThreadRow(threadId: selectedThreadID)
-        }
+        centerAndPulseThreadRow(byId: selectedThreadID)
     }
 
     private func pulseThreadRow(threadId: UUID) {
