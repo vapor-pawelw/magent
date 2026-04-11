@@ -97,6 +97,17 @@ On submit, both the **current** draft scope (project the user submitted to) and 
 
 `AgentLaunchPromptDraftScope` conforms to `Equatable`, so the two scopes are compared with `!=` directly.
 
+## Project Picker Draft Switching
+
+When the New Thread sheet has multiple projects and the user changes the project picker:
+
+- The sheet now persists/restores prompt drafts per project scope and per mode (`agent` / `terminal` / `web`), so switching away and back restores each project's last in-progress input.
+- If the current input is non-empty, switching projects requires explicit confirmation:
+  - **Move to `<new project>`**: carries the current input into the destination project's draft for the same mode.
+  - **Save in `<old project>`**: keeps current input as the old project's draft and loads the destination project's saved draft.
+  - **Cancel**: reverts project selection and changes nothing.
+- If the destination already has a saved draft for that mode, the confirmation alert is destructive and shows a quoted preview (first 120 characters, with `...` only when truncated) of the draft that will be replaced.
+
 ## Non-tmux Tab Types
 
 Tab types that don't go through tmux (web tabs, draft tabs, future non-terminal types) must set `pendingPromptFileURL = nil` in `performAccept`. The crash-recovery temp file is only cleaned up by `clearAfterInjection` which listens for `magentAgentKeysInjected` — without the nil-out, the temp file lingers and triggers a stale recovery banner on next launch.

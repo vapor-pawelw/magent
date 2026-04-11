@@ -70,6 +70,10 @@ All notable changes to this project will be documented in this file.
 #### Features
 - Terminal and Web type prompts now display as compact single-line fields with placeholder text ("e.g. vim, htop, ssh user@host" / "https://..."), making the expected input obvious and reducing accidental prompt-in-URL mistakes.
 
+#### Bug Fixes
+- Fixed project-switch draft restore in the New Thread sheet: each project's in-progress prompt is now saved and restored per mode (`agent`, `terminal`, `web`) when switching between projects.
+- Switching projects with non-empty input now asks whether to move the current input to the selected project or save it in the current project; when the destination already has a saved draft, the dialog warns that it will be replaced and shows a quoted preview of the existing draft.
+
 ### Sidebar
 #### Features
 - Added "Sort" submenu to section and repo right-click context menus. Sort threads by description, branch name, priority, or last completion. Sorting always respects pinned/normal/hidden boundaries (pinned threads never drop below unpinned). Hold/release ⌥ Option while the menu is open to live-swap between ascending and descending sort items. Right-clicking the repo name sorts all sections at once (including hidden sections); right-clicking a section sorts only that section. When section grouping is disabled, all threads are treated as one container.

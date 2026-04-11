@@ -472,6 +472,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
     private var sectionPickerRow: NSView?
     // When section is inlined into the project row, we track its label separately for show/hide.
     private var sectionPickerLabel: NSTextField?
+    private let projectSwitchPreviewLimit = 120
 
     private enum PickerItem {
         case agent(AgentType, isDefault: Bool)
@@ -1225,14 +1226,106 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let newScope = AgentLaunchPromptDraftScope.newThread(projectId: newProject.id)
         guard case .newThread(let oldId) = currentDraftScope, oldId != newProject.id else { return }
 
-        // Just update the scope — no save, no load.
-        // Drafts are saved only when the user actually types (textDidChange), so switching
-        // projects neither persists the current content to the old project nor overwrites
-        // the prompt with the new project's saved draft. Whatever is in the field stays.
-        currentDraftScope = newScope
+        let mode = currentMode
+        let oldProjectName = projectPickerItems.first(where: { $0.id == oldId })?.name ?? "previous project"
+        let trimmedCurrentPrompt = promptTextView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let destinationDraft = AgentLaunchPromptDraftStore.draft(for: newScope, mode: mode)
+        let destinationPrompt = destinationDraft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let destinationPromptPreview = destinationPrompt.isEmpty
+            ? nil
+            : quotedDraftPreview(destinationPrompt, limit: projectSwitchPreviewLimit)
+
+        if !trimmedCurrentPrompt.isEmpty {
+            guard let decision = confirmProjectSwitchDecision(
+                oldProjectName: oldProjectName,
+                newProjectName: newProject.name,
+                destinationPromptPreview: destinationPromptPreview
+            ) else {
+                if let oldIndex = projectPickerItems.firstIndex(where: { $0.id == oldId }) {
+                    picker.selectItem(at: oldIndex)
+                }
+                return
+            }
+
+            switch decision {
+            case .moveToNewProject:
+                // Keep current in-progress content and treat it as the destination project's draft.
+                currentDraftScope = newScope
+                persistDraft(mode: mode)
+            case .saveInOldProject:
+                // Store current in-progress content under the current (old) project.
+                persistDraft(mode: mode)
+                currentDraftScope = newScope
+            }
+        } else {
+            currentDraftScope = newScope
+        }
+
+        // Load selected project's draft for the current mode.
+        loadDraft(mode: mode)
+        applyPrefillIfNeeded()
         populateSectionPicker(for: newProject.id)
         reloadBaseBranches(for: newProject)
         resizeWindowToFitContent()
+    }
+
+    private enum ProjectSwitchDecision {
+        case moveToNewProject
+        case saveInOldProject
+    }
+
+    private func confirmProjectSwitchDecision(
+        oldProjectName: String,
+        newProjectName: String,
+        destinationPromptPreview: String?
+    ) -> ProjectSwitchDecision? {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+
+        if let destinationPromptPreview {
+            alert.messageText = "Replace draft in \"\(newProjectName)\"?"
+            alert.informativeText = """
+            \"\(newProjectName)\" already has a saved draft.
+
+            Moving your current input will replace:
+            \(destinationPromptPreview)
+            """
+            alert.addButton(withTitle: "Replace in \(newProjectName)")
+            alert.addButton(withTitle: "Save in \(oldProjectName)")
+            alert.addButton(withTitle: "Cancel")
+            alert.buttons.first?.hasDestructiveAction = true
+        } else {
+            alert.messageText = "Switch project?"
+            alert.informativeText = "You have unsaved input in \"\(oldProjectName)\"."
+            alert.addButton(withTitle: "Move to \(newProjectName)")
+            alert.addButton(withTitle: "Save in \(oldProjectName)")
+            alert.addButton(withTitle: "Cancel")
+        }
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            return .moveToNewProject
+        case .alertSecondButtonReturn:
+            return .saveInOldProject
+        default:
+            return nil
+        }
+    }
+
+    private func quotedDraftPreview(_ text: String, limit: Int) -> String {
+        let normalized = text.replacingOccurrences(
+            of: #"\s+"#,
+            with: " ",
+            options: .regularExpression
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return "\"\"" }
+        guard normalized.count > limit else { return "\"\(normalized)\"" }
+
+        let index = normalized.index(normalized.startIndex, offsetBy: limit)
+        let prefix = String(normalized[..<index]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let remainder = normalized[index...].trimmingCharacters(in: .whitespacesAndNewlines)
+        let suffix = remainder.isEmpty ? "" : "..."
+        return "\"\(prefix)\(suffix)\""
     }
 
     private func makeSectionPickerRow() -> NSStackView {
