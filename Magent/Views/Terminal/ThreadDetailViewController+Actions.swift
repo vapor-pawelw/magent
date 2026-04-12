@@ -1025,6 +1025,7 @@ extension ThreadDetailViewController {
                 tabItems[i].showKeepAliveIcon = false
             }
         }
+        refreshTabTooltips()
     }
 
     @MainActor

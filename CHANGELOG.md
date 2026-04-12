@@ -20,6 +20,9 @@ All notable changes to this project will be documented in this file.
 - Fixed host:port URL parsing in the in-app web view address bar. Entries like `localhost:3000/docs#api` now open as HTTP(S) URLs and preserve query/fragment anchors.
 
 ### Tab
+#### Features
+- Added tab hover tooltips in the thread detail view. Hover now shows tab type, terminal tmux session name (for terminal tabs), and live tab status details (busy, waiting for input, keep-alive, dead session, and rate-limit state).
+
 #### Bug Fixes
 - Fixed slow tab switches showing no progress for non-agent terminal tabs. Tab selection now shows the same debounced loading overlay during tmux/session validation instead of leaving the terminal area blank with no feedback.
 - Fixed tab-name deduplication when cloning/resuming/renaming tabs. Names now use a single monotonic suffix sequence per base name (`Codex`, `Codex-1`, `Codex-2`, ...), preventing chained names like `Codex-1-1` and avoiding suffix reuse after deletions.
