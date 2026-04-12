@@ -836,7 +836,8 @@ final class ThreadDetailViewController: NSViewController {
                     selectTab(at: resolvedIndex)
                     return
                 }
-                let keepStartupOverlay = recreatedInitialSession || consumeStartupOverlayRequirement(for: initialSessionName)
+                let keepStartupOverlay = initialAgentType != nil
+                    && (recreatedInitialSession || consumeStartupOverlayRequirement(for: initialSessionName))
                 if !keepStartupOverlay {
                     dismissLoadingOverlay()
                 }
