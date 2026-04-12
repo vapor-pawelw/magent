@@ -308,7 +308,7 @@ final class PopoutInfoStripView: NSView {
         } else if thread.hasUnreadAgentCompletion {
             borderColor = .systemGreen.withAlphaComponent(0.5)
         } else {
-            borderColor = NSColor.separatorColor.withAlphaComponent(0.45)
+            borderColor = .controlAccentColor
         }
 
         effectiveAppearance.performAsCurrentDrawingAppearance {

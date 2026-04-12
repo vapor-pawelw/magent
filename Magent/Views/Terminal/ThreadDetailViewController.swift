@@ -123,6 +123,7 @@ final class ThreadDetailViewController: NSViewController {
     static let promptTOCCollapsedWidth: CGFloat = 185
     static let promptTOCCollapsedHeight: CGFloat = 36
 
+    let showsHeaderInfoStrip: Bool
     var thread: MagentThread
     let threadManager = ThreadManager.shared
     let headerInfoStrip = PopoutInfoStripView()
@@ -242,7 +243,8 @@ final class ThreadDetailViewController: NSViewController {
     let prJiraSeparator = VerticalSeparatorView()
     let pinSeparator = VerticalSeparatorView()
 
-    init(thread: MagentThread) {
+    init(thread: MagentThread, showsHeaderInfoStrip: Bool = true) {
+        self.showsHeaderInfoStrip = showsHeaderInfoStrip
         self.thread = thread
         self.primaryTabIndex = thread.isMain ? -1 : 0
         super.init(nibName: nil, bundle: nil)
@@ -614,29 +616,45 @@ final class ThreadDetailViewController: NSViewController {
         }
 
         view.addSubview(topBar)
-        headerInfoStrip.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(headerInfoStrip)
+        if showsHeaderInfoStrip {
+            headerInfoStrip.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(headerInfoStrip)
+        }
         view.addSubview(terminalContainer)
         setupPromptTOCOverlay()
 
         terminalBottomToView = terminalContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor)
 
-        NSLayoutConstraint.activate([
-            headerInfoStrip.topAnchor.constraint(equalTo: view.topAnchor),
-            headerInfoStrip.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            headerInfoStrip.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            headerInfoStrip.heightAnchor.constraint(equalToConstant: 48),
+        if showsHeaderInfoStrip {
+            NSLayoutConstraint.activate([
+                headerInfoStrip.topAnchor.constraint(equalTo: view.topAnchor),
+                headerInfoStrip.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                headerInfoStrip.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                headerInfoStrip.heightAnchor.constraint(equalToConstant: 48),
 
-            topBar.topAnchor.constraint(equalTo: headerInfoStrip.bottomAnchor, constant: 4),
-            topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
-            topBar.heightAnchor.constraint(equalToConstant: 32),
+                topBar.topAnchor.constraint(equalTo: headerInfoStrip.bottomAnchor, constant: 4),
+                topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+                topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+                topBar.heightAnchor.constraint(equalToConstant: 32),
 
-            terminalContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4),
-            terminalContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            terminalContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            terminalBottomToView!,
-        ])
+                terminalContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4),
+                terminalContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                terminalContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                terminalBottomToView!,
+            ])
+        } else {
+            NSLayoutConstraint.activate([
+                topBar.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
+                topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+                topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+                topBar.heightAnchor.constraint(equalToConstant: 32),
+
+                terminalContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4),
+                terminalContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                terminalContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                terminalBottomToView!,
+            ])
+        }
 
         setupTerminalBannerOverlay()
         setupScrollFAB()
@@ -1503,7 +1521,7 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     func refreshHeaderInfoStrip() {
-        guard isViewLoaded else { return }
+        guard isViewLoaded, showsHeaderInfoStrip else { return }
         let latest = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
         headerInfoStrip.refresh(from: latest)
     }

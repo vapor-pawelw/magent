@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 ### Thread
 #### Bug Fixes
 - Pop-out windows now use section-colored thread icons in the top info strip (instead of default primary styling), keep that strip synced with section/thread metadata changes from the main window, and mirror the same info strip in the main thread view above the tab/action bar.
+- Fixed double header bars in popped-out thread windows by keeping the shared thread info strip only in the pop-out chrome there (while still showing it in the main thread view), and aligned the strip separator baseline to the sidebar selected-thread accent.
 - Focusing a thread now clears unread completion state immediately, even if the thread was already selected or its separate window was already focused when the agent finished.
 - Separate thread and detached-tab windows now persist their latest size and position continuously, so app restart restores the same extracted windows in the same place.
 - Fixed separate-window quit/relaunch restore so popped-out thread windows stay popped out across normal app restart instead of collapsing back into the main window.

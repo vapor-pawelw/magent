@@ -15,7 +15,7 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
     init(thread: MagentThread, sourceWindow: NSWindow?) {
         self.threadId = thread.id
         self.infoStrip = PopoutInfoStripView()
-        self.detailVC = ThreadDetailViewController(thread: thread)
+        self.detailVC = ThreadDetailViewController(thread: thread, showsHeaderInfoStrip: false)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
