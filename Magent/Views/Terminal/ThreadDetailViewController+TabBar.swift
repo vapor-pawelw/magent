@@ -216,6 +216,7 @@ extension ThreadDetailViewController {
         threadManager.markSessionCompletionSeen(threadId: thread.id, sessionName: sessionName)
         threadManager.markSessionWaitingSeen(threadId: thread.id, sessionName: sessionName)
         threadManager.markSessionRateLimitSeen(threadId: thread.id, sessionName: sessionName)
+        refreshTabTooltips()
 
         schedulePromptTOCRefresh()
         return true
@@ -353,6 +354,95 @@ extension ThreadDetailViewController {
                 item.availableAgentsForContinue = []
                 item.showKeepAliveIcon = false
             }
+        }
+
+        refreshTabTooltips()
+    }
+
+    func refreshTabTooltips() {
+        for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
+            tabItems[i].toolTip = tooltipText(for: slot, displayIndex: i)
+        }
+    }
+
+    private func tooltipText(for slot: TabSlot, displayIndex: Int) -> String {
+        let pinned = displayIndex < pinnedCount ? "Yes" : "No"
+
+        switch slot {
+        case .terminal(let sessionName):
+            let agentType = threadManager.agentType(for: thread, sessionName: sessionName)
+            let typeText = agentType.map { "Terminal (\($0.displayName))" } ?? "Terminal"
+            var statusBits: [String] = []
+
+            if thread.deadSessions.contains(sessionName) { statusBits.append("dead session") }
+            if thread.busySessions.contains(sessionName) { statusBits.append("agent busy") }
+            if thread.magentBusySessions.contains(sessionName) { statusBits.append("Magent busy") }
+            if thread.waitingForInputSessions.contains(sessionName) { statusBits.append("waiting for input") }
+            if thread.hasUnsubmittedInputSessions.contains(sessionName) { statusBits.append("input typed") }
+            if let rateLimitInfo = thread.rateLimitedSessions[sessionName] {
+                var rateLimitText = "rate limited"
+                if rateLimitInfo.isPropagated {
+                    rateLimitText += " (propagated)"
+                }
+                if !rateLimitInfo.isPromptBased {
+                    rateLimitText += " until \(rateLimitInfo.resetAt.formatted(date: .abbreviated, time: .shortened))"
+                }
+                statusBits.append(rateLimitText)
+            }
+            if thread.unreadCompletionSessions.contains(sessionName) { statusBits.append("unread completion") }
+            if thread.unreadRateLimitSessions.contains(sessionName) { statusBits.append("unread rate-limit notice") }
+            if statusBits.isEmpty { statusBits.append("idle") }
+
+            let keepAlive: String
+            if thread.isKeepAlive {
+                keepAlive = "Thread-level"
+            } else if thread.protectedTmuxSessions.contains(sessionName) {
+                keepAlive = "Tab-level"
+            } else {
+                keepAlive = "No"
+            }
+
+            return [
+                "Type: \(typeText)",
+                "Session: \(sessionName)",
+                "Pinned: \(pinned)",
+                "Keep Alive: \(keepAlive)",
+                "Status: \(statusBits.joined(separator: ", "))",
+            ].joined(separator: "\n")
+
+        case .web(let identifier):
+            let persisted = thread.persistedWebTabs.first(where: { $0.identifier == identifier })
+            let typeText: String = {
+                switch persisted?.iconType ?? .web {
+                case .jira: return "Web (Jira)"
+                case .pullRequest: return "Web (Pull Request)"
+                case .web, .none: return "Web"
+                }
+            }()
+            let urlText = persisted?.url.absoluteString ?? "Unknown"
+
+            return [
+                "Type: \(typeText)",
+                "Identifier: \(identifier)",
+                "Pinned: \(pinned)",
+                "URL: \(urlText)",
+                "Status: content tab",
+            ].joined(separator: "\n")
+
+        case .draft(let identifier):
+            let draft = draftTabs.first(where: { $0.identifier == identifier })
+            let agentText = draft?.agentType.displayName ?? "Unknown"
+            let modelText = draft?.modelId ?? "Default"
+            let reasoningText = draft?.reasoningLevel ?? "Default"
+
+            return [
+                "Type: Draft (\(agentText))",
+                "Identifier: \(identifier)",
+                "Pinned: \(pinned)",
+                "Model: \(modelText)",
+                "Reasoning: \(reasoningText)",
+                "Status: saved draft",
+            ].joined(separator: "\n")
         }
     }
 }

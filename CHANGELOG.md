@@ -20,6 +20,9 @@ All notable changes to this project will be documented in this file.
 - Fixed host:port URL parsing in the in-app web view address bar. Entries like `localhost:3000/docs#api` now open as HTTP(S) URLs and preserve query/fragment anchors.
 
 ### Tab
+#### Features
+- Added tab hover tooltips in the thread detail view. Hover now shows tab type, terminal tmux session name (for terminal tabs), and live tab status details (busy, waiting for input, keep-alive, dead session, and rate-limit state).
+
 #### Bug Fixes
 - Fixed recurring app termination when closing tabs from non-visible threads (or IPC paths) by evicting cached terminal surfaces before tmux session shutdown.
 - Fixed slow tab switches showing no progress for non-agent terminal tabs. Tab selection now shows the same debounced loading overlay during tmux/session validation instead of leaving the terminal area blank with no feedback.

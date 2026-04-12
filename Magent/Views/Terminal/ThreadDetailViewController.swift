@@ -796,6 +796,7 @@ final class ThreadDetailViewController: NSViewController {
                     tabItems[i].isSessionDead = thread.deadSessions.contains(sessionName)
                 }
             }
+            refreshTabTooltips()
 
             // If restoring to a non-terminal tab, select it immediately before terminal prep.
             if let slotIndex = nonTerminalSlotIndex {
@@ -1193,6 +1194,7 @@ final class ThreadDetailViewController: NSViewController {
                 tabItems[displayIdx].isSessionDead = true
             }
         }
+        refreshTabTooltips()
     }
 
     @objc private func handleAgentCompletionNotification(_ notification: Notification) {
@@ -1207,6 +1209,7 @@ final class ThreadDetailViewController: NSViewController {
                 tabItems[i].hasUnreadCompletion = unreadSessions.contains(sessionName)
             }
         }
+        refreshTabTooltips()
         refreshDiffViewerIfVisible()
         syncTransientState()
         schedulePromptTOCRefresh()
@@ -1260,6 +1263,7 @@ final class ThreadDetailViewController: NSViewController {
                 tabItems[i].hasWaitingForInput = waitingSessions.contains(sessionName)
             }
         }
+        refreshTabTooltips()
         syncTransientState()
     }
 
@@ -1275,6 +1279,7 @@ final class ThreadDetailViewController: NSViewController {
                 tabItems[i].hasBusy = busySessions.contains(sessionName)
             }
         }
+        refreshTabTooltips()
         syncTransientState()
     }
 
@@ -1295,6 +1300,7 @@ final class ThreadDetailViewController: NSViewController {
                 tabItems[i].hasUnreadRateLimit = thread.unreadRateLimitSessions.contains(sessionName)
             }
         }
+        refreshTabTooltips()
     }
 
     @objc private func handleThreadCreationFinished(_ notification: Notification) {

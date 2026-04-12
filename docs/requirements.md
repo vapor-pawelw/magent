@@ -35,6 +35,7 @@ Each tab within a thread:
 - Starts in the thread worktree/repo directory on first session creation, but switching back to an already-running tab must not reset the shell's current directory
 - `Continue in...` context handoff must not create tracked or untracked files in the repo/worktree root; any transient handoff file should live outside the repo, use a unique filename so concurrent transfers do not collide, and expire automatically after a short retention window
 - Double-clicking a terminal session tab opens the same rename prompt as the tab context-menu "Rename Tab..." action
+- Hovering a tab shows a tooltip with tab type and status context. Terminal tabs include the tmux session name and session status details (busy, waiting for input, keep-alive, dead session, unread completion/rate-limit, and active rate-limit reset time when available). Web and draft tabs include their identifier plus type-specific details.
 
 ### Web Tabs
 
