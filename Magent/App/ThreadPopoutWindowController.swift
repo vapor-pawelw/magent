@@ -169,13 +169,6 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
 
         nc.addObserver(
             self,
-            selector: #selector(handleNavigateToThread(_:)),
-            name: .magentNavigateToThread,
-            object: nil
-        )
-
-        nc.addObserver(
-            self,
             selector: #selector(handleArchivedThreadsChanged),
             name: .magentArchivedThreadsDidChange,
             object: nil
@@ -202,12 +195,6 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
         guard let latestThread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) else { return }
         infoStrip.refresh(from: latestThread)
         window?.title = Self.windowTitle(for: latestThread)
-    }
-
-    @objc private func handleNavigateToThread(_ notification: Notification) {
-        guard let navigateId = notification.userInfo?["threadId"] as? UUID,
-              navigateId == threadId else { return }
-        window?.makeKeyAndOrderFront(nil)
     }
 
     @objc private func handleTabReturnedToThread(_ notification: Notification) {
