@@ -38,3 +38,12 @@ The script will:
 5. Push the tag and verify release/homebrew automation
 
 GitHub Releases read release notes from the matching `CHANGELOG.md` version section first, with annotated-tag fallback.
+
+## In-app display
+
+- The app bundles `CHANGELOG.md` at build time and uses it for both:
+  - `mAgent > Changelog…` (full document)
+  - launch-time `What's New` popup (current app version section only)
+- Launch-time `What's New` is shown once per app version, tracked in `AppSettings.lastShownChangelogVersion`.
+- If no matching `## <version> - ...` section exists for the current app version, launch skips the popup.
+- Debug Settings includes a `What's New` helper to reopen the current-version popup for testing.

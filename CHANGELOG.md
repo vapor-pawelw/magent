@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### General
+#### Features
+- Added a polished "What's New" changelog window on launch after upgrading. It reads from bundled `CHANGELOG.md`, shows only the current app version section, and appears once per version.
+
 ### Sidebar
 #### Features
 - Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.

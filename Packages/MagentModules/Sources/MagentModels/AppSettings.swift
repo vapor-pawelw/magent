@@ -124,6 +124,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
     public var rateLimitLiftedSoundName: String
     public var autoCheckForUpdates: Bool
     public var skippedUpdateVersion: String?
+    public var lastShownChangelogVersion: String?
     public var syncLocalPathsOnArchive: Bool
     public var externalLinkOpenPreference: ExternalLinkOpenPreference
     public var appAppearanceMode: AppAppearanceMode
@@ -182,6 +183,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         rateLimitLiftedSoundName: String = "Glass",
         autoCheckForUpdates: Bool = true,
         skippedUpdateVersion: String? = nil,
+        lastShownChangelogVersion: String? = nil,
         syncLocalPathsOnArchive: Bool = true,
         externalLinkOpenPreference: ExternalLinkOpenPreference = .inApp,
         appAppearanceMode: AppAppearanceMode = .system,
@@ -239,6 +241,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         self.rateLimitLiftedSoundName = rateLimitLiftedSoundName
         self.autoCheckForUpdates = autoCheckForUpdates
         self.skippedUpdateVersion = skippedUpdateVersion
+        self.lastShownChangelogVersion = lastShownChangelogVersion
         self.syncLocalPathsOnArchive = syncLocalPathsOnArchive
         self.externalLinkOpenPreference = externalLinkOpenPreference
         self.appAppearanceMode = appAppearanceMode
@@ -302,6 +305,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         rateLimitLiftedSoundName = try container.decodeIfPresent(String.self, forKey: .rateLimitLiftedSoundName) ?? "Glass"
         autoCheckForUpdates = try container.decodeIfPresent(Bool.self, forKey: .autoCheckForUpdates) ?? true
         skippedUpdateVersion = try container.decodeIfPresent(String.self, forKey: .skippedUpdateVersion)
+        lastShownChangelogVersion = try container.decodeIfPresent(String.self, forKey: .lastShownChangelogVersion)
         syncLocalPathsOnArchive = try container.decodeIfPresent(Bool.self, forKey: .syncLocalPathsOnArchive) ?? true
         externalLinkOpenPreference = try container.decodeIfPresent(ExternalLinkOpenPreference.self, forKey: .externalLinkOpenPreference) ?? .inApp
         appAppearanceMode = try container.decodeIfPresent(AppAppearanceMode.self, forKey: .appAppearanceMode) ?? .system
@@ -363,6 +367,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         try container.encode(rateLimitLiftedSoundName, forKey: .rateLimitLiftedSoundName)
         try container.encode(autoCheckForUpdates, forKey: .autoCheckForUpdates)
         try container.encodeIfPresent(skippedUpdateVersion, forKey: .skippedUpdateVersion)
+        try container.encodeIfPresent(lastShownChangelogVersion, forKey: .lastShownChangelogVersion)
         try container.encode(syncLocalPathsOnArchive, forKey: .syncLocalPathsOnArchive)
         try container.encode(externalLinkOpenPreference, forKey: .externalLinkOpenPreference)
         try container.encode(appAppearanceMode, forKey: .appAppearanceMode)
@@ -535,6 +540,7 @@ public nonisolated struct AppSettings: Codable, Sendable {
         case rateLimitLiftedSoundName
         case autoCheckForUpdates
         case skippedUpdateVersion
+        case lastShownChangelogVersion
         case syncLocalPathsOnArchive
         case externalLinkOpenPreference
         case appAppearanceMode

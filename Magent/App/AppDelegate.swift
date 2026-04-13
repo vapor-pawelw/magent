@@ -118,6 +118,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         ThreadManager.shared.ensureManagedZdotdir()
         coordinator = AppCoordinator()
         coordinator?.start()
+        showCurrentVersionChangelogIfNeeded()
 
         let server = IPCSocketServer()
         self.ipcServer = server
@@ -236,6 +237,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         mainMenu.addItem(editMenuItem)
 
         NSApp.mainMenu = mainMenu
+    }
+
+    private func showCurrentVersionChangelogIfNeeded() {
+        let version = ((Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !version.isEmpty else { return }
+
+        var settings = PersistenceService.shared.loadSettings()
+        guard settings.lastShownChangelogVersion != version else { return }
+        guard ChangelogWindowController.showCurrentVersionChangelog(version: version) else { return }
+
+        settings.lastShownChangelogVersion = version
+        do {
+            try PersistenceService.shared.saveSettings(settings)
+        } catch {
+            NSLog("[AppDelegate] Failed to persist lastShownChangelogVersion: %@", String(describing: error))
+        }
     }
 
     private func applyAppAppearanceAndTerminalPreferences() {

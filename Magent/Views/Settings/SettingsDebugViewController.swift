@@ -46,6 +46,20 @@ final class SettingsDebugViewController: NSViewController {
         relaunchButton.bezelStyle = .rounded
         appSection.addArrangedSubview(relaunchButton)
 
+        let (changelogCard, changelogSection) = createSectionCard(
+            title: "What's New",
+            description: "Debug builds only. Reopen the launch-time changelog popup for the current app version."
+        )
+        stackView.addArrangedSubview(changelogCard)
+
+        let showWhatsNewButton = NSButton(
+            title: "Show Current Version What's New",
+            target: self,
+            action: #selector(showCurrentVersionWhatsNewTapped)
+        )
+        showWhatsNewButton.bezelStyle = .rounded
+        changelogSection.addArrangedSubview(showWhatsNewButton)
+
         let documentView = FlippedDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(stackView)
@@ -86,6 +100,31 @@ final class SettingsDebugViewController: NSViewController {
         relaunchApp()
     }
 
+    @objc private func showCurrentVersionWhatsNewTapped() {
+        let version = ((Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !version.isEmpty else {
+            showInfoAlert(
+                title: "What's New Unavailable",
+                message: "Could not determine the current app version."
+            )
+            return
+        }
+
+        var settings = persistence.loadSettings()
+        settings.lastShownChangelogVersion = nil
+        try? persistence.saveSettings(settings)
+
+        let shown = ChangelogWindowController.showCurrentVersionChangelog(version: version)
+        if !shown {
+            showInfoAlert(
+                title: "What's New Unavailable",
+                message: "No matching section for version \(version) was found in bundled CHANGELOG.md."
+            )
+        }
+    }
+
     private func relaunchApp() {
         let bundleURL = Bundle.main.bundleURL.path
         let task = Process()
@@ -93,6 +132,15 @@ final class SettingsDebugViewController: NSViewController {
         task.arguments = ["-c", "sleep 0.5 && open -n '\(bundleURL)'"]
         try? task.run()
         NSApp.terminate(nil)
+    }
+
+    private func showInfoAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     private func createSectionCard(title: String, description: String? = nil) -> (container: NSView, content: NSStackView) {

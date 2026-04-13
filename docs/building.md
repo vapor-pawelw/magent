@@ -86,7 +86,7 @@ It always attempts `--ff-only` first and automatically falls back to a non-ff me
 
 ## Build Notes
 
-- A post-build script phase (`scripts/embed-changelog.sh`) runs on every build. It copies `CHANGELOG.md` into the app bundle's Resources, writes the short git commit hash to `BUILD_COMMIT`, and sets `CFBundleVersion` to the git commit count (incremental build number). The "Changelog…" menu item reads these at runtime.
+- A post-build script phase (`scripts/embed-changelog.sh`) runs on every build. It copies `CHANGELOG.md` into the app bundle's Resources, writes the short git commit hash to `BUILD_COMMIT`, and sets `CFBundleVersion` to the git commit count (incremental build number). The app reads this bundled changelog both for the "Changelog…" menu item and for the launch-time "What's New" window (current version section only, shown once per version).
 - `./scripts/bootstrap-ghosttykit.sh` builds Ghostty from the repo's pinned default ref. If local `Libraries/GhosttyKit.xcframework` drifts to another Ghostty ref, rerun the bootstrap script before building to realign the C headers and Swift bridge.
 - `Packages/MagentModules` contains local SwiftPM modules consumed through `Tuist/Package.swift`. If package dependencies change, rerun `mise x -- tuist install` before `mise x -- tuist generate --no-open`.
 - After adding or removing Swift files, run `mise x -- tuist generate --no-open` before `xcodebuild` so the generated workspace includes the current source list.
