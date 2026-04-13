@@ -2,6 +2,7 @@ import Cocoa
 import MagentCore
 
 extension NSPasteboard.PasteboardType {
+    static let magentThreadId = NSPasteboard.PasteboardType("app.magent.thread-id")
     static let magentSectionId = NSPasteboard.PasteboardType("app.magent.section-id")
 }
 
@@ -11,7 +12,7 @@ extension ThreadListViewController: NSOutlineViewDataSource {
 
     private func draggedThread(from info: NSDraggingInfo) -> MagentThread? {
         guard let pasteboardItem = info.draggingPasteboard.pasteboardItems?.first,
-              let uuidString = pasteboardItem.string(forType: .string),
+              let uuidString = pasteboardItem.string(forType: .magentThreadId),
               let threadId = UUID(uuidString: uuidString) else {
             return nil
         }
@@ -188,7 +189,9 @@ extension ThreadListViewController: NSOutlineViewDataSource {
 
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
         if let thread = item as? MagentThread, !thread.isMain {
-            return thread.id.uuidString as NSString
+            let pbItem = NSPasteboardItem()
+            pbItem.setString(thread.id.uuidString, forType: .magentThreadId)
+            return pbItem
         }
         if let section = item as? SidebarSection {
             let pbItem = NSPasteboardItem()

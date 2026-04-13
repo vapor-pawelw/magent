@@ -10,12 +10,12 @@ private final class ThreadPopoutDragDestinationView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        registerForDraggedTypes([.string])
+        registerForDraggedTypes([.magentThreadId])
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        registerForDraggedTypes([.string])
+        registerForDraggedTypes([.magentThreadId])
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -55,7 +55,7 @@ private final class ThreadPopoutDragDestinationView: NSView {
 
     private static func draggedThreadId(from info: NSDraggingInfo) -> UUID? {
         guard let pasteboardItem = info.draggingPasteboard.pasteboardItems?.first,
-              let uuidString = pasteboardItem.string(forType: .string) else {
+              let uuidString = pasteboardItem.string(forType: .magentThreadId) else {
             return nil
         }
         return UUID(uuidString: uuidString)

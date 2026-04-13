@@ -278,6 +278,17 @@ When terminal overlays are enabled (for example, the prompt Table of Contents or
 
 **Bring-to-front after lazy tab add**: Terminal views are added lazily on first tab selection. After adding a new `TerminalSurfaceView` to `terminalContainer`, call `addSubview(_:positioned:above:relativeTo: nil)` on every overlay to keep them on top. See `bringPromptTOCOverlayToFront()` and `bringScrollOverlaysToFront()` in `ThreadDetailViewController+PromptTOC.swift` and `ThreadDetailViewController+ScrollFAB.swift`.
 
+## Thread Drag-and-Drop Pasteboard Contract (Pop-out Replace)
+
+Thread drag/drop payloads must use a dedicated custom pasteboard type (`app.magent.thread-id`), not plain `.string`.
+
+Why: embedded terminal surfaces can accept plain text drops. If thread drags are exported as `.string`, dropping over Ghostty content can be consumed as terminal input, which pastes the raw thread UUID into the shell instead of triggering pop-out replacement handling.
+
+Rule:
+- Sidebar thread drags must publish only `.magentThreadId`.
+- Pop-out replacement drop targets must register/read only `.magentThreadId`.
+- Do not reintroduce `.string` for thread drag payloads.
+
 ## Overlay Appearance Contract
 
 Terminal overlays must respond to appearance changes the same way the surrounding terminal chrome does.

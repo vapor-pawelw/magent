@@ -72,6 +72,7 @@ All notable changes to this project will be documented in this file.
 - Sidebar threads can now be dragged onto separate thread windows to replace their contents. Drop targets show a dark hover overlay, confirm before replacing, and handle already-popped-out threads with move/swap options.
 
 #### Bug Fixes
+- Fixed pop-out thread replacement drag/drop over embedded terminal surfaces inserting raw thread UUID text into terminal input. Thread drags now use a dedicated pasteboard type so Ghostty no longer consumes drops as plain text.
 - Fixed paste routing for detached/popped-out terminal windows. `Cmd+V` now pastes into the focused pop-out Ghostty surface instead of occasionally landing in the main-window terminal.
 - Pop-out windows now use section-colored thread icons in the top info strip (instead of default primary styling), keep that strip synced with section/thread metadata changes from the main window, and mirror the same info strip in the main thread view above the tab/action bar.
 - Fixed double header bars in popped-out thread windows by keeping the shared thread info strip only in the pop-out chrome there (while still showing it in the main thread view), and aligned the strip separator baseline to the sidebar selected-thread accent.
