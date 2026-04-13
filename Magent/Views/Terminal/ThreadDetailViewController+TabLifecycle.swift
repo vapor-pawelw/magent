@@ -15,6 +15,13 @@ extension ThreadDetailViewController {
 
         switch tabSlots[index] {
         case .terminal(let sessionName):
+            guard !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                BannerManager.shared.show(
+                    message: String(localized: .ThreadStrings.tabCreatingSession),
+                    style: .info
+                )
+                return
+            }
             GhosttyAppManager.log("closeTab: terminal session=\(sessionName) displayIndex=\(index)")
 
             let alert = NSAlert()
@@ -67,6 +74,13 @@ extension ThreadDetailViewController {
 
         switch tabSlots[index] {
         case .terminal(let sessionName):
+            guard !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                BannerManager.shared.show(
+                    message: String(localized: .ThreadStrings.tabCreatingSession),
+                    style: .info
+                )
+                return
+            }
             GhosttyAppManager.log("forceCloseTab: terminal session=\(sessionName) displayIndex=\(index)")
             Task {
                 do {

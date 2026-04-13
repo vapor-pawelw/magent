@@ -64,6 +64,10 @@ extension ThreadDetailViewController {
 
         switch tabSlots[index] {
         case .terminal(let sessionName):
+            if sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                selectPendingTerminalTab(at: index)
+                return
+            }
             if PopoutWindowManager.shared.isTabDetached(sessionName: sessionName) {
                 selectDetachedTab(at: index, sessionName: sessionName)
             } else {
@@ -74,6 +78,31 @@ extension ThreadDetailViewController {
         case .draft(let identifier):
             selectDraftTab(identifier: identifier, displayIndex: index)
         }
+    }
+
+    private func selectPendingTerminalTab(at index: Int) {
+        for (i, item) in tabItems.enumerated() {
+            item.isSelected = (i == index)
+        }
+
+        for termView in terminalViews where termView.superview != nil {
+            termView.isHidden = true
+        }
+
+        hideActiveWebTab()
+        hideActiveDraftTab()
+        hideEmptyState()
+        for (_, placeholder) in detachedTabPlaceholders {
+            placeholder.isHidden = true
+        }
+
+        ensureLoadingOverlay()
+        loadingLabel?.stringValue = String(localized: .ThreadStrings.tabCreatingSession)
+        loadingDetailLabel?.isHidden = true
+        revealLoadingOverlay(after: 0)
+
+        currentTabIndex = index
+        postFocusedThreadContextChangedIfKeyWindow()
     }
 
     private func selectTerminalTab(at index: Int, sessionName: String) {
@@ -366,37 +395,58 @@ extension ThreadDetailViewController {
 
             switch slot {
             case .terminal(let sessionName):
-                let agentType = threadManager.agentType(for: thread, sessionName: sessionName)
-                let resumeID = threadManager.conversationID(for: thread.id, sessionName: sessionName)
-                let isForwardedContinuation = thread.forwardedTmuxSessions.contains(sessionName)
-                item.isDetached = PopoutWindowManager.shared.isTabDetached(sessionName: sessionName)
-                item.onDetach = { [weak self] in self?.detachTab(at: i) }
-                item.onShowDetachedWindow = {
-                    PopoutWindowManager.shared.bringToFront(sessionName: sessionName)
+                let isPending = sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                if isPending {
+                    item.showCloseButton = false
+                    item.isDetached = false
+                    item.onDetach = nil
+                    item.onShowDetachedWindow = nil
+                    item.onReturnDetachedTab = nil
+                    item.onRename = nil
+                    item.allowsDoubleClickRename = false
+                    item.onResumeAgentInNewTab = nil
+                    item.canResumeAgentInNewTab = false
+                    item.onContinueIn = nil
+                    item.onExportContext = nil
+                    item.onKeepAlive = nil
+                    item.onKillSession = nil
+                    item.onKillAllSessions = nil
+                    item.availableAgentsForContinue = []
+                    item.showKeepAliveIcon = false
+                    item.typeIcon.isHidden = true
+                } else {
+                    let agentType = threadManager.agentType(for: thread, sessionName: sessionName)
+                    let resumeID = threadManager.conversationID(for: thread.id, sessionName: sessionName)
+                    let isForwardedContinuation = thread.forwardedTmuxSessions.contains(sessionName)
+                    item.isDetached = PopoutWindowManager.shared.isTabDetached(sessionName: sessionName)
+                    item.onDetach = { [weak self] in self?.detachTab(at: i) }
+                    item.onShowDetachedWindow = {
+                        PopoutWindowManager.shared.bringToFront(sessionName: sessionName)
+                    }
+                    item.onReturnDetachedTab = {
+                        PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
+                    }
+                    item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
+                    item.allowsDoubleClickRename = true
+                    item.onResumeAgentInNewTab = agentType?.supportsResume == true
+                        ? { [weak self] in self?.resumeAgentSessionInNewTab(at: i) }
+                        : nil
+                    item.canResumeAgentInNewTab = !(resumeID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                    item.onContinueIn = { [weak self] in self?.presentContinueTabSheet(for: i) }
+                    item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
+                    // Hide per-tab Keep Alive controls when the thread itself is keep-alive.
+                    item.onKeepAlive = thread.isKeepAlive ? nil : { [weak self] in self?.toggleKeepAlive(at: i) }
+                    item.onKillSession = { [weak self] in self?.killSession(at: i) }
+                    item.onKillAllSessions = { [weak self] in self?.killAllSessions() }
+                    item.availableAgentsForContinue = settings.availableActiveAgents
+                    item.showKeepAliveIcon = !thread.isKeepAlive
+                        && thread.protectedTmuxSessions.contains(sessionName)
+                    item.typeIcon.image = isForwardedContinuation
+                        ? NSImage(systemSymbolName: "arrowshape.turn.up.forward", accessibilityDescription: "Forwarded continuation")
+                        : nil
+                    item.typeIcon.contentTintColor = .secondaryLabelColor
+                    item.typeIcon.isHidden = !isForwardedContinuation
                 }
-                item.onReturnDetachedTab = {
-                    PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
-                }
-                item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
-                item.allowsDoubleClickRename = true
-                item.onResumeAgentInNewTab = agentType?.supportsResume == true
-                    ? { [weak self] in self?.resumeAgentSessionInNewTab(at: i) }
-                    : nil
-                item.canResumeAgentInNewTab = !(resumeID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-                item.onContinueIn = { [weak self] in self?.presentContinueTabSheet(for: i) }
-                item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
-                // Hide per-tab Keep Alive controls when the thread itself is keep-alive.
-                item.onKeepAlive = thread.isKeepAlive ? nil : { [weak self] in self?.toggleKeepAlive(at: i) }
-                item.onKillSession = { [weak self] in self?.killSession(at: i) }
-                item.onKillAllSessions = { [weak self] in self?.killAllSessions() }
-                item.availableAgentsForContinue = settings.availableActiveAgents
-                item.showKeepAliveIcon = !thread.isKeepAlive
-                    && thread.protectedTmuxSessions.contains(sessionName)
-                item.typeIcon.image = isForwardedContinuation
-                    ? NSImage(systemSymbolName: "arrowshape.turn.up.forward", accessibilityDescription: "Forwarded continuation")
-                    : nil
-                item.typeIcon.contentTintColor = .secondaryLabelColor
-                item.typeIcon.isHidden = !isForwardedContinuation
             case .web:
                 item.onRename = { [weak self] in self?.showWebTabRenameDialog(at: i) }
                 item.allowsDoubleClickRename = false

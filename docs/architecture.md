@@ -264,6 +264,7 @@ Agent-backed terminal tabs may expose a `Resume Agent Session in New Tab` contex
 - Gate enablement on a non-empty persisted `sessionConversationIDs[sessionName]`; if no resume ID has been captured yet, the menu item should stay disabled and the action must not launch a best-effort fresh session under the guise of resume.
 - Route resumed-duplicate tabs through the normal `addTab(...)` flow with an explicit `resumeSessionID` so startup, trust handling, overlay behavior, and persisted session metadata stay consistent with every other agent tab.
 - Persist the copied resume ID onto the new tab's `sessionConversationIDs` entry immediately so later recreation/reopen flows preserve the resumed conversation even before a subsequent refresh discovers the same ID again.
+- Tabs inserted in a pending-create state (placeholder terminal slot before tmux session name is assigned) must be treated as non-interactive: no close/force-close, rename, resume, continue, detach, or kill actions. Selecting a pending tab should only show the "Creating tab..." loading state and must never trigger session preparation for an empty session name.
 
 Tab display-name deduplication must use one shared allocator for create, resume-duplicate, and rename flows:
 - Parse incoming names as `<base>-<N>` when the suffix is numeric, and treat that as the same base sequence (for example `Codex-1` belongs to the `Codex` sequence).
