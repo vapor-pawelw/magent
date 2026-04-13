@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Popped-out thread rows now use a stronger purple highlight with a 2pt border and keep their row pulse/centering behavior on sidebar click-to-focus.
 
 #### Bug Fixes
+- Fixed the synthetic bottom sidebar spacer row drawing a stray thread-style capsule at the end of the list.
 - Fixed launch-time thread navigation so the selected thread is centered only after the sidebar has fully loaded and laid out, avoiding premature scroll jumps during startup.
 - Fixed sidebar interaction with popped-out threads so clicking their rows now focuses the pop-out window without changing main-window content/selection.
 - Removed the busy-row shimmer effect to reduce sidebar motion; busy threads now keep only border/separator animations.

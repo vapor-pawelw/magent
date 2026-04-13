@@ -389,6 +389,9 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         if item is SidebarGroupSeparator {
             return SidebarSpacerRowView()
         }
+        if item is SidebarBottomPadding {
+            return SidebarSpacerRowView()
+        }
         if item is SidebarProject {
             let rowView = ProjectHeaderRowView()
             return rowView

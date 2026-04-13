@@ -21,6 +21,7 @@
 - Keep the description line limit in `AppSettings.sidebarDescriptionLineLimit` so the `Narrow threads` toggle switches both text wrapping and minimum row height together.
 - Keep description text style stable for description rows (semibold) so wrapping does not change with unread-selection state transitions.
 - Status badges (pinned, rate-limit, keep-alive, duration) are now positioned on the capsule border rather than in a trailing stack. They do not affect available text width.
+- Synthetic spacer rows such as `SidebarBottomPadding` must use `SidebarSpacerRowView`, not `AlwaysEmphasizedRowView`, or the empty row will draw a thread-style capsule with no content.
 - Refit sidebar outline width from the scroll view's visible clip width, not from `NSOutlineView`'s current frame width. On launch, the outline can hold a stale frame width even after the split view has restored the real sidebar size, which leaves trailing markers and project `+` buttons flush against the outer edge until a manual divider drag forces a resize.
 - Avoid per-layout `noteHeightOfRows(...)` invalidation, which caused visible resize lag/flicker during divider drags.
 - `ThreadListViewController.reloadData()` rebuilds the full outline tree during periodic thread/session refreshes, so it must capture and restore the `NSScrollView` clip-view origin around `outlineView.reloadData()` to preserve browsing position.
