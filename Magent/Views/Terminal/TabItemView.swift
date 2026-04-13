@@ -498,7 +498,6 @@ final class TabItemView: NSView, NSMenuDelegate {
         let hasTabsToLeft = tabIndex > 0
 
         if onKeepAlive != nil || onKillAllSessions != nil {
-            menu.addItem(.separator())
             let sessionItem = NSMenuItem(title: "Session", action: nil, keyEquivalent: "")
             let sessionSubmenu = NSMenu()
 
@@ -519,10 +518,10 @@ final class TabItemView: NSView, NSMenuDelegate {
             menu.addItem(sessionItem)
         }
 
-        // Close tabs section at the bottom
-        if hasTabsToRight || hasTabsToLeft {
-            menu.addItem(.separator())
+        // Close tabs section at the bottom — single separator before all close actions
+        menu.addItem(.separator())
 
+        if hasTabsToRight || hasTabsToLeft {
             if hasTabsToRight {
                 let closeRightItem = NSMenuItem(
                     title: "Close Tabs to the Right",
@@ -559,7 +558,6 @@ final class TabItemView: NSView, NSMenuDelegate {
         }
 
         // "Close this tab" — always the last option
-        menu.addItem(.separator())
         let closeThisItem = NSMenuItem(title: "Close This Tab", action: #selector(closeTapped), keyEquivalent: "")
         closeThisItem.target = self
         menu.addItem(closeThisItem)
