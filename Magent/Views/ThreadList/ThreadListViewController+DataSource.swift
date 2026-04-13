@@ -1337,7 +1337,7 @@ extension ThreadListViewController: ThreadManagerDelegate {
     /// Updates thread cell content in-place without a full reloadData().
     /// Mutates sidebar model objects, then directly reconfigures existing visible
     /// row/cell views — avoids reloadItem() which recreates row views and kills
-    /// running CA animations (busy border rotation, shimmer).
+    /// running CA animations (busy border rotation).
     private func updateSidebarInPlace(with updatedThreads: [MagentThread]) {
         let threadById = Dictionary(uniqueKeysWithValues: updatedThreads.map { ($0.id, $0) })
 
@@ -1365,7 +1365,7 @@ extension ThreadListViewController: ThreadManagerDelegate {
             guard let thread = outlineView.item(atRow: row) as? MagentThread,
                   let updated = threadById[thread.id] else { continue }
 
-            // Reconfigure the row view (shimmer, highlight borders, sign emoji).
+            // Reconfigure the row view (busy border, highlight borders, sign emoji).
             if let rowView = outlineView.rowView(atRow: row, makeIfNecessary: false) as? AlwaysEmphasizedRowView {
                 let isSelected = outlineView.isRowSelected(row)
                 rowView.busyBorderPhaseKey = updated.id

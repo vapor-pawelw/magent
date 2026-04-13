@@ -75,10 +75,7 @@ private final class ArchivingRowOverlayView: NSView {
 }
 
 final class AlwaysEmphasizedRowView: NSTableRowView {
-    private static let busyOpacitySweepAnimationKey = "busy-row-opacity-sweep"
     private static let busyBorderRotationAnimationKey = "busy-border-rotation"
-    private static let busyMaskOverscanLeft: CGFloat = 96
-    private static let busyMaskOverscanRight: CGFloat = 48
     static let capsuleLeadingInset: CGFloat = 12
     static let capsuleTrailingInset: CGFloat = 12
     static let capsuleVerticalInset: CGFloat = 10
@@ -93,16 +90,14 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     /// X/Y offset from the row's top-leading corner for the sign emoji badge/label center.
     /// Badge radius is 10pt; centering at 14pt gives a 4pt margin from the leading/top edge.
     private static let signEmojiBadgeCenter: CGFloat = 14
-    private var busyOpacityMaskLayer: CAGradientLayer?
-    private weak var maskedContentView: NSView?
     private var archivingOverlay: ArchivingRowOverlayView?
     private var signEmojiTintColor: NSColor?
     private var signEmojiBadge: SignEmojiBadgeView?
     /// Container layer for the rotating conic gradient border.
     private var busyBorderContainer: CALayer?
 
-    /// Single shared animation start time so all busy threads rotate and
-    /// shimmer in phase. Set once when any thread first becomes busy;
+    /// Single shared animation start time so all busy threads rotate in phase.
+    /// Set once when any thread first becomes busy;
     /// never reset (the epoch is meaningless, only the phase matters).
     private static var sharedAnimationEpoch: CFTimeInterval = 0
 
@@ -196,11 +191,6 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
 
     override func layout() {
         super.layout()
-        if let busyOpacityMaskLayer,
-           let maskedContentView,
-           let contentLayer = maskedContentView.layer {
-            busyOpacityMaskLayer.frame = busyMaskFrame(for: contentLayer.bounds)
-        }
         layoutBusyBorderLayers()
     }
 
@@ -333,97 +323,15 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
     }
 
     private func updateBusyShimmerAnimation() {
-        guard let contentView = targetContentView(),
-              let contentLayer = contentView.layer else {
-            stopBusyShimmerAnimation()
-            return
-        }
         if showsBusyShimmer {
             if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                stopBusyShimmerAnimation()
                 stopBusyBorderAnimation()
                 return
             }
             startBusyBorderAnimation()
-            let maskLayer = ensureBusyOpacityMaskLayer()
-            maskLayer.frame = busyMaskFrame(for: contentLayer.bounds)
-            if contentLayer.mask !== maskLayer {
-                contentLayer.mask = maskLayer
-            }
-            maskedContentView = contentView
-
-            guard maskLayer.animation(forKey: Self.busyOpacitySweepAnimationKey) == nil else { return }
-
-            // Keep the dip fully offscreen at cycle boundaries so leading icons
-            // do not appear to blink/disappear when the animation loops.
-            let startLocations: [NSNumber] = [-0.72, -0.56, -0.47, -0.38, -0.22]
-            let endLocations: [NSNumber] = [1.22, 1.38, 1.47, 1.56, 1.72]
-            maskLayer.locations = startLocations
-
-            // Ensure the shared epoch exists so shimmer and border stay in phase.
-            if Self.sharedAnimationEpoch == 0 {
-                Self.sharedAnimationEpoch = CACurrentMediaTime()
-            }
-
-            let animation = CABasicAnimation(keyPath: "locations")
-            animation.fromValue = startLocations
-            animation.toValue = endLocations
-            animation.duration = 2.6
-            animation.repeatCount = .infinity
-            animation.timingFunction = CAMediaTimingFunction(name: .linear)
-            animation.beginTime = Self.sharedAnimationEpoch
-            maskLayer.add(animation, forKey: Self.busyOpacitySweepAnimationKey)
         } else {
-            stopBusyShimmerAnimation()
+            stopBusyBorderAnimation()
         }
-    }
-
-    private func stopBusyShimmerAnimation() {
-        busyOpacityMaskLayer?.removeAnimation(forKey: Self.busyOpacitySweepAnimationKey)
-        if let maskedContentView,
-           let maskedLayer = maskedContentView.layer,
-           maskedLayer.mask === busyOpacityMaskLayer {
-            maskedLayer.mask = nil
-        }
-        maskedContentView = nil
-        stopBusyBorderAnimation()
-    }
-
-    private func ensureBusyOpacityMaskLayer() -> CAGradientLayer {
-        if let busyOpacityMaskLayer {
-            return busyOpacityMaskLayer
-        }
-        let mask = CAGradientLayer()
-        mask.startPoint = CGPoint(x: 0, y: 0.5)
-        mask.endPoint = CGPoint(x: 1, y: 0.5)
-        mask.colors = [
-            NSColor.white.withAlphaComponent(1.0).cgColor,
-            NSColor.white.withAlphaComponent(1.0).cgColor,
-            NSColor.white.withAlphaComponent(0.74).cgColor,
-            NSColor.white.withAlphaComponent(1.0).cgColor,
-            NSColor.white.withAlphaComponent(1.0).cgColor,
-        ]
-        busyOpacityMaskLayer = mask
-        return mask
-    }
-
-    private func targetContentView() -> NSView? {
-        if let maskedContentView, subviews.contains(maskedContentView) {
-            return maskedContentView
-        }
-        if let cellView = subviews.first(where: { $0 is NSTableCellView }) {
-            return cellView
-        }
-        return subviews.first
-    }
-
-    private func busyMaskFrame(for contentBounds: CGRect) -> CGRect {
-        CGRect(
-            x: -Self.busyMaskOverscanLeft,
-            y: contentBounds.minY,
-            width: contentBounds.width + Self.busyMaskOverscanLeft + Self.busyMaskOverscanRight,
-            height: contentBounds.height
-        )
     }
 
     // MARK: - Busy Border Animation
