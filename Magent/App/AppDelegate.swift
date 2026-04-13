@@ -59,6 +59,42 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         return ProcessInfo.processInfo.processName
     }
 
+    private struct ThreadActionContext {
+        let thread: MagentThread?
+        let presentingWindow: NSWindow?
+        let contextThreadId: UUID?
+    }
+
+    private func activeThreadActionContext() -> ThreadActionContext {
+        let window = NSApp.keyWindow ?? NSApp.mainWindow
+
+        if let threadPopout = window?.windowController as? ThreadPopoutWindowController {
+            let thread = ThreadManager.shared.threads.first(where: { $0.id == threadPopout.threadId })
+            return ThreadActionContext(
+                thread: thread,
+                presentingWindow: window,
+                contextThreadId: threadPopout.threadId
+            )
+        }
+
+        if let tabPopout = window?.windowController as? TabPopoutWindowController {
+            let thread = ThreadManager.shared.threads.first(where: { $0.id == tabPopout.threadId })
+            return ThreadActionContext(
+                thread: thread,
+                presentingWindow: window,
+                contextThreadId: tabPopout.threadId
+            )
+        }
+
+        let split = coordinator?.mainSplitViewController()
+        let thread = split?.selectedThreadForContextRouting()
+        return ThreadActionContext(
+            thread: thread,
+            presentingWindow: window,
+            contextThreadId: thread?.id
+        )
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Install crash diagnostics handler
         NSSetUncaughtExceptionHandler { exception in
@@ -215,10 +251,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Thread menu
         let threadMenuItem = NSMenuItem()
         let threadMenu = NSMenu(title: "Thread")
-        threadMenu.addItem(withTitle: "New Thread", action: #selector(SplitViewController.requestNewThread), keyEquivalent: "")
-        threadMenu.addItem(withTitle: "Fork Thread", action: #selector(SplitViewController.requestNewThreadFromBranch), keyEquivalent: "")
+        threadMenu.addItem(withTitle: "New Thread", action: #selector(requestNewThreadFromActiveContext(_:)), keyEquivalent: "")
+        threadMenu.addItem(withTitle: "Fork Thread", action: #selector(requestForkThreadFromActiveContext(_:)), keyEquivalent: "")
         threadMenu.addItem(.separator())
-        let aiRenameItem = threadMenu.addItem(withTitle: "AI Rename…", action: #selector(SplitViewController.requestAIRename), keyEquivalent: "r")
+        let aiRenameItem = threadMenu.addItem(withTitle: "AI Rename…", action: #selector(requestAIRenameFromActiveContext(_:)), keyEquivalent: "r")
         aiRenameItem.keyEquivalentModifierMask = [.command, .shift]
         threadMenuItem.submenu = threadMenu
         mainMenu.addItem(threadMenuItem)
@@ -329,6 +365,39 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     @objc private func openSettings(_ sender: Any?) {
         NotificationCenter.default.post(name: .magentOpenSettings, object: nil)
+    }
+
+    @objc func requestNewThreadFromActiveContext(_ sender: Any?) {
+        guard let split = coordinator?.mainSplitViewController() else {
+            NSSound.beep()
+            return
+        }
+        let context = activeThreadActionContext()
+        split.requestNewThread(contextThread: context.thread, presentingWindow: context.presentingWindow)
+    }
+
+    @objc func requestForkThreadFromActiveContext(_ sender: Any?) {
+        guard let split = coordinator?.mainSplitViewController() else {
+            NSSound.beep()
+            return
+        }
+        let context = activeThreadActionContext()
+        split.requestNewThreadFromBranch(contextThread: context.thread, presentingWindow: context.presentingWindow)
+    }
+
+    @objc func requestAIRenameFromActiveContext(_ sender: Any?) {
+        guard let split = coordinator?.mainSplitViewController() else {
+            NSSound.beep()
+            return
+        }
+        let context = activeThreadActionContext()
+        split.requestAIRename(contextThread: context.thread, presentingWindow: context.presentingWindow)
+    }
+
+    func handleNewTabShortcutFromActiveContext() -> Bool {
+        guard let split = coordinator?.mainSplitViewController() else { return false }
+        let context = activeThreadActionContext()
+        return split.performNewTabShortcut(contextThreadId: context.contextThreadId)
     }
 
     @objc private func showAboutPanel(_ sender: Any?) {

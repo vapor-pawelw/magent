@@ -8,6 +8,7 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
     let threadId: UUID
     private var terminalView: TerminalSurfaceView?
     private let infoStrip: PopoutInfoStripView
+    private var keyEventMonitor: Any?
 
     /// Set to true when `PopoutWindowManager.returnTabToThread` is driving the close,
     /// so `windowWillClose` does not re-enter the return flow.
@@ -34,6 +35,7 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
         window.delegate = self
 
         setupViewHierarchy(thread: thread, sessionName: sessionName)
+        setupKeyEventMonitor()
         setupNotificationObservers()
 
         if let sourceFrame = sourceWindow?.frame {
@@ -49,6 +51,14 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    func tearDown() {
+        if let monitor = keyEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyEventMonitor = nil
+        }
+        NotificationCenter.default.removeObserver(self)
     }
 
     deinit {
@@ -85,6 +95,70 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
         ])
 
         window.contentView = rootView
+    }
+
+    // MARK: - Key Event Monitor
+
+    private func setupKeyEventMonitor() {
+        keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self,
+                  event.window === self.window else { return event }
+            return self.handleKeyEvent(event)
+        }
+    }
+
+    private func handleKeyEvent(_ event: NSEvent) -> NSEvent? {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let settings = PersistenceService.shared.loadSettings()
+        let bindings = settings.keyBindings
+
+        let newThreadBinding = bindings.binding(for: .newThread)
+        if event.keyCode == newThreadBinding.keyCode
+            && flags == newThreadBinding.modifiers.nsEventFlags {
+            _ = NSApp.sendAction(#selector(AppDelegate.requestNewThreadFromActiveContext(_:)), to: nil, from: self)
+            return nil
+        }
+
+        let forkBinding = bindings.binding(for: .newThreadFromBranch)
+        if event.keyCode == forkBinding.keyCode
+            && flags == forkBinding.modifiers.nsEventFlags {
+            _ = NSApp.sendAction(#selector(AppDelegate.requestForkThreadFromActiveContext(_:)), to: nil, from: self)
+            return nil
+        }
+
+        let closeTabBinding = bindings.binding(for: .closeTab)
+        if event.keyCode == closeTabBinding.keyCode
+            && flags == closeTabBinding.modifiers.nsEventFlags {
+            PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
+            return nil
+        }
+
+        let newTabBinding = bindings.binding(for: .newTab)
+        if event.keyCode == newTabBinding.keyCode
+            && flags == newTabBinding.modifiers.nsEventFlags {
+            if let appDelegate = NSApp.delegate as? AppDelegate,
+               appDelegate.handleNewTabShortcutFromActiveContext() {
+                return nil
+            }
+            NSSound.beep()
+            return nil
+        }
+
+        let popOutBinding = bindings.binding(for: .popOutThread)
+        if event.keyCode == popOutBinding.keyCode
+            && flags == popOutBinding.modifiers.nsEventFlags {
+            NSSound.beep()
+            return nil
+        }
+
+        let detachBinding = bindings.binding(for: .detachTab)
+        if event.keyCode == detachBinding.keyCode
+            && flags == detachBinding.modifiers.nsEventFlags {
+            NSSound.beep()
+            return nil
+        }
+
+        return event
     }
 
     // MARK: - Cache Terminal View

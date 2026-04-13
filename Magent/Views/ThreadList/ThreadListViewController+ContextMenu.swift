@@ -1369,8 +1369,12 @@ extension ThreadListViewController {
         presentAIRenameSheet(for: thread)
     }
 
-    func presentAIRenameSheet(for thread: MagentThread, prefillPrompt: String = "") {
-        guard let parentWindow = view.window else { return }
+    func presentAIRenameSheet(
+        for thread: MagentThread,
+        prefillPrompt: String = "",
+        presentingWindow: NSWindow? = nil
+    ) {
+        guard let parentWindow = presentingWindow ?? view.window else { return }
 
         let recentPrompts = Self.collectRecentPrompts(for: thread, limit: 10)
         let config = AIRenameSheetConfig(

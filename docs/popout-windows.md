@@ -20,6 +20,9 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - The thread top bar (above the terminal) also includes a pop-out button next to Archive in the main window thread view.
 - That top-bar pop-out button is hidden for the main thread, hidden in pop-out windows themselves, and hidden when the thread is already popped out.
 - Hiding a project in `Settings > Projects` force-closes any thread/tab pop-outs from that project and moves main-window selection to the first remaining visible thread.
+- Thread actions use key-window context across main and pop-out windows. When a detached tab window is key, thread-level actions resolve to that tab's parent thread.
+- Keyboard shortcuts and Thread menu actions are parity-routed across window types (`New Thread`, `Fork Thread`, `AI Rename`, and contextual tab/thread actions).
+- Detached-tab shortcut behavior is explicit: `Cmd+W` returns the detached tab to its parent thread window, while `Cmd+Shift+D` and `Cmd+Shift+O` are no-op with feedback.
 
 ## Implementation notes
 
@@ -34,6 +37,11 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Main-window `activeThreadId` is for main content routing only. Popped-out threads should not become the main active thread through sidebar selection/navigation paths.
 - Project-hide flows should close pop-outs via `PopoutWindowManager.closePopouts(forProjectId:)` and then use main-window fallback selection (`ThreadListViewController.selectFirstAvailableThread()`) instead of restoring last-opened thread/project defaults.
 - Context handoff must avoid non-key responder churn. Pop-out windows should post `.magentFocusedThreadContextChanged` with explicit `isPopoutContext` on key-window focus and on direct terminal interaction. Main-window context must not auto-switch on key-window activation alone; it should switch on sidebar selection or direct interaction with the main terminal session.
+- Thread-command routing should use key-window precedence:
+  - key `ThreadPopoutWindowController` -> popped-out thread
+  - key `TabPopoutWindowController` -> detached tab's parent thread
+  - otherwise -> main selected/visible thread context
+- Thread menu actions should not target `SplitViewController` selectors directly. Route through `AppDelegate` context-aware handlers so menu invocation matches keyboard behavior in pop-outs.
 - Ghostty clipboard/link callbacks are app-global, so pop-out/main focus handoff must keep the active surface synchronized. When a pop-out (thread or detached tab) becomes key, force its terminal surface as first responder and mark it active; when main regains key, re-mark the current main terminal surface active. URL-open callbacks should prefer the source `GHOSTTY_TARGET_SURFACE` over global focused-surface fallback to avoid opening/pasting against the wrong window.
 
 ## Relevant files
