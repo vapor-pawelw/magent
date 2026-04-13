@@ -1345,15 +1345,16 @@ extension ThreadListViewController {
     }
 
     private func updateDiffContextThreadIndicator(for thread: MagentThread) {
-        let isNonSelectedContext = thread.id != selectedThreadID
-        guard isNonSelectedContext else {
+        let hasAnyPopoutWindow = !PopoutWindowManager.shared.poppedOutThreadIds.isEmpty
+            || !PopoutWindowManager.shared.detachedSessionNames.isEmpty
+        guard hasAnyPopoutWindow else {
             diffPanelView.clearContextThreadIndicator()
             return
         }
         let name = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = (name?.isEmpty == false ? name! : thread.name)
-        let suffix = isDiffInspectionPopoutContext ? " (Pop-out)" : ""
-        diffPanelView.setContextThreadIndicator("Showing: \(displayName)\(suffix)")
+        let suffix = isDiffInspectionPopoutContext ? " (Pop-out)" : " (Main)"
+        diffPanelView.setContextThreadIndicator("\(displayName)\(suffix)")
     }
 
     // MARK: - Branch Mismatch

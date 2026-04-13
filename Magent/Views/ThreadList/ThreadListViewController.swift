@@ -280,6 +280,30 @@ final class ThreadListViewController: NSViewController {
             name: .magentFocusedThreadContextChanged,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePopoutStateChanged(_:)),
+            name: .magentThreadPoppedOut,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePopoutStateChanged(_:)),
+            name: .magentThreadReturnedToMain,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePopoutStateChanged(_:)),
+            name: .magentTabDetached,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePopoutStateChanged(_:)),
+            name: .magentTabReturnedToThread,
+            object: nil
+        )
         checkForPendingPromptRecovery()
 
         // Observe scroll position to update sticky headers
@@ -518,6 +542,10 @@ final class ThreadListViewController: NSViewController {
         let isPopoutContext = explicitPopoutContext
             ?? PopoutWindowManager.shared.isThreadPoppedOut(threadId)
         setDiffInspectionContext(threadId: threadId, isPopoutContext: isPopoutContext)
+    }
+
+    @objc private func handlePopoutStateChanged(_ notification: Notification) {
+        refreshDiffPanelContextForSelectedThread()
     }
 
     // MARK: - Outline View

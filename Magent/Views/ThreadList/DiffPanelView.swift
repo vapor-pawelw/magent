@@ -210,6 +210,8 @@ final class DiffPanelView: NSView {
         didSet { UserDefaults.standard.set(isCollapsed, forKey: Self.collapsedKey) }
     }
     private let collapseButton = NSButton()
+    private var tabBarTopToHandleConstraint: NSLayoutConstraint!
+    private var tabBarTopToContextBadgeConstraint: NSLayoutConstraint!
     /// Active only in collapsed mode — pins branch info directly below the separator
     private var collapsedTopConstraint: NSLayoutConstraint!
 
@@ -351,14 +353,16 @@ final class DiffPanelView: NSView {
 
         contextThreadBadgeView.wantsLayer = true
         contextThreadBadgeView.layer?.cornerRadius = 5
-        contextThreadBadgeView.layer?.backgroundColor = NSColor.systemPurple.withAlphaComponent(0.92).cgColor
+        contextThreadBadgeView.layer?.borderWidth = 1
+        contextThreadBadgeView.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.1).cgColor
+        contextThreadBadgeView.layer?.borderColor = NSColor.controlAccentColor.cgColor
         contextThreadBadgeView.translatesAutoresizingMaskIntoConstraints = false
         contextThreadBadgeView.isHidden = true
         addSubview(contextThreadBadgeView)
 
         // Context badge label — highlights when diff panel shows a non-selected thread.
         commitContextLabel.font = .systemFont(ofSize: 10, weight: .semibold)
-        commitContextLabel.textColor = .white
+        commitContextLabel.textColor = NSColor.controlAccentColor
         commitContextLabel.lineBreakMode = .byTruncatingTail
         commitContextLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         commitContextLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -481,6 +485,9 @@ final class DiffPanelView: NSView {
         expandedHeight = clampedHeight
         heightConstraint = heightAnchor.constraint(equalToConstant: clampedHeight)
 
+        tabBarTopToHandleConstraint = tabBarStack.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4)
+        tabBarTopToContextBadgeConstraint = tabBarStack.topAnchor.constraint(equalTo: contextThreadBadgeView.bottomAnchor, constant: 4)
+
         NSLayoutConstraint.activate([
             handleView.topAnchor.constraint(equalTo: topAnchor),
             handleView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -492,14 +499,13 @@ final class DiffPanelView: NSView {
             separatorView.trailingAnchor.constraint(equalTo: handleView.trailingAnchor, constant: -8),
             separatorView.heightAnchor.constraint(equalToConstant: 1),
 
-            tabBarStack.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4),
             tabBarStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             tabBarStack.trailingAnchor.constraint(lessThanOrEqualTo: topRightButtonStack.leadingAnchor, constant: -4),
 
             topRightButtonStack.centerYAnchor.constraint(equalTo: tabBarStack.centerYAnchor),
             topRightButtonStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
 
-            contextThreadBadgeView.topAnchor.constraint(equalTo: tabBarStack.bottomAnchor, constant: 2),
+            contextThreadBadgeView.topAnchor.constraint(equalTo: handleView.bottomAnchor, constant: 4),
             contextThreadBadgeView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             contextThreadBadgeView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
 
@@ -508,7 +514,7 @@ final class DiffPanelView: NSView {
             commitContextLabel.trailingAnchor.constraint(equalTo: contextThreadBadgeView.trailingAnchor, constant: -8),
             commitContextLabel.bottomAnchor.constraint(equalTo: contextThreadBadgeView.bottomAnchor, constant: -2),
 
-            scrollView.topAnchor.constraint(equalTo: contextThreadBadgeView.bottomAnchor, constant: 2),
+            scrollView.topAnchor.constraint(equalTo: tabBarStack.bottomAnchor, constant: 2),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: branchInfoStack.topAnchor, constant: -4),
@@ -530,6 +536,7 @@ final class DiffPanelView: NSView {
             stackView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
             stackView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
             stackView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            tabBarTopToHandleConstraint,
         ])
 
         // Collapsed-mode constraint: branch info sits right below the separator
@@ -959,7 +966,7 @@ final class DiffPanelView: NSView {
         commitsTabButton.isHidden = true
         contextThreadIndicatorText = nil
         commitContextLabel.stringValue = ""
-        commitContextLabel.isHidden = true
+        updateContextThreadIndicatorVisibility()
         branchInfoLabel.isHidden = true
         baseLineStack.isHidden = true
         remoteStatusLabel.isHidden = true
@@ -1225,6 +1232,8 @@ final class DiffPanelView: NSView {
         let isVisible = contextThreadIndicatorText != nil
         contextThreadBadgeView.isHidden = !isVisible
         commitContextLabel.isHidden = !isVisible
+        tabBarTopToHandleConstraint.isActive = !isVisible
+        tabBarTopToContextBadgeConstraint.isActive = isVisible
     }
 
     private func rebuildCommitDetailRows() {

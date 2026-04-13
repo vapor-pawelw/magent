@@ -80,7 +80,7 @@ All notable changes to this project will be documented in this file.
 ### Changes Panel
 #### Features
 - Changes/commits panel context now follows the currently focused thread tab/session (including pop-out windows) instead of strictly following main sidebar selection.
-- Added a prominent purple context badge when the panel is showing a non-selected thread, including a `(Pop-out)` suffix for separate-window context.
+- Added a context badge above `COMMITS` / `ALL CHANGES` that appears only while at least one pop-out window exists, uses selection-accent styling, and labels context as `<thread> (Pop-out)` or `<thread> (Main)`.
 
 #### Bug Fixes
 - Fixed refresh/load/commit-selection guards in the changes panel to use focused context thread state, preventing stale updates when main selection differs from focused pop-out thread.
