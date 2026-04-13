@@ -849,6 +849,10 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
             y *= 1
         }
 
+        // Keep each wheel event bounded so one notch/gesture step cannot jump
+        // excessively through terminal history.
+        y = max(-5, min(5, y))
+
         // ghostty_input_scroll_mods_t is a packed bitfield:
         //   bit 0: precision flag (trackpad vs discrete mouse wheel)
         //   bits 1-3: momentum phase enum

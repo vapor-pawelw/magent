@@ -104,6 +104,7 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Hardened embedded terminal display-link callbacks to safely ignore missing runtime userdata instead of crashing on pointer unwrap.
 - Eliminated the tmux zombie process buildup that caused the recurring "tmux health issue: N defunct processes" banner. The per-click URL capture binding now stores mouse state in an in-process tmux option (`set-option -gqF`) instead of spawning a shell script via `run-shell -b` on every mouse click, so fast clicking no longer accumulates defunct children under the tmux server.
+- Reduced wheel-scroll jump size in embedded Ghostty terminals by clamping each wheel event to at most 5 lines up/down, preventing large one-step scroll leaps.
 
 ### Tab
 #### Bug Fixes
