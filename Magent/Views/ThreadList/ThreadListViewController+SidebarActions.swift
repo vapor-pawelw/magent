@@ -494,7 +494,7 @@ extension ThreadListViewController {
         localFileSyncEntriesOverride: [LocalFileSyncEntry]? = nil
     ) {
         isCreatingThread = true
-        reloadData()
+        refreshVisibleProjectAddButtonsEnabledState()
 
         Task {
             do {
@@ -532,7 +532,7 @@ extension ThreadListViewController {
                 // below is a background nicety that shouldn't gate new-thread creation.
                 await MainActor.run {
                     self.isCreatingThread = false
-                    self.reloadData()
+                    self.refreshVisibleProjectAddButtonsEnabledState()
                 }
                 // Trigger auto-rename from the draft prompt text after the draft-only
                 // thread has been created and persisted.
@@ -548,7 +548,7 @@ extension ThreadListViewController {
             } catch {
                 await MainActor.run {
                     self.isCreatingThread = false
-                    self.reloadData()
+                    self.refreshVisibleProjectAddButtonsEnabledState()
                     let recoveryPrefill = self.failedThreadCreationRecoveryPrefill(
                         requestedAgentType: requestedAgentType,
                         useAgentCommand: useAgentCommand,
@@ -588,6 +588,16 @@ extension ThreadListViewController {
                     )
                 }
             }
+        }
+    }
+
+    private func refreshVisibleProjectAddButtonsEnabledState() {
+        for row in 0..<outlineView.numberOfRows {
+            guard outlineView.item(atRow: row) is SidebarProject,
+                  let cell = outlineView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView,
+                  let addButton = cell.subviews.first(where: { $0.identifier == Self.projectAddButtonIdentifier }) as? NSButton
+            else { continue }
+            addButton.isEnabled = !isCreatingThread
         }
     }
 

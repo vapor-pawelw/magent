@@ -1200,10 +1200,7 @@ extension ThreadListViewController: ThreadManagerDelegate {
         manager.skipNextAutoSelect = false
         guard !skipDueToIPC,
               PersistenceService.shared.loadSettings().switchToNewlyCreatedThread else { return }
-        let row = outlineView.row(forItem: thread)
-        if row >= 0 {
-            outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-        }
+        selectThread(byId: thread.id)
     }
 
     func threadManager(_ manager: ThreadManager, didArchiveThread thread: MagentThread) {
