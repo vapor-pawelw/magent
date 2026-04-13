@@ -123,6 +123,31 @@ final class PopoutWindowManager: PopoutStateProviding {
         }
     }
 
+    /// Closes every pop-out window (thread and detached tab) that belongs to the
+    /// given project. Returns true when at least one pop-out was closed.
+    @discardableResult
+    func closePopouts(forProjectId projectId: UUID) -> Bool {
+        let threadsById = Dictionary(uniqueKeysWithValues: ThreadManager.shared.threads.map { ($0.id, $0) })
+
+        let tabSessionsToClose = tabWindows.compactMap { sessionName, controller -> String? in
+            guard let thread = threadsById[controller.threadId], thread.projectId == projectId else { return nil }
+            return sessionName
+        }
+        let threadIdsToClose = threadWindows.keys.filter { threadId in
+            guard let thread = threadsById[threadId] else { return false }
+            return thread.projectId == projectId
+        }
+
+        let hadAny = !tabSessionsToClose.isEmpty || !threadIdsToClose.isEmpty
+        for sessionName in tabSessionsToClose {
+            returnTabToThread(sessionName: sessionName)
+        }
+        for threadId in threadIdsToClose {
+            returnThreadToMain(threadId)
+        }
+        return hadAny
+    }
+
     // MARK: - Tab Detach
 
     @discardableResult

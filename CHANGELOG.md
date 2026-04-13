@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 ### Settings
 #### Bug Fixes
 - Fixed `Settings > General > Links` preference persistence. "Open web links in" now stays on the selected value after relaunch instead of reverting.
+- Fixed `Settings > Projects > Hide in sidebar` behavior so hiding a project now closes all of that project's pop-out windows and automatically moves focus to the first remaining visible thread.
 
 ### Terminal
 #### Bug Fixes

@@ -1102,6 +1102,23 @@ final class ThreadListViewController: NSViewController {
         clearSelectedThreadState()
     }
 
+    /// Selects the first currently visible/selectable thread in the sidebar,
+    /// ignoring last-opened persistence. Used for deterministic fallback flows
+    /// such as hiding an entire project.
+    func selectFirstAvailableThread() {
+        for row in 0..<outlineView.numberOfRows {
+            if let thread = outlineView.item(atRow: row) as? MagentThread,
+               !PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
+                let isNewThread = selectedThreadID != thread.id
+                let resolved = recordSelectedThread(thread)
+                if isNewThread { delegate?.threadList(self, didSelectThread: resolved) }
+                outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                return
+            }
+        }
+        clearSelectedThreadState()
+    }
+
     func selectThread(byId threadId: UUID, scrollRowToVisible: Bool = true) {
         if PopoutWindowManager.shared.isThreadPoppedOut(threadId) {
             PopoutWindowManager.shared.bringToFront(threadId: threadId)

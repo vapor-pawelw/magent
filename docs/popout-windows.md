@@ -19,6 +19,7 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Popped-out rows are visually persistent in the sidebar (purple + pop-out icon) and use a 2pt capsule border to match the selected-row weight.
 - The thread top bar (above the terminal) also includes a pop-out button next to Archive in the main window thread view.
 - That top-bar pop-out button is hidden for the main thread, hidden in pop-out windows themselves, and hidden when the thread is already popped out.
+- Hiding a project in `Settings > Projects` force-closes any thread/tab pop-outs from that project and moves main-window selection to the first remaining visible thread.
 
 ## Implementation notes
 
@@ -31,6 +32,7 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Do not focus pop-out windows on generic `.magentNavigateToThread` notifications. Those events are shared across multiple UI flows (status bar, sidebar jumps, etc.); pop-out windows should only come front when the user explicitly opens/reveals them.
 - "Reveal without focus" paths (restore/reopen/app-activation recovery) must not use focus-stealing APIs (`showWindow`, `orderFrontRegardless`, `makeKeyAndOrderFront`, `NSApp.activate`). Use non-focusing `orderFront` behavior and preserve the existing key window.
 - Main-window `activeThreadId` is for main content routing only. Popped-out threads should not become the main active thread through sidebar selection/navigation paths.
+- Project-hide flows should close pop-outs via `PopoutWindowManager.closePopouts(forProjectId:)` and then use main-window fallback selection (`ThreadListViewController.selectFirstAvailableThread()`) instead of restoring last-opened thread/project defaults.
 - Context handoff must avoid non-key responder churn. Pop-out windows should post `.magentFocusedThreadContextChanged` with explicit `isPopoutContext` on key-window focus and on direct terminal interaction. Main-window context must not auto-switch on key-window activation alone; it should switch on sidebar selection or direct interaction with the main terminal session.
 - Ghostty clipboard/link callbacks are app-global, so pop-out/main focus handoff must keep the active surface synchronized. When a pop-out (thread or detached tab) becomes key, force its terminal surface as first responder and mark it active; when main regains key, re-mark the current main terminal surface active. URL-open callbacks should prefer the source `GHOSTTY_TARGET_SURFACE` over global focused-surface fallback to avoid opening/pasting against the wrong window.
 

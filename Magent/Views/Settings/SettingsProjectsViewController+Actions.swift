@@ -89,12 +89,22 @@ extension SettingsProjectsViewController {
         guard row >= 0, row < settings.projects.count else { return }
 
         let projectID = settings.projects[row].id
+        var isNowHidden = false
         guard mutateSettings({ settings in
             guard let index = settings.projects.firstIndex(where: { $0.id == projectID }) else { return }
             settings.projects[index].isHidden.toggle()
+            isNowHidden = settings.projects[index].isHidden
         }) else { return }
         projectTableView.reloadData(forRowIndexes: IndexSet(integer: row), columnIndexes: IndexSet(integer: 0))
         NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+        NotificationCenter.default.post(
+            name: .magentProjectVisibilityDidChange,
+            object: nil,
+            userInfo: [
+                "projectId": projectID,
+                "isHidden": isNowHidden
+            ]
+        )
     }
 
     // MARK: - Field Handlers

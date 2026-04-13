@@ -148,6 +148,13 @@ final class SplitViewController: NSSplitViewController {
             name: .magentAgentCompletionDetected,
             object: nil
         )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleProjectVisibilityChanged(_:)),
+            name: .magentProjectVisibilityDidChange,
+            object: nil
+        )
     }
 
     /// Forwarded from the main menu's "New Thread" item (⌘N).
@@ -533,6 +540,21 @@ final class SplitViewController: NSSplitViewController {
         threadListVC.selectThread(byId: threadId)
         DispatchQueue.main.async {
             openTab()
+        }
+    }
+
+    @objc private func handleProjectVisibilityChanged(_ notification: Notification) {
+        guard let projectId = notification.userInfo?["projectId"] as? UUID,
+              let isHidden = notification.userInfo?["isHidden"] as? Bool,
+              isHidden else { return }
+
+        let selectedInHiddenProject = threadListVC.selectedThreadFromState()?.projectId == projectId
+        let hadProjectPopouts = PopoutWindowManager.shared.closePopouts(forProjectId: projectId)
+        guard selectedInHiddenProject || hadProjectPopouts else { return }
+
+        threadListVC.selectFirstAvailableThread()
+        if threadListVC.selectedThreadFromState() == nil {
+            showEmptyState()
         }
     }
 
