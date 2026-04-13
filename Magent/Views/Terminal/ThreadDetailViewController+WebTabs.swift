@@ -17,8 +17,7 @@ extension ThreadDetailViewController {
     }
 
     func supportsInAppWebTab(for url: URL) -> Bool {
-        guard let scheme = url.scheme?.lowercased() else { return false }
-        return scheme == "http" || scheme == "https"
+        WebURLNormalizer.supportsInAppWebTab(url)
     }
 
     func openExternalWebDestination(
@@ -56,7 +55,13 @@ extension ThreadDetailViewController {
     /// Recreates tab items for persisted web tabs without loading any pages.
     /// Pinned web tabs are inserted into the pinned section; unpinned are appended.
     func restoreWebTabItems() {
+        var removedUnsupportedURL = false
+
         for persisted in thread.persistedWebTabs {
+            guard supportsInAppWebTab(for: persisted.url) else {
+                removedUnsupportedURL = true
+                continue
+            }
             if webTabs.contains(where: { $0.identifier == persisted.identifier }) {
                 continue
             }
@@ -83,6 +88,11 @@ extension ThreadDetailViewController {
                 tabSlots.append(.web(identifier: persisted.identifier))
             }
         }
+
+        if removedUnsupportedURL {
+            thread.persistedWebTabs.removeAll { !supportsInAppWebTab(for: $0.url) }
+            persistWebTabs()
+        }
     }
 
     // MARK: - Open / Focus
@@ -96,6 +106,11 @@ extension ThreadDetailViewController {
         iconType: WebTabIconType = .none,
         resetExistingTabToURL: Bool = false
     ) {
+        guard supportsInAppWebTab(for: url) else {
+            NSWorkspace.shared.open(url)
+            return
+        }
+
         // Dedup: if a tab with this identifier already exists, select it.
         if let existingIndex = tabSlots.firstIndex(of: .web(identifier: identifier)) {
             if resetExistingTabToURL,

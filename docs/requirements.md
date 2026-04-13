@@ -53,6 +53,7 @@ Tabs can also display in-app web content (WKWebView) alongside terminal tabs:
 - **CMD+R** refreshes the active web tab; **CMD+SHIFT+R** hard-refreshes (bypasses cache via `reloadFromOrigin`)
 - **CMD+F** opens in-page find in web tabs with next/previous controls; Enter jumps to next result, Esc dismisses find.
 - URL normalization (shared `WebURLNormalizer`): bare hostnames get `https://`, localhost/loopback addresses get `http://`, `host:port` patterns without `://` are detected and normalized; host:port entries with paths/query/fragment (for example `localhost:3000/docs?q=1#api`) must preserve those components
+- Only `http` / `https` URLs are eligible for in-app web tabs and persisted web-tab current URLs. Non-web schemes (for example `mailto:`, app-deep links, or custom handlers) must open in the default browser/OS handler instead of loading in the embedded WKWebView.
 - Web tabs are persisted across app restarts but load lazily — the WKWebView is only created when the tab is first selected. The current URL is persisted on every navigation so the tab reopens where the user left off, not at the original URL.
 - Web tabs participate in the same tab bar as terminal tabs: they can be pinned, renamed, drag-reordered, and freely mixed with terminal tabs in both the pinned and unpinned sections
 - Closing a web tab asks for confirmation, matching terminal tab close behavior

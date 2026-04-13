@@ -27,6 +27,7 @@ All notable changes to this project will be documented in this file.
 ### Web Tab
 #### Bug Fixes
 - Fixed host:port URL parsing in the in-app web view address bar. Entries like `localhost:3000/docs#api` now open as HTTP(S) URLs and preserve query/fragment anchors.
+- Fixed repeated WebContent crashes when pages triggered non-web URL schemes. Web tabs now keep HTTP(S) in-app, open unsupported schemes in the default browser, and clean unsupported persisted web-tab URLs during restore.
 
 ### Tab
 #### Features
