@@ -6,6 +6,9 @@ import WebKit
 /// Handles bare host:port (e.g. "localhost:3000"), loopback addresses,
 /// and scheme-less hostnames. Returns nil for empty or unparseable input.
 enum WebURLNormalizer {
+    private static let inAppWebTabSchemes: Set<String> = ["http", "https"]
+    private static let inAppNavigationSchemes: Set<String> = ["http", "https", "about", "blob", "data", "file", "javascript"]
+
     private static let bareHostPortRegex: NSRegularExpression = {
         // Treat host:port (with optional path/query/fragment) as a web URL, not a custom scheme.
         try! NSRegularExpression(
@@ -53,11 +56,22 @@ enum WebURLNormalizer {
         guard let host = url.host else { return nil }
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }
+
+    static func supportsInAppWebTab(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return inAppWebTabSchemes.contains(scheme)
+    }
+
+    static func supportsInAppNavigation(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return inAppNavigationSchemes.contains(scheme)
+    }
 }
 
 /// Lightweight in-app browser view with back/forward/refresh navigation.
 /// Used for Jira tickets and similar web content displayed inside a tab.
 final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
+    private static let aboutBlankURL = URL(string: "about:blank")!
 
     let webView: WKWebView
     private let toolbar: NSStackView
@@ -230,7 +244,11 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15"
         applyVisualStyling()
         applyAppearanceMode()
-        webView.load(URLRequest(url: url))
+        if WebURLNormalizer.supportsInAppWebTab(url) {
+            webView.load(URLRequest(url: url))
+        } else {
+            webView.load(URLRequest(url: Self.aboutBlankURL))
+        }
         updateNavButtons()
 
         NotificationCenter.default.addObserver(
@@ -333,7 +351,11 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
 
     private func openInNewTabIfPossible(_ navigationAction: WKNavigationAction) -> Bool {
         guard let url = navigationAction.request.url else { return false }
-        onOpenInNewTab?(url)
+        if WebURLNormalizer.supportsInAppWebTab(url) {
+            onOpenInNewTab?(url)
+        } else {
+            NSWorkspace.shared.open(url)
+        }
         return true
     }
 
@@ -344,6 +366,13 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
+        if let url = navigationAction.request.url,
+           !WebURLNormalizer.supportsInAppNavigation(url) {
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
+            return
+        }
+
         if navigationAction.targetFrame?.isMainFrame == true,
            shouldOpenInNewTab(navigationAction),
            openInNewTabIfPossible(navigationAction) {
@@ -382,7 +411,9 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
             updateNavButtons()
             updateAddressField()
             applyAppearanceModeToCurrentPage()
-            if let url = webView.url, url.absoluteString != "about:blank" {
+            if let url = webView.url,
+               WebURLNormalizer.supportsInAppWebTab(url),
+               url.absoluteString != "about:blank" {
                 onURLChange?(url)
             }
         }
@@ -409,7 +440,11 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
 
     private func navigateToAddressFieldValue() {
         guard let url = WebURLNormalizer.normalize(addressField.stringValue) else { return }
-        webView.load(URLRequest(url: url))
+        if WebURLNormalizer.supportsInAppNavigation(url) {
+            webView.load(URLRequest(url: url))
+        } else {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func applyVisualStyling() {
