@@ -56,6 +56,13 @@ let project = Project(
                     name: "Embed Changelog",
                     basedOnDependencyAnalysis: false
                 ),
+                .post(
+                    script: """
+                    "${SRCROOT}/scripts/sync-version-from-tag.sh"
+                    """,
+                    name: "Sync Version from Git Tag",
+                    basedOnDependencyAnalysis: false
+                ),
             ],
             dependencies: [
                 .external(name: "GhosttyBridge"),
