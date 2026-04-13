@@ -42,7 +42,7 @@ All notable changes to this project will be documented in this file.
 ### Terminal
 #### Bug Fixes
 - Fixed `magentDefaultScroll` wheel jumps still feeling too large by removing tmux's hardcoded `-N 6` wheel multiplier. Wheel up/down now use single-line copy-mode steps per wheel event.
-- Fixed remaining oversized physical mouse-wheel jumps by normalizing discrete Ghostty wheel deltas (including no-phase wheel packets some mice still mark as "precise") to one signed step per event before forwarding to `ghostty_surface_mouse_scroll`.
+- Fixed remaining oversized physical mouse-wheel jumps by normalizing discrete Ghostty wheel deltas to one signed step per event before forwarding to `ghostty_surface_mouse_scroll`, including coarse per-notch packets (for example `±15`) that AppKit may still tag as "precise" and phase-bearing.
 
 ### Status Bar
 #### Features
