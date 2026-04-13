@@ -66,6 +66,7 @@ All notable changes to this project will be documented in this file.
 #### Features
 - Added a top-bar pop-out button next to Archive in thread view (above terminal), with auto-hide when the thread is already in a separate window.
 - Keyboard shortcuts and Thread-menu actions now work from pop-out windows with key-window thread context (including detached-tab windows resolving to their parent thread).
+- Sidebar threads can now be dragged onto separate thread windows to replace their contents. Drop targets show a dark hover overlay, confirm before replacing, and handle already-popped-out threads with move/swap options.
 
 #### Bug Fixes
 - Fixed paste routing for detached/popped-out terminal windows. `Cmd+V` now pastes into the focused pop-out Ghostty surface instead of occasionally landing in the main-window terminal.

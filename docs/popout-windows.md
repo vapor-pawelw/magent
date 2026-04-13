@@ -19,6 +19,9 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Popped-out rows are visually persistent in the sidebar (purple + pop-out icon) and use a 2pt capsule border to match the selected-row weight.
 - The thread top bar (above the terminal) also includes a pop-out button next to Archive in the main window thread view.
 - That top-bar pop-out button is hidden for the main thread, hidden in pop-out windows themselves, and hidden when the thread is already popped out.
+- Sidebar thread rows can be dragged over thread pop-out windows. A dark overlay appears on valid hover targets to indicate drop-to-replace behavior.
+- Dropping a thread over another thread's pop-out window shows a confirmation alert. Confirming returns the currently popped-out thread to the main window and replaces it with the dropped thread in that pop-out window.
+- Dropping a thread onto the same pop-out window where it is already open is a silent no-op. Dropping a thread that is already popped out in a different window prompts the user to either move it into the target window or swap the two pop-out windows.
 - Hiding a project in `Settings > Projects` force-closes any thread/tab pop-outs from that project and moves main-window selection to the first remaining visible thread.
 - Thread actions use key-window context across main and pop-out windows. When a detached tab window is key, thread-level actions resolve to that tab's parent thread.
 - Keyboard shortcuts and Thread menu actions are parity-routed across window types (`New Thread`, `Fork Thread`, `AI Rename`, and contextual tab/thread actions).

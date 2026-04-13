@@ -100,20 +100,7 @@ final class PopoutWindowManager: PopoutStateProviding {
     }
 
     func returnThreadToMain(_ threadId: UUID) {
-        guard let controller = threadWindows.removeValue(forKey: threadId) else { return }
-        controller.detailVC.cacheTerminalViewsForReuse()
-        // Prevent windowWillClose from re-entering returnThreadToMain
-        controller.isReturningToMain = true
-        controller.tearDown()
-        controller.window?.close()
-
-        NotificationCenter.default.post(
-            name: .magentThreadReturnedToMain,
-            object: nil,
-            userInfo: ["threadId": threadId]
-        )
-
-        saveStateIfAllowed()
+        closePoppedOutThread(threadId, postReturnNotification: true)
     }
 
     func returnAllThreadsToMain() {
@@ -121,6 +108,85 @@ final class PopoutWindowManager: PopoutStateProviding {
         for threadId in threadIds {
             returnThreadToMain(threadId)
         }
+    }
+
+    /// Replaces the thread shown in one pop-out window with another thread.
+    /// The existing pop-out thread is returned to the main window.
+    func replacePoppedOutThread(targetThreadId: UUID, with newThreadId: UUID, in frame: NSRect?) {
+        guard targetThreadId != newThreadId else {
+            bringToFront(threadId: targetThreadId)
+            return
+        }
+        guard threadWindows[targetThreadId] != nil else { return }
+        guard let newThread = ThreadManager.shared.threads.first(where: { $0.id == newThreadId }),
+              !newThread.isMain else { return }
+
+        let targetFrame = frame ?? threadWindows[targetThreadId]?.window?.frame
+
+        returnThreadToMain(targetThreadId)
+
+        if let existingNewThreadWindow = threadWindows[newThreadId] {
+            if let targetFrame {
+                existingNewThreadWindow.window?.setFrame(targetFrame, display: true)
+            }
+            existingNewThreadWindow.window?.makeKeyAndOrderFront(nil)
+            saveStateIfAllowed()
+            return
+        }
+
+        let newController = popOutThread(newThread, from: nil)
+        if let targetFrame {
+            newController.window?.setFrame(targetFrame, display: true)
+        }
+    }
+
+    /// Moves an already-popped-out thread into another pop-out window, returning
+    /// the target thread to the main window and closing the dragged thread's old window.
+    func movePoppedOutThread(targetThreadId: UUID, draggedThreadId: UUID, to frame: NSRect?) {
+        guard targetThreadId != draggedThreadId else { return }
+        guard threadWindows[targetThreadId] != nil,
+              threadWindows[draggedThreadId] != nil,
+              let draggedThread = ThreadManager.shared.threads.first(where: { $0.id == draggedThreadId }),
+              !draggedThread.isMain else { return }
+
+        let targetFrame = frame ?? threadWindows[targetThreadId]?.window?.frame
+        returnThreadToMain(targetThreadId)
+        closePoppedOutThread(draggedThreadId, postReturnNotification: false)
+
+        let newController = popOutThread(draggedThread, from: nil)
+        if let targetFrame {
+            newController.window?.setFrame(targetFrame, display: true)
+        }
+        saveStateIfAllowed()
+    }
+
+    /// Swaps the window positions of two already-popped-out threads.
+    func swapPoppedOutThreads(_ firstThreadId: UUID, _ secondThreadId: UUID) {
+        guard firstThreadId != secondThreadId,
+              let firstController = threadWindows[firstThreadId],
+              let secondController = threadWindows[secondThreadId],
+              let firstThread = ThreadManager.shared.threads.first(where: { $0.id == firstThreadId }),
+              let secondThread = ThreadManager.shared.threads.first(where: { $0.id == secondThreadId }),
+              !firstThread.isMain,
+              !secondThread.isMain else { return }
+
+        let firstFrame = firstController.window?.frame
+        let secondFrame = secondController.window?.frame
+
+        closePoppedOutThread(firstThreadId, postReturnNotification: false)
+        closePoppedOutThread(secondThreadId, postReturnNotification: false)
+
+        let movedSecond = popOutThread(secondThread, from: nil)
+        if let firstFrame {
+            movedSecond.window?.setFrame(firstFrame, display: true)
+        }
+
+        let movedFirst = popOutThread(firstThread, from: nil)
+        if let secondFrame {
+            movedFirst.window?.setFrame(secondFrame, display: true)
+        }
+
+        saveStateIfAllowed()
     }
 
     /// Closes every pop-out window (thread and detached tab) that belongs to the
@@ -422,6 +488,24 @@ final class PopoutWindowManager: PopoutStateProviding {
     private func saveStateIfAllowed() {
         guard !suppressAutomaticStateSaves else { return }
         saveState()
+    }
+
+    private func closePoppedOutThread(_ threadId: UUID, postReturnNotification: Bool) {
+        guard let controller = threadWindows.removeValue(forKey: threadId) else { return }
+        controller.detailVC.cacheTerminalViewsForReuse()
+        // Prevent windowWillClose from re-entering the return flow while we re-home windows.
+        controller.isReturningToMain = true
+        controller.tearDown()
+        controller.window?.close()
+
+        if postReturnNotification {
+            NotificationCenter.default.post(
+                name: .magentThreadReturnedToMain,
+                object: nil,
+                userInfo: ["threadId": threadId]
+            )
+            saveStateIfAllowed()
+        }
     }
 
     private func deduplicatedThreadPopouts(
