@@ -55,10 +55,10 @@ enum AgentMenuBuilder {
             let reasoning = AgentLastSelectionStore.lastReasoning(for: agent, modelId: modelId)
 
             // Verbose suffix for the + menu: show the full model label and full
-            // reasoning level ("Claude (Opus, high reasoning)"). Any part set to
-            // Auto (nil) is skipped. This intentionally bypasses the compact
-            // tab-name formatting in TmuxSessionNaming, which strips "Opus" and
-            // GPT version tokens and abbreviates reasoning to single letters.
+            // reasoning level ("Claude (Opus, high)"). Any part set to Auto (nil)
+            // is skipped. This intentionally bypasses the compact tab-name
+            // formatting in TmuxSessionNaming, which strips the "GPT" vendor
+            // prefix for Codex and abbreviates reasoning to single letters.
             var details: [String] = []
             if let modelLabel, !modelLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 details.append(modelLabel)

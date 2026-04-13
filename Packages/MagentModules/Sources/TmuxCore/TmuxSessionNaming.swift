@@ -65,14 +65,20 @@ public enum TmuxSessionNaming {
 
         switch agentType {
         case .codex:
+            // Strip the "GPT" vendor prefix, lowercase the remaining tokens, and join them
+            // with hyphens so the version (e.g. "5.4", "5.4-mini", "5.3-codex") is the
+            // primary identifier shown in the tab title. Previously the version digits
+            // themselves were stripped, which reduced "GPT 5.3 Codex" to "Codex" and
+            // produced confusing titles like "Codex (Codex, M)".
             let stripped = trimmed
                 .replacingOccurrences(of: #"(?i)\bgpt\b"#, with: "", options: .regularExpression)
-                .replacingOccurrences(of: #"(?i)\b\d+(\.\d+)*\b"#, with: "", options: .regularExpression)
                 .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            return stripped.isEmpty ? nil : stripped
+                .lowercased()
+            guard !stripped.isEmpty else { return nil }
+            return stripped.split(separator: " ").joined(separator: "-")
         case .claude:
-            return trimmed.caseInsensitiveCompare("Opus") == .orderedSame ? nil : trimmed
+            return trimmed
         case .custom:
             return nil
         @unknown default:

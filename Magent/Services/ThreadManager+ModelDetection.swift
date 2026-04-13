@@ -5,9 +5,9 @@ extension ThreadManager {
 
     // MARK: - Model Change Detection
 
-    /// Scans agent sessions for Claude's "Set model to …" output and updates tab display
-    /// names to reflect the current model/effort — skipping any tab the user has manually
-    /// renamed.
+    /// Scans agent sessions for Claude's "Set model to …" / Codex's "• Model changed to …"
+    /// output and updates tab display names to reflect the current model/effort — skipping
+    /// any tab the user has manually renamed.
     ///
     /// Called on the session monitor's 10-tick cadence (~50 s). Not time-critical; a brief
     /// lag between the user switching models and the tab name updating is acceptable.
@@ -18,7 +18,8 @@ extension ThreadManager {
         for i in threads.indices {
             let thread = threads[i]
             for session in thread.agentTmuxSessions {
-                guard thread.sessionAgentTypes[session] == .claude else { continue }
+                let agentType = thread.sessionAgentTypes[session]
+                guard agentType == .claude || agentType == .codex else { continue }
 
                 // Skip tabs the user has explicitly renamed — either via the rename dialog
                 // after this feature shipped, or populated by the startup migration for tabs
@@ -29,10 +30,31 @@ extension ThreadManager {
 
                 guard let paneContent = await tmux.cachedCapturePane(sessionName: session, lastLines: 80) else { continue }
 
-                guard let (modelLabel, effortLevel) = parseClaudeModelChange(from: paneContent) else { continue }
+                let modelLabel: String
+                let effortLevel: String?
+                switch agentType {
+                case .claude:
+                    guard let parsed = parseClaudeModelChange(from: paneContent) else { continue }
+                    modelLabel = parsed.modelLabel
+                    effortLevel = parsed.effortLevel
+                case .codex:
+                    guard let parsed = parseCodexModelChange(from: paneContent) else { continue }
+                    // Prefer the human label from the manifest so the compact formatter can
+                    // cleanly strip the "GPT" vendor prefix. If the id isn't in the manifest
+                    // (stale cache, new release), fall back to a spacified raw id so
+                    // displayModelLabel still recognises the "gpt" token to strip.
+                    if let resolved = resolvedModelLabel(for: .codex, modelId: parsed.modelId) {
+                        modelLabel = resolved
+                    } else {
+                        modelLabel = parsed.modelId.replacingOccurrences(of: "-", with: " ")
+                    }
+                    effortLevel = parsed.effortLevel
+                default:
+                    continue
+                }
 
                 let newName = TmuxSessionNaming.defaultTabDisplayName(
-                    for: .claude,
+                    for: agentType,
                     modelLabel: modelLabel,
                     reasoningLevel: effortLevel
                 )
@@ -63,20 +85,34 @@ extension ThreadManager {
     ///
     /// Returns nil if no model-change line is found.
     func parseClaudeModelChange(from paneContent: String) -> (modelLabel: String, effortLevel: String?)? {
-        let allLines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
-
-        // Scope to the latest block — everything after the last separator (same heuristic as
-        // rate-limit detection). Falls back to the full tail if there's no separator.
-        let scopedLines: [String]
-        if let separatorIdx = allLines.lastIndex(where: Self.isModelDetectionScopeSeparator) {
-            scopedLines = Array(allLines[(allLines.index(after: separatorIdx)...)])
-        } else {
-            scopedLines = allLines
-        }
-
+        let scopedLines = scopedModelDetectionLines(from: paneContent)
         // Scan from the bottom — we want the *last* model-change line, which reflects the
         // current model even if the user ran /model multiple times in the same session.
         return scopedLines.reversed().lazy.compactMap { Self.parseModelChangeLine($0) }.first
+    }
+
+    /// Extracts the last "• Model changed to <modelId> <effort>" line from `paneContent` and
+    /// returns the parsed raw model id plus optional effort level.
+    ///
+    /// Codex writes this line after a `/model` switch (for example
+    /// `• Model changed to gpt-5.3-codex medium`), so the id matches the entries in
+    /// `agent-models.json` and can be looked up through `AgentModelsService`.
+    ///
+    /// Returns nil if no model-change line is found.
+    func parseCodexModelChange(from paneContent: String) -> (modelId: String, effortLevel: String?)? {
+        let scopedLines = scopedModelDetectionLines(from: paneContent)
+        return scopedLines.reversed().lazy.compactMap { Self.parseCodexModelChangeLine($0) }.first
+    }
+
+    /// Shared scoping helper: returns the tail of `paneContent` after the last horizontal
+    /// separator (same heuristic as rate-limit detection) so stale scrollback matches are
+    /// ignored. Falls back to all lines if there's no separator.
+    private func scopedModelDetectionLines(from paneContent: String) -> [String] {
+        let allLines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
+        if let separatorIdx = allLines.lastIndex(where: Self.isModelDetectionScopeSeparator) {
+            return Array(allLines[(allLines.index(after: separatorIdx)...)])
+        }
+        return allLines
     }
 
     /// Returns true if the line looks like a Claude/Codex block separator (a long horizontal
@@ -121,5 +157,29 @@ extension ThreadManager {
 
         // No effort suffix — model name only.
         return (remainder, nil)
+    }
+
+    /// Parses a single line for the Codex model-change pattern:
+    ///   `• Model changed to <modelId> <effort>`
+    ///   `• Model changed to <modelId>`
+    ///
+    /// The leading "•" bullet is optional — we strip leading whitespace and any leading
+    /// bullets/spaces before matching. The first whitespace-delimited token after the
+    /// prefix is treated as the model id (Codex ids are hyphen-separated, never contain
+    /// spaces), and the second token (if present) is the reasoning level.
+    private static func parseCodexModelChangeLine(_ line: String) -> (modelId: String, effortLevel: String?)? {
+        let stripped = line
+            .trimmingCharacters(in: .whitespaces)
+            .drop(while: { $0 == "•" || $0 == " " })
+
+        guard stripped.hasPrefix("Model changed to ") else { return nil }
+
+        let remainder = String(stripped.dropFirst("Model changed to ".count)).trimmingCharacters(in: .whitespaces)
+        guard !remainder.isEmpty else { return nil }
+
+        let tokens = remainder.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard let modelId = tokens.first, !modelId.isEmpty else { return nil }
+        let effortLevel = tokens.count >= 2 ? tokens[1] : nil
+        return (modelId, effortLevel)
     }
 }

@@ -81,14 +81,16 @@ When a new thread or agent tab is created without an explicit custom title, Mage
 
 ## Auto-Sync Tab Name from `/model` Output
 
-When a user runs `/model` inside Claude Code to switch models or effort, the terminal outputs a line like:
+When a user runs `/model` inside Claude Code or Codex to switch models or effort, the terminal outputs a line like:
 
 ```
   ⎿  Set model to Opus 4.6
   ⎿  Set model to Sonnet 4.6 with high effort
+  • Model changed to gpt-5.3-codex medium
+  • Model changed to gpt-5.4-mini low
 ```
 
-`ThreadManager+ModelDetection.swift` scans for this pattern on the session monitor's 10-tick cadence (~50 s) and updates the tab display name to match (e.g. `"Claude"` → `"Claude (Sonnet 4.6, H)"`), reusing `TmuxSessionNaming.defaultTabDisplayName(for:modelLabel:reasoningLevel:)`.
+`ThreadManager+ModelDetection.swift` scans for these patterns on the session monitor's 10-tick cadence (~50 s) and updates the tab display name to match (e.g. `"Claude"` → `"Claude (Sonnet 4.6, H)"`, `"Codex"` → `"Codex (5.3-codex, M)"`), reusing `TmuxSessionNaming.defaultTabDisplayName(for:modelLabel:reasoningLevel:)`. For Codex, the parsed raw model id (e.g. `gpt-5.3-codex`) is resolved against `AgentModelsService` so the manifest label (`GPT 5.3 Codex`) feeds the compact formatter, which strips the `GPT` vendor prefix and hyphenates the remaining tokens. When the id isn't in the manifest, the raw id is spacified (`gpt 5.3 codex`) so the same stripping still applies.
 
 ### Guard: `manuallyRenamedTabs`
 
@@ -122,7 +124,7 @@ Model and Reasoning pickers are **hidden** (individually, not the whole row) whe
 
 Uses last-selected model + reasoning for the relevant agent. No sheet shown. Equivalent to accepting the sheet with last-used values.
 
-The right-click context menu on the "+" (new tab) button and the sidebar "New Thread" submenu list agent types directly — the default agent appears first with a "(Default)" suffix. Each agent's menu item shows its last-used model and reasoning verbatim in a verbose form (e.g., `Claude (Sonnet, high) (Default)`, `Codex (GPT 5.3 Codex, xhigh)`, `Claude` when both are Auto). Any part set to Auto is omitted individually. This is intentionally different from the compact tab-name formatter in `TmuxSessionNaming.defaultTabDisplayName(for:modelLabel:reasoningLevel:)` — the compact form strips `"Opus"` for Claude and `GPT`/version tokens for Codex and abbreviates reasoning to single letters, which produced misleading suffixes like `Claude (M)` or `Codex (Codex, M)` when reused in the `+` menu. The verbose form is built inline in `AgentMenuBuilder.populate` and must not be replaced with the compact helper.
+The right-click context menu on the "+" (new tab) button and the sidebar "New Thread" submenu list agent types directly — the default agent appears first with a "(Default)" suffix. Each agent's menu item shows its last-used model and reasoning verbatim in a verbose form (e.g., `Claude (Sonnet, high) (Default)`, `Codex (GPT 5.3 Codex, xhigh)`, `Claude` when both are Auto). Any part set to Auto is omitted individually. This is intentionally different from the compact tab-name formatter in `TmuxSessionNaming.defaultTabDisplayName(for:modelLabel:reasoningLevel:)` — the compact form strips the `GPT` vendor prefix for Codex (so `GPT 5.3 Codex` becomes `5.3-codex`, `GPT 5.4 Mini` becomes `5.4-mini`) and abbreviates reasoning to single letters, producing tab titles like `Codex (5.3-codex, M)` or `Claude (Opus, H)`. The verbose form is built inline in `AgentMenuBuilder.populate` and must not be replaced with the compact helper.
 
 ### Draft Tabs
 
