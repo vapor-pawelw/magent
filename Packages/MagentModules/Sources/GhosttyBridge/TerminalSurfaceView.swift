@@ -839,6 +839,12 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
         if precision {
             x *= 1
             y *= 1
+        } else {
+            // Discrete mouse wheels often report large per-notch deltas (for example 15)
+            // and Ghostty applies its own internal line scaling. Normalize to one signed
+            // step so each notch maps to a small, predictable history movement.
+            x = x == 0 ? 0 : (x > 0 ? 1 : -1)
+            y = y == 0 ? 0 : (y > 0 ? 1 : -1)
         }
 
         // Keep each wheel event bounded so one notch/gesture step cannot jump

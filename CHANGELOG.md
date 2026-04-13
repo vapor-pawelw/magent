@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 ### Terminal
 #### Bug Fixes
 - Suppressed right-click context menus inside embedded terminal surfaces. Right-click is now swallowed so neither Ghostty's native menu nor AppKit fallback menus appear over terminal content.
+- Fixed oversized physical mouse-wheel jumps in embedded Ghostty terminals. Non-precision wheel events are now normalized to one signed step per notch before forwarding to Ghostty, preventing large raw deltas from producing 20-30 line jumps.
 
 ### Web Tab
 #### Bug Fixes
@@ -40,6 +41,7 @@ All notable changes to this project will be documented in this file.
 ### Terminal
 #### Bug Fixes
 - Fixed `magentDefaultScroll` wheel jumps still feeling too large by removing tmux's hardcoded `-N 6` wheel multiplier. Wheel up/down now use single-line copy-mode steps per wheel event.
+- Fixed remaining oversized physical mouse-wheel jumps by normalizing non-precision Ghostty wheel deltas to one signed step per event before forwarding to `ghostty_surface_mouse_scroll`.
 
 ### Status Bar
 #### Features
