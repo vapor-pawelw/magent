@@ -1311,6 +1311,14 @@ extension ThreadListViewController: ThreadManagerDelegate {
             }
         }
 
+        // Compare only threads that can currently appear in the rendered sidebar.
+        // Hidden projects still exist in ThreadManager.threads and update on background
+        // ticks, but they are intentionally absent from sidebarProjects. Including them
+        // here makes the structure look different on every didUpdateThreads pass and
+        // forces a full reloadData() blink even though the visible sidebar is unchanged.
+        let visibleProjectIds = Set(sidebarProjects.map(\.projectId))
+        let comparableNewThreads = newThreads.filter { visibleProjectIds.contains($0.projectId) }
+
         // Only consider completion date as a structural signal when the sidebar actually
         // reorders threads on completion — otherwise every agent completion needlessly
         // triggers a full reload (and the animate-open jitter that comes with it).
@@ -1321,7 +1329,7 @@ extension ThreadListViewController: ThreadManagerDelegate {
         let currentKeys = currentThreads
             .map { SidebarThreadStructuralKey($0, considerCompletionDate: considerCompletionDate) }
             .sorted(by: sortById)
-        let newKeys = newThreads
+        let newKeys = comparableNewThreads
             .map { SidebarThreadStructuralKey($0, considerCompletionDate: considerCompletionDate) }
             .sorted(by: sortById)
         return currentKeys != newKeys
