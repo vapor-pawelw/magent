@@ -13,6 +13,7 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - The separate-window header strip mirrors sidebar thread naming semantics: primary text is task description (single-line in strip), secondary text is `branch · worktree` when they differ, and the dirty-dot sits before the secondary line.
 - The same strip is also shown above the tab/action bar in the main thread view. In pop-out thread windows, keep only one strip (the pop-out chrome strip) to avoid duplicated headers.
 - The strip uses sidebar-like state language: the bottom separator line carries completion/waiting/rate-limit/busy state; busy is shown only via separator animation (no trailing spinner).
+- Rate-limit state in the strip uses agent-specific glyphs (Claude/Codex) with the same color semantics as sidebar badges (red for direct, orange for propagated-only), not generic hourglass symbols.
 - Trailing strip accessories are limited to rate-limit/waiting indicator, keep-alive, favorite, and pinned badges.
 
 ## Implementation notes

@@ -155,7 +155,7 @@ The response includes a `status` object with all UI-visible indicators:
 | `isFavorite` | bool | Thread is marked as favorite |
 | `isSidebarHidden` | bool | Thread is hidden to the bottom of the list and shown dimmed |
 | `isArchived` | bool | Thread has been archived |
-| `isBlockedByRateLimit` | bool | All agent tabs are rate-limited (red hourglass) |
+| `isBlockedByRateLimit` | bool | All agent tabs are rate-limited (thread shows a rate-limit badge) |
 | `hasBranchMismatch` | bool | Worktree HEAD doesn't match expected branch |
 | `jiraTicketKey` | string? | Associated Jira ticket (e.g. `IP-1234`) |
 | `jiraUnassigned` | bool | Jira ticket no longer assigned to user |

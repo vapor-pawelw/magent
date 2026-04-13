@@ -267,19 +267,40 @@ final class PopoutInfoStripView: NSView {
             stateIndicator.isHidden = true
         } else if thread.isBlockedByRateLimit {
             stateIndicator.isHidden = false
+            let rateLimitedAgent = preferredRateLimitedAgent(for: thread)
+            stateIndicator.image = Self.agentIconImage(for: rateLimitedAgent)
             if thread.isRateLimitPropagatedOnly {
-                stateIndicator.image = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "Rate limited (propagated)")
                 stateIndicator.contentTintColor = .systemOrange
+                stateIndicator.toolTip = "\(rateLimitedAgent.displayName) rate limited (propagated)"
             } else {
-                stateIndicator.image = NSImage(systemSymbolName: "hourglass.circle.fill", accessibilityDescription: "Rate limited")
                 stateIndicator.contentTintColor = .systemRed
+                stateIndicator.toolTip = "\(rateLimitedAgent.displayName) rate limited"
             }
         } else if thread.hasWaitingForInput {
             stateIndicator.isHidden = false
             stateIndicator.image = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: "Waiting for input")
             stateIndicator.contentTintColor = .systemYellow
+            stateIndicator.toolTip = "Waiting for input"
         } else {
             stateIndicator.isHidden = true
+            stateIndicator.toolTip = nil
+        }
+    }
+
+    private func preferredRateLimitedAgent(for thread: MagentThread) -> AgentType {
+        if thread.directlyRateLimitedAgentTypes.contains(.codex) { return .codex }
+        if thread.directlyRateLimitedAgentTypes.contains(.claude) { return .claude }
+        if thread.rateLimitedAgentTypes.contains(.codex) { return .codex }
+        if thread.rateLimitedAgentTypes.contains(.claude) { return .claude }
+        return .claude
+    }
+
+    private static func agentIconImage(for agent: AgentType) -> NSImage? {
+        switch agent {
+        case .claude, .custom:
+            return NSImage(resource: .claudeIcon)
+        case .codex:
+            return NSImage(resource: .codexIcon)
         }
     }
 

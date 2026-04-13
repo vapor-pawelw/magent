@@ -72,14 +72,14 @@ Newer pane output such as `/status` must not auto-clear an already-anchored limi
 
 ## UI Indicators
 
-- **Bottom status bar**: Shows a global rate-limit countdown (e.g. "⏳ Claude: 19m · Codex: 3h 5m") on the right side. Right-click offers:
+- **Bottom status bar**: Shows a global rate-limit countdown (with inline Claude/Codex agent icons) on the right side. Right-click offers:
   - Lift Claude/Codex limit now
   - Lift + ignore currently visible reset windows for Claude/Codex. If the pane currently shows multiple future reset dates for that agent (for example separate session and weekly limits), all of those reset timestamps are added to the ignore list together.
-- **Thread list**: Hourglass icon on threads with active rate limits:
-  - **Red hourglass** (⏳): Direct rate limit detected in this thread's session(s)
-  - **Orange hourglass** (⏳): Propagated from another session/agent (global account limit, but detected elsewhere)
+- **Thread list**: Claude/Codex glyph badge on threads with active rate limits:
+  - **Red agent glyph**: Direct rate limit detected in this thread's session(s)
+  - **Orange agent glyph**: Propagated from another session/agent (global account limit, but detected elsewhere)
   - **2pt red corner dot on the badge**: At least one currently shown marker for that agent is directly detected on this thread (not propagated-only)
-- **Tab bar**: Same hourglass distinction for individual rate-limited tabs
+- **Tab bar and thread info strip**: Same Claude/Codex glyph distinction for individual rate-limited tabs and the header strip above the thread detail panel/pop-out windows
 - **Tooltips**: Show the exact reset time (e.g., "Rate limit reached. Resets Mar 2, 2026 at 8:00 PM") and whether the limit is direct or propagated
 - **Notifications**: Optional system notification when a rate limit lifts (configurable in Settings)
 
