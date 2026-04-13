@@ -124,12 +124,12 @@ public final class TmuxService: Sendable {
             // Force wheel to always scroll terminal history (copy-mode), regardless of
             // whether the pane's running app has requested mouse reporting.
             _ = try? await ShellExecutor.run(
-                "tmux bind-key -T root WheelUpPane if-shell -F '#{pane_in_mode}' 'send-keys -X -N 6 scroll-up' 'copy-mode -e ; send-keys -X -N 6 scroll-up'"
+                "tmux bind-key -T root WheelUpPane if-shell -F '#{pane_in_mode}' 'send-keys -X scroll-up' 'copy-mode -e ; send-keys -X scroll-up'"
             )
             // When in copy-mode: scroll down if there is history above, otherwise exit
             // copy-mode (so the user returns to live output automatically).
             _ = try? await ShellExecutor.run(
-                "tmux bind-key -T root WheelDownPane if-shell -F '#{pane_in_mode}' \"if-shell -F '#{scroll_position}' 'send-keys -X -N 6 scroll-down' 'send-keys -X cancel'\" ''"
+                "tmux bind-key -T root WheelDownPane if-shell -F '#{pane_in_mode}' \"if-shell -F '#{scroll_position}' 'send-keys -X scroll-down' 'send-keys -X cancel'\" ''"
             )
         case .allowAppsToCapture:
             _ = try? await ShellExecutor.run("tmux set-option -g mouse on")

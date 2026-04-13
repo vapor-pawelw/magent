@@ -34,6 +34,10 @@ All notable changes to this project will be documented in this file.
 - Fixed slow tab switches showing no progress for non-agent terminal tabs. Tab selection now shows the same debounced loading overlay during tmux/session validation instead of leaving the terminal area blank with no feedback.
 - Fixed tab-name deduplication when cloning/resuming/renaming tabs. Names now use a single monotonic suffix sequence per base name (`Codex`, `Codex-1`, `Codex-2`, ...), preventing chained names like `Codex-1-1` and avoiding suffix reuse after deletions.
 
+### Terminal
+#### Bug Fixes
+- Fixed `magentDefaultScroll` wheel jumps still feeling too large by removing tmux's hardcoded `-N 6` wheel multiplier. Wheel up/down now use single-line copy-mode steps per wheel event.
+
 ### Status Bar
 #### Features
 - Added a `windows` status in the bottom bar for threads opened in separate windows. Clicking it lists those threads, uses the same centered sidebar navigation as Favorites, and includes actions to return individual windows or all windows to the main app.
