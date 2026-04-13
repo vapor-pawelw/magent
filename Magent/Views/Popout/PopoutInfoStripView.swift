@@ -7,16 +7,14 @@ final class PopoutInfoStripView: NSView {
     private static let busySeparatorAnimationKey = "popout-info-strip-busy-separator-shift"
     private let threadIconView = NSImageView()
     private let descriptionLabel = NSTextField(labelWithString: "")
+    private let secondLineStack = NSStackView()
     private let branchLabel = NSTextField(labelWithString: "")
     private let dirtyDot = NSView()
-    private let jiraLabel = NSTextField(labelWithString: "")
-    private let prLabel = NSTextField(labelWithString: "")
     private let trailingAccessoryStack = NSStackView()
     private let stateIndicator = NSImageView()
     private let keepAliveIndicator = NSImageView()
     private let favoriteIndicator = NSImageView()
     private let pinnedIndicator = NSImageView()
-    private let busySpinner = NSProgressIndicator()
     private let bottomBorder = NSView()
     private var busyBorderGradientLayer: CAGradientLayer?
     private var currentThreadId: UUID?
@@ -50,35 +48,23 @@ final class PopoutInfoStripView: NSView {
         // Branch label (line 2)
         branchLabel.translatesAutoresizingMaskIntoConstraints = false
         branchLabel.font = .systemFont(ofSize: 11)
-        branchLabel.lineBreakMode = .byTruncatingHead
+        branchLabel.lineBreakMode = .byTruncatingTail
         branchLabel.maximumNumberOfLines = 1
-        addSubview(branchLabel)
 
         // Dirty dot
         dirtyDot.translatesAutoresizingMaskIntoConstraints = false
         dirtyDot.wantsLayer = true
         dirtyDot.layer?.cornerRadius = 3.5
         dirtyDot.isHidden = true
-        addSubview(dirtyDot)
 
-        // Jira label (line 2)
-        jiraLabel.translatesAutoresizingMaskIntoConstraints = false
-        jiraLabel.font = .systemFont(ofSize: 10)
-        jiraLabel.isHidden = true
-        addSubview(jiraLabel)
-
-        // PR label (line 2)
-        prLabel.translatesAutoresizingMaskIntoConstraints = false
-        prLabel.font = .systemFont(ofSize: 10)
-        prLabel.isHidden = true
-        addSubview(prLabel)
-
-        // Busy spinner
-        busySpinner.translatesAutoresizingMaskIntoConstraints = false
-        busySpinner.style = .spinning
-        busySpinner.controlSize = .small
-        busySpinner.isIndeterminate = true
-        busySpinner.isHidden = true
+        secondLineStack.orientation = .horizontal
+        secondLineStack.alignment = .centerY
+        secondLineStack.spacing = 4
+        secondLineStack.detachesHiddenViews = true
+        secondLineStack.translatesAutoresizingMaskIntoConstraints = false
+        secondLineStack.addArrangedSubview(dirtyDot)
+        secondLineStack.addArrangedSubview(branchLabel)
+        addSubview(secondLineStack)
 
         trailingAccessoryStack.orientation = .horizontal
         trailingAccessoryStack.alignment = .centerY
@@ -93,7 +79,6 @@ final class PopoutInfoStripView: NSView {
             indicator.isHidden = true
             trailingAccessoryStack.addArrangedSubview(indicator)
         }
-        trailingAccessoryStack.addArrangedSubview(busySpinner)
 
         keepAliveIndicator.image = NSImage(systemSymbolName: "shield.righthalf.filled", accessibilityDescription: "Keep Alive")
         favoriteIndicator.image = NSImage(systemSymbolName: "heart.fill", accessibilityDescription: "Favorite")
@@ -110,12 +95,12 @@ final class PopoutInfoStripView: NSView {
         NSLayoutConstraint.activate([
             // Line 1
             threadIconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            threadIconView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            threadIconView.centerYAnchor.constraint(equalTo: centerYAnchor),
             threadIconView.widthAnchor.constraint(equalToConstant: 16),
             threadIconView.heightAnchor.constraint(equalToConstant: 16),
 
             descriptionLabel.leadingAnchor.constraint(equalTo: threadIconView.trailingAnchor, constant: 6),
-            descriptionLabel.centerYAnchor.constraint(equalTo: threadIconView.centerYAnchor),
+            descriptionLabel.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             descriptionLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAccessoryStack.leadingAnchor, constant: -8),
 
             trailingAccessoryStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
@@ -129,16 +114,12 @@ final class PopoutInfoStripView: NSView {
             favoriteIndicator.heightAnchor.constraint(equalToConstant: 12),
             pinnedIndicator.widthAnchor.constraint(equalToConstant: 12),
             pinnedIndicator.heightAnchor.constraint(equalToConstant: 12),
-            busySpinner.widthAnchor.constraint(equalToConstant: 14),
-            busySpinner.heightAnchor.constraint(equalToConstant: 14),
 
             // Line 2
-            branchLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 30),
-            branchLabel.topAnchor.constraint(equalTo: threadIconView.bottomAnchor, constant: 2),
-            branchLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 200),
+            secondLineStack.leadingAnchor.constraint(equalTo: descriptionLabel.leadingAnchor),
+            secondLineStack.topAnchor.constraint(equalTo: descriptionLabel.bottomAnchor, constant: 2),
+            secondLineStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAccessoryStack.leadingAnchor, constant: -8),
 
-            dirtyDot.leadingAnchor.constraint(equalTo: branchLabel.trailingAnchor, constant: 4),
-            dirtyDot.centerYAnchor.constraint(equalTo: branchLabel.centerYAnchor),
             dirtyDot.widthAnchor.constraint(equalToConstant: 7),
             dirtyDot.heightAnchor.constraint(equalToConstant: 7),
 
@@ -156,11 +137,9 @@ final class PopoutInfoStripView: NSView {
             self.dirtyDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
             self.descriptionLabel.textColor = NSColor(resource: .textPrimary)
             self.branchLabel.textColor = NSColor(resource: .textSecondary)
-            self.jiraLabel.textColor = .controlAccentColor
-            self.prLabel.textColor = .controlAccentColor
             self.keepAliveIndicator.contentTintColor = .systemCyan
             self.favoriteIndicator.contentTintColor = NSColor(resource: .primaryBrand)
-            self.pinnedIndicator.contentTintColor = NSColor(resource: .primaryBrand)
+            self.pinnedIndicator.contentTintColor = NSColor(resource: .textSecondary)
         }
     }
 
@@ -200,27 +179,7 @@ final class PopoutInfoStripView: NSView {
         currentThreadId = thread.id
         currentSessionName = nil
         threadIconView.image = NSImage(systemSymbolName: thread.threadIcon.symbolName, accessibilityDescription: nil)
-
-        descriptionLabel.stringValue = thread.taskDescription ?? thread.name
-        branchLabel.stringValue = thread.currentBranch
-        dirtyDot.isHidden = !thread.isDirty
-
-        // Jira
-        if let ticket = thread.jiraTicketKey {
-            jiraLabel.stringValue = ticket
-            jiraLabel.isHidden = false
-        } else {
-            jiraLabel.isHidden = true
-        }
-
-        // PR
-        if let prInfo = thread.pullRequestInfo {
-            prLabel.stringValue = "#\(prInfo.number)"
-            prLabel.isHidden = false
-        } else {
-            prLabel.isHidden = true
-        }
-
+        applySidebarStyleText(from: thread, tabPrefix: nil)
         updateTrailingIndicators(thread: thread)
         updateThreadIconTint(thread: thread)
         updateStatusIndicator(thread: thread)
@@ -231,19 +190,8 @@ final class PopoutInfoStripView: NSView {
         currentThreadId = thread.id
         currentSessionName = sessionName
         let tabIndex = thread.tmuxSessionNames.firstIndex(of: sessionName).map { $0 + 1 } ?? 1
-        let threadName = thread.taskDescription ?? thread.name
-        descriptionLabel.stringValue = "\(threadName) — Tab \(tabIndex)"
-        branchLabel.stringValue = thread.currentBranch
-        dirtyDot.isHidden = !thread.isDirty
+        applySidebarStyleText(from: thread, tabPrefix: "Tab \(tabIndex)")
         threadIconView.image = NSImage(systemSymbolName: thread.threadIcon.symbolName, accessibilityDescription: nil)
-
-        // PR info for tab popout
-        if let prInfo = thread.pullRequestInfo {
-            prLabel.stringValue = "#\(prInfo.number)"
-            prLabel.isHidden = false
-        } else {
-            prLabel.isHidden = true
-        }
 
         updateTrailingIndicators(thread: thread)
         updateThreadIconTint(thread: thread)
@@ -257,26 +205,67 @@ final class PopoutInfoStripView: NSView {
         pinnedIndicator.isHidden = !thread.isPinned
     }
 
-    private func updateThreadIconTint(thread: MagentThread) {
-        if thread.hasAllSessionsDead {
-            threadIconView.contentTintColor = .tertiaryLabelColor
-        } else if thread.hasWaitingForInput {
-            threadIconView.contentTintColor = .systemOrange
-        } else if thread.hasUnreadAgentCompletion {
-            threadIconView.contentTintColor = .systemGreen
-        } else {
-            threadIconView.contentTintColor = NSColor(resource: .primaryBrand)
+    private func applySidebarStyleText(from thread: MagentThread, tabPrefix: String?) {
+        if thread.isMain {
+            let branch = thread.currentBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+            let mainLabel = "Main worktree"
+            if let tabPrefix {
+                descriptionLabel.stringValue = "\(tabPrefix) — \(mainLabel)"
+            } else {
+                descriptionLabel.stringValue = mainLabel
+            }
+            branchLabel.stringValue = branch
+            branchLabel.isHidden = branch.isEmpty
+            dirtyDot.isHidden = branch.isEmpty || !thread.isDirty
+            return
         }
+
+        let worktreeName = (thread.worktreePath as NSString).lastPathComponent
+        let branchName = (thread.actualBranch ?? thread.branchName).trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedBranchName = branchName.isEmpty ? thread.name : branchName
+        let hasBranchWorktreeMismatch = worktreeName != resolvedBranchName
+        let trimmedDescription = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasDescription = !(trimmedDescription?.isEmpty ?? true)
+
+        if hasDescription, let description = trimmedDescription {
+            if let tabPrefix {
+                descriptionLabel.stringValue = "\(tabPrefix) — \(description)"
+            } else {
+                descriptionLabel.stringValue = description
+            }
+            var branchWorktreeParts = [resolvedBranchName]
+            if hasBranchWorktreeMismatch {
+                branchWorktreeParts.append(worktreeName)
+            }
+            branchLabel.stringValue = branchWorktreeParts.joined(separator: "  ·  ")
+            branchLabel.isHidden = false
+            dirtyDot.isHidden = !thread.isDirty
+        } else {
+            if let tabPrefix {
+                descriptionLabel.stringValue = "\(tabPrefix) — \(resolvedBranchName)"
+            } else {
+                descriptionLabel.stringValue = resolvedBranchName
+            }
+            if hasBranchWorktreeMismatch {
+                branchLabel.stringValue = worktreeName
+                branchLabel.isHidden = false
+                dirtyDot.isHidden = !thread.isDirty
+            } else {
+                branchLabel.stringValue = ""
+                branchLabel.isHidden = true
+                dirtyDot.isHidden = true
+            }
+        }
+    }
+
+    private func updateThreadIconTint(thread: MagentThread) {
+        threadIconView.contentTintColor = sectionColor(for: thread) ?? .secondaryLabelColor
     }
 
     private func updateStatusIndicator(thread: MagentThread) {
         if thread.isAnyBusy {
             stateIndicator.isHidden = true
-            busySpinner.isHidden = false
-            busySpinner.startAnimation(nil)
         } else if thread.isBlockedByRateLimit {
-            busySpinner.isHidden = true
-            busySpinner.stopAnimation(nil)
             stateIndicator.isHidden = false
             if thread.isRateLimitPropagatedOnly {
                 stateIndicator.image = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "Rate limited (propagated)")
@@ -286,14 +275,10 @@ final class PopoutInfoStripView: NSView {
                 stateIndicator.contentTintColor = .systemRed
             }
         } else if thread.hasWaitingForInput {
-            busySpinner.isHidden = true
-            busySpinner.stopAnimation(nil)
             stateIndicator.isHidden = false
             stateIndicator.image = NSImage(systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: "Waiting for input")
             stateIndicator.contentTintColor = .systemYellow
         } else {
-            busySpinner.isHidden = true
-            busySpinner.stopAnimation(nil)
             stateIndicator.isHidden = true
         }
     }
@@ -316,9 +301,7 @@ final class PopoutInfoStripView: NSView {
         } else if thread.hasUnreadAgentCompletion {
             borderColor = .systemGreen.withAlphaComponent(0.5)
         } else {
-            let subtlePurple = NSColor.systemPurple.blended(withFraction: 0.35, of: .secondaryLabelColor)
-                ?? NSColor.systemPurple
-            borderColor = subtlePurple.withAlphaComponent(0.28)
+            borderColor = NSColor.white.withAlphaComponent(0.12)
         }
 
         effectiveAppearance.performAsCurrentDrawingAppearance {
@@ -386,5 +369,13 @@ final class PopoutInfoStripView: NSView {
         busyBorderGradientLayer?.removeAllAnimations()
         busyBorderGradientLayer?.removeFromSuperlayer()
         busyBorderGradientLayer = nil
+    }
+
+    private func sectionColor(for thread: MagentThread) -> NSColor? {
+        let settings = PersistenceService.shared.loadSettings()
+        guard settings.shouldUseThreadSections(for: thread.projectId) else { return nil }
+        let sections = settings.sections(for: thread.projectId)
+        let effectiveSectionId = ThreadManager.shared.effectiveSectionId(for: thread, settings: settings)
+        return sections.first(where: { $0.id == effectiveSectionId })?.color
     }
 }

@@ -2144,6 +2144,9 @@ extension Notification.Name {
     static let magentSettingsDidChange = Notification.Name("magentSettingsDidChange")
     static let magentUpdateStateChanged = Notification.Name("magentUpdateStateChanged")
     static let magentThreadCreationFinished = Notification.Name("magentThreadCreationFinished")
+    /// Posted after thread metadata snapshots are applied in the sidebar so
+    /// pop-out windows can refresh from the latest ThreadManager state.
+    static let magentThreadsDidChange = Notification.Name("magentThreadsDidChange")
     /// Posted by `injectAfterStart` just before it begins waiting for the agent TUI
     /// so that the loading overlay knows to suppress poll-timer dismissal.
     static let magentAgentInjectionStarted = Notification.Name("magentAgentInjectionStarted")

@@ -1245,6 +1245,8 @@ extension ThreadListViewController: ThreadManagerDelegate {
             clearSelectedThreadState()
         }
         updateSelectedThreadJumpCapsuleVisibility()
+
+        NotificationCenter.default.post(name: .magentThreadsDidChange, object: nil)
     }
 
     // MARK: - Structural change detection

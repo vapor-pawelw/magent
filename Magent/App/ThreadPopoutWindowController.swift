@@ -15,7 +15,7 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
     init(thread: MagentThread, sourceWindow: NSWindow?) {
         self.threadId = thread.id
         self.infoStrip = PopoutInfoStripView()
-        self.detailVC = ThreadDetailViewController(thread: thread)
+        self.detailVC = ThreadDetailViewController(thread: thread, showsHeaderInfoStrip: false)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
@@ -157,16 +157,15 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
             .magentAgentWaitingForInput,
             .magentStatusSyncCompleted,
             .magentSettingsDidChange,
+            .magentSectionsDidChange,
+            .magentPullRequestInfoChanged,
+            .magentJiraTicketInfoChanged,
+            .magentKeepAliveChanged,
+            .magentFavoritesChanged,
+            .magentThreadsDidChange,
         ] {
             nc.addObserver(self, selector: #selector(refreshInfoStrip), name: name, object: nil)
         }
-
-        nc.addObserver(
-            self,
-            selector: #selector(handleNavigateToThread(_:)),
-            name: .magentNavigateToThread,
-            object: nil
-        )
 
         nc.addObserver(
             self,
@@ -196,12 +195,6 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
         guard let latestThread = ThreadManager.shared.threads.first(where: { $0.id == threadId }) else { return }
         infoStrip.refresh(from: latestThread)
         window?.title = Self.windowTitle(for: latestThread)
-    }
-
-    @objc private func handleNavigateToThread(_ notification: Notification) {
-        guard let navigateId = notification.userInfo?["threadId"] as? UUID,
-              navigateId == threadId else { return }
-        window?.makeKeyAndOrderFront(nil)
     }
 
     @objc private func handleTabReturnedToThread(_ notification: Notification) {

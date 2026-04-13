@@ -163,6 +163,7 @@ final class TabItemView: NSView, NSMenuDelegate {
 
         // Pin icon
         pinIcon.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
+        pinIcon.image?.isTemplate = true
         pinIcon.contentTintColor = NSColor(resource: .textSecondary)
         pinIcon.translatesAutoresizingMaskIntoConstraints = false
         pinIcon.isHidden = true

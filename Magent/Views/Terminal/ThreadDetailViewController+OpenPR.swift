@@ -402,5 +402,6 @@ extension ThreadDetailViewController {
         if prChanged {
             applyPRButtonTitle()
         }
+        refreshHeaderInfoStrip()
     }
 }

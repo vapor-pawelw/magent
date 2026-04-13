@@ -163,6 +163,13 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
             .magentAgentCompletionDetected,
             .magentAgentWaitingForInput,
             .magentStatusSyncCompleted,
+            .magentSettingsDidChange,
+            .magentSectionsDidChange,
+            .magentPullRequestInfoChanged,
+            .magentJiraTicketInfoChanged,
+            .magentKeepAliveChanged,
+            .magentFavoritesChanged,
+            .magentThreadsDidChange,
         ] {
             nc.addObserver(self, selector: #selector(refreshInfoStrip), name: name, object: nil)
         }

@@ -1201,7 +1201,7 @@ final class ThreadCell: NSTableCellView {
             let badge = TopBorderBadge(bareIcon: true)
             badge.label.isHidden = true
             badge.iconView.image = Self.cachedSymbolImage("pin.fill")
-            badge.iconView.contentTintColor = NSColor(resource: .primaryBrand)
+            badge.iconView.contentTintColor = NSColor(resource: .textSecondary)
             badge.iconView.isHidden = false
             badge.isHidden = true
             pinnedBadge = badge
@@ -1250,7 +1250,7 @@ final class ThreadCell: NSTableCellView {
             favorite.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
         }
         if let pin = pinnedBadge {
-            pin.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
+            pin.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .textSecondary)
         }
         if let popout = popoutImageView {
             popout.contentTintColor = .systemPurple
