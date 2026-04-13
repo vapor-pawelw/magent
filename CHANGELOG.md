@@ -32,6 +32,7 @@ All notable changes to this project will be documented in this file.
 - Added tab hover tooltips in the thread detail view. Hover now shows tab type, terminal tmux session name (for terminal tabs), and live tab status details (busy, waiting for input, keep-alive, dead session, and rate-limit state).
 
 #### Bug Fixes
+- Fixed a crash/blank-content race when `Resume Agent Session in New Tab` was followed by immediate close/switch actions. Pending tabs now stay non-interactive until tmux session creation finishes.
 - Fixed stale `Preparing terminal session...` overlays covering already-live Codex tabs. Startup overlay retention now only stays active when the selected tab still resolves to a running agent session.
 - Fixed recurring app termination when closing tabs from non-visible threads (or IPC paths) by evicting cached terminal surfaces before tmux session shutdown.
 - Fixed slow tab switches showing no progress for non-agent terminal tabs. Tab selection now shows the same debounced loading overlay during tmux/session validation instead of leaving the terminal area blank with no feedback.
