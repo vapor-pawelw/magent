@@ -159,22 +159,34 @@ final class SplitViewController: NSSplitViewController {
 
     /// Forwarded from the main menu's "New Thread" item (⌘N).
     @objc func requestNewThread() {
-        threadListVC.requestNewThread()
+        requestNewThread(contextThread: nil, presentingWindow: nil)
+    }
+
+    func requestNewThread(contextThread: MagentThread?, presentingWindow: NSWindow?) {
+        threadListVC.requestNewThread(contextThread: contextThread, presentingWindow: presentingWindow)
     }
 
     /// Forwarded from the main menu's "New Thread from Branch" item (⌘⇧N).
     @objc func requestNewThreadFromBranch() {
-        threadListVC.requestNewThreadFromBranch()
+        requestNewThreadFromBranch(contextThread: nil, presentingWindow: nil)
+    }
+
+    func requestNewThreadFromBranch(contextThread: MagentThread?, presentingWindow: NSWindow?) {
+        threadListVC.requestNewThreadFromBranch(contextThread: contextThread, presentingWindow: presentingWindow)
     }
 
     /// Forwarded from the main menu's "AI Rename" item (⌘⇧R).
     @objc func requestAIRename() {
-        guard let thread = threadListVC.selectedThreadFromState(),
+        requestAIRename(contextThread: nil, presentingWindow: nil)
+    }
+
+    func requestAIRename(contextThread: MagentThread?, presentingWindow: NSWindow?) {
+        guard let thread = contextThread ?? threadListVC.selectedThreadFromState(),
               !thread.isMain else {
             NSSound.beep()
             return
         }
-        threadListVC.presentAIRenameSheet(for: thread)
+        threadListVC.presentAIRenameSheet(for: thread, presentingWindow: presentingWindow)
     }
 
     // MARK: - Key Bindings
@@ -227,7 +239,7 @@ final class SplitViewController: NSSplitViewController {
             return nil
         }
         if matchesBinding(.detachTab, keyCode: event.keyCode, modifiers: eventModifiers) {
-            currentDetailVC?.detachCurrentTabFromKeyboard()
+            _ = performDetachTabShortcut(contextThreadId: nil)
             return nil
         }
 
@@ -299,11 +311,80 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func newTabShortcut() {
-        currentDetailVC?.addTabFromKeyboard()
+        _ = performNewTabShortcut(contextThreadId: nil)
     }
 
     private func closeTabShortcut() {
-        currentDetailVC?.closeCurrentTab()
+        _ = performCloseTabShortcut(contextThreadId: nil)
+    }
+
+    func selectedThreadForContextRouting() -> MagentThread? {
+        currentDetailVC?.thread ?? threadListVC.selectedThreadFromState()
+    }
+
+    @discardableResult
+    func performNewTabShortcut(contextThreadId: UUID?) -> Bool {
+        if let threadId = contextThreadId {
+            if let controller = PopoutWindowManager.shared.threadWindows[threadId] {
+                controller.detailVC.addTabFromKeyboard()
+                return true
+            }
+            if let currentDetailVC, currentDetailVC.thread.id == threadId {
+                currentDetailVC.addTabFromKeyboard()
+                return true
+            }
+            if !PopoutWindowManager.shared.isThreadPoppedOut(threadId),
+               ThreadManager.shared.threads.contains(where: { $0.id == threadId }) {
+                threadListVC.selectThread(byId: threadId)
+                if let currentDetailVC, currentDetailVC.thread.id == threadId {
+                    currentDetailVC.addTabFromKeyboard()
+                    return true
+                }
+            }
+            return false
+        }
+
+        guard let currentDetailVC else { return false }
+        currentDetailVC.addTabFromKeyboard()
+        return true
+    }
+
+    @discardableResult
+    func performCloseTabShortcut(contextThreadId: UUID?) -> Bool {
+        if let threadId = contextThreadId {
+            if let controller = PopoutWindowManager.shared.threadWindows[threadId] {
+                controller.detailVC.closeCurrentTab()
+                return true
+            }
+            if let currentDetailVC, currentDetailVC.thread.id == threadId {
+                currentDetailVC.closeCurrentTab()
+                return true
+            }
+            return false
+        }
+
+        guard let currentDetailVC else { return false }
+        currentDetailVC.closeCurrentTab()
+        return true
+    }
+
+    @discardableResult
+    func performDetachTabShortcut(contextThreadId: UUID?) -> Bool {
+        if let threadId = contextThreadId {
+            if let controller = PopoutWindowManager.shared.threadWindows[threadId] {
+                controller.detailVC.detachCurrentTabFromKeyboard()
+                return true
+            }
+            if let currentDetailVC, currentDetailVC.thread.id == threadId {
+                currentDetailVC.detachCurrentTabFromKeyboard()
+                return true
+            }
+            return false
+        }
+
+        guard let currentDetailVC else { return false }
+        currentDetailVC.detachCurrentTabFromKeyboard()
+        return true
     }
 
     private func showThread(_ thread: MagentThread) {

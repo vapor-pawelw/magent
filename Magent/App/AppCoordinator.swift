@@ -214,6 +214,11 @@ final class AppCoordinator {
         ensureWindowIsVisibleOnCurrentScreens(window)
     }
 
+    func mainSplitViewController() -> SplitViewController? {
+        guard let container = window?.contentViewController as? MainContainerViewController else { return nil }
+        return container.splitViewController
+    }
+
     func persistMainWindowFrame() {
         guard let window else { return }
         window.saveFrame(usingName: Self.mainWindowAutosaveName)

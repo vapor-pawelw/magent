@@ -114,6 +114,20 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
         let settings = PersistenceService.shared.loadSettings()
         let bindings = settings.keyBindings
 
+        let newThreadBinding = bindings.binding(for: .newThread)
+        if event.keyCode == newThreadBinding.keyCode
+            && flags == newThreadBinding.modifiers.nsEventFlags {
+            _ = NSApp.sendAction(#selector(AppDelegate.requestNewThreadFromActiveContext(_:)), to: nil, from: self)
+            return nil
+        }
+
+        let forkBinding = bindings.binding(for: .newThreadFromBranch)
+        if event.keyCode == forkBinding.keyCode
+            && flags == forkBinding.modifiers.nsEventFlags {
+            _ = NSApp.sendAction(#selector(AppDelegate.requestForkThreadFromActiveContext(_:)), to: nil, from: self)
+            return nil
+        }
+
         // Cmd+Shift+O in pop-out → return thread to main (toggle)
         let popOutBinding = bindings.binding(for: .popOutThread)
         if event.keyCode == popOutBinding.keyCode

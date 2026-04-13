@@ -182,10 +182,13 @@ extension ThreadListViewController {
         alert.runModal()
     }
 
-    private func preferredProjectForQuickCreate(from projects: [Project]) -> Project? {
+    private func preferredProjectForQuickCreate(
+        from projects: [Project],
+        contextThread: MagentThread? = nil
+    ) -> Project? {
         guard !projects.isEmpty else { return nil }
 
-        if let selectedThread = selectedThreadFromState(),
+        if let selectedThread = contextThread ?? selectedThreadFromState(),
            let matched = projects.first(where: { $0.id == selectedThread.projectId }) {
             return matched
         }
@@ -215,12 +218,13 @@ extension ThreadListViewController {
     func presentNewThreadSheet(
         for project: Project,
         anchorView: NSView,
+        presentingWindow: NSWindow? = nil,
         baseBranch: String? = nil,
         sourceThread: MagentThread? = nil,
         selectedSectionIdOverride: UUID? = nil,
         recoveryPrefill: AgentLaunchSheetPrefill? = nil
     ) {
-        guard let window = view.window else { return }
+        guard let window = presentingWindow ?? view.window else { return }
         let settings = persistence.loadSettings()
 
         var autoHintParts: [String] = []
@@ -398,21 +402,25 @@ extension ThreadListViewController {
     /// Called from SplitViewController's Cmd+Shift+N shortcut. Creates a new thread
     /// branching from the currently selected thread's branch, inheriting its section
     /// and inserting right below it in the sidebar.
-    func requestNewThreadFromBranch() {
+    func requestNewThreadFromBranch(
+        contextThread: MagentThread? = nil,
+        presentingWindow: NSWindow? = nil
+    ) {
         guard !isCreatingThread else { return }
 
         let settings = persistence.loadSettings()
-        guard let sourceThread = selectedThreadFromState(),
+        guard let sourceThread = contextThread ?? selectedThreadFromState(),
               let project = settings.projects.first(where: { $0.id == sourceThread.projectId }),
               let baseBranch = baseBranchForNewThread(from: sourceThread, project: project) else {
             // Fall back to regular new-thread flow when no thread is selected or no branch is available.
-            requestNewThread()
+            requestNewThread(contextThread: contextThread, presentingWindow: presentingWindow)
             return
         }
 
         presentNewThreadSheet(
             for: project,
             anchorView: outlineView,
+            presentingWindow: presentingWindow,
             baseBranch: baseBranch,
             sourceThread: sourceThread
         )
@@ -421,7 +429,10 @@ extension ThreadListViewController {
     /// Called from SplitViewController's Cmd+N shortcut to respect the loading guard.
     /// Picks the most relevant project context and opens that project's agent menu.
     /// When a thread is selected, inherits its section and positions the new thread below it.
-    func requestNewThread() {
+    func requestNewThread(
+        contextThread: MagentThread? = nil,
+        presentingWindow: NSWindow? = nil
+    ) {
         guard !isCreatingThread else { return }
 
         let settings = persistence.loadSettings()
@@ -430,10 +441,10 @@ extension ThreadListViewController {
             showNoProjectsAlert()
             return
         }
-        guard let project = preferredProjectForQuickCreate(from: projects) else { return }
+        guard let project = preferredProjectForQuickCreate(from: projects, contextThread: contextThread) else { return }
 
         // Use the selected thread as the source for section/position inheritance.
-        let selectedSource = selectedThreadFromState()
+        let selectedSource = contextThread ?? selectedThreadFromState()
         let sourceInSameProject = selectedSource?.projectId == project.id ? selectedSource : nil
 
         let isOptionPressed = NSApp.currentEvent?.modifierFlags.contains(.option) == true
@@ -453,7 +464,12 @@ extension ThreadListViewController {
                 reasoningLevel: reasoning
             )
         } else {
-            presentNewThreadSheet(for: project, anchorView: outlineView, sourceThread: sourceInSameProject)
+            presentNewThreadSheet(
+                for: project,
+                anchorView: outlineView,
+                presentingWindow: presentingWindow,
+                sourceThread: sourceInSameProject
+            )
         }
     }
 

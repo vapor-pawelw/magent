@@ -5,9 +5,9 @@ import Cocoa
 final class MainContainerViewController: NSViewController {
 
     let statusBar = StatusBarView()
-    private let splitViewController: NSSplitViewController
+    let splitViewController: SplitViewController
 
-    init(splitViewController: NSSplitViewController) {
+    init(splitViewController: SplitViewController) {
         self.splitViewController = splitViewController
         super.init(nibName: nil, bundle: nil)
     }

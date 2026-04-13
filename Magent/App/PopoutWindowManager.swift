@@ -180,6 +180,7 @@ final class PopoutWindowManager: PopoutStateProviding {
         guard let controller = tabWindows.removeValue(forKey: sessionName) else { return }
         controller.cacheTerminalViewForReuse()
         controller.isReturningToThread = true
+        controller.tearDown()
         controller.window?.close()
 
         NotificationCenter.default.post(
