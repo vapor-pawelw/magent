@@ -83,6 +83,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Fixed refresh/load/commit-selection guards in the changes panel to use focused context thread state, preventing stale updates when main selection differs from focused pop-out thread.
+- Fixed changes-panel context not returning to the selected main thread after repeated clicks/typing in the main Ghostty tab when responder state did not change.
 
 ### CLI
 #### Bug Fixes

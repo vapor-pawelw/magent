@@ -31,6 +31,10 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     public var onScroll: (() -> Void)?
     /// Called when the terminal surface becomes first responder.
     public var onBecomeFirstResponder: (() -> Void)?
+    /// Called when the user interacts directly with the terminal surface
+    /// (for example mouse down or key press), even if first-responder state
+    /// does not change.
+    public var onUserInteraction: (() -> Void)?
     /// When true, the surface is preserved when the view is removed from its window
     /// (e.g. when cached for reuse across thread switches). The flag is automatically
     /// cleared once the view re-attaches to a window.
@@ -315,6 +319,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     }
 
     override public func keyDown(with event: NSEvent) {
+        onUserInteraction?()
         captureSubmittedLineIfNeeded(from: event)
 
         // Send key event to ghostty first. If ghostty consumed it, we're done.
@@ -586,6 +591,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     }
 
     override public func mouseDown(with event: NSEvent) {
+        onUserInteraction?()
         window?.makeFirstResponder(self)
         markAsActiveSurface()
         sendMousePos(event)
@@ -677,6 +683,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     }
 
     override public func otherMouseDown(with event: NSEvent) {
+        onUserInteraction?()
         markAsActiveSurface()
         sendMousePos(event)
         refreshHoveredLink(at: convert(event.locationInWindow, from: nil))

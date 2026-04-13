@@ -132,6 +132,17 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
                 ]
             )
         }
+        view.onUserInteraction = { [weak self, threadId] in
+            guard self?.window?.isKeyWindow == true else { return }
+            NotificationCenter.default.post(
+                name: .magentFocusedThreadContextChanged,
+                object: nil,
+                userInfo: [
+                    "threadId": threadId,
+                    "isPopoutContext": true,
+                ]
+            )
+        }
         view.resolveTmuxMouseOpenableURL = { [sessionName = sessionName] in
             await TmuxService.shared.recentMouseOpenableURL(sessionName: sessionName)
         }

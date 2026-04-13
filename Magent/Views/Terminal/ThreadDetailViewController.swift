@@ -1031,6 +1031,9 @@ final class ThreadDetailViewController: NSViewController {
         view.onBecomeFirstResponder = { [weak self] in
             self?.postFocusedThreadContextChangedIfKeyWindow()
         }
+        view.onUserInteraction = { [weak self] in
+            self?.postFocusedThreadContextChangedIfKeyWindow()
+        }
         view.onSubmitLine = { [weak self, sessionName = sessionName] line in
             Task { @MainActor [weak self] in
                 await self?.handleSubmittedLine(line, sessionName: sessionName)
