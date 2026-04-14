@@ -1,10 +1,23 @@
 #!/usr/bin/env bash
-# Post-build: patch CFBundleShortVersionString in the built Info.plist to match
-# the latest git tag. This keeps debug builds in sync with the latest release
-# without requiring manual edits to Project.swift.
+# Patch CFBundleShortVersionString to match the latest git tag so debug builds
+# show the real release version instead of the placeholder `1.0` baked into
+# Project.swift.
 #
-# In CI the release workflow already sed-patches Project.swift before building,
-# so this script just reinforces the same value harmlessly.
+# This script must patch BOTH plists:
+#
+#   1. The Tuist-generated SOURCE plist at
+#      ${SRCROOT}/Derived/InfoPlists/Magent-Info.plist
+#      Xcode's "Process Info.plist" phase reads this template and copies the
+#      processed result into the bundle. If we only patched the built plist,
+#      Process Info.plist would clobber our edit because, in practice,
+#      run-script phases run *before* Process Info.plist in this target's
+#      build order.
+#
+#   2. The built/processed plist inside the .app bundle (when present),
+#      as a defense-in-depth in case the build order ever changes.
+#
+# In CI, the release workflow already sed-patches Project.swift before
+# building, so this script just reinforces the same value harmlessly.
 
 set -euo pipefail
 
@@ -14,11 +27,24 @@ if [[ -z "$VERSION" ]]; then
     exit 0
 fi
 
-PLIST="${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}"
-if [[ ! -f "$PLIST" ]]; then
-    echo "sync-version-from-tag: Info.plist not found at ${PLIST}, skipping"
-    exit 0
+patched_any=0
+
+SOURCE_PLIST="${SRCROOT}/Derived/InfoPlists/Magent-Info.plist"
+if [[ -f "$SOURCE_PLIST" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$SOURCE_PLIST"
+    echo "sync-version-from-tag: patched source plist at $SOURCE_PLIST -> $VERSION"
+    patched_any=1
 fi
 
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST"
-echo "sync-version-from-tag: set CFBundleShortVersionString to $VERSION"
+if [[ -n "${BUILT_PRODUCTS_DIR:-}" && -n "${INFOPLIST_PATH:-}" ]]; then
+    BUILT_PLIST="${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}"
+    if [[ -f "$BUILT_PLIST" ]]; then
+        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$BUILT_PLIST"
+        echo "sync-version-from-tag: patched built plist at $BUILT_PLIST -> $VERSION"
+        patched_any=1
+    fi
+fi
+
+if [[ "$patched_any" -eq 0 ]]; then
+    echo "sync-version-from-tag: no Info.plist found to patch, skipping"
+fi

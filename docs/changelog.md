@@ -12,8 +12,9 @@ Guidelines:
 
 - Group notes by product domain using `### <Domain>` headings (for example: `Thread`, `Sidebar`, `Settings`, `Agents`).
 - Hide empty domains; only include a domain heading when it has at least one note.
+- **Each `### <Domain>` heading must appear at most once per release section.** When adding a new bullet to a release that already has that domain, merge it into the existing `### <Domain>` block (under the appropriate `#### Features` or `#### Bug Fixes` subsection) instead of creating a second `### <Domain>` further down the file. Before any commit that touches `CHANGELOG.md`, scan the affected release section for duplicate domain headings and collapse them. The "What's New" renderer auto-merges duplicates as a safety net, but the on-disk file should still be clean.
 - Keep `Thread` as a single top-level domain by default. Do not split it into permanent domains like `Thread: Rename`.
-- Within each domain, use `#### Features` and `#### Bug Fixes` subsections when both exist, with `#### Bug Fixes` listed below `#### Features`.
+- Within each domain, use `#### Features` and `#### Bug Fixes` subsections when both exist, with `#### Bug Fixes` listed below `#### Features`. Do not interleave bullets — all features for a domain go under its `#### Features`, all fixes under its `#### Bug Fixes`.
 - If one topic inside a domain dominates a release, use an optional temporary `##### <Topic>` subheading inside `#### Features` or `#### Bug Fixes` (for example `##### Rename`) and remove it in later releases when no longer needed.
 - Focus on behavior users can notice (new features, fixes, UX changes).
 - Skip internal-only refactors unless they affect user outcomes.

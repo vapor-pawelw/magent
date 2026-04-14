@@ -242,21 +242,38 @@ final class ChangelogWindowController: NSWindowController {
     private static func attributedReleaseNotes(from markdown: String) -> NSAttributedString {
         let result = NSMutableAttributedString()
 
+        let brandColor = NSColor(resource: .primaryBrand)
+        let separatorColor = brandColor.withAlphaComponent(0.45)
+
         let titleAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 20, weight: .bold),
             .foregroundColor: NSColor.labelColor,
         ]
+        let sectionParagraph = NSMutableParagraphStyle()
+        sectionParagraph.paragraphSpacingBefore = 14
+        sectionParagraph.paragraphSpacing = 2
         let sectionAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 16, weight: .semibold),
+            .font: NSFont.systemFont(ofSize: 17, weight: .bold),
             .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: sectionParagraph,
         ]
+        let subSectionParagraph = NSMutableParagraphStyle()
+        subSectionParagraph.paragraphSpacingBefore = 6
+        subSectionParagraph.paragraphSpacing = 2
         let subSectionAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
-            .foregroundColor: NSColor.secondaryLabelColor,
+            .font: NSFont.systemFont(ofSize: 11, weight: .bold),
+            .foregroundColor: brandColor,
+            .kern: 0.6,
+            .paragraphStyle: subSectionParagraph,
         ]
+        let bulletParagraph = NSMutableParagraphStyle()
+        bulletParagraph.headIndent = 14
+        bulletParagraph.firstLineHeadIndent = 0
+        bulletParagraph.paragraphSpacing = 2
         let bulletAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13, weight: .regular),
             .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: bulletParagraph,
         ]
         let bodyAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13, weight: .regular),
@@ -267,8 +284,22 @@ final class ChangelogWindowController: NSWindowController {
             result.append(NSAttributedString(string: text, attributes: attributes))
         }
 
+        func appendSectionSeparator() {
+            let attachment = NSTextAttachment()
+            attachment.attachmentCell = HorizontalRuleAttachmentCell(color: separatorColor, height: 1)
+            let separatorParagraph = NSMutableParagraphStyle()
+            separatorParagraph.paragraphSpacingBefore = 0
+            separatorParagraph.paragraphSpacing = 6
+            let attachmentString = NSMutableAttributedString(attachment: attachment)
+            attachmentString.addAttributes([.paragraphStyle: separatorParagraph], range: NSRange(location: 0, length: attachmentString.length))
+            result.append(attachmentString)
+            append("\n", attributes: [.paragraphStyle: separatorParagraph])
+        }
+
+        let normalized = mergeDuplicateDomains(in: markdown)
+
         var previousLineWasEmpty = true
-        for rawLine in markdown.components(separatedBy: .newlines) {
+        for rawLine in normalized.components(separatedBy: .newlines) {
             let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty {
                 if !previousLineWasEmpty {
@@ -284,12 +315,13 @@ final class ChangelogWindowController: NSWindowController {
             } else if trimmed.hasPrefix("### ") {
                 if !previousLineWasEmpty { append("\n", attributes: bodyAttributes) }
                 append("\(String(trimmed.dropFirst(4)))\n", attributes: sectionAttributes)
+                appendSectionSeparator()
             } else if trimmed.hasPrefix("#### ") {
-                append("\(String(trimmed.dropFirst(5)))\n", attributes: subSectionAttributes)
+                append("\(String(trimmed.dropFirst(5)).uppercased())\n", attributes: subSectionAttributes)
             } else if trimmed.hasPrefix("##### ") {
-                append("\(String(trimmed.dropFirst(6)))\n", attributes: subSectionAttributes)
+                append("\(String(trimmed.dropFirst(6)).uppercased())\n", attributes: subSectionAttributes)
             } else if trimmed.hasPrefix("- ") {
-                append("• \(String(trimmed.dropFirst(2)))\n", attributes: bulletAttributes)
+                append("•  \(String(trimmed.dropFirst(2)))\n", attributes: bulletAttributes)
             } else {
                 append("\(trimmed)\n", attributes: bodyAttributes)
             }
@@ -300,11 +332,153 @@ final class ChangelogWindowController: NSWindowController {
         return result
     }
 
+    /// Collapses duplicate `### Domain` headings within the same release into a single
+    /// section, ordering subsections as Features → Bug Fixes → Performance → others.
+    /// This keeps rendering tidy even when a hand-edited CHANGELOG accidentally splits
+    /// the same domain across multiple groups.
+    private static func mergeDuplicateDomains(in markdown: String) -> String {
+        struct Domain {
+            var name: String
+            var subsectionOrder: [String] = []
+            var subsections: [String: [String]] = [:]
+            var preamble: [String] = []
+        }
+
+        let lines = markdown.components(separatedBy: .newlines)
+        var leading: [String] = []
+        var domainOrder: [String] = []
+        var domains: [String: Domain] = [:]
+        var currentDomain: String?
+        var currentSubsection: String?
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if trimmed.hasPrefix("### ") {
+                let name = String(trimmed.dropFirst(4)).trimmingCharacters(in: .whitespaces)
+                currentDomain = name
+                currentSubsection = nil
+                if domains[name] == nil {
+                    domains[name] = Domain(name: name)
+                    domainOrder.append(name)
+                }
+                continue
+            }
+
+            if trimmed.hasPrefix("#### "), let domain = currentDomain {
+                let name = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                currentSubsection = name
+                if domains[domain]?.subsections[name] == nil {
+                    domains[domain]?.subsections[name] = []
+                    domains[domain]?.subsectionOrder.append(name)
+                }
+                continue
+            }
+
+            guard let domain = currentDomain else {
+                leading.append(line)
+                continue
+            }
+
+            if trimmed.isEmpty { continue }
+
+            if let subsection = currentSubsection {
+                domains[domain]?.subsections[subsection]?.append(line)
+            } else {
+                domains[domain]?.preamble.append(line)
+            }
+        }
+
+        // No `### Domain` headings at all — return original markdown untouched.
+        if domainOrder.isEmpty { return markdown }
+
+        let preferredSubsectionOrder = ["Features", "Bug Fixes", "Performance"]
+        var output: [String] = leading
+
+        if !leading.isEmpty, !(leading.last?.isEmpty ?? true) {
+            output.append("")
+        }
+
+        for domainName in domainOrder {
+            guard let domain = domains[domainName] else { continue }
+            output.append("### \(domainName)")
+
+            if !domain.preamble.isEmpty {
+                output.append("")
+                output.append(contentsOf: domain.preamble)
+            }
+
+            var ordered: [String] = []
+            for preferred in preferredSubsectionOrder where domain.subsections[preferred] != nil {
+                ordered.append(preferred)
+            }
+            for sub in domain.subsectionOrder where !ordered.contains(sub) {
+                ordered.append(sub)
+            }
+
+            for sub in ordered {
+                output.append("")
+                output.append("#### \(sub)")
+                if let bullets = domain.subsections[sub] {
+                    output.append(contentsOf: bullets)
+                }
+            }
+            output.append("")
+        }
+
+        return output.joined(separator: "\n")
+    }
+
     private static func loadBundleFile(_ name: String) -> String? {
         guard let url = Bundle.main.url(forResource: name, withExtension: nil)
                 ?? Bundle.main.url(forResource: name, withExtension: "md") else {
             return nil
         }
         return try? String(contentsOf: url, encoding: .utf8)
+    }
+}
+
+/// Inline NSTextAttachment cell that draws a thin horizontal bar spanning the
+/// available line fragment width. Used as a separator under each release-section
+/// heading in the "What's New" / Changelog window.
+private final class HorizontalRuleAttachmentCell: NSTextAttachmentCell {
+    private let ruleColor: NSColor
+    private let ruleHeight: CGFloat
+
+    init(color: NSColor, height: CGFloat) {
+        self.ruleColor = color
+        self.ruleHeight = height
+        super.init()
+    }
+
+    @available(*, unavailable)
+    required init(coder: NSCoder) { fatalError() }
+
+    nonisolated override func cellSize() -> NSSize {
+        // Provide a fallback size; actual width is taken from the line fragment in cellFrame.
+        NSSize(width: 10_000, height: ruleHeight + 6)
+    }
+
+    nonisolated override func cellFrame(
+        for textContainer: NSTextContainer,
+        proposedLineFragment lineFrag: NSRect,
+        glyphPosition position: NSPoint,
+        characterIndex charIndex: Int
+    ) -> NSRect {
+        NSRect(x: 0, y: 0, width: lineFrag.width, height: ruleHeight + 6)
+    }
+
+    nonisolated override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
+        // Text drawing already runs inside the host view's appearance context, so
+        // dynamic asset colors resolve correctly without touching `controlView.window`
+        // (which would force this method onto the main actor).
+        let lineRect = NSRect(
+            x: cellFrame.minX,
+            y: cellFrame.midY - (ruleHeight / 2),
+            width: cellFrame.width,
+            height: ruleHeight
+        )
+        ruleColor.setFill()
+        lineRect.fill()
     }
 }

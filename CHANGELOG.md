@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### General
 #### Features
 - Added a polished "What's New" changelog window on launch after upgrading. It reads from bundled `CHANGELOG.md`, shows only the current app version section, and appears once per version.
+- Refined the "What's New" / Changelog window layout. Each domain (for example `Tab`, `Terminal`, `Sidebar`) is now a single grouped section with a brand-tinted separator under its heading, and `Features` / `Bug Fixes` subsection labels are styled in the app's primary brand color. Duplicate domain headings within the same release are now merged automatically when rendering.
 
 ### Sidebar
 #### Features
@@ -16,11 +17,13 @@ All notable changes to this project will be documented in this file.
 - Popped-out thread rows now use a stronger purple highlight with a 2pt border and keep their row pulse/centering behavior on sidebar click-to-focus.
 
 #### Bug Fixes
+- Fixed `Create New Repository…` from the sidebar add-repo menu sometimes appearing to do nothing. Repo creation now shows a persistent progress banner with spinner, reports explicit success/failure banners, and seeds the initial empty commit with transient git identity/signing-hook overrides so local git config does not block creation.
 - Fixed the synthetic bottom sidebar spacer row drawing a stray thread-style capsule at the end of the list.
 - Fixed launch-time thread navigation so the selected thread is centered only after the sidebar has fully loaded and laid out, avoiding premature scroll jumps during startup.
 - Fixed sidebar interaction with popped-out threads so clicking their rows now focuses the pop-out window without changing main-window content/selection.
 - Fixed repeated sidebar scroll blinks after hiding a project. Background thread updates no longer treat hidden-project threads as visible sidebar structure changes.
 - Fixed sidebar scroll jumps when creating a new thread. Toggling the create-thread busy state no longer triggers redundant full sidebar reloads, and auto-selecting the new thread now uses the same id-based selection path as all other navigation.
+- Fixed pinned thread badges/icons rendering with a yellow/brand tint in some views; pinned indicators now use the neutral text-secondary tint consistently.
 - Removed the busy-row shimmer effect to reduce sidebar motion; busy threads now keep only border/separator animations.
 
 ### Settings
@@ -35,6 +38,9 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Suppressed right-click context menus inside embedded terminal surfaces. Right-click is now swallowed so neither Ghostty's native menu nor AppKit fallback menus appear over terminal content.
 - Fixed oversized physical mouse-wheel jumps in embedded Ghostty terminals. Non-precision wheel events are now normalized to one signed step per notch before forwarding to Ghostty, preventing large raw deltas from producing 20-30 line jumps.
+- Fixed `magentDefaultScroll` wheel jumps still feeling too large by removing tmux's hardcoded `-N 6` wheel multiplier. Wheel up/down now use single-line copy-mode steps per wheel event.
+- Fixed each physical mouse-wheel notch still scrolling roughly 15 lines in the embedded terminal. Magent's per-event ±5 line cap was being silently tripled by Ghostty's default `mouse-scroll-multiplier = 3.0`; the embedded Ghostty config now pins that multiplier to 1, and discrete wheel notches are forwarded as a fixed 5-line step, so one wheel notch scrolls exactly 5 lines of tmux history.
+- Reduced wheel-scroll jump size in embedded Ghostty terminals by clamping each wheel event to at most 5 lines up/down, preventing large one-step scroll leaps.
 
 ### Web Tab
 #### Bug Fixes
@@ -55,11 +61,6 @@ All notable changes to this project will be documented in this file.
 - Fixed slow tab switches showing no progress for non-agent terminal tabs. Tab selection now shows the same debounced loading overlay during tmux/session validation instead of leaving the terminal area blank with no feedback.
 - Fixed tab-name deduplication when cloning/resuming/renaming tabs. Names now use a single monotonic suffix sequence per base name (`Codex`, `Codex-1`, `Codex-2`, ...), preventing chained names like `Codex-1-1` and avoiding suffix reuse after deletions.
 
-### Terminal
-#### Bug Fixes
-- Fixed `magentDefaultScroll` wheel jumps still feeling too large by removing tmux's hardcoded `-N 6` wheel multiplier. Wheel up/down now use single-line copy-mode steps per wheel event.
-- Fixed each physical mouse-wheel notch still scrolling roughly 15 lines in the embedded terminal. Magent's per-event ±5 line cap was being silently tripled by Ghostty's default `mouse-scroll-multiplier = 3.0`; the embedded Ghostty config now pins that multiplier to 1, and discrete wheel notches are forwarded as a fixed 5-line step, so one wheel notch scrolls exactly 5 lines of tmux history.
-
 ### Status Bar
 #### Features
 - Added a `windows` status in the bottom bar for threads opened in separate windows. Clicking it lists those threads, uses the same centered sidebar navigation as Favorites, and includes actions to return individual windows or all windows to the main app.
@@ -74,8 +75,11 @@ All notable changes to this project will be documented in this file.
 - Added a top-bar pop-out button next to Archive in thread view (above terminal), with auto-hide when the thread is already in a separate window.
 - Keyboard shortcuts and Thread-menu actions now work from pop-out windows with key-window thread context (including detached-tab windows resolving to their parent thread).
 - Sidebar threads can now be dragged onto separate thread windows to replace their contents. Drop targets show a dark hover overlay, confirm before replacing, and handle already-popped-out threads with move/swap options.
+- Added ballot box with check (`☑️`) to thread sign emojis (next to the existing checkmark option) for finer task-state labeling.
 
 #### Bug Fixes
+- Fixed missing branch-name compatibility symlinks for some worktrees. Non-main worktrees now auto-create and maintain `<worktrees-base>/<current-branch>` symlinks during branch-state refresh, branch-accept, and branch-rename flows.
+- Detached tabs now reopen with their live terminal session instead of a blank window, including after app relaunch, and the main-window `Detach Tab` shortcut now routes correctly.
 - Fixed pop-out thread replacement drag/drop over embedded terminal surfaces inserting raw thread UUID text into terminal input. Thread drags now use a dedicated pasteboard type so Ghostty no longer consumes drops as plain text.
 - Fixed paste routing for detached/popped-out terminal windows. `Cmd+V` now pastes into the focused pop-out Ghostty surface instead of occasionally landing in the main-window terminal.
 - Pop-out windows now use section-colored thread icons in the top info strip (instead of default primary styling), keep that strip synced with section/thread metadata changes from the main window, and mirror the same info strip in the main thread view above the tab/action bar.
@@ -99,9 +103,21 @@ All notable changes to this project will be documented in this file.
 - Fixed refresh/load/commit-selection guards in the changes panel to use focused context thread state, preventing stale updates when main selection differs from focused pop-out thread.
 - Fixed changes-panel context not returning to the selected main thread after repeated clicks/typing in the main Ghostty tab when responder state did not change.
 
+### New Thread Sheet
+#### Bug Fixes
+- Fixed project-switch draft restore in the New Thread sheet: each project's in-progress prompt is now saved and restored per mode (`agent`, `terminal`, `web`) when switching between projects.
+- Switching projects with non-empty input now asks whether to move the current input to the selected project or save it in the current project; when the destination already has a saved draft, the dialog warns that it will be replaced and shows a quoted preview of the existing draft.
+
+### Agents
+#### Bug Fixes
+- Fixed active global rate limits incorrectly marking idle shell tabs as limited. Per-tab rate-limit fan-out now applies only to sessions where that agent is currently detected as running.
+- Added a direct-source marker to thread rate-limit badges: a tiny red corner dot now appears when the limit was directly detected on that thread (not only propagated globally).
+- Fixed agent tabs staying busy after dropping back to a plain shell prompt. Stored agent-type fallback now requires active busy markers (not prompt glyphs alone), preventing terminal sessions from being misclassified as running Claude/Codex.
+
 ### CLI
 #### Bug Fixes
 - Documented `create-thread --select` semantics for popped-out targets: selection now focuses the pop-out window instead of replacing main-window content.
+
 ## 1.5.4 - 2026-04-10
 
 
@@ -112,8 +128,11 @@ All notable changes to this project will be documented in this file.
 - Improved multi-monitor launch restore reliability. Magent now persists the main window's last display ID on quit and prefers reopening on that display at next launch (with active-screen fallback when the saved display is unavailable).
 
 ### Settings
-- Fixed rare crashes when opening repository/worktree folder pickers before the Settings/Configuration view had an attached window.
+#### Features
 - App updates now use a clear staged action in Settings: `Download` first, disabled `Downloading...` while transfer/prep runs, then `Install & Relaunch` once the update is ready. Prepared downloads are recovered from `/tmp` after app restarts, so you can still install without downloading again.
+
+#### Bug Fixes
+- Fixed rare crashes when opening repository/worktree folder pickers before the Settings/Configuration view had an attached window.
 - Link-opening preference is now persisted correctly across launches. `Settings > General > Links` no longer reverts after restart.
 
 ### Web Tab
@@ -132,28 +151,34 @@ All notable changes to this project will be documented in this file.
 - Tab names now automatically reflect the active Claude model and effort when you switch with `/model` (e.g. "Claude" → "Claude (Sonnet 4.6, H)"). Tabs you've manually renamed are never touched.
 - Double-clicking a terminal session tab now opens the existing "Rename Tab" prompt directly.
 
+#### Bug Fixes
+- Reorganized the tab context menu for faster session actions: `Resume Agent Session in New Tab` now sits directly below `Continue in...`, tab-level session controls are grouped under a `Session` submenu (`Keep Alive`, `Kill All Sessions`), and `Close Tabs to the Left/Right` now appear immediately above `Close This Tab` (which stays last).
+
 ### Terminal
 #### Bug Fixes
 - Hardened embedded terminal display-link callbacks to safely ignore missing runtime userdata instead of crashing on pointer unwrap.
 - Eliminated the tmux zombie process buildup that caused the recurring "tmux health issue: N defunct processes" banner. The per-click URL capture binding now stores mouse state in an in-process tmux option (`set-option -gqF`) instead of spawning a shell script via `run-shell -b` on every mouse click, so fast clicking no longer accumulates defunct children under the tmux server.
-- Reduced wheel-scroll jump size in embedded Ghostty terminals by clamping each wheel event to at most 5 lines up/down, preventing large one-step scroll leaps.
-
-### Tab
-#### Bug Fixes
-- Reorganized the tab context menu for faster session actions: `Resume Agent Session in New Tab` now sits directly below `Continue in...`, tab-level session controls are grouped under a `Session` submenu (`Keep Alive`, `Kill All Sessions`), and `Close Tabs to the Left/Right` now appear immediately above `Close This Tab` (which stays last).
 
 ### New Thread Sheet
 #### Features
 - Terminal and Web type prompts now display as compact single-line fields with placeholder text ("e.g. vim, htop, ssh user@host" / "https://..."), making the expected input obvious and reducing accidental prompt-in-URL mistakes.
 
-#### Bug Fixes
-- Fixed project-switch draft restore in the New Thread sheet: each project's in-progress prompt is now saved and restored per mode (`agent`, `terminal`, `web`) when switching between projects.
-- Switching projects with non-empty input now asks whether to move the current input to the selected project or save it in the current project; when the destination already has a saved draft, the dialog warns that it will be replaced and shows a quoted preview of the existing draft.
-
 ### Sidebar
 #### Features
 - Added "Sort" submenu to section and repo right-click context menus. Sort threads by description, branch name, priority, or last completion. Sorting always respects pinned/normal/hidden boundaries (pinned threads never drop below unpinned). Hold/release ⌥ Option while the menu is open to live-swap between ascending and descending sort items. Right-clicking the repo name sorts all sections at once (including hidden sections); right-clicking a section sorts only that section. When section grouping is disabled, all threads are treated as one container.
 - Added a floating "selected thread" jump capsule at the bottom of the thread list that appears only when the current thread is outside the visible sidebar viewport. The capsule shows thread icon + description (or worktree fallback) and a directional arrow, and clicking it scrolls to center the thread row.
+- Thread sign emojis now appear inside a small circular badge in the top-left corner of the thread row, with a border that matches the row's current highlight color.
+- Right-clicking an unselected thread now briefly highlights its row while the context menu is open, making it clear which thread the action will apply to.
+
+#### Bug Fixes
+- Fixed bottom-of-list overlap with the floating selected-thread capsule by reserving explicit spacer height in the thread list content, so end-of-list spacing stays consistent whether the changes panel is visible or hidden.
+- Fixed thread row state highlights (busy/completion/waiting/rate-limit) disappearing after scrolling away and back. Reused rows now resolve against the latest thread snapshot before rendering.
+- Fixed branch rename dialog pre-filling with the worktree name instead of the current git branch, and silently doing nothing when the user accepted it.
+- Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.
+- Increased thread row vertical spacing so the pin badge is no longer clipped at the top.
+- Fixed "Mark as read" appearing in the context menu for threads that aren't visually highlighted as done (when a rate-limit is also active, suppressing the green highlight).
+- Fixed thread rows appearing simultaneously green (agent completed) and busy. Busy state now takes precedence — completion highlights are suppressed while the thread is busy and reappear once it goes idle.
+- Fixed thread row border widths so only the selected row uses a 2pt border; all non-selected states (including completion, waiting, rate-limit, and busy animation) now use 1pt, and attached sign badges match that width.
 
 ### Thread
 #### Features
@@ -163,15 +188,12 @@ All notable changes to this project will be documented in this file.
 - Added a 1–5 Priority submenu next to Sign. Priority is shown as five cumulative dots on the thread row (immediately left of the busy-state duration), tinted blue → green → yellow → orange → red as the level rises. The ↑ High Priority and ↓ Low Priority sign emojis were removed in favor of this scale; the remaining sign emojis are unchanged.
 - Added "Set priority from Jira ticket" to the Jira submenu in the thread context menu, mirroring the existing "Set description from Jira ticket" action. The action is shown when the detected/linked Jira ticket has a priority that maps to the 1–5 scale (Highest → 5 … Lowest → 1).
 - Added question and exclamation sign emojis to thread rows; trimmed rarely-used signs (Pause, Book, Bolt, Lock).
-- Added ballot box with check (`☑️`) to thread sign emojis (next to the existing checkmark option) for finer task-state labeling.
 - Auto-rename now uses all accumulated prompts for context, so if the first prompt gets rate-limited and the user follows up with "continue", the rename model still sees the original task description.
 - Manual "Rename from prompt" now updates the thread description and icon to match the new branch, instead of keeping the stale description from the original auto-rename.
 - Rename failure banners now include a diagnostic reason (timeout, CLI error, empty output, or parse failure) instead of a generic "could not generate" message.
 - Added thread Favorites: right-click `Add to Favorites` / `Remove from Favorites` action (next to pin), max 10 favorites, and a heart badge on favorite thread rows (positioned immediately left of the pin badge when both are present).
 
 #### Bug Fixes
-- Fixed missing branch-name compatibility symlinks for some worktrees. Non-main worktrees now auto-create and maintain `<worktrees-base>/<current-branch>` symlinks during branch-state refresh, branch-accept, and branch-rename flows.
-- Detached tabs now reopen with their live terminal session instead of a blank window, including after app relaunch, and the main-window `Detach Tab` shortcut now routes correctly.
 - Fixed AI Rename sheet hanging (infinite spinner) when typing after clicking at the end of the placeholder text.
 - Reduced unnecessary `Starting agent...` flashes when revisiting recently used tabs. Healthy sessions now fast-path across view-controller rebuilds, the loading overlay reveal is debounced for quick switches, and repeated tmux readiness polling during startup tracking was removed.
 - Fixed occasional blank thread view on open when a "prepared" terminal tab failed to attach on the first pass. Startup/tab selection now keeps a visible loading state and retries full tmux/session validation instead of leaving an empty panel.
@@ -202,29 +224,10 @@ All notable changes to this project will be documented in this file.
 - When a rate limit lifts (timer expiry or manual dismiss), threads and tabs where the agent was directly interrupted now show a "waiting for input" indicator so you know which ones to revisit and continue work. The indicator clears as soon as you select the tab or the agent resumes on its own.
 
 #### Bug Fixes
-- Fixed active global rate limits incorrectly marking idle shell tabs as limited. Per-tab rate-limit fan-out now applies only to sessions where that agent is currently detected as running.
-- Added a direct-source marker to thread rate-limit badges: a tiny red corner dot now appears when the limit was directly detected on that thread (not only propagated globally).
 - Fresh Claude/Codex tabs now scope resume discovery to the tab that created them instead of the whole thread age, reducing accidental conversation carryover on older worktrees.
 - Fixed Codex busy indicators dropping during long-running tool commands (for example `xcodebuild`) and occasionally staying busy due to stale pane lines. Busy detection now uses Codex working/background status markers near the bottom of the latest pane scope and only applies stored agent-type fallback when live pane content matches that agent.
-- Fixed agent tabs staying busy after dropping back to a plain shell prompt. Stored agent-type fallback now requires active busy markers (not prompt glyphs alone), preventing terminal sessions from being misclassified as running Claude/Codex.
 - Fixed agent labels in the "+" right-click menu (both new thread and new tab) showing misleading suffixes like "Claude (M)" or "Codex (Codex, M)". The menu now shows the full model and reasoning level verbatim (e.g. `Claude (Opus, high)`, `Codex (GPT 5.3 Codex, xhigh)`), and omits any part set to Auto.
 - Fixed `Lift + Ignore Current Messages` over-suppressing later agent limits that reused the same text. Ignore entries are now keyed by exact resolved reset timestamps, and the action captures all visible future reset windows for that agent at once.
-### Sidebar
-#### Features
-- Thread sign emojis (↑ ↓ and custom emoji) now appear inside a small circular badge in the top-left corner of the thread row, with a border that matches the row's current highlight color.
-- Right-clicking an unselected thread now briefly highlights its row while the context menu is open, making it clear which thread the action will apply to.
-
-#### Bug Fixes
-- Fixed pinned thread badges/icons rendering with a yellow/brand tint in some views; pinned indicators now use the neutral text-secondary tint consistently.
-- Fixed bottom-of-list overlap with the floating selected-thread capsule by reserving explicit spacer height in the thread list content, so end-of-list spacing stays consistent whether the changes panel is visible or hidden.
-- Fixed thread row state highlights (busy/completion/waiting/rate-limit) disappearing after scrolling away and back. Reused rows now resolve against the latest thread snapshot before rendering.
-- Fixed branch rename dialog pre-filling with the worktree name instead of the current git branch, and silently doing nothing when the user accepted it.
-- Fixed rate-limit red border not clearing when selecting the rate-limited thread/tab. The in-place sidebar update path was missing `showsRateLimitHighlight`, so the border persisted even after the unread state was cleared.
-- Increased thread row vertical spacing so the pin badge is no longer clipped at the top.
-- Fixed "Mark as read" appearing in the context menu for threads that aren't visually highlighted as done (when a rate-limit is also active, suppressing the green highlight).
-- Fixed thread rows appearing simultaneously green (agent completed) and busy. Busy state now takes precedence — completion highlights are suppressed while the thread is busy and reappear once it goes idle.
-- Fixed thread row border widths so only the selected row uses a 2pt border; all non-selected states (including completion, waiting, rate-limit, and busy animation) now use 1pt, and attached sign badges match that width.
-- Fixed `Create New Repository…` from the sidebar add-repo menu sometimes appearing to do nothing. Repo creation now shows a persistent progress banner with spinner, reports explicit success/failure banners, and seeds the initial empty commit with transient git identity/signing-hook overrides so local git config does not block creation.
 
 ### Status Bar
 #### Features
