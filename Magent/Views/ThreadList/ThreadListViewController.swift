@@ -1148,6 +1148,7 @@ final class ThreadListViewController: NSViewController {
     }
 
     func selectThread(byId threadId: UUID, scrollRowToVisible: Bool = true) {
+        revealThreadIfHiddenOrCollapsed(byId: threadId)
         if PopoutWindowManager.shared.isThreadPoppedOut(threadId) {
             PopoutWindowManager.shared.bringToFront(threadId: threadId)
             centerAndPulseThreadRow(byId: threadId)
@@ -1170,6 +1171,7 @@ final class ThreadListViewController: NSViewController {
     }
 
     func centerThreadRow(byId threadId: UUID, completion: (() -> Void)? = nil) {
+        revealThreadIfHiddenOrCollapsed(byId: threadId)
         expandAncestorsIfNeeded(for: threadId)
         for row in 0..<outlineView.numberOfRows {
             guard let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == threadId else { continue }
@@ -1182,6 +1184,85 @@ final class ThreadListViewController: NSViewController {
     func centerAndPulseThreadRow(byId threadId: UUID) {
         centerThreadRow(byId: threadId) { [weak self] in
             self?.pulseThreadRow(threadId: threadId)
+        }
+    }
+
+    /// Ensures the project and section that contain `threadId` are not hidden in
+    /// settings and not collapsed in the sidebar's persisted disclosure state.
+    /// Without this, navigating to a thread (via the bottom jump capsule, the
+    /// sticky header bar, the popout strip, the status bar, etc.) silently fails
+    /// when the user previously hid or collapsed its containing project/section —
+    /// the row simply never enters the outline view's row range, so scrolling and
+    /// selection have nothing to act on.
+    private func revealThreadIfHiddenOrCollapsed(byId threadId: UUID) {
+        guard let thread = threadManager.threads.first(where: { $0.id == threadId }) else { return }
+        let projectId = thread.projectId
+
+        var settings = persistence.loadSettings()
+        var didMutateSettings = false
+
+        if let projectIndex = settings.projects.firstIndex(where: { $0.id == projectId }) {
+            if settings.projects[projectIndex].isHidden {
+                settings.projects[projectIndex].isHidden = false
+                didMutateSettings = true
+            }
+
+            if let threadSectionId = thread.sectionId {
+                if var override = settings.projects[projectIndex].threadSections {
+                    if let sectionIndex = override.firstIndex(where: { $0.id == threadSectionId }),
+                       !override[sectionIndex].isVisible {
+                        override[sectionIndex].isVisible = true
+                        settings.projects[projectIndex].threadSections = override
+                        didMutateSettings = true
+                    }
+                } else if let globalIndex = settings.threadSections.firstIndex(where: { $0.id == threadSectionId }),
+                          !settings.threadSections[globalIndex].isVisible {
+                    settings.threadSections[globalIndex].isVisible = true
+                    didMutateSettings = true
+                }
+            }
+        }
+
+        if didMutateSettings {
+            do {
+                try persistence.saveSettings(settings)
+            } catch {
+                return
+            }
+        }
+
+        var didMutateCollapseState = false
+
+        var collapsedProjects = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectIdsKey) ?? [])
+        if collapsedProjects.contains(projectId.uuidString) {
+            collapsedProjects.remove(projectId.uuidString)
+            UserDefaults.standard.set(Array(collapsedProjects), forKey: Self.collapsedProjectIdsKey)
+            didMutateCollapseState = true
+        }
+
+        let knownSectionIds = Set(settings.sections(for: projectId).map(\.id))
+        let fallbackSectionId = settings.defaultSection(for: projectId)?.id
+        if let resolvedSectionId = thread.resolvedSectionId(
+            knownSectionIds: knownSectionIds,
+            fallback: fallbackSectionId
+        ) {
+            let sectionKey = "\(projectId.uuidString):\(resolvedSectionId.uuidString)"
+            var collapsedSections = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedSectionIdsKey) ?? [])
+            if collapsedSections.contains(sectionKey) {
+                collapsedSections.remove(sectionKey)
+                UserDefaults.standard.set(Array(collapsedSections), forKey: Self.collapsedSectionIdsKey)
+                didMutateCollapseState = true
+            }
+        }
+
+        guard didMutateSettings || didMutateCollapseState else { return }
+
+        if didMutateSettings {
+            // sectionsDidChange handler reloads the sidebar synchronously and lets
+            // other listeners (Settings → Projects, etc.) refresh their own state.
+            NotificationCenter.default.post(name: .magentSectionsDidChange, object: nil)
+        } else {
+            reloadData()
         }
     }
 
