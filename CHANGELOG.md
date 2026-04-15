@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Fixed sidebar interaction with popped-out threads so clicking their rows now focuses the pop-out window without changing main-window content/selection.
 - Fixed repeated sidebar scroll blinks after hiding a project. Background thread updates no longer treat hidden-project threads as visible sidebar structure changes.
 - Fixed sidebar scroll jumps when creating a new thread. Toggling the create-thread busy state no longer triggers redundant full sidebar reloads, and auto-selecting the new thread now uses the same id-based selection path as all other navigation.
+- Fixed the project (repo name) header row sometimes rendering blank after creating a new thread. The row's space was reserved but its name, chevron, and `+` button were invisible until the user scrolled or resized the sidebar.
 - Fixed sidebar scroll jumps when dropping a thread onto an existing pop-out window (or moving a thread between pop-outs). The fallback main-window selection no longer scrolls the sidebar away from where the user was browsing.
 - Removed the busy-row shimmer effect to reduce sidebar motion; busy threads now keep only border/separator animations.
 
