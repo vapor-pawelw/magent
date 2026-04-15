@@ -87,6 +87,7 @@ All notable changes to this project will be documented in this file.
 - Fixed double header bars in popped-out thread windows by keeping the shared thread info strip only in the pop-out chrome there (while still showing it in the main thread view), and aligned the strip separator baseline to the sidebar selected-thread accent.
 - Refined thread info-strip layout/content to mirror sidebar row semantics: centered leading icon, dirty-state dot before the secondary line, and branch/worktree secondary text (showing worktree only when it differs from branch) while keeping description single-line.
 - Fixed thread info-strip rate-limit badges (main thread view + pop-out windows) still showing legacy hourglass icons. The strip now shows Claude/Codex glyphs, matching sidebar rate-limit badges.
+- Fixed the "Thread: …" context chip in the new-tab and fork-thread prompt sheet wrapping to multiple lines when the thread name is long. The chip now always shows a single truncated line.
 - Fixed occasional unexpected focus jumps to popped-out thread windows by stopping global thread-navigation notifications from forcing pop-out windows to front.
 - Fixed random separate-window focus steals by making pop-out reveal/restore paths non-focusing and limiting app-activation reveal to no-visible-window recovery.
 - Fixed separate-window context jitter by making changes-panel context follow key-window activation (main vs pop-out) instead of non-key responder transitions.

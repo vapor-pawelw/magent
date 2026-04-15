@@ -1172,6 +1172,7 @@ final class AgentLaunchPromptSheetController: NSWindowController, NSWindowDelega
         let textField = NSTextField(labelWithAttributedString: attrStr)
         textField.translatesAutoresizingMaskIntoConstraints = false
         textField.lineBreakMode = .byTruncatingTail
+        textField.maximumNumberOfLines = 1
 
         container.addSubview(iconView)
         container.addSubview(textField)
