@@ -769,73 +769,83 @@ extension ThreadListViewController: NSOutlineViewDelegate {
 
         // Level 0: Project header
         if let project = item as? SidebarProject {
+            // Bypass NSOutlineView's cell reuse pool entirely for project header
+            // cells. Reused instances could arrive with stale bounds from their
+            // prior row, making the auto-layout chain
+            // (tf.trailing → disclosureButton.leading → iv.leading → addButton.leading)
+            // temporarily unsatisfiable and leaving the cell blank until the row
+            // scrolled fully offscreen and back. Project headers are tiny (1-5
+            // rows at most), so building fresh every time costs nothing.
             let identifier = NSUserInterfaceItemIdentifier("ProjectCellV2")
-            let cell = outlineView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
-                ?? {
-                    let c = NSTableCellView()
-                    c.identifier = identifier
+            let cell: NSTableCellView = {
+                let c = NSTableCellView()
+                c.identifier = identifier
 
-                    let iv = NSImageView()
-                    iv.translatesAutoresizingMaskIntoConstraints = false
-                    c.addSubview(iv)
-                    c.imageView = iv
+                let iv = NSImageView()
+                iv.translatesAutoresizingMaskIntoConstraints = false
+                c.addSubview(iv)
+                c.imageView = iv
 
-                    let tf = NSTextField(labelWithString: "")
-                    tf.translatesAutoresizingMaskIntoConstraints = false
-                    c.addSubview(tf)
-                    c.textField = tf
+                let tf = NSTextField(labelWithString: "")
+                tf.translatesAutoresizingMaskIntoConstraints = false
+                c.addSubview(tf)
+                c.textField = tf
 
-                    let disclosureButton = NSButton()
-                    disclosureButton.identifier = Self.projectDisclosureButtonIdentifier
-                    disclosureButton.translatesAutoresizingMaskIntoConstraints = false
-                    disclosureButton.isBordered = false
-                    disclosureButton.imagePosition = .imageOnly
-                    disclosureButton.focusRingType = .none
-                    disclosureButton.setButtonType(.momentaryChange)
-                    disclosureButton.sendAction(on: [.leftMouseUp])
-                    disclosureButton.target = self
-                    disclosureButton.action = #selector(toggleProjectExpanded(_:))
-                    c.addSubview(disclosureButton)
+                let disclosureButton = NSButton()
+                disclosureButton.identifier = Self.projectDisclosureButtonIdentifier
+                disclosureButton.translatesAutoresizingMaskIntoConstraints = false
+                disclosureButton.isBordered = false
+                disclosureButton.imagePosition = .imageOnly
+                disclosureButton.focusRingType = .none
+                disclosureButton.setButtonType(.momentaryChange)
+                disclosureButton.sendAction(on: [.leftMouseUp])
+                disclosureButton.target = self
+                disclosureButton.action = #selector(toggleProjectExpanded(_:))
+                c.addSubview(disclosureButton)
 
-                    let addButton = NSButton()
-                    addButton.identifier = Self.projectAddButtonIdentifier
-                    addButton.translatesAutoresizingMaskIntoConstraints = false
-                    addButton.isBordered = false
-                    addButton.imagePosition = .imageOnly
-                    addButton.focusRingType = .none
-                    addButton.setButtonType(.momentaryChange)
-                    addButton.sendAction(on: [.leftMouseUp])
-                    addButton.target = self
-                    addButton.action = #selector(addThreadForProjectTapped(_:))
-                    c.addSubview(addButton)
+                let addButton = NSButton()
+                addButton.identifier = Self.projectAddButtonIdentifier
+                addButton.translatesAutoresizingMaskIntoConstraints = false
+                addButton.isBordered = false
+                addButton.imagePosition = .imageOnly
+                addButton.focusRingType = .none
+                addButton.setButtonType(.momentaryChange)
+                addButton.sendAction(on: [.leftMouseUp])
+                addButton.target = self
+                addButton.action = #selector(addThreadForProjectTapped(_:))
+                c.addSubview(addButton)
 
-                    tf.setContentCompressionResistancePriority(.required, for: .horizontal)
+                // defaultHigh (not required) so the iv.trailing ≤ addButton.leading
+                // constraint below always has a way to be satisfied, even at tiny
+                // transient cell widths. With required resistance the system could
+                // briefly be unsatisfiable and leave subviews at broken positions.
+                tf.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
 
-                    NSLayoutConstraint.activate([
-                        tf.centerYAnchor.constraint(equalTo: c.centerYAnchor, constant: -1),
-                        tf.leadingAnchor.constraint(
-                            equalTo: c.leadingAnchor,
-                            constant: Self.capsuleAlignedLeading
-                        ),
-                        disclosureButton.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 0),
-                        disclosureButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor, constant: 1),
-                        disclosureButton.widthAnchor.constraint(equalToConstant: Self.projectHeaderActionButtonSize),
-                        disclosureButton.heightAnchor.constraint(equalToConstant: Self.projectHeaderActionButtonSize),
-                        iv.leadingAnchor.constraint(equalTo: disclosureButton.trailingAnchor, constant: 6),
-                        iv.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
-                        iv.widthAnchor.constraint(equalToConstant: 10),
-                        iv.heightAnchor.constraint(equalToConstant: 10),
-                        iv.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -6),
-                        addButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
-                        addButton.widthAnchor.constraint(equalToConstant: Self.projectHeaderActionButtonSize),
-                        addButton.heightAnchor.constraint(equalToConstant: Self.projectHeaderActionButtonSize),
-                        addButton.trailingAnchor.constraint(
-                            equalTo: c.trailingAnchor,
-                            constant: -Self.projectAddButtonTrailingInset
-                        ),
-                    ])
-                    return c
-                }()
+                NSLayoutConstraint.activate([
+                    tf.centerYAnchor.constraint(equalTo: c.centerYAnchor, constant: -1),
+                    tf.leadingAnchor.constraint(
+                        equalTo: c.leadingAnchor,
+                        constant: Self.capsuleAlignedLeading
+                    ),
+                    disclosureButton.leadingAnchor.constraint(equalTo: tf.trailingAnchor, constant: 0),
+                    disclosureButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor, constant: 1),
+                    disclosureButton.widthAnchor.constraint(equalToConstant: Self.projectHeaderActionButtonSize),
+                    disclosureButton.heightAnchor.constraint(equalToConstant: Self.projectHeaderActionButtonSize),
+                    iv.leadingAnchor.constraint(equalTo: disclosureButton.trailingAnchor, constant: 6),
+                    iv.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
+                    iv.widthAnchor.constraint(equalToConstant: 10),
+                    iv.heightAnchor.constraint(equalToConstant: 10),
+                    iv.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -6),
+                    addButton.centerYAnchor.constraint(equalTo: tf.centerYAnchor),
+                    addButton.widthAnchor.constraint(equalToConstant: Self.projectHeaderActionButtonSize),
+                    addButton.heightAnchor.constraint(equalToConstant: Self.projectHeaderActionButtonSize),
+                    addButton.trailingAnchor.constraint(
+                        equalTo: c.trailingAnchor,
+                        constant: -Self.projectAddButtonTrailingInset
+                    ),
+                ])
+                return c
+            }()
 
             cell.textField?.font = .systemFont(ofSize: 20, weight: .bold)
             cell.textField?.stringValue = project.name
