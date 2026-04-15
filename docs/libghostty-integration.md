@@ -343,6 +343,55 @@ This pattern works for both paths:
 
 **Tab-close cache eviction rule:** closing a tab can happen while that thread is not currently visible (or via IPC), so no `ThreadDetailViewController` may exist to remove/evict the view. In `removeTabBySessionName`, always evict the closing session from `ReusableTerminalViewCache` *before* `tmux.killSession`. Otherwise a detached cached surface can still hold a live PTY and libghostty may terminate the process when the PTY closes.
 
+### Thread Archive/Delete Contract
+
+The same invariant ("free every `ghostty_surface_t` before any backing tmux session is killed") applies when **an entire thread** is removed via `ThreadManager.archiveThread(...)` or `ThreadManager.deleteThread(...)`. The scope is wider than tab-close — a single thread can own many live surfaces distributed across three hierarchies:
+
+1. **`ReusableTerminalViewCache`** — cached views for previously-visited tabs with `preserveSurfaceOnDetach = true`.
+2. **The main window's `ThreadDetailViewController`** — if the thread is currently selected, every `TerminalSurfaceView` in `terminalViews` that has been added to the view hierarchy at least once is a live surface.
+3. **Pop-out windows managed by `PopoutWindowManager`** — thread-level pop-outs (`ThreadPopoutWindowController`) and tab-level pop-outs (`TabPopoutWindowController`). These live in entirely separate `NSWindow` instances and are **invisible** to the main `SplitViewController` teardown. If you only tear down the main detail VC and skip pop-outs, their surfaces stay alive while `tmux.killSession` closes their PTYs and ghostty calls `_exit()`.
+
+**Required teardown sequence**, all synchronous on the main actor, before the detached cleanup task runs:
+
+```swift
+// 1. Evict cached-but-detached surfaces for every session owned by the thread.
+ReusableTerminalViewCache.shared.evictSessions(thread.tmuxSessionNames)
+
+// 2. Force all pop-out windows for this thread back to the main hierarchy,
+//    THEN evict again — returnThreadToMain / returnTabToThread caches the views
+//    with preserveSurfaceOnDetach=true, which re-populates the cache with live
+//    surfaces that must not survive the upcoming killSession.
+if PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
+    PopoutWindowManager.shared.returnThreadToMain(thread.id)
+}
+for sessionName in thread.tmuxSessionNames
+    where PopoutWindowManager.shared.isTabDetached(sessionName: sessionName) {
+    PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
+}
+ReusableTerminalViewCache.shared.evictSessions(thread.tmuxSessionNames)
+
+// 3. Remove the main detail VC from the window so AppKit fires
+//    viewDidMoveToWindow(nil) -> destroySurface() synchronously.
+//    showEmptyState(skipTerminalCache: true) is the canonical entry point;
+//    the skipTerminalCache flag keeps the views from being moved into the
+//    cache we just evicted.
+delegate?.threadManager(self, didDeleteThread: thread)   // runs showEmptyState
+
+// 4. Only now is it safe to kill tmux sessions off-actor.
+Task.detached {
+    for sessionName in thread.tmuxSessionNames {
+        try? await capturedTmux.killSession(name: sessionName)
+    }
+    // ...worktree/branch cleanup...
+}
+```
+
+**`.magentArchivedThreadsDidChange` is load-bearing for pop-out teardown**: `PopoutWindowManager.startObserving()` listens for this notification and, for any thread no longer present in `ThreadManager.shared.threads`, calls `returnThreadToMain(threadId)` + `returnTabToThread(sessionName:)`. The archive path posts the notification at the same time it removes the thread from the in-memory list. **Any new thread-removal path (including `deleteThread`) must post this notification synchronously**, or the `PopoutWindowManager` observer never fires and pop-out surfaces outlive their PTYs. Do not rely on `didDeleteThread` as a substitute — the delegate only reaches `SplitViewController`, not `PopoutWindowManager`.
+
+**Why `preserveSurfaceOnDetach` makes this subtle**: when a popped-out tab/thread is returned to the main hierarchy, `closePoppedOutThread`/`returnTabToThread` calls `cacheTerminalViewsForReuse`, which stores the views in `ReusableTerminalViewCache` and flips `preserveSurfaceOnDetach = true` on them. Those surfaces survive `removeFromSuperview()` — which is the whole point for thread-switching — but it means the sequence "evict cache → return pop-outs" re-populates the cache with preserved surfaces. You MUST evict a second time after step 2, or bypass the cache entirely by tearing down pop-out windows directly before invoking the archive/delete logic.
+
+**Why this keeps regressing**: every new feature that adds a way to remove a thread (delete, archive, bulk-archive, section-delete, project-delete, startup recovery collapse, test harness) is a new path that needs to satisfy this contract. The tab-close path has the `magentTabWillClose` notification as a structural safety net; the thread-level paths do not. When in doubt, route thread removal through a single helper that performs steps 1–3 above, rather than reimplementing the sequence inline.
+
 ## Link Opening and Hover (GHOSTTY_ACTION_OPEN_URL / GHOSTTY_ACTION_MOUSE_OVER_LINK)
 
 Ghostty fires two actions for link interaction:

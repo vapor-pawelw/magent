@@ -27,6 +27,18 @@ Automatic — when a user selects a thread whose worktree directory is missing, 
 - **Resume metadata boundaries**: Claude/Codex resume lookup is keyed by worktree path, so when an archived auto-generated worktree name is reused, only conversations newer than the current thread's `createdAt` may be adopted.
 - **tmux zombie overload recovery** is banner-driven: `ThreadManager.checkTmuxZombieHealth()` monitors zombie-heavy tmux parents and offers a one-click `restartTmuxAndRecoverSessions()` action.
 
+## Thread Archive/Delete — Ghostty Surface Teardown
+
+Archiving or deleting a thread must free every `ghostty_surface_t` owned by the thread **before** any `tmux kill-session` runs, or libghostty calls `_exit()` when a PTY closes on a live surface and kills the whole app. This is the same invariant as tab-close, but at thread scope, so the teardown has to cover three hierarchies:
+
+1. `ReusableTerminalViewCache` (preserved detached surfaces).
+2. The main-window `ThreadDetailViewController` (in-view surfaces of the currently selected thread).
+3. Pop-out windows owned by `PopoutWindowManager` — both thread-level (`ThreadPopoutWindowController`) and tab-level (`TabPopoutWindowController`).
+
+Required sequence (sync, main actor) before the detached cleanup task spawns: evict cache → return pop-outs → evict cache again → swap detail VC to empty state → post `.magentArchivedThreadsDidChange` → THEN `Task.detached { tmux.killSession(...) }`. The notification is load-bearing: `PopoutWindowManager` only learns the thread is gone via that observer. `deleteThread` must post it too — `didDeleteThread` alone is not enough.
+
+See `docs/libghostty-integration.md` → "Surface Lifecycle: Thread Archive/Delete Contract" for the full rationale, code sketch, and the `preserveSurfaceOnDetach` gotcha that makes the second cache eviction mandatory.
+
 ## Startup Recovery
 
 If `threads.json` records are reassigned onto an existing project during `settings.json` recovery, do not keep multiple active threads that resolve to the same normalized `worktreePath`. Merge their tabs/state into one canonical thread and de-duplicate terminal tab titles (especially for the main worktree).

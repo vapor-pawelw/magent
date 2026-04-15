@@ -6,6 +6,40 @@ extension ThreadManager {
 
     private static let archivedThreadBannerDuration: TimeInterval = 10.0
 
+    // MARK: - Ghostty Surface Teardown (shared archive/delete helper)
+
+    /// Frees every `ghostty_surface_t` owned by `thread` before its tmux sessions
+    /// are killed. Ghostty calls `_exit()` when a PTY closes on a live surface,
+    /// silently terminating the whole app, so this must run synchronously on the
+    /// main actor before any `tmux.killSession` is spawned.
+    ///
+    /// Covers all three hierarchies that can hold live surfaces for a thread:
+    ///   1. `ReusableTerminalViewCache` (cached detached surfaces with
+    ///      `preserveSurfaceOnDetach = true`).
+    ///   2. Pop-out windows owned by `PopoutWindowManager` — both thread-level
+    ///      and tab-level. These live in separate `NSWindow` hierarchies that
+    ///      are invisible to the main `SplitViewController` teardown.
+    ///   3. The main-window detail VC — torn down separately by the delegate's
+    ///      `didArchiveThread` / `didDeleteThread` handler replacing the content
+    ///      with `showEmptyState(skipTerminalCache: true)`.
+    ///
+    /// A second cache eviction is required after returning pop-outs because
+    /// `closePoppedOutThread` / `returnTabToThread` re-cache the surfaces via
+    /// `cacheTerminalViewsForReuse` with `preserveSurfaceOnDetach = true`.
+    ///
+    /// See docs/libghostty-integration.md → "Surface Lifecycle: Thread
+    /// Archive/Delete Contract" for full rationale.
+    func releaseLivingGhosttySurfaces(for thread: MagentThread) {
+        if PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
+            PopoutWindowManager.shared.returnThreadToMain(thread.id)
+        }
+        for sessionName in thread.tmuxSessionNames
+            where PopoutWindowManager.shared.isTabDetached(sessionName: sessionName) {
+            PopoutWindowManager.shared.returnTabToThread(sessionName: sessionName)
+        }
+        ReusableTerminalViewCache.shared.evictSessions(thread.tmuxSessionNames)
+    }
+
     // MARK: - Thread Creation
 
     func createThread(
@@ -684,10 +718,10 @@ extension ThreadManager {
         notifiedWaitingSessions.subtract(thread.tmuxSessionNames)
         rateLimitLiftPendingResumeSessions.subtract(thread.tmuxSessionNames)
 
-        // Evict any cached ghostty terminal views for this thread's sessions BEFORE the
-        // cleanup task kills the tmux sessions. Ghostty calls _exit() when the PTY fd closes
-        // on a live surface, which silently terminates the entire process.
-        ReusableTerminalViewCache.shared.evictSessions(thread.tmuxSessionNames)
+        // Free every ghostty surface for this thread (cache, pop-out windows) BEFORE
+        // the cleanup task kills the tmux sessions. Ghostty calls _exit() when a PTY
+        // fd closes on a live surface, silently terminating the entire process.
+        releaseLivingGhosttySurfaces(for: thread)
 
         // Remove from active list
         threads.removeAll { $0.id == thread.id }
@@ -868,8 +902,9 @@ extension ThreadManager {
             excludeJiraTicket(key: ticketKey, projectId: thread.projectId)
         }
 
-        // Evict cached ghostty surfaces before killing sessions (see archiveThread comment).
-        ReusableTerminalViewCache.shared.evictSessions(thread.tmuxSessionNames)
+        // Free every ghostty surface for this thread (cache, pop-out windows) BEFORE
+        // the cleanup task kills the tmux sessions. Same contract as archiveThread.
+        releaseLivingGhosttySurfaces(for: thread)
 
         // Prompt-injection bookkeeping is global to ThreadManager rather than persisted on
         // the thread, so archive/delete must clear it explicitly when a thread disappears.
@@ -892,6 +927,11 @@ extension ThreadManager {
         try persistence.saveThreads(allThreads)
 
         await MainActor.run {
+            // Mirror archiveThread: PopoutWindowManager.startObserving listens for
+            // this notification to clean up any pop-out windows whose thread is no
+            // longer present. Omitting it leaves pop-out surfaces alive until the
+            // detached cleanup task kills their tmux sessions — ghostty _exit().
+            NotificationCenter.default.post(name: .magentArchivedThreadsDidChange, object: nil)
             delegate?.threadManager(self, didDeleteThread: thread)
         }
 
