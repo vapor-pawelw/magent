@@ -1820,7 +1820,8 @@ final class StatusBarView: NSView, NSPopoverDelegate {
     private func navigateToThread(threadId: UUID, sessionName: String?, centerInSidebar: Bool) {
         var userInfo: [String: Any] = [
             "threadId": threadId,
-            "sessionName": sessionName as Any
+            "sessionName": sessionName as Any,
+            "revealSidebarIfHidden": true,
         ]
         if centerInSidebar {
             userInfo["centerInSidebar"] = true

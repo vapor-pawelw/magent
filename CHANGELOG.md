@@ -11,6 +11,8 @@ All notable changes to this project will be documented in this file.
 
 ### Sidebar
 #### Features
+- Added a sidebar hide/show toggle via the new `View > Hide Sidebar` menu item or the `Toggle Sidebar` keyboard shortcut (default `⌃⌘S`, configurable in `Settings > General > Keyboard Shortcuts`). Hiding the sidebar also hides the changes panel and lets the thread detail view fill the full window with an animated transition. The hidden state persists across launches.
+- The sidebar now automatically reveals itself whenever you focus a thread from outside it — selecting a thread from a status bar popover, clicking the thread info top bar above the terminal, opening a thread from a system notification, or restoring an archived thread. Closing pop-out windows does not reveal the sidebar.
 - The changes panel context badge now uses purple styling when showing a pop-out thread's info, matching the sidebar's purple popout tint.
 - Added hover tooltips for all thread-row badges, including priority, busy duration, favorite, pinned, keep-alive, Jira status, and PR status badges.
 - Threads opened in separate windows now use a subtle purple row tint and a more prominent trailing window icon in the sidebar.

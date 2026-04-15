@@ -41,6 +41,7 @@ private final class SplitContentContainerViewController: NSViewController {
 final class SplitViewController: NSSplitViewController {
 
     private static let sidebarWidthDefaultsKey = "MagentSidebarWidth"
+    private static let sidebarHiddenDefaultsKey = "MagentSidebarHidden"
     private static let defaultSidebarWidth: CGFloat = 280
 
     private let threadListVC = ThreadListViewController()
@@ -53,6 +54,7 @@ final class SplitViewController: NSSplitViewController {
     private var preferredSidebarWidth: CGFloat = defaultSidebarWidth
     private var enforcedSidebarWidth: CGFloat?
     private var isRestoringSidebarWidth = false
+    private var isTogglingSidebarCollapse = false
     private var keyEventMonitor: Any?
     private var cachedKeyBindings: KeyBindingSettings = KeyBindingSettings()
     private weak var observedWindowForFocusNotifications: NSWindow?
@@ -67,6 +69,14 @@ final class SplitViewController: NSSplitViewController {
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: threadListVC)
         sidebarItem.minimumThickness = 220
         sidebarItem.maximumThickness = 420
+        // `sidebarWithViewController:` already configures `canCollapse = true`
+        // as part of the sidebar behavior — no explicit assignment needed.
+        // Seed the collapsed state from persistence before adding to the split view.
+        // Setting `isCollapsed` directly (instead of via the animator) avoids any
+        // launch-time animation while still being respected by NSSplitViewController.
+        if UserDefaults.standard.bool(forKey: Self.sidebarHiddenDefaultsKey) {
+            sidebarItem.isCollapsed = true
+        }
         self.sidebarItem = sidebarItem
         addSplitViewItem(sidebarItem)
 
@@ -244,6 +254,12 @@ final class SplitViewController: NSSplitViewController {
             _ = performDetachTabShortcut(contextThreadId: nil)
             return nil
         }
+        if matchesBinding(.toggleSidebar, keyCode: event.keyCode, modifiers: eventModifiers) {
+            // Key-repeat would otherwise flicker the sidebar — swallow repeats.
+            guard !event.isARepeat else { return nil }
+            toggleSidebar(nil)
+            return nil
+        }
 
         return event
     }
@@ -253,6 +269,48 @@ final class SplitViewController: NSSplitViewController {
         return binding.keyCode == keyCode && binding.modifiers == modifiers
     }
 
+    // MARK: - Sidebar Visibility
+
+    /// Toggle the sidebar with animation and persist the new state.
+    /// Routed through `toggleSidebar(_:)` so that menu items using the standard
+    /// `toggleSidebar:` first-responder action get AppKit's automatic
+    /// "Hide Sidebar" / "Show Sidebar" title swap for free.
+    override func toggleSidebar(_ sender: Any?) {
+        beginSidebarCollapseAnimationGuard()
+        super.toggleSidebar(sender)
+        persistSidebarHiddenState()
+    }
+
+    /// Reveal the sidebar if hidden, used by user actions that focus a
+    /// thread (status bar popovers, top info strip click, navigate-to-thread
+    /// notifications, restore archived). No-op if already visible.
+    func revealSidebarIfHidden() {
+        guard let sidebarItem, sidebarItem.isCollapsed else { return }
+        beginSidebarCollapseAnimationGuard()
+        sidebarItem.animator().isCollapsed = false
+        persistSidebarHiddenState()
+    }
+
+    private func persistSidebarHiddenState() {
+        guard let sidebarItem else { return }
+        UserDefaults.standard.set(sidebarItem.isCollapsed, forKey: Self.sidebarHiddenDefaultsKey)
+    }
+
+    /// Suppress the preferred-width snap-back path in
+    /// `splitViewDidResizeSubviews` while NSSplitViewController's collapse /
+    /// expand animation is running. Intermediate frames have width values
+    /// between 0 and `preferredSidebarWidth`; without this guard, the
+    /// restore branch would call `setPosition(preferredSidebarWidth, 0)`
+    /// every frame and fight the animator.
+    private func beginSidebarCollapseAnimationGuard() {
+        isTogglingSidebarCollapse = true
+        // NSSplitViewController's collapse animation settles in ~0.25s.
+        // A short margin covers settle frames and any layout side effects.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            self?.isTogglingSidebarCollapse = false
+        }
+    }
+
     private func applyInitialSidebarWidthIfNeeded() {
         guard !didApplyInitialSidebarWidth else { return }
         guard let sidebarItem else { return }
@@ -260,21 +318,24 @@ final class SplitViewController: NSSplitViewController {
 
         didApplyInitialSidebarWidth = true
 
-        // If the sidebar was persisted as collapsed, force it visible so thread list
-        // state is always discoverable after relaunch.
-        if sidebarItem.isCollapsed {
-            sidebarItem.animator().isCollapsed = false
-        }
-
         let clampedWidth = resolvedSavedSidebarWidth()
         preferredSidebarWidth = clampedWidth
-        splitView.setPosition(clampedWidth, ofDividerAt: 0)
+        // Skip setPosition while collapsed — it would fight the persisted hidden
+        // state by snapping the divider to a non-zero position and effectively
+        // re-expanding the sidebar at launch.
+        if !sidebarItem.isCollapsed {
+            splitView.setPosition(clampedWidth, ofDividerAt: 0)
+        }
         threadListVC.refreshSidebarLayout(forceColumnRefit: true)
     }
 
     override func splitViewDidResizeSubviews(_ notification: Notification) {
         threadListVC.refreshSidebarLayout(forceColumnRefit: true)
         guard !isRestoringSidebarWidth else { return }
+        // During the collapse/expand animation, intermediate frames carry
+        // widths between 0 and `preferredSidebarWidth`. Skip the preferred-
+        // width restoration path so we don't snap-back every frame.
+        guard !isTogglingSidebarCollapse else { return }
         guard let sidebarItem else { return }
         let width = sidebarItem.viewController.view.frame.width
         guard width.isFinite, width > 0 else { return }
@@ -571,6 +632,16 @@ final class SplitViewController: NSSplitViewController {
         if let sessionName {
             UserDefaults.standard.set(threadId.uuidString, forKey: "MagentLastOpenedThreadID")
             UserDefaults.standard.set(sessionName, forKey: "MagentLastOpenedSessionName")
+        }
+
+        // User-driven navigation should reveal the sidebar so the focused row
+        // is visible. This is opt-in: posters must set
+        // `userInfo["revealSidebarIfHidden"] == true` to trigger the reveal.
+        // Programmatic posters (restore flows, background reconcile, etc.)
+        // leave the flag off and will not silently un-hide the sidebar.
+        // Closing pop-outs deliberately does not post this notification at all.
+        if notification.userInfo?["revealSidebarIfHidden"] as? Bool == true {
+            revealSidebarIfHidden()
         }
 
         // Select the thread in the sidebar (creates ThreadDetailViewController if needed)

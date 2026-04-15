@@ -259,6 +259,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         threadMenuItem.submenu = threadMenu
         mainMenu.addItem(threadMenuItem)
 
+        // View menu (sidebar toggle — uses NSSplitViewController.toggleSidebar:
+        // so AppKit handles the "Hide Sidebar" / "Show Sidebar" title swap).
+        // Shortcut handling lives in SplitViewController.handleKeyEvent so the
+        // user can rebind it from Settings; the menu item itself shows no key
+        // equivalent, matching how other configurable shortcuts are presented.
+        let viewMenuItem = NSMenuItem()
+        let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(
+            withTitle: "Hide Sidebar",
+            action: #selector(NSSplitViewController.toggleSidebar(_:)),
+            keyEquivalent: ""
+        )
+        viewMenuItem.submenu = viewMenu
+        mainMenu.addItem(viewMenuItem)
+
         // Edit menu (enables Cut/Copy/Paste/Select All in text fields)
         let editMenuItem = NSMenuItem()
         let editMenu = NSMenu(title: String(localized: .AppStrings.appMenuEdit))
@@ -462,7 +477,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Navigate to the thread/tab that triggered this notification
         if let threadIdString = userInfo["threadId"] as? String,
            let threadId = UUID(uuidString: threadIdString) {
-            var info: [String: Any] = ["threadId": threadId]
+            var info: [String: Any] = [
+                "threadId": threadId,
+                "revealSidebarIfHidden": true,
+            ]
             if let sessionName = userInfo["sessionName"] as? String {
                 info["sessionName"] = sessionName
             }

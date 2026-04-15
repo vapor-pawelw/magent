@@ -843,7 +843,10 @@ extension ThreadManager {
             NotificationCenter.default.post(
                 name: .magentNavigateToThread,
                 object: nil,
-                userInfo: ["threadId": restoredThread.id]
+                userInfo: [
+                    "threadId": restoredThread.id,
+                    "revealSidebarIfHidden": true,
+                ]
             )
         }
 

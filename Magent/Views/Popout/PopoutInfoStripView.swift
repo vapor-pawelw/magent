@@ -165,6 +165,7 @@ final class PopoutInfoStripView: NSView {
         var userInfo: [String: Any] = [
             "threadId": currentThreadId,
             "centerInSidebar": true,
+            "revealSidebarIfHidden": true,
         ]
         if let currentSessionName {
             userInfo["sessionName"] = currentSessionName
