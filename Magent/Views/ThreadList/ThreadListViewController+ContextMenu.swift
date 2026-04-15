@@ -609,7 +609,29 @@ extension ThreadListViewController {
         copyLinkItem.representedObject = thread
         submenu.addItem(copyLinkItem)
 
-        if let jiraSummary = thread.verifiedJiraTicket?.summary, !jiraSummary.isEmpty {
+        // Per-thread auto-sync toggle: works whenever Jira detection is on and the
+        // thread resolves to a ticket key. The apply happens from the detection
+        // pipeline (not the `FEATURE_JIRA_SYNC` section sync), so this is available
+        // in release builds as well.
+        let canAutoSync = settings.jiraIntegrationEnabled
+            && settings.jiraTicketDetectionEnabled
+            && thread.effectiveJiraTicketKey(settings: settings) != nil
+        if canAutoSync {
+            submenu.addItem(NSMenuItem.separator())
+            let syncItem = NSMenuItem(
+                title: String(localized: .ThreadStrings.threadSyncWithJira),
+                action: #selector(toggleSyncWithJira(_:)),
+                keyEquivalent: ""
+            )
+            syncItem.target = self
+            syncItem.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
+            syncItem.representedObject = thread
+            syncItem.state = thread.syncWithJira ? .on : .off
+            submenu.addItem(syncItem)
+        }
+
+        // One-shot description/priority copies are redundant while auto-sync is on.
+        if !thread.syncWithJira, let jiraSummary = thread.verifiedJiraTicket?.summary, !jiraSummary.isEmpty {
             let descItem = NSMenuItem(
                 title: String(localized: .ThreadStrings.threadSetDescriptionFromJira),
                 action: #selector(setThreadDescriptionFromJira(_:)),
@@ -621,7 +643,7 @@ extension ThreadListViewController {
             submenu.addItem(descItem)
         }
 
-        if let jiraPriority = thread.verifiedJiraTicket?.priority, (1...5).contains(jiraPriority) {
+        if !thread.syncWithJira, let jiraPriority = thread.verifiedJiraTicket?.priority, (1...5).contains(jiraPriority) {
             let priorityItem = NSMenuItem(
                 title: String(localized: .ThreadStrings.threadSetPriorityFromJira),
                 action: #selector(setThreadPriorityFromJira(_:)),
@@ -1493,6 +1515,11 @@ extension ThreadListViewController {
               let jiraSummary = thread.verifiedJiraTicket?.summary, !jiraSummary.isEmpty else { return }
 
         try? threadManager.setTaskDescription(threadId: thread.id, description: jiraSummary)
+    }
+
+    @objc private func toggleSyncWithJira(_ sender: NSMenuItem) {
+        guard let thread = sender.representedObject as? MagentThread else { return }
+        try? threadManager.setSyncWithJira(threadId: thread.id, enabled: !thread.syncWithJira)
     }
 
     @objc private func setThreadPriorityFromJira(_ sender: NSMenuItem) {

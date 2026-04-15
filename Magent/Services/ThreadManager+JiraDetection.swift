@@ -141,6 +141,7 @@ extension ThreadManager {
         let s = persistence.loadSettings()
         let detectionEnabled = s.jiraIntegrationEnabled && s.jiraTicketDetectionEnabled
         var changed = false
+        var persistentChanged = false
         for i in threads.indices where !threads[i].isArchived {
             let previous = threads[i].verifiedJiraTicket
             if detectionEnabled,
@@ -148,12 +149,31 @@ extension ThreadManager {
                let cached = jiraTicketCache[ticketKey] {
                 threads[i].verifiedJiraTicket = cached
                 if previous != cached { changed = true }
+
+                // Per-thread auto-sync: overwrite description/priority from the
+                // cached ticket for subscribed threads. Overwrite-only-if-different
+                // keeps notifications quiet; user edits snap back on the next tick,
+                // which is the documented contract for the toggle.
+                if threads[i].syncWithJira {
+                    let trimmed = cached.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty, threads[i].taskDescription != trimmed {
+                        threads[i].taskDescription = trimmed
+                        persistentChanged = true
+                    }
+                    if let p = cached.priority, (1...5).contains(p), threads[i].priority != p {
+                        threads[i].priority = p
+                        persistentChanged = true
+                    }
+                }
             } else if previous != nil {
                 threads[i].verifiedJiraTicket = nil
                 changed = true
             }
         }
-        if changed {
+        if persistentChanged {
+            try? persistence.saveActiveThreads(threads)
+        }
+        if changed || persistentChanged {
             Task { @MainActor in
                 delegate?.threadManager(self, didUpdateThreads: threads)
                 NotificationCenter.default.post(name: .magentJiraTicketInfoChanged, object: nil)

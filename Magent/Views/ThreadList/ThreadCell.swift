@@ -229,11 +229,29 @@ final class ThreadCell: NSTableCellView {
         return image
     }
 
+    /// Returns a larger Jira brand icon for the top-border badge. Cached separately
+    /// from `jiraMarkerImage()` so the inline 10pt marker instance isn't resized.
+    static func jiraBadgeIconImage() -> NSImage? {
+        if let cached = symbolImageCache["_jiraBadge"] { return cached }
+        let image: NSImage?
+        if let jiraIcon = NSImage(named: NSImage.Name("JiraIcon")) {
+            let sized = (jiraIcon.copy() as? NSImage) ?? jiraIcon
+            sized.size = NSSize(width: jiraBadgeIconSize, height: jiraBadgeIconSize)
+            sized.isTemplate = false
+            image = sized
+        } else {
+            image = cachedSymbolImage("ticket")
+        }
+        if let image { symbolImageCache["_jiraBadge"] = image }
+        return image
+    }
+
     // MARK: - Constants
 
     private static let leadingIconSize: CGFloat = 16
     private static let dirtyDotSize: CGFloat = 7
     private static let jiraMarkerWidth: CGFloat = 10
+    private static let jiraBadgeIconSize: CGFloat = 13
     private static let pinMarkerWidth: CGFloat = 12
     private static let archiveMarkerWidth: CGFloat = 12
     private static let trailingMarkerSpacing: CGFloat = 4
@@ -273,6 +291,7 @@ final class ThreadCell: NSTableCellView {
     private var keepAliveBadge: TopBorderBadge?
     private var favoriteBadge: TopBorderBadge?
     private var pinnedBadge: TopBorderBadge?
+    private var jiraSyncBadge: TopBorderBadge?
     private var hasInstalledTextTrailingConstraint = false
     private var isConfiguredAsMain = false
     private var showsRenamePulse = false
@@ -812,6 +831,15 @@ final class ThreadCell: NSTableCellView {
             pinnedBadge?.toolTip = nil
             pinImageView?.isHidden = true
         }
+
+        if thread.syncWithJira {
+            ensureJiraSyncBadge()
+            jiraSyncBadge?.isHidden = false
+            jiraSyncBadge?.toolTip = "Auto-syncing description and priority from Jira"
+        } else {
+            jiraSyncBadge?.isHidden = true
+            jiraSyncBadge?.toolTip = nil
+        }
         updateTopBorderBadgeOrder()
 
         // Show shield when thread has Keep Alive, but hide it when pinned threads
@@ -1211,10 +1239,28 @@ final class ThreadCell: NSTableCellView {
         }
     }
 
+    private func ensureJiraSyncBadge() {
+        ensureTopBorderBadgeStack()
+        if jiraSyncBadge == nil {
+            let badge = TopBorderBadge(bareIcon: true)
+            badge.label.isHidden = true
+            badge.iconView.image = Self.jiraBadgeIconImage()
+            // Brand asset — do NOT set contentTintColor or the colored mark
+            // would render as a monochrome silhouette.
+            badge.iconView.contentTintColor = nil
+            badge.iconView.isHidden = false
+            badge.isHidden = true
+            jiraSyncBadge = badge
+        }
+        if let badge = jiraSyncBadge, badge.superview !== topBorderBadgeStack {
+            topBorderBadgeStack?.addArrangedSubview(badge)
+        }
+    }
+
     private func updateTopBorderBadgeOrder() {
         guard let stack = topBorderBadgeStack else { return }
 
-        let trailingBadges = [favoriteBadge, pinnedBadge].compactMap { badge -> TopBorderBadge? in
+        let trailingBadges = [favoriteBadge, pinnedBadge, jiraSyncBadge].compactMap { badge -> TopBorderBadge? in
             guard let badge, badge.superview === stack else { return nil }
             return badge
         }
@@ -1244,6 +1290,7 @@ final class ThreadCell: NSTableCellView {
         keepAliveBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         favoriteBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         pinnedBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
+        jiraSyncBadge?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         priorityCapsule?.updateColors(isRowSelected: rowSelected, hasCompletionHighlight: completion, hasWaitingHighlight: waiting, appearance: effectiveAppearance)
         // Pin/favorite icons: primary brand by default, white when selected.
         if let favorite = favoriteBadge {

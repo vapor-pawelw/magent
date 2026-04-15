@@ -915,6 +915,9 @@ extension ThreadManager {
     }
 
     func generateTaskDescriptionIfNeeded(threadId: UUID, prompt: String) async {
+        // Subscribed threads have their description owned by the Jira sync pass;
+        // the AI generator must stay out of the way so Jira summary isn't clobbered.
+        if threads.first(where: { $0.id == threadId })?.syncWithJira == true { return }
         guard persistence.loadSettings().autoSetThreadDescription else { return }
         _ = await generateAndPersistTaskDescription(
             threadId: threadId,
@@ -989,6 +992,41 @@ extension ThreadManager {
         threads[index].priority = clamped
         try persistence.saveActiveThreads(threads)
         delegate?.threadManager(self, didUpdateThreads: threads)
+    }
+
+    /// Toggles whether the thread's description and priority are auto-synced from
+    /// the linked Jira ticket on every sync pass. When turning on, applies any
+    /// cached `verifiedJiraTicket` values immediately so the user sees effect
+    /// without waiting for the next tick, then kicks off a background sync.
+    func setSyncWithJira(threadId: UUID, enabled: Bool) throws {
+        guard let index = threads.firstIndex(where: { $0.id == threadId }) else {
+            throw ThreadManagerError.threadNotFound
+        }
+        guard threads[index].syncWithJira != enabled else { return }
+        threads[index].syncWithJira = enabled
+
+        if enabled, let cached = threads[index].verifiedJiraTicket {
+            let trimmed = cached.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, threads[index].taskDescription != trimmed {
+                threads[index].taskDescription = trimmed
+            }
+            if let p = cached.priority, (1...5).contains(p), threads[index].priority != p {
+                threads[index].priority = p
+            }
+        }
+
+        try persistence.saveActiveThreads(threads)
+        delegate?.threadManager(self, didUpdateThreads: threads)
+
+        if enabled {
+            // Fire-and-forget; kicks the detection pipeline so the cache refreshes
+            // for this specific thread. The next periodic detection tick reconciles
+            // anything still missing.
+            let id = threadId
+            Task { [weak self] in
+                await self?.verifyDetectedJiraTickets(forThreadIds: [id])
+            }
+        }
     }
 
     // MARK: - Rename Tab

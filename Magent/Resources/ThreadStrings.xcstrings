@@ -903,6 +903,17 @@
         }
       }
     },
+    "threadSyncWithJira": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync description and priority from Jira"
+          }
+        }
+      }
+    },
     "threadSetDescriptionMessage": {
       "extractionState": "manual",
       "localizations": {

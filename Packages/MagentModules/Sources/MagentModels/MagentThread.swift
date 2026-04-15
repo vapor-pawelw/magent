@@ -304,6 +304,10 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
     /// Optional 1–5 priority. `nil` means no priority is set and nothing renders.
     /// 1 = lowest weight (blue), 5 = highest (red). Validated/clamped on assignment.
     public var priority: Int?
+    /// When `true`, the periodic Jira sync pass overwrites `taskDescription` and
+    /// `priority` from the linked Jira ticket on every tick. Defaults to `false`
+    /// so existing threads keep their current (possibly user-edited) values.
+    public var syncWithJira: Bool
 
     // MARK: - Computed
 
@@ -627,6 +631,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         case persistedDraftTabs
         case signEmoji
         case priority
+        case syncWithJira
         case busyStateSince
     }
 
@@ -676,7 +681,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         persistedWebTabs: [PersistedWebTab] = [],
         persistedDraftTabs: [PersistedDraftTab] = [],
         signEmoji: String? = nil,
-        priority: Int? = nil
+        priority: Int? = nil,
+        syncWithJira: Bool = false
     ) {
         self.id = id
         self.projectId = projectId
@@ -724,6 +730,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         self.persistedDraftTabs = persistedDraftTabs
         self.signEmoji = signEmoji
         self.priority = priority.map { max(1, min(5, $0)) }
+        self.syncWithJira = syncWithJira
     }
 
     /// Merges infrastructure fields from a phase-2 thread into this (pending) thread,
@@ -793,7 +800,8 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
             persistedWebTabs: persistedWebTabs,
             persistedDraftTabs: persistedDraftTabs,
             signEmoji: signEmoji,
-            priority: priority
+            priority: priority,
+            syncWithJira: syncWithJira
         )
         copy.busySessions = busySessions
         copy.magentBusySessions = magentBusySessions
@@ -873,6 +881,7 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         signEmoji = try container.decodeIfPresent(String.self, forKey: .signEmoji)
         // Clamp any stray out-of-range values from older builds or manual edits.
         priority = try container.decodeIfPresent(Int.self, forKey: .priority).map { max(1, min(5, $0)) }
+        syncWithJira = try container.decodeIfPresent(Bool.self, forKey: .syncWithJira) ?? false
         busyStateSince = try container.decodeIfPresent(Date.self, forKey: .busyStateSince)
         // On launch all sessions are idle, so seed the debounced state to match.
         // This prevents updateBusyStateDuration() from overwriting the restored timestamp.
@@ -965,6 +974,9 @@ public nonisolated struct MagentThread: Codable, Identifiable, Sendable {
         }
         try container.encodeIfPresent(signEmoji, forKey: .signEmoji)
         try container.encodeIfPresent(priority, forKey: .priority)
+        if syncWithJira {
+            try container.encode(syncWithJira, forKey: .syncWithJira)
+        }
         try container.encodeIfPresent(busyStateSince, forKey: .busyStateSince)
     }
 }

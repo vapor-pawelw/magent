@@ -73,6 +73,7 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 #### Features
+- Added a per-thread "Sync description and priority from Jira" toggle under the Jira context submenu. When enabled, the thread's description and priority are automatically kept in sync with its detected Jira ticket on every detection refresh, the AI auto-description generator stays out of the way, and a small Jira badge appears in the thread row's top-right corner.
 - Added a top-bar pop-out button next to Archive in thread view (above terminal), with auto-hide when the thread is already in a separate window.
 - Keyboard shortcuts and Thread-menu actions now work from pop-out windows with key-window thread context (including detached-tab windows resolving to their parent thread).
 - Sidebar threads can now be dragged onto separate thread windows to replace their contents. Drop targets show a dark hover overlay, confirm before replacing, and handle already-popped-out threads with move/swap options.
