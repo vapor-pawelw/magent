@@ -260,6 +260,12 @@ extension ThreadManager {
         await tmux.killServer()
         setTmuxZombieSummary(nil)
 
+        // tmux `bind-key` state is server-global and is lost when the server
+        // is killed. Re-install Magent's wheel-scroll bindings before any
+        // new sessions spin up, so copy-mode scrolling doesn't fall back to
+        // tmux's stock `-N5` multiplier / broken wheel behavior.
+        await tmux.applyMouseWheelScrollSettings(behavior: persistence.loadSettings().terminalMouseWheelBehavior)
+
         var recreatedCount = 0
         let activeThreads = threads.filter { !$0.isArchived }
         for thread in activeThreads {
