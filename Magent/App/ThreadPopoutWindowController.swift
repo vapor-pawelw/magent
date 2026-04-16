@@ -71,6 +71,7 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
     private let replaceDropOverlay = NSView()
     private let replaceDropTitleLabel = NSTextField(labelWithString: "")
     private let replaceDropSubtitleLabel = NSTextField(labelWithString: "")
+    private let bannerOverlay = BannerOverlayView()
     private var keyEventMonitor: Any?
 
     /// Set to true when `PopoutWindowManager.returnThreadToMain` is driving the close,
@@ -126,6 +127,7 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
             NSEvent.removeMonitor(monitor)
             keyEventMonitor = nil
         }
+        BannerManager.shared.unregisterContainer(bannerOverlay)
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -155,6 +157,12 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
 
         setupReplaceDropOverlay(in: rootView)
 
+        // Banner overlay for BannerManager — so errors/warnings surfaced during
+        // rename or other work triggered from this popout are visible here even
+        // when the main window is hidden or behind other windows.
+        bannerOverlay.translatesAutoresizingMaskIntoConstraints = false
+        rootView.addSubview(bannerOverlay, positioned: .above, relativeTo: detailView)
+
         NSLayoutConstraint.activate([
             infoStrip.topAnchor.constraint(equalTo: rootView.topAnchor),
             infoStrip.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
@@ -165,9 +173,16 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
             detailView.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
             detailView.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
             detailView.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
+
+            bannerOverlay.topAnchor.constraint(equalTo: rootView.topAnchor),
+            bannerOverlay.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
+            bannerOverlay.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
+            bannerOverlay.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
         ])
 
         window.contentView = rootView
+
+        BannerManager.shared.registerContainer(bannerOverlay)
 
         // Hand the detail VC's PR/Jira buttons to our info strip's action row.
         // The detail VC styles them as inline capsules in popout context but

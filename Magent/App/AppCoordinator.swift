@@ -199,7 +199,7 @@ final class AppCoordinator {
             bannerOverlay.trailingAnchor.constraint(equalTo: overlayHost.trailingAnchor),
             bannerOverlay.bottomAnchor.constraint(equalTo: overlayHost.bottomAnchor),
         ])
-        BannerManager.shared.setContainer(bannerOverlay)
+        BannerManager.shared.registerContainer(bannerOverlay)
     }
 
     func showMainWindow() {
