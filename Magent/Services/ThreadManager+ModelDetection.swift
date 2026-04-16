@@ -28,7 +28,7 @@ extension ThreadManager {
 
                 let currentName = thread.customTabNames[session] ?? ""
 
-                guard let paneContent = await tmux.cachedCapturePane(sessionName: session, lastLines: 80) else { continue }
+                guard let paneContent = await tmux.cachedCapturePane(sessionName: session, lastLines: 300) else { continue }
 
                 let modelLabel: String
                 let effortLevel: String?
@@ -80,15 +80,17 @@ extension ThreadManager {
     /// Extracts the last "Set model to <Model>" or "Set model to <Model> with <effort> effort"
     /// line from `paneContent` and returns the parsed model label and optional effort level.
     ///
-    /// Scopes to the latest terminal block (content after the last horizontal separator line),
-    /// matching the pattern used by rate-limit detection to avoid stale scrollback matches.
+    /// Scans the full capture window from the bottom up so the most recent `/model` run
+    /// wins even when the user ran `/model` multiple times in the same session. Do NOT
+    /// scope to the latest terminal block the way rate-limit detection does: Claude Code's
+    /// input box is bordered by full-width `─` rules, so "lines after the last separator"
+    /// only ever sees the input box itself and any `Set model to …` line in the conversation
+    /// history above is silently dropped.
     ///
     /// Returns nil if no model-change line is found.
     func parseClaudeModelChange(from paneContent: String) -> (modelLabel: String, effortLevel: String?)? {
-        let scopedLines = scopedModelDetectionLines(from: paneContent)
-        // Scan from the bottom — we want the *last* model-change line, which reflects the
-        // current model even if the user ran /model multiple times in the same session.
-        return scopedLines.reversed().lazy.compactMap { Self.parseModelChangeLine($0) }.first
+        let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        return lines.reversed().lazy.compactMap { Self.parseModelChangeLine(String($0)) }.first
     }
 
     /// Extracts the last "• Model changed to <modelId> <effort>" line from `paneContent` and
@@ -98,29 +100,13 @@ extension ThreadManager {
     /// `• Model changed to gpt-5.3-codex medium`), so the id matches the entries in
     /// `agent-models.json` and can be looked up through `AgentModelsService`.
     ///
+    /// Same whole-capture scan as `parseClaudeModelChange` — see that method for why we
+    /// deliberately don't scope to the latest block.
+    ///
     /// Returns nil if no model-change line is found.
     func parseCodexModelChange(from paneContent: String) -> (modelId: String, effortLevel: String?)? {
-        let scopedLines = scopedModelDetectionLines(from: paneContent)
-        return scopedLines.reversed().lazy.compactMap { Self.parseCodexModelChangeLine($0) }.first
-    }
-
-    /// Shared scoping helper: returns the tail of `paneContent` after the last horizontal
-    /// separator (same heuristic as rate-limit detection) so stale scrollback matches are
-    /// ignored. Falls back to all lines if there's no separator.
-    private func scopedModelDetectionLines(from paneContent: String) -> [String] {
-        let allLines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
-        if let separatorIdx = allLines.lastIndex(where: Self.isModelDetectionScopeSeparator) {
-            return Array(allLines[(allLines.index(after: separatorIdx)...)])
-        }
-        return allLines
-    }
-
-    /// Returns true if the line looks like a Claude/Codex block separator (a long horizontal
-    /// rule of dashes or box-drawing chars), used to scope parsing to the latest pane block.
-    private static func isModelDetectionScopeSeparator(_ line: String) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard trimmed.count >= 20 else { return false }
-        return trimmed.allSatisfy { $0 == "─" || $0 == "-" }
+        let lines = paneContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        return lines.reversed().lazy.compactMap { Self.parseCodexModelChangeLine(String($0)) }.first
     }
 
     /// Parses a single line for the Claude model-change pattern:

@@ -92,6 +92,8 @@ When a user runs `/model` inside Claude Code or Codex to switch models or effort
 
 `ThreadManager+ModelDetection.swift` scans for these patterns on the session monitor's 10-tick cadence (~50 s) and updates the tab display name to match (e.g. `"Claude"` → `"Claude (Sonnet 4.6, H)"`, `"Codex"` → `"Codex (5.3-codex, M)"`), reusing `TmuxSessionNaming.defaultTabDisplayName(for:modelLabel:reasoningLevel:)`. For Codex, the parsed raw model id (e.g. `gpt-5.3-codex`) is resolved against `AgentModelsService` so the manifest label (`GPT 5.3 Codex`) feeds the compact formatter, which strips the `GPT` vendor prefix and hyphenates the remaining tokens. When the id isn't in the manifest, the raw id is spacified (`gpt 5.3 codex`) so the same stripping still applies.
 
+Parsing scans the **entire capture window** (300 lines of scrollback + visible pane) from the bottom up. It deliberately does **not** scope to the latest block after the last horizontal separator the way rate-limit detection does: Claude Code renders a full-width `─` rule above and below its input box, so any "lines after the last separator" heuristic only ever sees the input box itself and drops every `Set model to …` line in the conversation history. Picking the last match from the full capture is correct because it reflects the most recent `/model` run, even if the user ran `/model` multiple times in the same session.
+
 ### Guard: `manuallyRenamedTabs`
 
 `MagentThread` carries a persisted `manuallyRenamedTabs: Set<String>` field. Auto-sync is skipped for any session in this set. The set is populated in two ways:
