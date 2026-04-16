@@ -48,6 +48,7 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Fixed host:port URL parsing in the in-app web view address bar. Entries like `localhost:3000/docs#api` now open as HTTP(S) URLs and preserve query/fragment anchors.
 - Fixed repeated WebContent crashes when pages triggered non-web URL schemes. Web tabs now keep HTTP(S) in-app, open unsupported schemes in the default browser, and clean unsupported persisted web-tab URLs during restore.
+- Fixed creating a new web thread or web tab without entering a URL triggering a "there's no app to open about:blank" alert. Blank web tabs now open as an empty in-app browser with a focused address bar so you can type a URL directly.
 
 ### Tab
 #### Features

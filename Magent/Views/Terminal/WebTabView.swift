@@ -58,8 +58,16 @@ enum WebURLNormalizer {
     }
 
     static func supportsInAppWebTab(_ url: URL) -> Bool {
+        // `about:blank` is an intentional "empty" tab state used when the user creates
+        // a new web tab/thread without entering a URL. It renders cleanly in WKWebView
+        // but is not openable by `NSWorkspace.open`, so it must be treated as in-app.
+        if isBlankTab(url) { return true }
         guard let scheme = url.scheme?.lowercased() else { return false }
         return inAppWebTabSchemes.contains(scheme)
+    }
+
+    static func isBlankTab(_ url: URL) -> Bool {
+        url.absoluteString == "about:blank"
     }
 
     static func supportsInAppNavigation(_ url: URL) -> Bool {
@@ -120,7 +128,7 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
         addressField.cell?.isScrollable = true
         addressField.cell?.wraps = false
         addressField.translatesAutoresizingMaskIntoConstraints = false
-        addressField.stringValue = url.absoluteString
+        addressField.stringValue = WebURLNormalizer.isBlankTab(url) ? "" : url.absoluteString
 
         findField = NSSearchField()
         findField.placeholderString = "Find in page"
@@ -334,6 +342,9 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
 
     @objc private func openInExternalBrowser() {
         guard let url = webView.url ?? URL(string: addressField.stringValue) else { return }
+        // `about:blank` isn't a resource the system can hand off to a browser; skip it
+        // so an empty web tab can't trigger a "there's no app to open about:blank" alert.
+        if WebURLNormalizer.isBlankTab(url) { return }
         NSWorkspace.shared.open(url)
     }
 
@@ -435,7 +446,8 @@ final class WebTabView: NSView, WKNavigationDelegate, WKUIDelegate {
     private func updateAddressField() {
         // Only update when the field is not being edited
         guard window?.firstResponder != addressField.currentEditor() else { return }
-        addressField.stringValue = webView.url?.absoluteString ?? ""
+        let raw = webView.url?.absoluteString ?? ""
+        addressField.stringValue = (raw == "about:blank") ? "" : raw
     }
 
     private func navigateToAddressFieldValue() {
@@ -564,7 +576,8 @@ extension WebTabView: NSTextFieldDelegate, NSSearchFieldDelegate {
         }
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
             // Escape: revert to current URL and resign
-            addressField.stringValue = webView.url?.absoluteString ?? ""
+            let raw = webView.url?.absoluteString ?? ""
+            addressField.stringValue = (raw == "about:blank") ? "" : raw
             window?.makeFirstResponder(webView)
             return true
         }
