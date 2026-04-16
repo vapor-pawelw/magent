@@ -279,6 +279,13 @@ final class ThreadDetailViewController: NSViewController {
         refreshXcodeButton()
         refreshReviewButtonVisibility()
         ensureLoadingOverlay()
+        // Guarantee the thread switch shows *something* even before the async
+        // setupTabs() reaches its own overlay calls. Debounced reveal keeps
+        // fast-path switches flash-free; setupTabs either overwrites this label
+        // (via startLoadingOverlayTracking / showCreationOverlay) or dismisses
+        // it explicitly along every exit path.
+        loadingLabel?.stringValue = "Loading thread..."
+        revealLoadingOverlay(after: 0.25)
         currentTerminalMouseWheelBehavior = PersistenceService.shared.loadSettings().terminalMouseWheelBehavior
 
         // Observe Keep Alive changes (from sidebar thread context menu)
@@ -863,8 +870,11 @@ final class ThreadDetailViewController: NSViewController {
             refreshTabTooltips()
 
             // If restoring to a non-terminal tab, select it immediately before terminal prep.
+            // Dismiss the startup "Loading thread..." overlay here — startLoadingOverlayTracking
+            // was skipped above (nonTerminalSlotIndex != nil), so nothing else will.
             if let slotIndex = nonTerminalSlotIndex {
                 selectTab(at: slotIndex)
+                dismissLoadingOverlay()
             }
         }
 
