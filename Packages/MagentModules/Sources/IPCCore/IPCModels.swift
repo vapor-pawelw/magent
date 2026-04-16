@@ -26,6 +26,7 @@ public nonisolated struct IPCRequest: Codable, Sendable {
     public var sectionName: String?
     public var sectionColor: String?
     public var position: Int?
+    public var limit: Int?
     public var force: Bool?
     public var skipLocalSync: Bool?
     public var select: Bool?
@@ -202,6 +203,8 @@ public nonisolated struct IPCThreadInfo: Encodable, Sendable {
     public var prLabel: String?
     public var prStatusText: String?
     public var jiraTicketKey: String?
+    public var branchName: String?
+    public var archivedAt: String?
 
     public init(thread: MagentThread, projectName: String, baseBranch: String? = nil) {
         self.id = thread.id.uuidString

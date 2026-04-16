@@ -136,6 +136,21 @@ magent-cli list-threads [--project <name>]
 
 Each returned thread now includes the same `status` object described under `thread-info`, so CLI tools can render live state without issuing one request per thread.
 
+### list-archived
+
+List archived threads, most recently archived first. Archived threads live only in the persisted `threads.json` (not in `ThreadManager.threads`), so this is the only way to query them via the CLI.
+
+```bash
+magent-cli list-archived [--project <name>] [--limit <n>]
+```
+
+Each returned thread includes:
+- `branchName` — the git branch the worktree was attached to (the branch is preserved on archive)
+- `archivedAt` — ISO-8601 timestamp of when the thread was archived
+- the same `sectionName` / `taskDescription` / `projectName` fields as `list-threads`
+
+Use `--limit` to cap the result count (e.g. `--limit 10` for the ten most recent archives). Use `--project` to scope to a single project.
+
 ### thread-info
 
 Get full details for a thread, including runtime status.
