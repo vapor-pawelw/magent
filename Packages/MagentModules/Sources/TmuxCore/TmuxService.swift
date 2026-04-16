@@ -138,12 +138,22 @@ public final class TmuxService: Sendable {
             // own accumulated delta). We want one scroll-up per wheel event so
             // Magent's embedded terminal scrolls a fixed, small number of
             // lines per notch.
+            //
+            // No `select-pane \;` prefix: Magent runs one pane per session so
+            // selecting is a no-op, and chaining via `\;` through `/bin/sh -c`
+            // strips the backslash, leaving a bare `;` that tmux's argv parser
+            // treats as a command-list separator — which splits the binding
+            // body in half and leaves `WheelUpPane` bound to just
+            // `select-pane` (no scroll), while `send-keys -X scroll-up` runs
+            // once at bind time. Net effect: the first wheel fires the root
+            // binding (enters copy-mode + scrolls 1 line), but in copy-mode
+            // the broken binding does nothing until Esc exits copy-mode.
             for table in ["copy-mode", "copy-mode-vi"] {
                 _ = try? await ShellExecutor.run(
-                    "tmux bind-key -T \(table) WheelUpPane select-pane \\; send-keys -X scroll-up"
+                    "tmux bind-key -T \(table) WheelUpPane send-keys -X scroll-up"
                 )
                 _ = try? await ShellExecutor.run(
-                    "tmux bind-key -T \(table) WheelDownPane select-pane \\; send-keys -X scroll-down"
+                    "tmux bind-key -T \(table) WheelDownPane send-keys -X scroll-down"
                 )
             }
         case .allowAppsToCapture:
@@ -154,13 +164,14 @@ public final class TmuxService: Sendable {
             _ = try? await ShellExecutor.run("tmux unbind-key -T root WheelDownPane 2>/dev/null; true")
             // Also strip the `-N5` copy-mode multiplier in this mode so that
             // once a pane is in copy-mode, each wheel event still scrolls one
-            // line rather than five.
+            // line rather than five. See comment above for why we don't use
+            // `select-pane \;`.
             for table in ["copy-mode", "copy-mode-vi"] {
                 _ = try? await ShellExecutor.run(
-                    "tmux bind-key -T \(table) WheelUpPane select-pane \\; send-keys -X scroll-up"
+                    "tmux bind-key -T \(table) WheelUpPane send-keys -X scroll-up"
                 )
                 _ = try? await ShellExecutor.run(
-                    "tmux bind-key -T \(table) WheelDownPane select-pane \\; send-keys -X scroll-down"
+                    "tmux bind-key -T \(table) WheelDownPane send-keys -X scroll-down"
                 )
             }
         case .inheritGhosttyGlobal:
