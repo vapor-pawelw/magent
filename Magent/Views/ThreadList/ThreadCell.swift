@@ -1297,7 +1297,7 @@ final class ThreadCell: NSTableCellView {
             favorite.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
         }
         if let pin = pinnedBadge {
-            pin.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .textSecondary)
+            pin.iconView.contentTintColor = rowSelected ? .white : NSColor(resource: .primaryBrand)
         }
         if let popout = popoutImageView {
             popout.contentTintColor = .systemPurple
