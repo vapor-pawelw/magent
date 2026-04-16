@@ -125,6 +125,9 @@ All notable changes to this project will be documented in this file.
 - Fixed agent tabs staying busy after dropping back to a plain shell prompt. Stored agent-type fallback now requires active busy markers (not prompt glyphs alone), preventing terminal sessions from being misclassified as running Claude/Codex.
 
 ### CLI
+#### Features
+- Added `magent-cli list-archived [--project <name>] [--limit <n>]` to list recently archived threads (most recent first). Each result includes the thread's branch name and ISO-8601 archive timestamp so past work can be located after a thread is archived.
+
 #### Bug Fixes
 - Documented `create-thread --select` semantics for popped-out targets: selection now focuses the pop-out window instead of replacing main-window content.
 

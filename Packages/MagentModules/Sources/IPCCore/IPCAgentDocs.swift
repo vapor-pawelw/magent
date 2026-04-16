@@ -9,6 +9,7 @@ public enum IPCAgentDocs {
     /tmp/magent-cli batch-create --project <name> --file <specs.json> [--from-thread <name|main|none>] [--no-submit]
     /tmp/magent-cli list-projects
     /tmp/magent-cli list-threads [--project <name>]
+    /tmp/magent-cli list-archived [--project <name>] [--limit <n>]
     /tmp/magent-cli send-prompt --thread <name> (--prompt <text> | --prompt-file <path>)
     /tmp/magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]
     /tmp/magent-cli delete-thread --thread <name>
@@ -58,6 +59,7 @@ public enum IPCAgentDocs {
     Use hide-thread / unhide-thread to deprioritize a thread in the sidebar without archiving it.
     Use favorite-thread / unfavorite-thread to manage Favorites (max 10).
     Use archive-thread --skip-local-sync to avoid writing local sync path changes into the main worktree during archive.
+    Use list-archived to see recently archived threads (sorted most-recent first). Each item includes branchName and archivedAt (ISO-8601) so you can identify past work by branch name or when it was shelved.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
 
     Common user intents and how to handle them:

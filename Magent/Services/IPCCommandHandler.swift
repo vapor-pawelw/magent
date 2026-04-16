@@ -19,6 +19,8 @@ final class IPCCommandHandler {
             return listProjects(request)
         case "list-threads":
             return listThreads(request)
+        case "list-archived":
+            return listArchived(request)
         case "send-prompt":
             return await sendPrompt(request)
         case "archive-thread":
@@ -669,6 +671,59 @@ final class IPCCommandHandler {
             info.sectionName = resolveSectionName(for: thread, settings: settings)
             info.sectionId = thread.sectionId?.uuidString
             info.status = makeThreadStatus(for: thread)
+            return info
+        }
+        return IPCResponse(ok: true, id: request.id, threads: infos)
+    }
+
+    /// Lists archived threads (most recently archived first). Archived threads live in
+    /// `threads.json` but not in `ThreadManager.threads`, so we load them from persistence.
+    private func listArchived(_ request: IPCRequest) -> IPCResponse {
+        let settings = persistence.loadSettings()
+
+        let projectFilter: Project?
+        if let projectName = request.project {
+            guard let project = settings.projects.first(where: {
+                $0.name.caseInsensitiveCompare(projectName) == .orderedSame
+            }) else {
+                return .failure("Project not found: \(projectName)", id: request.id)
+            }
+            projectFilter = project
+        } else {
+            projectFilter = nil
+        }
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime]
+
+        var archived = persistence.loadThreads().filter { $0.isArchived && !$0.isMain }
+        if let projectFilter {
+            archived = archived.filter { $0.projectId == projectFilter.id }
+        }
+        // Most recently archived first; threads with no archivedAt sort last.
+        archived.sort { lhs, rhs in
+            switch (lhs.archivedAt, rhs.archivedAt) {
+            case let (l?, r?): return l > r
+            case (_?, nil): return true
+            case (nil, _?): return false
+            case (nil, nil): return false
+            }
+        }
+
+        if let limit = request.limit, limit > 0, archived.count > limit {
+            archived = Array(archived.prefix(limit))
+        }
+
+        let infos = archived.map { thread -> IPCThreadInfo in
+            let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
+            var info = IPCThreadInfo(thread: thread, projectName: projectName)
+            info.sectionName = resolveSectionName(for: thread, settings: settings)
+            info.sectionId = thread.sectionId?.uuidString
+            info.branchName = thread.branchName
+            info.baseBranch = thread.baseBranch
+            if let archivedAt = thread.archivedAt {
+                info.archivedAt = isoFormatter.string(from: archivedAt)
+            }
             return info
         }
         return IPCResponse(ok: true, id: request.id, threads: infos)

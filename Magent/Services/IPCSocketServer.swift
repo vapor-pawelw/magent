@@ -6,7 +6,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v27"
+    private static let cliVersion = "magent-cli-v28"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -910,6 +910,27 @@ actor IPCSocketServer {
             json="$json}"
             send_request "$json"
             ;;
+        list-archived)
+            archived_project=""
+            archived_limit=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --project) archived_project="$2"; shift 2 ;;
+                    --limit) archived_limit="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            json="{$(json_kv command list-archived)"
+            [ -n "$archived_project" ] && json="$json,$(json_kv project "$archived_project")"
+            if [ -n "$archived_limit" ]; then
+                case "$archived_limit" in
+                    ''|*[!0-9]*) die "--limit must be a positive integer" ;;
+                esac
+                json="$json,\"limit\":$archived_limit"
+            fi
+            json="$json}"
+            send_request "$json"
+            ;;
         ls)
             ls_project=""
             while [ $# -gt 0 ]; do
@@ -1432,6 +1453,7 @@ actor IPCSocketServer {
             echo "  batch-create         --project <name> --file <specs.json> [--no-submit]  (parallel thread creation; per-spec keys: agentType, modelId, reasoningLevel, prompt, ...)"
             echo "  list-projects"
             echo "  list-threads         [--project <name>]"
+            echo "  list-archived        [--project <name>] [--limit <n>]  (most recently archived first)"
             echo "  send-prompt          --thread <name> (--prompt <text> | --prompt-file <path>)"
             echo "  archive-thread       --thread <name> [--force] [--skip-local-sync]  (removes worktree, keeps branch)"
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
