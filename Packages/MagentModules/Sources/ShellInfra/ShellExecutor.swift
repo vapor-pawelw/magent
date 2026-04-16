@@ -87,15 +87,25 @@ public enum ShellExecutor {
             fullCommand = "cd \(shellQuote(wd)) && \(command)"
         }
 
-        // Set up environment with PATH, LANG, and HOME.
+        // Set up environment with PATH, LANG, HOME, USER, and LOGNAME.
         // LANG is required so programs like tmux don't sanitize non-printable bytes
         // such as tabs in format output. HOME is needed by tools like acli.
+        // USER/LOGNAME are required by the claude CLI: its macOS Keychain lookup
+        // for the "Claude Code-credentials" item fails with a 401 auth error when
+        // either is missing, which previously caused AI rename to fail silently.
         var env = [
             "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
             "LANG=C.UTF-8",
         ]
-        if let home = ProcessInfo.processInfo.environment["HOME"] {
+        let inherited = ProcessInfo.processInfo.environment
+        if let home = inherited["HOME"] {
             env.append("HOME=\(home)")
+        }
+        if let user = inherited["USER"] {
+            env.append("USER=\(user)")
+        }
+        if let logname = inherited["LOGNAME"] {
+            env.append("LOGNAME=\(logname)")
         }
         let envCStrings = env.map { strdup($0) } + [nil]
         defer { envCStrings.compactMap { $0 }.forEach { free($0) } }

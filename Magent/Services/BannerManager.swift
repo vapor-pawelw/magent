@@ -5,13 +5,52 @@ final class BannerManager {
 
     static let shared = BannerManager()
 
-    private var containerView: BannerOverlayView?
+    private struct ContainerRef {
+        weak var view: BannerOverlayView?
+    }
+
+    private var containers: [ContainerRef] = []
     private var currentBanner: BannerView?
     private var dismissTimer: Timer?
     private var topConstraint: NSLayoutConstraint?
 
+    func registerContainer(_ view: BannerOverlayView) {
+        pruneContainers()
+        if !containers.contains(where: { $0.view === view }) {
+            containers.append(ContainerRef(view: view))
+        }
+    }
+
+    func unregisterContainer(_ view: BannerOverlayView) {
+        containers.removeAll { $0.view === view || $0.view == nil }
+    }
+
+    /// Legacy API retained for callers that installed the first (main-window) container.
+    /// New callers should use `registerContainer` / `unregisterContainer`.
     func setContainer(_ view: BannerOverlayView) {
-        containerView = view
+        registerContainer(view)
+    }
+
+    private func pruneContainers() {
+        containers.removeAll { $0.view == nil }
+    }
+
+    /// Pick the best container to show a banner in. Prefer the one whose window
+    /// is currently key (so banners appear on the popout the user is looking at);
+    /// fall back to any main/visible window; finally fall back to the first.
+    private func preferredContainer() -> BannerOverlayView? {
+        pruneContainers()
+        let live = containers.compactMap { $0.view }
+        if let keyMatch = live.first(where: { $0.window?.isKeyWindow == true }) {
+            return keyMatch
+        }
+        if let mainMatch = live.first(where: { $0.window?.isMainWindow == true }) {
+            return mainMatch
+        }
+        if let visible = live.first(where: { $0.window?.isVisible == true }) {
+            return visible
+        }
+        return live.first
     }
 
     func show(
@@ -76,7 +115,7 @@ final class BannerManager {
             removeBannerImmediately()
         }
 
-        guard let container = containerView else { return }
+        guard let container = preferredContainer() else { return }
 
         let banner = BannerView(config: config)
         banner.onDismiss = { [weak self] in

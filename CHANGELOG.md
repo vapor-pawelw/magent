@@ -85,6 +85,8 @@ All notable changes to this project will be documented in this file.
 - Added ballot box with check (`☑️`) to thread sign emojis (next to the existing checkmark option) for finer task-state labeling.
 
 #### Bug Fixes
+- Fixed AI Rename, auto task description, and auto work-type icon generation silently failing for many users. Magent's background `claude -p` invocations now inherit the `USER`/`LOGNAME` environment variables required by the macOS Keychain lookup, so authentication no longer returns a silent 401 and the rename/description/icon pipeline actually completes.
+- Fixed error banners triggered from pop-out windows (AI rename failures, shell errors, etc.) only rendering in the main window. Pop-out windows now host their own banner overlay so failures from work initiated there are visible in the same window the user is looking at.
 - Fixed the app silently quitting after deleting a thread that still had pop-out windows or cached terminal surfaces. Thread delete now returns pop-out windows, evicts cached terminal views, and tears down embedded terminal surfaces before killing the backing tmux sessions, matching the existing thread archive contract.
 - Fixed thread switches occasionally showing a blank page with no tab selected. Thread view now primes a debounced "Loading thread..." overlay so slow switches always show progress while fast-path switches stay flash-free.
 - Fixed missing branch-name compatibility symlinks for some worktrees. Non-main worktrees now auto-create and maintain `<worktrees-base>/<current-branch>` symlinks during branch-state refresh, branch-accept, and branch-rename flows.
