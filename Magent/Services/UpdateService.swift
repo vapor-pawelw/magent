@@ -27,38 +27,6 @@ private struct UpdateReleaseResponse: Decodable, Sendable {
     }
 }
 
-private struct SemanticVersion: Comparable, Sendable {
-    let major: Int
-    let minor: Int
-    let patch: Int
-
-    init?(_ raw: String) {
-        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.hasPrefix("v") || value.hasPrefix("V") {
-            value.removeFirst()
-        }
-        let core = value.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: true).first.map(String.init) ?? value
-        let parts = core.split(separator: ".", omittingEmptySubsequences: false)
-        guard let major = parts.indices.contains(0) ? Int(parts[0]) : nil else { return nil }
-        let minor = parts.indices.contains(1) ? Int(parts[1]) : 0
-        let patch = parts.indices.contains(2) ? Int(parts[2]) : 0
-        guard let minor, let patch else { return nil }
-        self.major = major
-        self.minor = minor
-        self.patch = patch
-    }
-
-    static func < (lhs: SemanticVersion, rhs: SemanticVersion) -> Bool {
-        if lhs.major != rhs.major { return lhs.major < rhs.major }
-        if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
-        return lhs.patch < rhs.patch
-    }
-
-    var displayString: String {
-        "\(major).\(minor).\(patch)"
-    }
-}
-
 private struct AvailableUpdate: Sendable {
     let version: SemanticVersion
     let releaseNotes: String?
