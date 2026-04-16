@@ -68,10 +68,6 @@ Web tabs open in-app for PR reviews, CI dashboards, or docs without leaving the 
 
 Pop tabs out into standalone windows to run several agents side-by-side.
 
-<p align="center">
-  <img src="docs/screenshots/magent-multi-windows.png" alt="Multiple agent windows" width="800">
-</p>
-
 A searchable Table of Contents indexes every prompt in the conversation so you can jump back to earlier turns instantly.
 
 <p align="center">
