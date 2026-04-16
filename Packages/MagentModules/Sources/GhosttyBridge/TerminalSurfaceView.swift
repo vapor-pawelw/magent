@@ -40,6 +40,15 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     /// cleared once the view re-attaches to a window.
     public var preserveSurfaceOnDetach = false
 
+    /// The tmux session name backing this surface, if any.
+    ///
+    /// This lets `GhosttyAppManager` find and synchronously free the surface
+    /// immediately before the backing tmux session is killed — without it,
+    /// libghostty calls `_exit()` on the app when the PTY closes while the
+    /// `ghostty_surface_t` is still alive. Keep this in sync with the session
+    /// name used in tmux (set on creation, update on rename, clear on close).
+    public var tmuxSessionName: String?
+
     /// Returns a tmux-reported openable URL under the most recent mouse click for this view's session.
     public var resolveTmuxMouseOpenableURL: (() async -> String?)?
     /// Resolves a visible URL near the current mouse position using normalized pane coordinates.
@@ -154,10 +163,23 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
 
         if surface != nil {
             GhosttyAppManager.shared.registerSurface(surface, effectiveAppearance: effectiveAppearance)
+            GhosttyAppManager.shared.registerTerminalView(self)
             updateSurfaceSize()
             ghostty_surface_set_focus(surface, true)
             GhosttyAppManager.shared.focusedSurface = surface
         }
+    }
+
+    /// Synchronously frees the Ghostty surface backing this view without
+    /// waiting for AppKit detachment. Used by the `TmuxService` pre-kill hook
+    /// to guarantee the surface is torn down before the backing tmux session
+    /// is killed — libghostty calls `_exit()` on the app when the PTY closes
+    /// while a live `ghostty_surface_t` is still attached.
+    ///
+    /// Safe to call multiple times (idempotent) and from any of the
+    /// teardown paths (pre-kill hook, detach, dealloc).
+    public func freeSurfaceForShutdown() {
+        destroySurface()
     }
 
     // MARK: - Layout & Rendering
@@ -209,6 +231,7 @@ public final class TerminalSurfaceView: NSView, @preconcurrency NSTextInputClien
     private func destroySurface() {
         if let surface {
             GhosttyAppManager.shared.unregisterSurface(surface)
+            GhosttyAppManager.shared.unregisterTerminalView(self)
             // Clear the focused-surface reference before freeing so that any
             // DispatchQueue.main.async callbacks that use focusedSurface (e.g.
             // clipboard completion) cannot pass a freed pointer to Ghostty.

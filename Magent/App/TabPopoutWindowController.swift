@@ -183,6 +183,12 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
                 command: tmuxCommand
             )
         }
+        // Tag the view with its tmux session so `GhosttyAppManager` can
+        // synchronously free its surface from the `TmuxService` pre-kill
+        // hook before the backing tmux session dies. Pop-out windows live
+        // in their own NSWindow hierarchy invisible to the main detail VC,
+        // so they MUST carry the tag independently.
+        view.tmuxSessionName = sessionName
         configureTerminalViewHandlers(view, threadId: thread.id, sessionName: sessionName)
         return view
     }

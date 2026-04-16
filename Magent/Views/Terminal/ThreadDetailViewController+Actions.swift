@@ -1043,6 +1043,11 @@ extension ThreadDetailViewController {
         for (termIdx, terminalView) in terminalViews.enumerated() {
             if termIdx < thread.tmuxSessionNames.count {
                 let newSessionName = thread.tmuxSessionNames[termIdx]
+                // Keep the view's tmux session tag aligned with the renamed
+                // session so the `TmuxService` pre-kill hook can still find
+                // and free this surface before the new-named session dies
+                // (prevents libghostty's PTY-close `_exit()`).
+                terminalView.tmuxSessionName = newSessionName
                 terminalView.onCopy = {
                     Task { await TmuxService.shared.copySelectionToClipboard(sessionName: newSessionName) }
                 }

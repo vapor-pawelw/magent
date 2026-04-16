@@ -126,6 +126,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         CrashReportingService.initialize()
         setupMainMenu()
         GhosttyAppManager.shared.initialize()
+        // Install the structural barrier that frees any live Ghostty surface
+        // backed by a tmux session BEFORE that session is killed. This is
+        // what keeps libghostty from calling `_exit()` on the app when a
+        // thread is archived/deleted while its terminal surface is still
+        // alive. Every `TmuxService.killSession` funnels through this hook;
+        // do not bypass it with ad-hoc kill commands. See
+        // `docs/libghostty-integration.md`.
+        TmuxService.shared.setPreKillHook { sessionName in
+            await MainActor.run {
+                GhosttyAppManager.shared.freeSurfaces(forTmuxSession: sessionName)
+            }
+        }
         ContextExporter.cleanupExpiredContextFiles(
             worktreePaths: knownWorktreePaths,
             worktreesBasePaths: knownWorktreesBasePaths

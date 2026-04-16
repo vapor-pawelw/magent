@@ -1,4 +1,5 @@
 import Foundation
+import os
 import ShellInfra
 import MagentModels
 
@@ -6,6 +7,20 @@ public final class TmuxService: Sendable {
 
     public static let shared = TmuxService()
     public static let legacyAgentBellPipeEnabled = false
+
+    /// Closure invoked by `killSession(name:)` immediately before the tmux
+    /// `kill-session` command runs. The hook is `async` so callers can hop to
+    /// whatever actor owns the surfaces backing the session (typically the
+    /// main actor where `GhosttyAppManager.freeSurfaces(forTmuxSession:)`
+    /// runs), and its completion is awaited before the PTY closes.
+    ///
+    /// This is the structural barrier that keeps libghostty from calling
+    /// `_exit()` on the app when a tmux session is killed while a
+    /// `ghostty_surface_t` backed by that session is still alive. Do not add
+    /// an alternate kill path that bypasses this hook.
+    public typealias PreKillHook = @Sendable (String) async -> Void
+
+    private let preKillHookLock = OSAllocatedUnfairLock<PreKillHook?>(initialState: nil)
     private static let requiredTerminalFeatureEntries = [
         "alacritty*:RGB",
         "foot*:RGB",
@@ -536,7 +551,25 @@ public final class TmuxService: Sendable {
         _ = try? await ShellExecutor.run("tmux send-keys -t \(shellQuote(sessionName)) -X copy-pipe-and-cancel pbcopy")
     }
 
+    /// Registers the closure invoked before every `killSession(name:)`.
+    /// Passing `nil` removes the current hook. The app registers a hook at
+    /// startup that frees any `ghostty_surface_t` backed by the session being
+    /// killed; see `TmuxService.PreKillHook`.
+    public func setPreKillHook(_ hook: PreKillHook?) {
+        preKillHookLock.withLock { $0 = hook }
+    }
+
     public func killSession(name: String) async throws {
+        // Drain the pre-kill hook before issuing `tmux kill-session`. This is
+        // the only point where every kill path funnels through, so it is the
+        // structural place to guarantee Ghostty surfaces backed by this
+        // session are freed before the PTY closes — otherwise libghostty
+        // calls `_exit()` and takes the whole app down. See
+        // `docs/libghostty-integration.md`.
+        let hook = preKillHookLock.withLock { $0 }
+        if let hook {
+            await hook(name)
+        }
         _ = try await ShellExecutor.run("tmux kill-session -t \(shellQuote(name))")
     }
 

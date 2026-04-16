@@ -40,6 +40,12 @@ public final class GhosttyAppManager {
     private var pendingSyntheticPasteText: String?
     private var retainedConfigs: [ghostty_config_t] = []
     private var registeredSurfaces: [Int: ghostty_surface_t] = [:]
+    /// Weak registry of live `TerminalSurfaceView`s keyed by their backing tmux
+    /// session name. Used by the `TmuxService` pre-kill hook to synchronously
+    /// free Ghostty surfaces immediately before their tmux session dies —
+    /// without this, libghostty calls `_exit()` on the app when the PTY closes
+    /// while the surface is still alive.
+    private let liveTerminalViews = NSHashTable<TerminalSurfaceView>.weakObjects()
     private var embeddedPreferences = GhosttyEmbeddedPreferences()
     private var lastWrittenOverrideConfig: String? = nil
 
@@ -171,6 +177,42 @@ public final class GhosttyAppManager {
     public func unregisterSurface(_ surface: ghostty_surface_t?) {
         guard let surface else { return }
         registeredSurfaces.removeValue(forKey: Int(bitPattern: surface))
+    }
+
+    /// Registers a `TerminalSurfaceView` in the weak view registry. Must be
+    /// called after the view's Ghostty surface is created. Pairs with
+    /// `unregisterTerminalView(_:)` on surface destroy; `NSHashTable.weakObjects()`
+    /// also auto-removes entries if the view deallocates while still registered.
+    public func registerTerminalView(_ view: TerminalSurfaceView) {
+        liveTerminalViews.add(view)
+    }
+
+    public func unregisterTerminalView(_ view: TerminalSurfaceView) {
+        liveTerminalViews.remove(view)
+    }
+
+    /// Synchronously frees every live Ghostty surface whose view is tagged
+    /// with the given tmux session name. This is the structural barrier that
+    /// prevents libghostty from calling `_exit()` on the app when a tmux
+    /// session is killed while its surface is still alive: the
+    /// `TmuxService.killSession` pre-kill hook invokes this on the main actor
+    /// before running `tmux kill-session`.
+    ///
+    /// Safe to call when no matching view exists (no-op). Idempotent —
+    /// `TerminalSurfaceView.freeSurfaceForShutdown()` is nil-safe so a
+    /// second call after the manual teardown path already ran is harmless.
+    public func freeSurfaces(forTmuxSession sessionName: String) {
+        // Snapshot the registry before mutating; freeing a surface calls back
+        // into `unregisterTerminalView` via `destroySurface`, which would
+        // otherwise mutate the set mid-iteration.
+        let matching = liveTerminalViews.allObjects.filter {
+            $0.tmuxSessionName == sessionName
+        }
+        guard !matching.isEmpty else { return }
+        Self.log("freeSurfaces(forTmuxSession: \(sessionName)) matched \(matching.count) view(s)")
+        for view in matching {
+            view.freeSurfaceForShutdown()
+        }
     }
 
     public func applyEmbeddedPreferences(

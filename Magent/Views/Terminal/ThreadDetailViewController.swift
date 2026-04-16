@@ -1053,6 +1053,12 @@ final class ThreadDetailViewController: NSViewController {
                 command: tmuxCommand
             )
         }
+        // Tag the view with its tmux session so `GhosttyAppManager` can
+        // synchronously free its surface from the `TmuxService` pre-kill
+        // hook before the backing tmux session dies (prevents libghostty's
+        // PTY-close `_exit()`). Must be set on both create and reuse paths,
+        // and kept in sync on tmux session rename — see `handleRename`.
+        view.tmuxSessionName = sessionName
         configureTerminalViewHandlers(view, sessionName: sessionName)
         return view
     }
