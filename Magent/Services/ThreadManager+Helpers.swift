@@ -2254,7 +2254,7 @@ enum ThreadManagerError: LocalizedError {
         case .archiveCancelled:
             return "Archive cancelled."
         case .dirtyWorktree(let worktreePath):
-            return "Worktree has uncommitted or untracked changes at \(worktreePath). Commit or stash first, or pass --force (CLI) / choose Archive Anyway (GUI) to auto-commit with a generic message before archiving."
+            return "Worktree has uncommitted or untracked changes at \(worktreePath). Commit/stash/discard first. CLI --force does not bypass dirty-worktree safety."
         case .localFileSyncFailed(let message):
             return message
         case .agenticMergeSignal:

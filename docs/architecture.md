@@ -195,7 +195,7 @@ Projects can define repo-relative local sync entries (files or directories) with
   - `Cancel Archive`
 - CLI/non-interactive archive paths should avoid destructive overwrite prompts and skip conflicting targets by default.
 - Force archive is allowed for local sync failures: continue archiving with a warning, but still keep sync non-destructive.
-- Force archive no longer discards dirty worktrees: when the worktree has tracked/untracked changes, force performs a generic safety commit (`Uncommitted changes on <branch> (<worktree>)`) before archive. Ignored files remain destructive because they are not tracked by git.
+- Dirty worktrees are always refused by default, including CLI `--force`. GUI archive can continue only through an explicit `Commit & Archive` flow where the user confirms and edits the commit message before archive. Ignored files remain destructive because they are not tracked by git.
 
 ### 4.6 Sidebar Split View Stability
 

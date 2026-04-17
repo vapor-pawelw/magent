@@ -58,7 +58,7 @@ public enum IPCAgentDocs {
     Thread priority is a 1–5 scale shown as cumulative dots in the sidebar (1 blue = lowest, 5 red = highest). Pass --priority 1-5 to create-thread/batch-create (or set it later with set-priority --priority 1-5) ONLY when the user has given you real signal about urgency/importance for that specific thread — e.g. a Jira priority, an explicit instruction ("this is urgent", "low priority chore"), or a blocker vs. nice-to-have framing. Do NOT guess a priority from the task description alone, do NOT default every thread to 3, and do NOT set priority on exploratory/research threads where the user has not expressed urgency. Use set-priority --clear to remove a priority.
     Use hide-thread / unhide-thread to deprioritize a thread in the sidebar without archiving it.
     Use favorite-thread / unfavorite-thread to manage Favorites (max 10).
-    Use archive-thread --skip-local-sync to avoid writing local sync path changes into the main worktree during archive. archive-thread is refused when the worktree is dirty (uncommitted/untracked changes). With dirty worktrees, --force auto-commits tracked/untracked changes with a generic message (`Uncommitted changes on <branch> (<worktree>)`) before archiving. Prefer manual commit first for a more meaningful message.
+    Use archive-thread --skip-local-sync to avoid writing local sync path changes into the main worktree during archive. archive-thread is refused when the worktree is dirty (uncommitted/untracked changes) and that refusal still applies with --force. Clean the worktree first (commit/stash/discard), then archive.
     Use list-archived to see recently archived threads (sorted most-recent first). Each item includes branchName and archivedAt (ISO-8601) so you can identify past work by branch name or when it was shelved.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
 
@@ -77,7 +77,7 @@ public enum IPCAgentDocs {
     2. Run: `/tmp/magent-cli archive-thread --thread <name> --skip-local-sync`
     Use --skip-local-sync by default to avoid modifying the main worktree.
 
-    Archive safety: archive-thread is REFUSED when the worktree is dirty (uncommitted/untracked changes), unless --force is passed. The refusal message names the worktree path and explains the consequences. For dirty worktrees, --force auto-commits tracked/untracked changes with a generic message before archive. Prefer manual commit first (better message).
+    Archive safety: archive-thread is REFUSED when the worktree is dirty (uncommitted/untracked changes), including when --force is passed. The refusal message names the worktree path and requires commit/stash/discard first.
     """
 
     /// On-demand CLI reference returned by `magent-cli docs`.

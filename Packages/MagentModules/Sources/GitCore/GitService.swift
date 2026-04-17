@@ -732,7 +732,7 @@ public final class GitService: Sendable {
         let stderr = commitResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         let stdout = commitResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         let reason = !stderr.isEmpty ? stderr : stdout
-        throw GitError.commandFailed(reason.isEmpty ? "Failed to create archive auto-commit." : reason)
+        throw GitError.commandFailed(reason.isEmpty ? "Failed to create archive commit." : reason)
     }
 
     /// Lists ignored (in `.gitignore`) files/directories present in the worktree that

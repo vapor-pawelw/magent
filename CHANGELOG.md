@@ -123,7 +123,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Fixed threads getting stuck in the sidebar's `Archiving...` state after archive preflight failures (for example dirty worktree / ignored-file safety refusals). Failed archive attempts now always clear the archiving overlay.
-- Archive no longer discards dirty worktrees when you choose `Archive Anyway`. Magent now auto-commits tracked/untracked changes with a generic message (`Uncommitted changes on <branch> (<worktree>)`) before archiving, and the confirmation alert explains this behavior while recommending manual commit first for a better message.
+- Dirty-worktree archive flow is now explicit: CLI `archive-thread` refuses dirty worktrees even with `--force` (commit/stash/discard first), while GUI uses a `Commit & Archive` confirmation that prompts for a non-empty commit message (pre-filled with `Uncommitted changes on <branch> (<worktree>)`) before archiving.
 - Fixed AI Rename, auto task description, and auto work-type icon generation silently failing for many users. Magent's background `claude -p` invocations now inherit the `USER`/`LOGNAME` environment variables required by the macOS Keychain lookup, so authentication no longer returns a silent 401 and the rename/description/icon pipeline actually completes.
 - Fixed error banners triggered from pop-out windows (AI rename failures, shell errors, etc.) only rendering in the main window. Pop-out windows now host their own banner overlay so failures from work initiated there are visible in the same window the user is looking at.
 - Fixed the app silently quitting after archiving or deleting a thread that had pop-out windows, multiple tabs, or cached terminal surfaces. Embedded terminal surfaces are now always torn down before their backing tmux sessions are killed, regardless of which code path triggered the kill.
@@ -177,7 +177,7 @@ All notable changes to this project will be documented in this file.
 - Added `magent-cli list-archived [--project <name>] [--limit <n>]` to list recently archived threads (most recent first). Each result now includes the thread's branch name, full worktree path and directory name, created/archived timestamps, primary agent type, base branch, Jira ticket key, priority, icon, sign emoji, and favorite/pinned/hidden flags so past work can be fully identified after archive. `magent-cli thread-info` also now resolves archived threads by name or ID.
 
 #### Bug Fixes
-- `magent-cli archive-thread` now treats `--force` on dirty worktrees as "archive anyway with auto-commit" instead of discarding uncommitted work, and refusal/help text now recommends manual commit first for a more meaningful message.
+- `magent-cli archive-thread` now refuses dirty worktrees regardless of `--force`; `--force` only bypasses non-conflict local-sync failures. Refusal/help text now explicitly requires commit/stash/discard first.
 - Documented `create-thread --select` semantics for popped-out targets: selection now focuses the pop-out window instead of replacing main-window content.
 
 
