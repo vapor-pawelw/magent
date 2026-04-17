@@ -9,7 +9,7 @@
 - Any archive warning is shown in yellow beneath the branch/worktree line.
 - The same banner appears whether archive was triggered from the UI or via `magent-cli archive-thread`.
 - The banner exposes a `Restore` action that recreates the archived worktree, returns the thread to the sidebar, and navigates back to it.
-- **Destructive-archive safety.** Archiving is refused by default when the worktree is dirty (uncommitted/untracked changes). Archive runs `git worktree remove --force`, which deletes the worktree directory. The GUI surfaces critical destructive confirmation alerts; Cancel aborts. The CLI refuses with dedicated messages and requires `--force` to proceed. See `docs/cli.md#archive-thread`.
+- **Destructive-archive safety.** Archiving is refused by default when the worktree is dirty (uncommitted/untracked changes). Archive runs `git worktree remove --force`, which deletes the worktree directory. The GUI surfaces a critical confirmation plus commit-message prompt (`Commit & Archive`) so users choose the exact commit message before forced archive. The CLI always refuses dirty worktrees (including with `--force`) until they are committed/stashed/discarded. See `docs/cli.md#archive-thread`.
 - `Settings > Threads` also shows up to 10 recently archived threads with inline `Restore` buttons, so the same restore flow stays available after the archive banner expires.
 - A dedicated `archivebox` toolbar button in the top-right (next to the Settings gear) opens a compact popover listing up to 10 recently archived threads with one-click Restore actions — no need to open Settings for quick restores.
 - Recently archived popover rows show branch/worktree metadata (using the same branch/worktree mismatch rule as sidebar thread rows) plus project/archive-date context under the title.
@@ -61,7 +61,7 @@
 
 - Archive is now fully non-blocking from the user's perspective. Clicking Archive immediately shows an "Archiving…" overlay on the thread's sidebar row and returns focus to the app; the thread disappears when the operation completes.
 - Removed all pre-archive confirmation dialogs (agent busy warning, uncommitted-changes/unmerged-commits warning, local-sync-failure force-archive dialog). These previously stalled the UI for a git-status check before anything happened.
-- `threadArchiveThread` now uses `force: true` from both UI call sites so local file sync failures become a warning in the archive banner rather than a blocking dialog.
+- UI archive retries now use `force: true` only after the user confirms `Commit & Archive` and provides a non-empty commit message (defaulted to `Uncommitted changes on <branch> (<worktree>)`). The same forced path keeps non-conflict local-sync failures as archive warnings instead of blocking dialogs.
 - `MagentThread` has a new transient field `isArchiving: Bool` (not persisted). `ThreadManager` exposes `markThreadArchiving(id:)` and `clearThreadArchivingState(id:)`. The latter is called via a `defer` block in `archiveThread` so the overlay is always removed on failure.
 - The non-interactive local-sync merge-back phase now runs in a detached worker before archive completion, so large Local Sync Paths no longer freeze the app while the row stays in its archiving state.
 - The archiving overlay now belongs to `AlwaysEmphasizedRowView`, not `ThreadCell`, so the tint/spinner covers the full selected row bounds instead of only the cell content area.

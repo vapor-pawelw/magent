@@ -858,15 +858,15 @@ final class IPCCommandHandler {
         } catch ThreadManagerError.dirtyWorktree(let worktreePath) {
             // Keep the refusal distinct from generic archive failures so CLI users
             // and coding agents see clearly that this is a safety stop, not a bug.
-            // The message explicitly names the destructive consequence of `--force`
-            // so agents pause to reconfirm intent before passing it.
             let message = """
             Refusing to archive thread \"\(thread.name)\": worktree at \(worktreePath) has uncommitted or untracked changes.
 
             Options:
               1. Commit or stash the changes first, then re-run archive-thread.
-              2. Pass --force to archive anyway. --force now auto-commits tracked/untracked changes first using a generic commit message (`Uncommitted changes on <branch> (<worktree>)`), then archives.
-                 Suggested: prefer committing yourself first for a more meaningful commit message.
+              2. Discard the changes in that worktree if they are not needed.
+              3. Re-run archive-thread after the worktree is clean.
+
+            Note: `--force` does not bypass dirty-worktree refusal. It only allows archive to continue after non-conflict local-sync failures.
             """
             return .failure(message, id: request.id)
         } catch {

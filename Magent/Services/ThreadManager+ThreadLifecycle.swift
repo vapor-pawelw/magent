@@ -610,12 +610,17 @@ extension ThreadManager {
         return "Uncommitted changes on \(branchName) (\(worktreeName))"
     }
 
-    private func autoCommitBeforeForcedArchiveIfNeeded(_ thread: MagentThread) async throws {
+    func suggestedArchiveCommitMessage(for thread: MagentThread) async -> String {
+        let resolvedBranchName = await git.getCurrentBranch(workingDirectory: thread.worktreePath)
+        return archiveAutoCommitMessage(for: thread, resolvedBranchName: resolvedBranchName)
+    }
+
+    private func autoCommitBeforeForcedArchiveIfNeeded(
+        _ thread: MagentThread,
+        commitMessage: String
+    ) async throws {
         let isDirty = await git.isDirty(worktreePath: thread.worktreePath)
         guard isDirty else { return }
-
-        let resolvedBranchName = await git.getCurrentBranch(workingDirectory: thread.worktreePath)
-        let commitMessage = archiveAutoCommitMessage(for: thread, resolvedBranchName: resolvedBranchName)
         _ = try await git.commitAllChanges(worktreePath: thread.worktreePath, message: commitMessage)
     }
 
@@ -630,6 +635,7 @@ extension ThreadManager {
         _ thread: MagentThread,
         promptForLocalSyncConflicts: Bool = false,
         force: Bool = false,
+        forceCommitMessage: String? = nil,
         syncLocalPathsBackToRepo: Bool? = nil,
         awaitLocalSync: Bool = false
     ) async throws -> String? {
@@ -648,18 +654,20 @@ extension ThreadManager {
         }
 
         // Dirty-worktree guard. Archiving runs `git worktree remove --force`, which
-        // unconditionally deletes the worktree directory. Refuse unless `force` is
-        // set whenever git reports uncommitted or untracked changes, so the GUI can
-        // prompt for destructive confirmation and the CLI can require `--force`.
-        if !force {
-            let isDirty = await git.isDirty(worktreePath: thread.worktreePath)
-            if isDirty {
+        // unconditionally deletes the worktree directory.
+        // - Default + CLI: refuse dirty worktrees until the user commits/discards manually.
+        // - GUI force path: when caller provides an explicit commit message, create
+        //   that commit first, then continue archive.
+        let isDirty = await git.isDirty(worktreePath: thread.worktreePath)
+        if isDirty {
+            guard force, let forceCommitMessage else {
                 throw ThreadManagerError.dirtyWorktree(worktreePath: thread.worktreePath)
             }
-        } else {
-            // `force` no longer discards dirty worktrees. Instead, create a generic
-            // safety commit before archive so uncommitted/untracked changes are kept.
-            try await autoCommitBeforeForcedArchiveIfNeeded(thread)
+            let trimmedCommitMessage = forceCommitMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedCommitMessage.isEmpty else {
+                throw ThreadManagerError.dirtyWorktree(worktreePath: thread.worktreePath)
+            }
+            try await autoCommitBeforeForcedArchiveIfNeeded(thread, commitMessage: trimmedCommitMessage)
         }
 
         var archiveWarning: String?

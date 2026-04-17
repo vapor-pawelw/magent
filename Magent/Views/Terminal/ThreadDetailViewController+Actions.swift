@@ -2,6 +2,18 @@ import Cocoa
 import GhosttyBridge
 import MagentCore
 
+private final class ArchiveCommitMessageTextFieldDelegate: NSObject, NSTextFieldDelegate {
+    let onChange: () -> Void
+
+    init(onChange: @escaping () -> Void) {
+        self.onChange = onChange
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        onChange()
+    }
+}
+
 private struct ManualLocalSyncTarget {
     let path: String
     let label: String
@@ -89,7 +101,7 @@ extension ThreadDetailViewController {
                         worktreePath: worktreePath,
                         threadName: threadToArchive.name
                     ) else { return }
-                    self.retryArchiveForced(thread: threadToArchive)
+                    self.promptForArchiveCommitMessageAndRetry(thread: threadToArchive)
                 }
             } catch ThreadManagerError.archiveCancelled {
                 // User cancelled a local-sync conflict prompt — leave thread unchanged.
@@ -105,14 +117,29 @@ extension ThreadDetailViewController {
     }
 
     @MainActor
-    private func retryArchiveForced(thread: MagentThread) {
+    private func promptForArchiveCommitMessageAndRetry(thread: MagentThread) {
+        Task {
+            let defaultCommitMessage = await threadManager.suggestedArchiveCommitMessage(for: thread)
+            await MainActor.run {
+                guard let commitMessage = self.promptForArchiveCommitMessage(defaultValue: defaultCommitMessage) else {
+                    self.threadManager.clearThreadArchivingState(id: thread.id)
+                    return
+                }
+                self.retryArchiveForced(thread: thread, commitMessage: commitMessage)
+            }
+        }
+    }
+
+    @MainActor
+    private func retryArchiveForced(thread: MagentThread, commitMessage: String) {
         threadManager.markThreadArchiving(id: thread.id)
         Task {
             do {
                 _ = try await threadManager.archiveThread(
                     thread,
                     promptForLocalSyncConflicts: true,
-                    force: true
+                    force: true,
+                    forceCommitMessage: commitMessage
                 )
             } catch ThreadManagerError.archiveCancelled {
                 // User cancelled a local-sync conflict prompt during forced retry.
@@ -141,6 +168,38 @@ extension ThreadDetailViewController {
         alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
         alert.buttons.first?.hasDestructiveAction = true
         return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    @MainActor
+    private func promptForArchiveCommitMessage(defaultValue: String) -> String? {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = String(localized: .ThreadStrings.threadArchiveCommitMessageTitle)
+        alert.informativeText = String(localized: .ThreadStrings.threadArchiveCommitMessageInfo)
+        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveCommitAndArchiveButton))
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+        let commitButton = alert.buttons.first
+
+        let textField = NSTextField(string: defaultValue)
+        textField.placeholderString = String(localized: .ThreadStrings.threadArchiveCommitMessagePlaceholder)
+        textField.frame = NSRect(x: 0, y: 0, width: 360, height: 24)
+        let delegate = ArchiveCommitMessageTextFieldDelegate {
+            commitButton?.isEnabled = !textField.stringValue
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+        }
+        textField.delegate = delegate
+        alert.accessoryView = textField
+
+        commitButton?.isEnabled = !textField.stringValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+
+        alert.window.initialFirstResponder = textField
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let message = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? nil : message
     }
 
     @objc func popOutThreadTapped() {

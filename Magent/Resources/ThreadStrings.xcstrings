@@ -986,7 +986,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Archive \"%@\" anyway? (Auto-commit first)"
+            "value": "Archive \"%@\" with commit first?"
           }
         }
       }
@@ -1008,7 +1008,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The worktree at %@ has uncommitted or untracked changes. Choosing Archive Anyway will first auto-commit tracked/untracked changes with a generic message: \"Uncommitted changes on <branch> (<worktree>)\". Then archive removes the worktree directory. Suggested: commit manually first if you want a better commit message."
+            "value": "The worktree at %@ has uncommitted or untracked changes. Commit & Archive will ask for a commit message (default: \"Uncommitted changes on <branch> (<worktree>)\") and then archive removes the worktree directory."
           }
         }
       }
@@ -1019,7 +1019,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The worktree at %@ has uncommitted or untracked changes. Choosing Archive Anyway will auto-commit tracked/untracked changes with a generic message, then archive the worktree. Suggested: commit manually first for a better message."
+            "value": "The worktree at %@ has uncommitted or untracked changes. Commit & Archive will prompt for a commit message before archiving this worktree."
           }
         }
       }
@@ -1074,7 +1074,51 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Archive Anyway (Auto-Commit)"
+            "value": "Commit & Archive"
+          }
+        }
+      }
+    },
+    "threadArchiveCommitAndArchiveButton": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commit & Archive"
+          }
+        }
+      }
+    },
+    "threadArchiveCommitMessageInfo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter the commit message to use before archiving. Empty message is not allowed."
+          }
+        }
+      }
+    },
+    "threadArchiveCommitMessagePlaceholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commit message"
+          }
+        }
+      }
+    },
+    "threadArchiveCommitMessageTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commit Message Before Archive"
           }
         }
       }

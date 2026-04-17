@@ -342,11 +342,11 @@ When project `Local Sync Paths` are configured, archive performs merge-back from
 The refusal names the worktree path and returns a non-zero exit.
 
 - Recommended: commit/stash the changes, then re-run.
-- To proceed anyway, pass `--force`. For dirty worktrees, `--force` first runs a generic auto-commit (`git add -A` + `git commit -m "Uncommitted changes on <branch> (<worktree>)"`), then archives. Suggested: commit manually first for a more meaningful commit message.
-- `--force` also continues archiving when local sync fails for a non-conflict reason.
+- Dirty worktrees are never force-archived from CLI. `--force` does not bypass dirty-worktree refusal.
+- `--force` only continues archiving when local sync fails for a non-conflict reason.
 - **Coding agents:** do not reflexively retry with `--force` after a refusal. Pass `--force` only when the user has explicitly confirmed they want to discard the flagged data in the named worktree.
 
-The GUI enforces the same guard: archive first refuses and then prompts a critical confirmation alert. For dirty worktrees, "Archive Anyway" performs the same generic auto-commit before archive.
+The GUI enforces the same guard: archive first refuses and then prompts a critical confirmation alert. For dirty worktrees, "Commit & Archive" opens a commit-message prompt (pre-filled with `Uncommitted changes on <branch> (<worktree>)`) and archives only after creating that commit.
 
 ```bash
 magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]
