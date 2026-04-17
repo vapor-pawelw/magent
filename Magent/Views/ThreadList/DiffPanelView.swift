@@ -1235,11 +1235,14 @@ final class DiffPanelView: NSView {
         commitDetailEntries = []
         commitDetailHeaderView.isHidden = true
         tabBarStack.isHidden = false
+        updateContextThreadIndicatorVisibility()
         // infoButton visibility is restored by updateTabTitles()
     }
 
     private func updateContextThreadIndicatorVisibility() {
-        let isVisible = contextThreadIndicatorText != nil
+        // Commit detail mode uses a dedicated header row (with a back button),
+        // so suppress the context badge there to avoid header overlap.
+        let isVisible = contextThreadIndicatorText != nil && !isInCommitDetailMode
         contextThreadBadgeView.isHidden = !isVisible
         commitContextLabel.isHidden = !isVisible
         tabBarTopToHandleConstraint.isActive = !isVisible
