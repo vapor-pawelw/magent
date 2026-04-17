@@ -514,6 +514,8 @@ extension ThreadDetailViewController {
                     item.onKeepAlive = nil
                     item.onKillSession = nil
                     item.onKillAllSessions = nil
+                    item.onCopyTmuxSessionName = nil
+                    item.tmuxSessionNameForMenu = nil
                     item.availableAgentsForContinue = []
                     item.showKeepAliveIcon = false
                     item.typeIcon.isHidden = true
@@ -543,6 +545,12 @@ extension ThreadDetailViewController {
                     item.onKeepAlive = thread.isKeepAlive ? nil : { [weak self] in self?.toggleKeepAlive(at: i) }
                     item.onKillSession = { [weak self] in self?.killSession(at: i) }
                     item.onKillAllSessions = { [weak self] in self?.killAllSessions() }
+                    item.onCopyTmuxSessionName = {
+                        let pasteboard = NSPasteboard.general
+                        pasteboard.clearContents()
+                        pasteboard.setString(sessionName, forType: .string)
+                    }
+                    item.tmuxSessionNameForMenu = sessionName
                     item.availableAgentsForContinue = settings.availableActiveAgents
                     item.showKeepAliveIcon = !thread.isKeepAlive
                         && thread.protectedTmuxSessions.contains(sessionName)
@@ -562,6 +570,8 @@ extension ThreadDetailViewController {
                 item.onKeepAlive = nil
                 item.onKillSession = nil
                 item.onKillAllSessions = nil
+                item.onCopyTmuxSessionName = nil
+                item.tmuxSessionNameForMenu = nil
                 item.availableAgentsForContinue = []
                 item.showKeepAliveIcon = false
             case .draft:
@@ -574,6 +584,8 @@ extension ThreadDetailViewController {
                 item.onKeepAlive = nil
                 item.onKillSession = nil
                 item.onKillAllSessions = nil
+                item.onCopyTmuxSessionName = nil
+                item.tmuxSessionNameForMenu = nil
                 item.availableAgentsForContinue = []
                 item.showKeepAliveIcon = false
             }

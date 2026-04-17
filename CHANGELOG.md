@@ -58,6 +58,7 @@ All notable changes to this project will be documented in this file.
 #### Features
 - The tab bar now scrolls horizontally when tabs overflow the available space instead of compressing them. Navigate via the new chevron arrow buttons that appear on either side of the tab strip when overflow exists, by spinning the mouse scroll wheel over the tab bar, or with a trackpad horizontal swipe. The scroll bar itself stays hidden — overflow is communicated only by the arrows.
 - Added tab hover tooltips in the thread detail view. Hover now shows tab type, terminal tmux session name (for terminal tabs), and live tab status details (busy, waiting for input, keep-alive, dead session, and rate-limit state).
+- The `Session` submenu in the tab context menu (terminal tabs) now shows the underlying tmux session name as a grayed-out header row, with a `Copy Session Name` action below it.
 
 #### Bug Fixes
 - Fixed Codex tab titles showing `Codex (Codex, M)` instead of the actual model version. Codex tab titles now show the version directly (for example `Codex (5.4, M)`, `Codex (5.4-mini, M)`, `Codex (5.3-codex, M)`). Claude tab titles now show `Opus` explicitly when Opus is selected instead of hiding it.

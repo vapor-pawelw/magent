@@ -132,6 +132,8 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onExportContext: (() -> Void)?
     var onKillSession: (() -> Void)?
     var onKillAllSessions: (() -> Void)?
+    var onCopyTmuxSessionName: (() -> Void)?
+    var tmuxSessionNameForMenu: String?
     var onDetach: (() -> Void)?
     var onShowDetachedWindow: (() -> Void)?
     var onReturnDetachedTab: (() -> Void)?
@@ -364,6 +366,10 @@ final class TabItemView: NSView, NSMenuDelegate {
     @objc private func killAllSessionsTapped() {
         onKillAllSessions?()
     }
+
+    @objc private func copyTmuxSessionNameTapped() {
+        onCopyTmuxSessionName?()
+    }
     @objc private func detachTabTapped() {
         onDetach?()
     }
@@ -497,9 +503,42 @@ final class TabItemView: NSView, NSMenuDelegate {
         let hasTabsToRight = tabIndex < totalTabCount - 1
         let hasTabsToLeft = tabIndex > 0
 
-        if onKeepAlive != nil || onKillAllSessions != nil {
+        if onKeepAlive != nil || onKillAllSessions != nil || onCopyTmuxSessionName != nil {
             let sessionItem = NSMenuItem(title: "Session", action: nil, keyEquivalent: "")
             let sessionSubmenu = NSMenu()
+
+            if let name = tmuxSessionNameForMenu, !name.isEmpty {
+                // Disabled informational row showing the underlying tmux session name.
+                let nameItem = NSMenuItem(title: name, action: nil, keyEquivalent: "")
+                nameItem.isEnabled = false
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.menuFont(ofSize: 0),
+                    .foregroundColor: NSColor.secondaryLabelColor
+                ]
+                nameItem.attributedTitle = NSAttributedString(string: name, attributes: attrs)
+                sessionSubmenu.addItem(nameItem)
+
+                if onCopyTmuxSessionName != nil {
+                    let copyItem = NSMenuItem(
+                        title: "Copy Session Name",
+                        action: #selector(copyTmuxSessionNameTapped),
+                        keyEquivalent: ""
+                    )
+                    copyItem.target = self
+                    sessionSubmenu.addItem(copyItem)
+                }
+
+                sessionSubmenu.addItem(.separator())
+            } else if onCopyTmuxSessionName != nil {
+                let copyItem = NSMenuItem(
+                    title: "Copy Session Name",
+                    action: #selector(copyTmuxSessionNameTapped),
+                    keyEquivalent: ""
+                )
+                copyItem.target = self
+                sessionSubmenu.addItem(copyItem)
+                sessionSubmenu.addItem(.separator())
+            }
 
             if onKeepAlive != nil {
                 let keepAliveTitle = showKeepAliveIcon ? "Remove Keep Alive" : "Keep Alive"
@@ -512,6 +551,11 @@ final class TabItemView: NSView, NSMenuDelegate {
                 let killAllItem = NSMenuItem(title: "Kill All Sessions", action: #selector(killAllSessionsTapped), keyEquivalent: "")
                 killAllItem.target = self
                 sessionSubmenu.addItem(killAllItem)
+            }
+
+            // Trim a trailing separator if the lower section ended up empty.
+            if let last = sessionSubmenu.items.last, last.isSeparatorItem {
+                sessionSubmenu.removeItem(last)
             }
 
             sessionItem.submenu = sessionSubmenu
