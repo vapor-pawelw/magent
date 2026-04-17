@@ -43,7 +43,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
   - `sidebarTrailingInset` — trailing content rail (same derivation from trailing side).
   - `capsuleAlignedLeading` / `capsuleAlignedTrailing` — non-thread row alignment (project/section headers).
   - `addRepoRowHeight` — height for the `SidebarAddRepoRow`.
-- Sidebar and changes-panel scroll views use `NonFlashingScrollView`, which suppresses AppKit scroller-reveal paths (`flashScrollers`, `reflectScrolledClipView`) unless there was very recent local `scrollWheel` input. This prevents overlay scroller flicker from background list refreshes and cross-device pointer transitions (Universal Control), while preserving normal visual feedback during actual scrolling.
+- Sidebar and changes-panel scroll views use `NonFlashingScrollView`. `flashScrollers()` is still gated by recent local `scrollWheel` input, but `reflectScrolledClipView(...)` is always forwarded to `super` so AppKit keeps tiling/geometry in sync during programmatic scroll restore and reload paths. Scroller visibility is still policy-driven (hidden without recent local input), which preserves anti-flicker behavior without risking stale layout.
 - Bottom overlay spacing is reserved via a dedicated `SidebarBottomPadding` root item appended after projects. This keeps end-of-list scroll space deterministic regardless of changes-panel visibility.
 - Outline view uses `indentationPerLevel = 0`. All indentation is managed via capsule-relative padding in `ThreadCell`.
 - `AlwaysEmphasizedRowView.drawBackground(in:)` handles all selection/state drawing (not `drawSelection`). `selectionHighlightStyle = .none` on the outline view suppresses AppKit's own selection rect.

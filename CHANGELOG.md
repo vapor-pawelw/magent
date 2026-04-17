@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Fixed Recently Archived history silently disappearing from the top-right archive popover and `Settings > Threads`. Archived entries are now retained in persistence, path re-discovery suppression after archive lasts 15 minutes, and archived history is capped to the latest 100 entries per project.
+- Fixed sidebar row/header misalignment after creating a thread (most visible with popped-out thread highlights), where project and section headers could appear shifted upward or overlapped until further scrolling. Sidebar scroll restore is now anchored to visible row identity during reloads, and create-thread update bursts avoid unsafe metadata-only in-place geometry reuse.
 - Fixed pinned thread badges in sidebar rows showing in a secondary gray color instead of the app's primary brand color.
 - Fixed navigating to a thread (from the bottom selected-thread jump capsule, sticky header bar, pop-out info strip, status bar popovers, etc.) silently failing when its containing project or section was hidden or collapsed. The sidebar now reveals and uncollapses the project and section before scrolling to the row.
 - Fixed `Create New Repository…` from the sidebar add-repo menu sometimes appearing to do nothing. Repo creation now shows a persistent progress banner with spinner, reports explicit success/failure banners, and seeds the initial empty commit with transient git identity/signing-hook overrides so local git config does not block creation.

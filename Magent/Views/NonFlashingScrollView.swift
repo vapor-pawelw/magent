@@ -60,8 +60,11 @@ final class NonFlashingScrollView: NSScrollView {
     }
 
     override func reflectScrolledClipView(_ cView: NSClipView) {
-        guard shouldRevealScrollers else { return }
         super.reflectScrolledClipView(cView)
+        // Always reflect clip-view changes so NSScrollView can keep document tiling
+        // and geometry in sync during programmatic scroll/restoration paths.
+        // Scroller visibility is still controlled by applyScrollerVisibilityPolicy().
+        applyScrollerVisibilityPolicy()
     }
 
     private var shouldRevealScrollers: Bool {

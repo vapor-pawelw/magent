@@ -220,8 +220,16 @@ final class ThreadListViewController: NSViewController {
     private var hasSidebarAppeared = false
     private var didCenterInitialSelectedThreadOnLaunch = false
 
+    private enum SidebarScrollAnchor: Equatable {
+        case thread(UUID)
+        case project(UUID)
+        case section(projectId: UUID, sectionId: UUID)
+    }
+
     private struct SidebarScrollSnapshot {
         let origin: NSPoint
+        let anchor: SidebarScrollAnchor?
+        let anchorOffsetY: CGFloat
     }
 
     // MARK: - Data Model (3-level hierarchy)
@@ -441,7 +449,9 @@ final class ThreadListViewController: NSViewController {
         // Only show sticky section header if the section is expanded, its header
         // row is scrolled off, and its threads are still partially visible.
         if let section = foundSection,
+           let project = foundProject,
            state.projectName != nil,
+           section.projectId == project.projectId,
            outlineView.isItemExpanded(section) {
             let sectionRow = outlineView.row(forItem: section)
             let childCount = outlineView.numberOfChildren(ofItem: section)
@@ -1007,7 +1017,33 @@ final class ThreadListViewController: NSViewController {
     }
 
     private func captureSidebarScrollSnapshot() -> SidebarScrollSnapshot {
-        SidebarScrollSnapshot(origin: scrollView.contentView.bounds.origin)
+        let clipView = scrollView.contentView
+        let visibleRect = clipView.bounds
+        let visibleRows = outlineView.rows(in: visibleRect)
+        guard visibleRows.length > 0 else {
+            return SidebarScrollSnapshot(origin: visibleRect.origin, anchor: nil, anchorOffsetY: 0)
+        }
+
+        let firstVisibleRow = visibleRows.location
+        let rowRect = outlineView.rect(ofRow: firstVisibleRow)
+        let anchorOffsetY = max(0, visibleRect.minY - rowRect.minY)
+        let anchor: SidebarScrollAnchor?
+        switch outlineView.item(atRow: firstVisibleRow) {
+        case let thread as MagentThread:
+            anchor = .thread(thread.id)
+        case let project as SidebarProject:
+            anchor = .project(project.projectId)
+        case let section as SidebarSection:
+            anchor = .section(projectId: section.projectId, sectionId: section.sectionId)
+        default:
+            anchor = nil
+        }
+
+        return SidebarScrollSnapshot(
+            origin: visibleRect.origin,
+            anchor: anchor,
+            anchorOffsetY: anchorOffsetY
+        )
     }
 
     private func restoreSidebarScrollSnapshot(_ snapshot: SidebarScrollSnapshot) {
@@ -1016,12 +1052,37 @@ final class ThreadListViewController: NSViewController {
         let visibleHeight = clipView.bounds.height
         let minY = documentRect.minY
         let maxY = max(documentRect.minY, documentRect.maxY - visibleHeight)
-        let targetY = min(max(snapshot.origin.y, minY), maxY)
+        var targetY = snapshot.origin.y
+
+        if let anchor = snapshot.anchor,
+           let anchorRow = rowIndex(for: anchor) {
+            let rowRect = outlineView.rect(ofRow: anchorRow)
+            targetY = rowRect.minY + snapshot.anchorOffsetY
+        }
+
+        targetY = min(max(targetY, minY), maxY)
         let targetOrigin = NSPoint(x: snapshot.origin.x, y: targetY)
 
         guard clipView.bounds.origin != targetOrigin else { return }
         clipView.scroll(to: targetOrigin)
         scrollView.reflectScrolledClipView(clipView)
+    }
+
+    private func rowIndex(for anchor: SidebarScrollAnchor) -> Int? {
+        for row in 0..<outlineView.numberOfRows {
+            switch (anchor, outlineView.item(atRow: row)) {
+            case let (.thread(threadId), thread as MagentThread) where thread.id == threadId:
+                return row
+            case let (.project(projectId), project as SidebarProject) where project.projectId == projectId:
+                return row
+            case let (.section(projectId, sectionId), section as SidebarSection)
+                where section.projectId == projectId && section.sectionId == sectionId:
+                return row
+            default:
+                continue
+            }
+        }
+        return nil
     }
 
     private func preserveSidebarSelectionViewport(_ updates: () -> Void) {
@@ -1424,17 +1485,6 @@ final class ThreadListViewController: NSViewController {
             rowView.wantsLayer = true
             guard let layer = rowView.layer else { return }
             layer.removeAnimation(forKey: "selectedThreadRowPulse")
-
-            // Ensure scaling animates around the visual center (not an edge/corner).
-            let targetAnchor = CGPoint(x: 0.5, y: 0.5)
-            if layer.anchorPoint != targetAnchor {
-                let oldAnchor = layer.anchorPoint
-                let oldPosition = layer.position
-                layer.anchorPoint = targetAnchor
-                let dx = (targetAnchor.x - oldAnchor.x) * layer.bounds.width
-                let dy = (targetAnchor.y - oldAnchor.y) * layer.bounds.height
-                layer.position = CGPoint(x: oldPosition.x + dx, y: oldPosition.y + dy)
-            }
 
             let pulse = CAKeyframeAnimation(keyPath: "transform.scale")
             pulse.values = [1.0, 1.05, 1.0]

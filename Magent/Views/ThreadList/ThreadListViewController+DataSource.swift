@@ -379,6 +379,47 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
     }
 
+    private func calculatedSidebarRowHeight(for thread: MagentThread, settings: AppSettings, outlineWidth: CGFloat) -> CGFloat {
+        let maxDescLines = settings.sidebarDescriptionLineLimit
+        let trimmedDesc = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasDescription = !(trimmedDesc?.isEmpty ?? true)
+
+        let worktreeName = (thread.worktreePath as NSString).lastPathComponent
+        let branchName = (thread.actualBranch ?? thread.branchName).trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedBranch = branchName.isEmpty ? thread.name : branchName
+        let hasBranchWorktreeMismatch = worktreeName != resolvedBranch
+
+        // Subtitle visible when description exists or branch != worktree.
+        let hasSubtitle = hasDescription || hasBranchWorktreeMismatch
+
+        let jiraEnabled = settings.jiraIntegrationEnabled && settings.jiraTicketDetectionEnabled
+        let hasTicket = jiraEnabled && thread.effectiveJiraTicketKey(settings: settings) != nil
+        let hasPR = thread.pullRequestInfo != nil
+        let hasPRRow = hasTicket || hasPR
+
+        let descLines: Int
+        if hasDescription, let desc = trimmedDesc, maxDescLines > 1 {
+            // Estimate available text width: sidebar width minus icon, spacing, trailing, capsule insets.
+            let textAvailableWidth = max(120, outlineWidth
+                - Self.sidebarHorizontalInset  // leading inset
+                - Self.sidebarTrailingInset     // trailing inset
+                - 16 - 6                        // icon + spacing
+                - 30)                           // trailing stack allowance
+            descLines = ThreadCell.estimatedDescriptionLineCount(
+                text: desc, maxLines: maxDescLines, availableWidth: textAvailableWidth
+            )
+        } else {
+            descLines = 1
+        }
+
+        return ThreadCell.sidebarRowHeight(
+            descriptionLines: descLines,
+            hasSubtitle: hasSubtitle,
+            hasPRRow: hasPRRow,
+            narrowThreads: settings.narrowThreads
+        )
+    }
+
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
         if item is SidebarAddRepoRow {
             return SidebarSpacerRowView()
@@ -534,44 +575,10 @@ extension ThreadListViewController: NSOutlineViewDelegate {
         }
         if let itemThread = item as? MagentThread {
             let thread = resolvedThreadSnapshot(for: itemThread)
-            let settings = currentSettings
-            let maxDescLines = settings.sidebarDescriptionLineLimit
-            let trimmedDesc = thread.taskDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let hasDescription = !(trimmedDesc?.isEmpty ?? true)
-
-            let worktreeName = (thread.worktreePath as NSString).lastPathComponent
-            let branchName = (thread.actualBranch ?? thread.branchName).trimmingCharacters(in: .whitespacesAndNewlines)
-            let resolvedBranch = branchName.isEmpty ? thread.name : branchName
-            let hasBranchWorktreeMismatch = worktreeName != resolvedBranch
-
-            // Subtitle visible when description exists or branch != worktree.
-            let hasSubtitle = hasDescription || hasBranchWorktreeMismatch
-
-            let jiraEnabled = settings.jiraIntegrationEnabled && settings.jiraTicketDetectionEnabled
-            let hasTicket = jiraEnabled && thread.effectiveJiraTicketKey(settings: settings) != nil
-            let hasPR = thread.pullRequestInfo != nil
-            let hasPRRow = hasTicket || hasPR
-
-            let descLines: Int
-            if hasDescription, let desc = trimmedDesc, maxDescLines > 1 {
-                // Estimate available text width: sidebar width minus icon, spacing, trailing, capsule insets.
-                let sidebarWidth = outlineView.bounds.width
-                let textAvailableWidth = sidebarWidth
-                    - Self.sidebarHorizontalInset  // leading inset
-                    - Self.sidebarTrailingInset     // trailing inset
-                    - 16 - 6                        // icon + spacing
-                    - 30                            // trailing stack allowance
-                descLines = ThreadCell.estimatedDescriptionLineCount(
-                    text: desc, maxLines: maxDescLines, availableWidth: textAvailableWidth
-                )
-            } else {
-                descLines = 1
-            }
-            return ThreadCell.sidebarRowHeight(
-                descriptionLines: descLines,
-                hasSubtitle: hasSubtitle,
-                hasPRRow: hasPRRow,
-                narrowThreads: settings.narrowThreads
+            return calculatedSidebarRowHeight(
+                for: thread,
+                settings: currentSettings,
+                outlineWidth: outlineView.bounds.width
             )
         }
         return 26
@@ -1246,7 +1253,8 @@ extension ThreadListViewController: ThreadManagerDelegate {
         // added/removed/reordered/re-sectioned). For metadata-only updates (busy state,
         // rate limits, dirty flag, PR info, etc.), update cells in-place — this avoids
         // the scroll-position flash that reloadData() + expand/collapse causes.
-        let didStructuralReload = sidebarNeedsStructuralReload(for: threads)
+        let shouldForceReloadForPendingCreation = !threadManager.pendingThreadIds.isEmpty
+        let didStructuralReload = shouldForceReloadForPendingCreation || sidebarNeedsStructuralReload(for: threads)
         if didStructuralReload {
             reloadData()
         } else {
@@ -1289,6 +1297,8 @@ extension ThreadListViewController: ThreadManagerDelegate {
     /// updated in-place via updateSidebarInPlace(with:).
     private struct SidebarThreadStructuralKey: Equatable {
         let id: UUID
+        let projectId: UUID
+        let isMain: Bool
         let sectionId: UUID?
         let displayOrder: Int
         let isPinned: Bool
@@ -1301,6 +1311,8 @@ extension ThreadListViewController: ThreadManagerDelegate {
         ///   does not affect display order, so a change to it is not a structural change.
         init(_ thread: MagentThread, considerCompletionDate: Bool) {
             id = thread.id
+            projectId = thread.projectId
+            isMain = thread.isMain
             sectionId = thread.sectionId
             displayOrder = thread.displayOrder
             isPinned = thread.isPinned
@@ -1354,6 +1366,32 @@ extension ThreadListViewController: ThreadManagerDelegate {
     /// running CA animations (busy border rotation).
     private func updateSidebarInPlace(with updatedThreads: [MagentThread]) {
         let threadById = Dictionary(uniqueKeysWithValues: updatedThreads.map { ($0.id, $0) })
+        var rowsWithHeightChanges = IndexSet()
+        let outlineWidth = outlineView.bounds.width
+        let settings = currentSettings
+        var previousHeightByThreadId: [UUID: CGFloat] = [:]
+
+        // Capture pre-mutation heights so we can detect row-height changes
+        // correctly after replacing model snapshots in Phase 1.
+        for project in sidebarProjects {
+            for child in project.children {
+                if let thread = child as? MagentThread, threadById[thread.id] != nil {
+                    previousHeightByThreadId[thread.id] = calculatedSidebarRowHeight(
+                        for: thread,
+                        settings: settings,
+                        outlineWidth: outlineWidth
+                    )
+                } else if let section = child as? SidebarSection {
+                    for thread in section.threads where threadById[thread.id] != nil {
+                        previousHeightByThreadId[thread.id] = calculatedSidebarRowHeight(
+                            for: thread,
+                            settings: settings,
+                            outlineWidth: outlineWidth
+                        )
+                    }
+                }
+            }
+        }
 
         // Phase 1: Update model objects in-place.
         for project in sidebarProjects {
@@ -1374,10 +1412,23 @@ extension ThreadListViewController: ThreadManagerDelegate {
         // Phase 2: Reconfigure visible row and cell views directly — no
         // reloadItem() call, so NSOutlineView keeps existing view instances
         // and running CA animations survive.
-        let settings = currentSettings
         for row in 0..<outlineView.numberOfRows {
-            guard let thread = outlineView.item(atRow: row) as? MagentThread,
-                  let updated = threadById[thread.id] else { continue }
+            guard let rowThread = outlineView.item(atRow: row) as? MagentThread,
+                  let updated = threadById[rowThread.id] else { continue }
+
+            let previousHeight = previousHeightByThreadId[updated.id] ?? calculatedSidebarRowHeight(
+                for: rowThread,
+                settings: settings,
+                outlineWidth: outlineWidth
+            )
+            let updatedHeight = calculatedSidebarRowHeight(
+                for: updated,
+                settings: settings,
+                outlineWidth: outlineWidth
+            )
+            if abs(previousHeight - updatedHeight) > 0.5 {
+                rowsWithHeightChanges.insert(row)
+            }
 
             // Reconfigure the row view (busy border, highlight borders, sign emoji).
             if let rowView = outlineView.rowView(atRow: row, makeIfNecessary: false) as? AlwaysEmphasizedRowView {
@@ -1445,6 +1496,13 @@ extension ThreadListViewController: ThreadManagerDelegate {
                     )
                 }
             }
+        }
+
+        if !rowsWithHeightChanges.isEmpty {
+            outlineView.noteHeightOfRows(withIndexesChanged: rowsWithHeightChanges)
+            outlineView.noteNumberOfRowsChanged()
+            outlineView.layoutSubtreeIfNeeded()
+            updateStickyHeaders()
         }
     }
 
