@@ -33,7 +33,6 @@ All notable changes to this project will be documented in this file.
 - Fixed sidebar scroll jumps when dropping a thread onto an existing pop-out window (or moving a thread between pop-outs). The fallback main-window selection no longer scrolls the sidebar away from where the user was browsing.
 - Removed the busy-row shimmer effect to reduce sidebar motion; busy threads now keep only border/separator animations.
 - Fixed sidebar thread capsules visibly resizing when the vertical scroller appeared or disappeared (notably when switching focus to another window and back).
-- Fixed long thread descriptions being hard-clipped in sidebar rows. Description overflow now ends with a trailing ellipsis (`...`) after the visible row line limit.
 
 ### Settings
 #### Features
@@ -84,7 +83,6 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 #### Features
-- Added destructive-archive safety guards when archiving a thread. Archive now refuses by default when the worktree is dirty (uncommitted/untracked changes) or when notable ignored files would be deleted; the GUI shows critical destructive confirmation alerts and the CLI refuses unless `--force` is explicitly passed.
 - Moved the Pull Request and Jira buttons out of the thread top utility bar into the thread info bar's bottom-right corner, styled as compact capsules. The status indicators (state, keep-alive, favorite, pinned) now sit in the top-right corner of the info bar so the right side mirrors the two-line layout on the left. Pop-out windows show the same capsule action buttons in their info strip.
 - Added a per-thread "Sync description and priority from Jira" toggle under the Jira context submenu. When enabled, the thread's description and priority are automatically kept in sync with its detected Jira ticket on every detection refresh, the AI auto-description generator stays out of the way, and a small Jira badge appears in the thread row's top-right corner.
 - Added a top-bar pop-out button next to Archive in thread view (above terminal), with auto-hide when the thread is already in a separate window.
@@ -113,7 +111,6 @@ All notable changes to this project will be documented in this file.
 - Separate thread and detached-tab windows now persist their latest size and position continuously, so app restart restores the same extracted windows in the same place.
 - Fixed separate-window quit/relaunch restore so popped-out thread windows stay popped out across normal app restart instead of collapsing back into the main window.
 - Fixed main-window content replacement when popping out the currently visible thread by switching main focus to another non-popped-out thread instead of showing a detached placeholder.
-- Fixed generated thread descriptions being truncated to 8 words. AI-generated descriptions now keep full text, with 2-8 words treated as guidance rather than a hard limit.
 
 ### Changes Panel
 #### Features
@@ -123,7 +120,7 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Fixed refresh/load/commit-selection guards in the changes panel to use focused context thread state, preventing stale updates when main selection differs from focused pop-out thread.
 - Fixed changes-panel context not returning to the selected main thread after repeated clicks/typing in the main Ghostty tab when responder state did not change.
-- Fixed commit-detail header overlap in the changes panel by hiding the context-thread badge while the detail header/back button is visible.
+- Fixed inline diff viewer rendering in every thread window at once. Diff open/close events from the changes panel now apply only to the main-window thread view, so pop-out windows no longer mirror the same diff panel.
 
 ### New Thread Sheet
 #### Bug Fixes
@@ -138,7 +135,6 @@ All notable changes to this project will be documented in this file.
 
 ### CLI
 #### Features
-- `magent-cli archive-thread` now refuses by default when the worktree has uncommitted/untracked changes or notable ignored files that would be deleted with the worktree directory. Refusal messages name the worktree path and require explicit `--force` to continue. Help text and agent-facing docs mark `--force` as destructive so coding agents do not silently retry with it.
 - Added `magent-cli list-archived [--project <name>] [--limit <n>]` to list recently archived threads (most recent first). Each result now includes the thread's branch name, full worktree path and directory name, created/archived timestamps, primary agent type, base branch, Jira ticket key, priority, icon, sign emoji, and favorite/pinned/hidden flags so past work can be fully identified after archive. `magent-cli thread-info` also now resolves archived threads by name or ID.
 
 #### Bug Fixes
@@ -244,7 +240,6 @@ All notable changes to this project will be documented in this file.
 - Fixed `batch-create` failing with "Invalid JSON" when `specs.json` is pretty-printed. The CLI now compacts the array before sending so embedded newlines don't truncate the IPC message.
 - Improved IPC JSON parse error messages: errors now report the specific field or mismatch instead of the generic "couldn't be read" Foundation message; `dataCorrupted` errors include a hint about the newline-truncation pitfall.
 - Interactive CLI tab picker now shows real tab names (including custom titles) instead of generic `Tab #` labels.
-- `auto-rename-thread` now returns a CLI warning when the generated description exceeds the preferred 2-8 word range, so agents can immediately adjust it without blocking the rename.
 
 ### Agents
 #### Features

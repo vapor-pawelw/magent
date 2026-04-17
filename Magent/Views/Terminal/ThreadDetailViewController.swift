@@ -374,19 +374,22 @@ final class ThreadDetailViewController: NSViewController {
             object: nil
         )
 
-        // Observe diff viewer open/close requests from sidebar
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleShowDiffViewerNotification(_:)),
-            name: .magentShowDiffViewer,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleHideDiffViewerNotification),
-            name: .magentHideDiffViewer,
-            object: nil
-        )
+        // Observe diff viewer open/close requests from sidebar only in the main window.
+        // Pop-out thread windows should not mirror inline diff content.
+        if !isPopoutContext {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleShowDiffViewerNotification(_:)),
+                name: .magentShowDiffViewer,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleHideDiffViewerNotification),
+                name: .magentHideDiffViewer,
+                object: nil
+            )
+        }
 
         // Observe ghostty scrollbar updates to show/hide floating scroll-to-bottom button
         NotificationCenter.default.addObserver(
@@ -1492,6 +1495,7 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     @objc private func handleShowDiffViewerNotification(_ notification: Notification) {
+        guard !isPopoutContext else { return }
         let filePath = notification.userInfo?["filePath"] as? String
         let commitHash = notification.userInfo?["commitHash"] as? String
         let forceWorkingTree = (notification.userInfo?["mode"] as? String) == "uncommitted"
@@ -1499,6 +1503,7 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     @objc private func handleHideDiffViewerNotification() {
+        guard !isPopoutContext else { return }
         hideDiffViewer()
     }
 
