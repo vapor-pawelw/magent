@@ -795,7 +795,9 @@ final class SplitViewController: NSSplitViewController {
         guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
         if threadListVC.diffInspectionThreadID == threadId {
             threadListVC.setDiffInspectionContextToSelectedThread()
-            focusMainWindowAndCurrentThread()
+            if shouldFocusMainWindowAfterThreadReturn() {
+                focusMainWindowAndCurrentThread()
+            }
         }
         threadListVC.refreshThreadRowInPlace(threadId: threadId)
     }
@@ -841,6 +843,17 @@ final class SplitViewController: NSSplitViewController {
         NSApp.activate(ignoringOtherApps: true)
         view.window?.makeKeyAndOrderFront(nil)
         currentDetailVC?.focusCurrentTabForNavigation()
+    }
+
+    private func shouldFocusMainWindowAfterThreadReturn() -> Bool {
+        // If the user is actively working in another pop-out window, do not
+        // steal focus back to the main window just because a different
+        // pop-out thread was returned to main.
+        if let keyWindow = NSApp.keyWindow,
+           PopoutWindowManager.shared.isPopoutWindow(keyWindow) {
+            return false
+        }
+        return true
     }
 
     private func preserveSidebarWidthDuringContentChange(_ change: () -> Void) {
