@@ -1021,8 +1021,8 @@ actor IPCSocketServer {
                 esac
             done
             [ -n "$thread" ] || die "Usage: magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]
-        Archive removes the worktree directory and keeps the git branch. Without --force, archive is refused when the worktree is dirty (uncommitted/untracked changes) or when notable ignored files would be deleted with the worktree directory.
-        --force archives anyway. For dirty worktrees it first auto-commits tracked/untracked changes with a generic commit message, then archives. Ignored files are still deleted. Suggested: commit first yourself for a more meaningful message."
+        Archive removes the worktree directory and keeps the git branch. Without --force, archive is refused when the worktree is dirty (uncommitted/untracked changes).
+        --force archives anyway. For dirty worktrees it first auto-commits tracked/untracked changes with a generic commit message, then archives. Suggested: commit first yourself for a more meaningful message."
             json="{$(json_kv command archive-thread),$(json_kv threadName "$thread")"
             [ "$force" = "1" ] && json="$json,\"force\":true"
             [ "$skip_local_sync" = "1" ] && json="$json,\"skipLocalSync\":true"
@@ -1457,7 +1457,7 @@ actor IPCSocketServer {
             echo "  list-threads         [--project <name>]"
             echo "  list-archived        [--project <name>] [--limit <n>]  (most recently archived first)"
             echo "  send-prompt          --thread <name> (--prompt <text> | --prompt-file <path>)"
-            echo "  archive-thread       --thread <name> [--force] [--skip-local-sync]  (removes worktree, keeps branch; refused for dirty or notable ignored files unless --force; dirty --force auto-commits first)"
+            echo "  archive-thread       --thread <name> [--force] [--skip-local-sync]  (removes worktree, keeps branch; refused for dirty worktrees unless --force; dirty --force auto-commits first)"
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
             echo "  list-tabs            (--thread <name> | --thread-id <id>)"
             echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--title <text>] [--fresh|--no-resume] [--prompt <text>]"

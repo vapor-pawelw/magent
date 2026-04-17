@@ -337,15 +337,14 @@ When project `Local Sync Paths` are configured, archive performs merge-back from
 
 **Destructive-archive safety.** Archive runs `git worktree remove --force`, which deletes the worktree directory unconditionally. To prevent silent data loss, `archive-thread` refuses to run when:
 
-- the worktree has uncommitted or untracked changes, or
-- the worktree is clean but contains notable ignored files that would also be deleted (for example notes, local config, secrets).
+- the worktree has uncommitted or untracked changes.
 
 The refusal names the worktree path and returns a non-zero exit.
 
-- Recommended: commit/stash or back up/move the affected files, then re-run.
+- Recommended: commit/stash the changes, then re-run.
 - To proceed anyway, pass `--force`. For dirty worktrees, `--force` first runs a generic auto-commit (`git add -A` + `git commit -m "Uncommitted changes on <branch> (<worktree>)"`), then archives. Suggested: commit manually first for a more meaningful commit message.
-- `--force` remains destructive for ignored files: ignored content is not tracked by git and is still deleted with the worktree directory.
 - `--force` also continues archiving when local sync fails for a non-conflict reason.
+- **Coding agents:** do not reflexively retry with `--force` after a refusal. Pass `--force` only when the user has explicitly confirmed they want to discard the flagged data in the named worktree.
 
 The GUI enforces the same guard: archive first refuses and then prompts a critical confirmation alert. For dirty worktrees, "Archive Anyway" performs the same generic auto-commit before archive.
 

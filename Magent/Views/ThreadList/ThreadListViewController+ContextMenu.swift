@@ -1659,23 +1659,11 @@ extension ThreadListViewController {
                     promptForLocalSyncConflicts: true,
                     force: false
                 )
-            } catch ThreadManagerError.dirtyWorktree(let worktreePath, let notableIgnored) {
+            } catch ThreadManagerError.dirtyWorktree(let worktreePath) {
                 await MainActor.run {
                     guard self.confirmDestructiveArchive(
                         worktreePath: worktreePath,
-                        threadName: liveThread.name,
-                        kind: .dirty,
-                        notableIgnoredFiles: notableIgnored
-                    ) else { return }
-                    self.retryArchiveForced(threadManager: threadManager, thread: liveThread)
-                }
-            } catch ThreadManagerError.notableIgnoredFilesWouldBeDeleted(let worktreePath, let files) {
-                await MainActor.run {
-                    guard self.confirmDestructiveArchive(
-                        worktreePath: worktreePath,
-                        threadName: liveThread.name,
-                        kind: .ignoredOnly,
-                        notableIgnoredFiles: files
+                        threadName: liveThread.name
                     ) else { return }
                     self.retryArchiveForced(threadManager: threadManager, thread: liveThread)
                 }
@@ -1715,46 +1703,18 @@ extension ThreadListViewController {
         }
     }
 
-    enum DestructiveArchiveKind {
-        case dirty
-        case ignoredOnly
-    }
-
     /// Shows a modal alert warning that archiving is destructive for this worktree.
     /// Returns `true` if the user confirmed.
     @MainActor
     private func confirmDestructiveArchive(
         worktreePath: String,
-        threadName: String,
-        kind: DestructiveArchiveKind,
-        notableIgnoredFiles: [String]
+        threadName: String
     ) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .critical
-
-        switch kind {
-        case .dirty:
-            alert.messageText = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyTitle(threadName))
-            var info = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyInfo(worktreePath))
-            if !notableIgnoredFiles.isEmpty {
-                info += String(localized: .ThreadStrings.threadArchiveDestructiveDirtyIgnoredPrefix)
-                    + notableIgnoredFiles.prefix(10).joined(separator: "\n  ")
-                if notableIgnoredFiles.count > 10 {
-                    info += String(localized: .ThreadStrings.threadArchiveDestructiveListOverflow(notableIgnoredFiles.count - 10))
-                }
-            }
-            alert.informativeText = info
-            alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveDestructiveDirtyConfirm))
-        case .ignoredOnly:
-            alert.messageText = String(localized: .ThreadStrings.threadArchiveDestructiveIgnoredTitle(threadName))
-            var info = String(localized: .ThreadStrings.threadArchiveDestructiveIgnoredInfo(worktreePath))
-                + notableIgnoredFiles.prefix(10).joined(separator: "\n  ")
-            if notableIgnoredFiles.count > 10 {
-                info += String(localized: .ThreadStrings.threadArchiveDestructiveListOverflow(notableIgnoredFiles.count - 10))
-            }
-            alert.informativeText = info
-            alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveDestructiveIgnoredConfirm))
-        }
+        alert.messageText = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyTitle(threadName))
+        alert.informativeText = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyInfo(worktreePath))
+        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveDestructiveDirtyConfirm))
         alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
         alert.buttons.first?.hasDestructiveAction = true
         return alert.runModal() == .alertFirstButtonReturn

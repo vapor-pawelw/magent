@@ -83,23 +83,11 @@ extension ThreadDetailViewController {
                     promptForLocalSyncConflicts: true,
                     force: false
                 )
-            } catch ThreadManagerError.dirtyWorktree(let worktreePath, let notableIgnoredFiles) {
+            } catch ThreadManagerError.dirtyWorktree(let worktreePath) {
                 await MainActor.run {
                     guard self.confirmDestructiveArchive(
                         worktreePath: worktreePath,
-                        threadName: threadToArchive.name,
-                        kind: .dirty,
-                        notableIgnoredFiles: notableIgnoredFiles
-                    ) else { return }
-                    self.retryArchiveForced(thread: threadToArchive)
-                }
-            } catch ThreadManagerError.notableIgnoredFilesWouldBeDeleted(let worktreePath, let files) {
-                await MainActor.run {
-                    guard self.confirmDestructiveArchive(
-                        worktreePath: worktreePath,
-                        threadName: threadToArchive.name,
-                        kind: .ignoredOnly,
-                        notableIgnoredFiles: files
+                        threadName: threadToArchive.name
                     ) else { return }
                     self.retryArchiveForced(thread: threadToArchive)
                 }
@@ -139,44 +127,16 @@ extension ThreadDetailViewController {
         }
     }
 
-    private enum DestructiveArchiveKind {
-        case dirty
-        case ignoredOnly
-    }
-
     @MainActor
     private func confirmDestructiveArchive(
         worktreePath: String,
-        threadName: String,
-        kind: DestructiveArchiveKind,
-        notableIgnoredFiles: [String]
+        threadName: String
     ) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .critical
-
-        switch kind {
-        case .dirty:
-            alert.messageText = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyTitle(threadName))
-            var info = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyInfoDetail(worktreePath))
-            if !notableIgnoredFiles.isEmpty {
-                info += String(localized: .ThreadStrings.threadArchiveDestructiveDirtyIgnoredPrefix)
-                    + notableIgnoredFiles.prefix(10).joined(separator: "\n  ")
-                if notableIgnoredFiles.count > 10 {
-                    info += String(localized: .ThreadStrings.threadArchiveDestructiveListOverflow(notableIgnoredFiles.count - 10))
-                }
-            }
-            alert.informativeText = info
-            alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveDestructiveDirtyConfirm))
-        case .ignoredOnly:
-            alert.messageText = String(localized: .ThreadStrings.threadArchiveDestructiveIgnoredTitle(threadName))
-            var info = String(localized: .ThreadStrings.threadArchiveDestructiveIgnoredInfoDetail(worktreePath))
-                + notableIgnoredFiles.prefix(10).joined(separator: "\n  ")
-            if notableIgnoredFiles.count > 10 {
-                info += String(localized: .ThreadStrings.threadArchiveDestructiveListOverflow(notableIgnoredFiles.count - 10))
-            }
-            alert.informativeText = info
-            alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveDestructiveIgnoredConfirm))
-        }
+        alert.messageText = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyTitle(threadName))
+        alert.informativeText = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyInfoDetail(worktreePath))
+        alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveDestructiveDirtyConfirm))
 
         alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
         alert.buttons.first?.hasDestructiveAction = true
