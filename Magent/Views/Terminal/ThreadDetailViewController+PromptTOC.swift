@@ -1184,7 +1184,7 @@ private final class PromptTOCEntryRowView: NSView {
         }
 
         layer.borderColor = NSColor.clear.cgColor
-        let isDark = effectiveAppearance.name == .darkAqua
+        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         layer.backgroundColor = showsAlternateBackground
             ? NSColor.separatorColor.withAlphaComponent(isDark ? 0.08 : 0.14).cgColor
             : NSColor.clear.cgColor

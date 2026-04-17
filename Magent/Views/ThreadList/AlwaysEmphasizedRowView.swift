@@ -180,7 +180,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             // selection changes (icon tint, badge colors, text color).
             // In light mode our selection is a pale tint, not a dark bg — push .normal
             // so AppKit doesn't auto-invert adaptive colors (labelColor etc.) to white.
-            let isDark = effectiveAppearance.name == .darkAqua
+            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let style: NSView.BackgroundStyle = (isSelected && isDark) ? .emphasized : .normal
             for case let cell as NSTableCellView in subviews {
                 cell.backgroundStyle = style
@@ -219,7 +219,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
 
     private var currentCapsuleStyle: CapsuleStyle {
         if isSelected {
-            let isDark = effectiveAppearance.name == .darkAqua
+            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let fillColor = isDark
                 ? NSColor.controlAccentColor.withAlphaComponent(0.1)
                 : NSColor.controlAccentColor.withAlphaComponent(0.2)
@@ -253,10 +253,10 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 border: NSColor.controlAccentColor.withAlphaComponent(0.26)
             )
         } else {
-            let borderColor = effectiveAppearance.name == .darkAqua
+            let borderColor = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
                 ? NSColor.white.withAlphaComponent(0.12)
                 : NSColor.black.withAlphaComponent(0.08)
-            let fillColor = effectiveAppearance.name == .darkAqua
+            let fillColor = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
                 ? NSColor.white.withAlphaComponent(0.05)
                 : NSColor.black.withAlphaComponent(0.03)
             return CapsuleStyle(fill: fillColor, border: borderColor)
@@ -299,7 +299,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
                 yRadius: Self.capsuleCornerRadius
             )
             // Brighten fill slightly when the context menu is open for this row.
-            let isDark = effectiveAppearance.name == .darkAqua
+            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let fillColor: NSColor
             if showsContextMenuHighlight {
                 fillColor = isDark
@@ -533,7 +533,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
             return
         }
         let fontSize: CGFloat = (emoji == "↑" || emoji == "↓") ? 14 : 11
-        let isDark = effectiveAppearance.name == .darkAqua
+        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let textColor: NSColor = (isSelected && isDark) ? .white : (tintColor ?? .labelColor)
 
         let badge = ensureSignEmojiBadge()
@@ -548,7 +548,7 @@ final class AlwaysEmphasizedRowView: NSTableRowView {
 
     private func updateSignEmojiSelectionColor() {
         guard let badge = signEmojiBadge, !badge.isHidden else { return }
-        let isDarkForEmoji = effectiveAppearance.name == .darkAqua
+        let isDarkForEmoji = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         badge.updateTextColor((isSelected && isDarkForEmoji) ? .white : (signEmojiTintColor ?? .labelColor))
         updateSignEmojiBadge()
     }

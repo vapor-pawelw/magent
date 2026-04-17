@@ -438,7 +438,7 @@ private final class ThreadStatusPopoverSeparatorView: NSView {
         case .rateLimited:
             return .systemRed.withAlphaComponent(0.5)
         case .busy, .favorites:
-            let isDark = effectiveAppearance.name == .darkAqua
+            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             return isDark
                 ? NSColor.white.withAlphaComponent(0.12)
                 : NSColor.black.withAlphaComponent(0.08)
@@ -477,7 +477,7 @@ private final class ThreadStatusPopoverSeparatorView: NSView {
                 brightness: min(brightness * 1.1, 1.0),
                 alpha: 0.8
             )
-            let isDark = self.effectiveAppearance.name == .darkAqua
+            let isDark = self.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let dimColor = isDark
                 ? NSColor.white.withAlphaComponent(0.12)
                 : NSColor.black.withAlphaComponent(0.08)
@@ -971,7 +971,7 @@ final class StatusBarView: NSView, NSPopoverDelegate {
 
     private func updateLayerColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let isDark = self.effectiveAppearance.name == .darkAqua
+            let isDark = self.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let bg: NSColor = isDark
                 ? NSColor(resource: .surface)
                 : NSColor(resource: .appBackground)

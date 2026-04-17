@@ -238,7 +238,7 @@ final class StickyHeaderOverlayView: NSView {
     private func updateBackground() {
         let appearance = window?.effectiveAppearance ?? NSApp.effectiveAppearance
         appearance.performAsCurrentDrawingAppearance {
-            let isDark = appearance.name == .darkAqua
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let bgColor: NSColor = isDark
                 ? NSColor.windowBackgroundColor
                 : NSColor(resource: .appBackground)

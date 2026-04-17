@@ -159,7 +159,7 @@ final class PopoutInfoStripView: NSView {
 
     override func updateLayer() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let isDark = self.effectiveAppearance.name == .darkAqua
+            let isDark = self.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let bgColor = isDark
                 ? NSColor(resource: .surface).withAlphaComponent(0.85)
                 : NSColor(resource: .appBackground)
@@ -380,7 +380,7 @@ final class PopoutInfoStripView: NSView {
         } else if thread.hasUnreadAgentCompletion {
             borderColor = .systemGreen.withAlphaComponent(0.5)
         } else {
-            let isDark = effectiveAppearance.name == .darkAqua
+            let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             borderColor = isDark
                 ? NSColor.white.withAlphaComponent(0.12)
                 : NSColor.black.withAlphaComponent(0.1)
@@ -423,7 +423,7 @@ final class PopoutInfoStripView: NSView {
                 brightness: min(brightness * 1.1, 1.0),
                 alpha: 0.8
             )
-            let isDark = self.effectiveAppearance.name == .darkAqua
+            let isDark = self.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let dimColor = isDark
                 ? NSColor.white.withAlphaComponent(0.12)
                 : NSColor.black.withAlphaComponent(0.08)

@@ -1292,7 +1292,7 @@ final class DiffPanelView: NSView {
 
     private func updateSeparatorColor() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let isDark = self.effectiveAppearance.name == .darkAqua
+            let isDark = self.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             let separatorColor = isDark
                 ? NSColor(resource: .textSecondary).withAlphaComponent(0.4)
                 : NSColor(resource: .textSecondary).withAlphaComponent(0.6)
