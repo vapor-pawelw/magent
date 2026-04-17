@@ -566,7 +566,12 @@ final class ThreadListViewController: NSViewController {
         outlineView.indentationPerLevel = 0
         outlineView.rowSizeStyle = .custom
         outlineView.backgroundColor = .clear
-        outlineView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        // Keep column width fully manual (see `refitOutlineColumnIfNeeded`). AppKit's
+        // last-column autoresizing otherwise shrinks the column whenever the enclosing
+        // clip view briefly narrows — e.g. when the overlay scroller hover-expands or
+        // legacy scroller toggles visibility on window activate/deactivate — causing
+        // every capsule to resize along with the scroller.
+        outlineView.columnAutoresizingStyle = .noColumnAutoresizing
         outlineView.intercellSpacing = NSSize(width: 0, height: 0)
         // Suppress AppKit's built-in selection drawing so right-click context menus
         // don't add an unwanted border. Our custom capsule is drawn in drawBackground.
@@ -574,8 +579,9 @@ final class ThreadListViewController: NSViewController {
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("ThreadColumn"))
         column.title = "Threads"
-        // .autoresizingMask lets the column track the outline view width.
-        column.resizingMask = .autoresizingMask
+        // No autoresizing — width is managed explicitly by `refitOutlineColumnIfNeeded`.
+        // User resizing is irrelevant here (single column, no header) so we pass [].
+        column.resizingMask = []
         // Prevent the column from growing wider than the scroll view clip bounds.
         // Actual width is pinned in refitOutlineColumnIfNeeded().
         column.minWidth = 10
@@ -596,7 +602,7 @@ final class ThreadListViewController: NSViewController {
         menu.delegate = self
         outlineView.menu = menu
 
-        scrollView = NSScrollView()
+        scrollView = NonFlashingScrollView()
         scrollView.documentView = outlineView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true

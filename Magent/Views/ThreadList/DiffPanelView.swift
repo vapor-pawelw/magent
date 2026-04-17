@@ -181,7 +181,7 @@ final class DiffPanelView: NSView {
     private let infoButton = NSButton()
     private let contextThreadBadgeView = NSView()
     private let commitContextLabel = NSTextField(labelWithString: "")
-    private let scrollView = NSScrollView()
+    private let scrollView = NonFlashingScrollView()
     private let stackView = NSStackView()
     private let branchInfoLabel = NSTextField(labelWithString: "")
     private let baseLineLabel = NSTextField(labelWithString: "⤷ ")
