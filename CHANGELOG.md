@@ -32,6 +32,7 @@ All notable changes to this project will be documented in this file.
 - Fixed the project (repo name) header row sometimes rendering blank after creating a new thread. The row's space was reserved but its name, chevron, and `+` button were invisible until the user scrolled or resized the sidebar.
 - Fixed sidebar scroll jumps when dropping a thread onto an existing pop-out window (or moving a thread between pop-outs). The fallback main-window selection no longer scrolls the sidebar away from where the user was browsing.
 - Removed the busy-row shimmer effect to reduce sidebar motion; busy threads now keep only border/separator animations.
+- Fixed sidebar thread capsules visibly resizing when the vertical scroller appeared or disappeared (notably when switching focus to another window and back).
 
 ### Settings
 #### Features
