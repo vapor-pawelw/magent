@@ -219,6 +219,7 @@ final class ThreadListViewController: NSViewController {
     private(set) var isDiffInspectionPopoutContext = false
     private var hasSidebarAppeared = false
     private var didCenterInitialSelectedThreadOnLaunch = false
+    private var pendingInitialSelectedThreadCenteringWorkItem: DispatchWorkItem?
 
     private enum SidebarScrollAnchor: Equatable {
         case thread(UUID)
@@ -975,20 +976,24 @@ final class ThreadListViewController: NSViewController {
     private func scheduleInitialSelectedThreadCenteringIfNeeded() {
         guard hasSidebarAppeared else { return }
         guard !didCenterInitialSelectedThreadOnLaunch else { return }
-        guard selectedThreadID != nil else {
-            didCenterInitialSelectedThreadOnLaunch = true
-            return
+        guard selectedThreadID != nil else { return }
+        pendingInitialSelectedThreadCenteringWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.hasSidebarAppeared else { return }
+            guard !self.didCenterInitialSelectedThreadOnLaunch else { return }
+            guard self.selectedThreadID != nil else { return }
+            self.refreshSidebarLayout(forceColumnRefit: true)
+            self.attemptInitialSelectedThreadCentering(remainingAttempts: 8)
         }
-        attemptInitialSelectedThreadCentering(remainingAttempts: 6)
+        pendingInitialSelectedThreadCenteringWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: work)
     }
 
     private func attemptInitialSelectedThreadCentering(remainingAttempts: Int) {
         guard !didCenterInitialSelectedThreadOnLaunch else { return }
         guard hasSidebarAppeared else { return }
-        guard let selectedThreadID else {
-            didCenterInitialSelectedThreadOnLaunch = true
-            return
-        }
+        guard let selectedThreadID else { return }
 
         refreshSidebarLayout(forceColumnRefit: true)
         expandAncestorsIfNeeded(for: selectedThreadID)
@@ -1004,8 +1009,16 @@ final class ThreadListViewController: NSViewController {
         for row in 0..<outlineView.numberOfRows {
             guard let thread = outlineView.item(atRow: row) as? MagentThread, thread.id == selectedThreadID else { continue }
             centerOutlineRowInViewport(row) { [weak self] in
-                self?.didCenterInitialSelectedThreadOnLaunch = true
-                self?.updateSelectedThreadJumpCapsuleVisibility()
+                guard let self else { return }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    if self.isSelectedThreadRowVisibleInViewport() {
+                        self.didCenterInitialSelectedThreadOnLaunch = true
+                        self.updateSelectedThreadJumpCapsuleVisibility()
+                    } else if remainingAttempts > 0 {
+                        self.attemptInitialSelectedThreadCentering(remainingAttempts: remainingAttempts - 1)
+                    }
+                }
             }
             return
         }
@@ -1014,6 +1027,16 @@ final class ThreadListViewController: NSViewController {
         DispatchQueue.main.async { [weak self] in
             self?.attemptInitialSelectedThreadCentering(remainingAttempts: remainingAttempts - 1)
         }
+    }
+
+    private func isSelectedThreadRowVisibleInViewport() -> Bool {
+        guard let selectedThread = selectedThreadFromState() else { return false }
+        let row = outlineView.row(forItem: selectedThread)
+        guard row >= 0 else { return false }
+
+        let visibleRect = scrollView.contentView.bounds
+        let rowRect = outlineView.rect(ofRow: row)
+        return rowRect.intersects(visibleRect)
     }
 
     private func captureSidebarScrollSnapshot() -> SidebarScrollSnapshot {
