@@ -33,7 +33,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 ## Implementation Notes
 
 - Capsule geometry is defined in `AlwaysEmphasizedRowView`:
-  - `capsuleLeadingInset` / `capsuleTrailingInset` — inset from row edges to capsule border. The overlay vertical scroller floats over the trailing inset region, so the capsule itself is never visually clipped. To avoid capsule-width jitter when the scroller appears/disappears (e.g. on window deactivate/reactivate), `refitOutlineColumnIfNeeded` sizes the column from `scrollView.bounds.width` rather than `contentView.bounds.width`.
+  - `capsuleLeadingInset` / `capsuleTrailingInset` — inset from row edges to capsule border. The overlay vertical scroller floats over the trailing inset region, so the capsule itself is never visually clipped. To avoid capsule-width jitter when the scroller appears/disappears (e.g. on window deactivate/reactivate, or on mouse hover expanding the overlay scroller), `refitOutlineColumnIfNeeded` sizes the column from `scrollView.bounds.width` rather than `contentView.bounds.width`. The outline view's `columnAutoresizingStyle` is set to `.noColumnAutoresizing` and the column's `resizingMask` is `[]` — otherwise AppKit's own last-column autoresize shrinks the column whenever the clip view narrows transiently (overlay-scroller hover reserves a few pixels) and beats our manual refit to it.
   - `capsuleVerticalInset` — vertical inset.
   - `capsuleBorderWidth` / `capsuleBorderInset` — border stroke width and half-width.
   - `capsuleContentHPadding` / `capsuleContentVPadding` — padding from capsule inner edge to content (12pt each).
@@ -43,6 +43,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
   - `sidebarTrailingInset` — trailing content rail (same derivation from trailing side).
   - `capsuleAlignedLeading` / `capsuleAlignedTrailing` — non-thread row alignment (project/section headers).
   - `addRepoRowHeight` — height for the `SidebarAddRepoRow`.
+- Sidebar and changes-panel scroll views use `NonFlashingScrollView`, which suppresses AppKit scroller-reveal paths (`flashScrollers`, `reflectScrolledClipView`) unless there was very recent local `scrollWheel` input. This prevents overlay scroller flicker from background list refreshes and cross-device pointer transitions (Universal Control), while preserving normal visual feedback during actual scrolling.
 - Bottom overlay spacing is reserved via a dedicated `SidebarBottomPadding` root item appended after projects. This keeps end-of-list scroll space deterministic regardless of changes-panel visibility.
 - Outline view uses `indentationPerLevel = 0`. All indentation is managed via capsule-relative padding in `ThreadCell`.
 - `AlwaysEmphasizedRowView.drawBackground(in:)` handles all selection/state drawing (not `drawSelection`). `selectionHighlightStyle = .none` on the outline view suppresses AppKit's own selection rect.
@@ -67,6 +68,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 - The sticky header's `CAGradientLayer` uses non-flipped CALayer coordinates: `colors[0]` at `startPoint(y=0)` is the visual **bottom** of the layer. So the array must be `[transparent, opaque]` to fade from opaque (top, adjacent to headers) to transparent (bottom).
 - Create-repo bootstrap must not depend on user-level git commit config. The seed commit path should pass transient `-c` overrides for identity and signing (`user.name`, `user.email`, `commit.gpgsign=false`) and skip local hooks (`--no-verify`) to avoid silent failures from machine-specific git config.
 - Do not discard git stderr in create/import flows. Failure paths should surface the underlying git message to the user (alert/banner) so "does nothing" states are diagnosable.
+- For sidebar/diff-panel scroller behavior, key-window checks are not sufficient in multi-Mac setups with Universal Control. Gate reveal on actual local scroll input instead of focus/hover state.
 
 ## Thread Row Naming/Description Contract
 
