@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- _No notable changes yet._
+
+## 1.6.1 - 2026-04-18
+
+
 ### Sidebar
 
 #### Features
@@ -25,6 +30,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Fixed focus steals to the main window while typing in a pop-out thread window. Returning a different pop-out thread to main no longer forcibly re-keys the main window when another pop-out is currently focused.
+
 ## 1.6.0 - 2026-04-17
 
 
