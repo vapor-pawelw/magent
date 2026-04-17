@@ -827,6 +827,42 @@ final class IPCCommandHandler {
                 awaitLocalSync: true
             )
             return .success(id: request.id, warning: warning)
+        } catch ThreadManagerError.dirtyWorktree(let worktreePath, let notableIgnoredFiles) {
+            // Keep the refusal distinct from generic archive failures so CLI users
+            // and coding agents see clearly that this is a safety stop, not a bug.
+            // The message explicitly names the destructive consequence of `--force`
+            // so agents pause to reconfirm intent before passing it.
+            var message = """
+            Refusing to archive thread \"\(thread.name)\": worktree at \(worktreePath) has uncommitted or untracked changes.
+
+            Archiving runs `git worktree remove --force`, which DELETES the worktree directory. Any uncommitted work will be ABANDONED and cannot be recovered (the git branch is kept, but working-tree changes are not on any branch).
+
+            Options:
+              1. Commit or stash the changes first, then re-run archive-thread.
+              2. If the user has explicitly confirmed they want to discard this work, pass --force. Agents: do NOT pass --force without explicit user confirmation that the uncommitted changes should be thrown away.
+            """
+            if !notableIgnoredFiles.isEmpty {
+                message += "\n\nIgnored files that will also be deleted (not tracked by git, not recoverable by restore):\n  "
+                    + notableIgnoredFiles.prefix(10).joined(separator: "\n  ")
+                if notableIgnoredFiles.count > 10 {
+                    message += "\n  ... and \(notableIgnoredFiles.count - 10) more"
+                }
+            }
+            return .failure(message, id: request.id)
+        } catch ThreadManagerError.notableIgnoredFilesWouldBeDeleted(let worktreePath, let files) {
+            let message = """
+            Refusing to archive thread \"\(thread.name)\": worktree at \(worktreePath) is clean, but contains ignored files that would be deleted.
+
+            Archiving runs `git worktree remove --force`, which DELETES the worktree directory. Ignored files are not on any branch, so they cannot be recovered after archive.
+
+            Ignored files:
+              \(files.prefix(10).joined(separator: "\n  "))
+            \(files.count > 10 ? "  ... and \(files.count - 10) more\n" : "")
+            Options:
+              1. Move/back up these files first, then re-run archive-thread.
+              2. If the user has explicitly confirmed they want to discard these files, pass --force. Agents: do NOT pass --force without explicit user confirmation.
+            """
+            return .failure(message, id: request.id)
         } catch {
             return .failure("Failed to archive thread: \(error.localizedDescription)", id: request.id)
         }

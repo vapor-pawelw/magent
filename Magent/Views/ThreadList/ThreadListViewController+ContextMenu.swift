@@ -1654,7 +1654,33 @@ extension ThreadListViewController {
         threadManager.markThreadArchiving(id: liveThread.id)
         Task {
             do {
-                _ = try await threadManager.archiveThread(liveThread, force: true)
+                _ = try await threadManager.archiveThread(
+                    liveThread,
+                    promptForLocalSyncConflicts: true,
+                    force: false
+                )
+            } catch ThreadManagerError.dirtyWorktree(let worktreePath, let notableIgnored) {
+                await MainActor.run {
+                    guard self.confirmDestructiveArchive(
+                        worktreePath: worktreePath,
+                        threadName: liveThread.name,
+                        kind: .dirty,
+                        notableIgnoredFiles: notableIgnored
+                    ) else { return }
+                    self.retryArchiveForced(threadManager: threadManager, thread: liveThread)
+                }
+            } catch ThreadManagerError.notableIgnoredFilesWouldBeDeleted(let worktreePath, let files) {
+                await MainActor.run {
+                    guard self.confirmDestructiveArchive(
+                        worktreePath: worktreePath,
+                        threadName: liveThread.name,
+                        kind: .ignoredOnly,
+                        notableIgnoredFiles: files
+                    ) else { return }
+                    self.retryArchiveForced(threadManager: threadManager, thread: liveThread)
+                }
+            } catch ThreadManagerError.archiveCancelled {
+                // User cancelled a local-sync conflict prompt — leave the worktree alone.
             } catch {
                 await MainActor.run {
                     BannerManager.shared.show(
@@ -1664,6 +1690,74 @@ extension ThreadListViewController {
                 }
             }
         }
+    }
+
+    @MainActor
+    private func retryArchiveForced(threadManager: ThreadManager, thread: MagentThread) {
+        threadManager.markThreadArchiving(id: thread.id)
+        Task {
+            do {
+                _ = try await threadManager.archiveThread(
+                    thread,
+                    promptForLocalSyncConflicts: true,
+                    force: true
+                )
+            } catch ThreadManagerError.archiveCancelled {
+                // User cancelled a local-sync conflict prompt during the forced retry.
+            } catch {
+                await MainActor.run {
+                    BannerManager.shared.show(
+                        message: String(localized: .ThreadStrings.threadArchiveFailed(error.localizedDescription)),
+                        style: .error
+                    )
+                }
+            }
+        }
+    }
+
+    enum DestructiveArchiveKind {
+        case dirty
+        case ignoredOnly
+    }
+
+    /// Shows a modal alert warning that archiving is destructive for this worktree.
+    /// Returns `true` if the user confirmed.
+    @MainActor
+    private func confirmDestructiveArchive(
+        worktreePath: String,
+        threadName: String,
+        kind: DestructiveArchiveKind,
+        notableIgnoredFiles: [String]
+    ) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+
+        switch kind {
+        case .dirty:
+            alert.messageText = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyTitle(threadName))
+            var info = String(localized: .ThreadStrings.threadArchiveDestructiveDirtyInfo(worktreePath))
+            if !notableIgnoredFiles.isEmpty {
+                info += String(localized: .ThreadStrings.threadArchiveDestructiveDirtyIgnoredPrefix)
+                    + notableIgnoredFiles.prefix(10).joined(separator: "\n  ")
+                if notableIgnoredFiles.count > 10 {
+                    info += String(localized: .ThreadStrings.threadArchiveDestructiveListOverflow(notableIgnoredFiles.count - 10))
+                }
+            }
+            alert.informativeText = info
+            alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveDestructiveDirtyConfirm))
+        case .ignoredOnly:
+            alert.messageText = String(localized: .ThreadStrings.threadArchiveDestructiveIgnoredTitle(threadName))
+            var info = String(localized: .ThreadStrings.threadArchiveDestructiveIgnoredInfo(worktreePath))
+                + notableIgnoredFiles.prefix(10).joined(separator: "\n  ")
+            if notableIgnoredFiles.count > 10 {
+                info += String(localized: .ThreadStrings.threadArchiveDestructiveListOverflow(notableIgnoredFiles.count - 10))
+            }
+            alert.informativeText = info
+            alert.addButton(withTitle: String(localized: .ThreadStrings.threadArchiveDestructiveIgnoredConfirm))
+        }
+        alert.addButton(withTitle: String(localized: .CommonStrings.commonCancel))
+        alert.buttons.first?.hasDestructiveAction = true
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     @objc private func deleteThread(_ sender: NSMenuItem) {

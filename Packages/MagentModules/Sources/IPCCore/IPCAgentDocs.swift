@@ -58,7 +58,7 @@ public enum IPCAgentDocs {
     Thread priority is a 1–5 scale shown as cumulative dots in the sidebar (1 blue = lowest, 5 red = highest). Pass --priority 1-5 to create-thread/batch-create (or set it later with set-priority --priority 1-5) ONLY when the user has given you real signal about urgency/importance for that specific thread — e.g. a Jira priority, an explicit instruction ("this is urgent", "low priority chore"), or a blocker vs. nice-to-have framing. Do NOT guess a priority from the task description alone, do NOT default every thread to 3, and do NOT set priority on exploratory/research threads where the user has not expressed urgency. Use set-priority --clear to remove a priority.
     Use hide-thread / unhide-thread to deprioritize a thread in the sidebar without archiving it.
     Use favorite-thread / unfavorite-thread to manage Favorites (max 10).
-    Use archive-thread --skip-local-sync to avoid writing local sync path changes into the main worktree during archive.
+    Use archive-thread --skip-local-sync to avoid writing local sync path changes into the main worktree during archive. archive-thread is refused when the worktree is dirty (uncommitted/untracked changes) OR when notable ignored files would be deleted; --force bypasses these guards but is DESTRUCTIVE (it runs `git worktree remove --force`, which deletes the worktree dir and abandons uncommitted work plus ignored files that are not stored on any branch). Do not pass --force unless the user has explicitly confirmed they want to discard the flagged data.
     Use list-archived to see recently archived threads (sorted most-recent first). Each item includes branchName and archivedAt (ISO-8601) so you can identify past work by branch name or when it was shelved.
     Section commands without --project operate on global sections. With --project, they operate on project-specific overrides.
 
@@ -75,7 +75,9 @@ public enum IPCAgentDocs {
     The user wants to archive the current thread (same as the Archive button in the GUI). This removes the worktree and hides the thread from the sidebar while keeping the git branch. Before archiving:
     1. Ensure all work is committed and pushed if needed.
     2. Run: `/tmp/magent-cli archive-thread --thread <name> --skip-local-sync`
-    Use --skip-local-sync by default to avoid modifying the main worktree. Use --force if the thread has uncommitted changes and the user has confirmed they want to discard them.
+    Use --skip-local-sync by default to avoid modifying the main worktree.
+
+    Destructive-archive safety: archive-thread is REFUSED when the worktree is dirty (uncommitted/untracked changes) OR when clean-but-notable ignored files would be deleted, unless --force is passed. The refusal message names the worktree path and explains the consequences. Do NOT reflexively retry with --force — archive runs `git worktree remove --force`, which deletes the worktree directory and abandons uncommitted work plus ignored files not stored on any branch. Only pass --force after the user has explicitly confirmed they want to discard the flagged data in this worktree. If unsure, commit/stash or back up those files first.
     """
 
     /// On-demand CLI reference returned by `magent-cli docs`.

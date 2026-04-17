@@ -980,6 +980,116 @@
         }
       }
     },
+    "threadArchiveDestructiveDirtyTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive \"%@\" and discard uncommitted changes?"
+          }
+        }
+      }
+    },
+    "threadArchiveDestructiveIgnoredTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive \"%@\" and discard ignored files?"
+          }
+        }
+      }
+    },
+    "threadArchiveDestructiveDirtyInfo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The worktree at %@ has uncommitted or untracked changes. Archiving removes the worktree directory — this work cannot be recovered. The git branch is kept (push it first if you want these commits on the remote)."
+          }
+        }
+      }
+    },
+    "threadArchiveDestructiveDirtyInfoDetail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The worktree at %@ has uncommitted or untracked changes. Archiving removes the worktree directory, so this work cannot be recovered. The git branch is kept."
+          }
+        }
+      }
+    },
+    "threadArchiveDestructiveDirtyIgnoredPrefix": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\n\nAlso about to be deleted (not tracked by git, not recoverable by restore):\n  "
+          }
+        }
+      }
+    },
+    "threadArchiveDestructiveIgnoredInfo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The worktree at %@ is clean, but contains files ignored by git (notes, local config, secrets, etc.) that will be deleted with the directory. These are not on any branch and restore cannot recover them:\n  "
+          }
+        }
+      }
+    },
+    "threadArchiveDestructiveIgnoredInfoDetail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The worktree at %@ is clean, but contains ignored files that will be deleted with the directory. These files are not on any branch and cannot be restored:\n  "
+          }
+        }
+      }
+    },
+    "threadArchiveDestructiveListOverflow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\n  ... and %lld more"
+          }
+        }
+      }
+    },
+    "threadArchiveDestructiveDirtyConfirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive and Discard Changes"
+          }
+        }
+      }
+    },
+    "threadArchiveDestructiveIgnoredConfirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive and Delete Files"
+          }
+        }
+      }
+    },
     "threadWorktree": {
       "extractionState": "manual",
       "localizations": {

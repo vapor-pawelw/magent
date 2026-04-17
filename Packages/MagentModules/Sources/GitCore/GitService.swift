@@ -703,6 +703,56 @@ public final class GitService: Sendable {
             && !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Lists ignored (in `.gitignore`) files/directories present in the worktree that
+    /// are likely to contain user-authored content the user cares about — notes,
+    /// secrets, local config. Common build/cache directories are filtered out so
+    /// archive-time warnings aren't drowned in `DerivedData/` noise. Returns up to
+    /// `limit` entries in repo-relative form.
+    ///
+    /// Rationale: `git worktree remove --force` deletes the directory wholesale,
+    /// including ignored files. Archive should surface *notable* ignored content so
+    /// users don't lose, e.g., `.agents/docs/` notes or `.env` files, but shouldn't
+    /// noisily list throwaway caches.
+    public func notableIgnoredPaths(worktreePath: String, limit: Int = 20) async -> [String] {
+        // `--ignored` asks status to list ignored entries with `!!` prefix;
+        // `-uall` makes untracked directories list individually (irrelevant here but
+        // keeps parity with standard porcelain output). We stick to porcelain v1
+        // for the `!! path` prefix.
+        let result = await ShellExecutor.execute(
+            "git -c core.quotePath=false status --porcelain --ignored",
+            workingDirectory: worktreePath
+        )
+        guard result.exitCode == 0 else { return [] }
+
+        // First path segment (directory name or filename) that marks "safe-to-delete"
+        // build/cache output. Kept narrow to avoid hiding genuinely important ignored
+        // files that happen to live under an ambiguous name.
+        let junkFirstSegments: Set<String> = [
+            "DerivedData", ".build", "build", "Build",
+            "node_modules", ".venv", "venv", "__pycache__",
+            "target", "dist", ".next", ".nuxt", ".turbo",
+            "Pods", ".swiftpm", ".tuist", ".tuist-bin",
+            "tmp", ".cache", ".gradle", ".idea", ".vscode",
+            "xcuserdata", "DerivedDataCache"
+        ]
+        let junkSuffixes: [String] = [
+            ".xcuserstate", ".DS_Store", ".log"
+        ]
+
+        var out: [String] = []
+        for rawLine in result.stdout.components(separatedBy: "\n") {
+            guard rawLine.hasPrefix("!! ") else { continue }
+            let path = String(rawLine.dropFirst(3))
+            guard !path.isEmpty else { continue }
+            let firstSegment = path.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? path
+            if junkFirstSegments.contains(firstSegment) { continue }
+            if junkSuffixes.contains(where: { path.hasSuffix($0) }) { continue }
+            out.append(path)
+            if out.count >= limit { break }
+        }
+        return out
+    }
+
     private func parseStatusMap(_ output: String) -> [String: FileWorkingStatus] {
         // Get working tree status for coloring
         var statusMap: [String: FileWorkingStatus] = [:]

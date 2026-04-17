@@ -622,6 +622,34 @@ extension ThreadManager {
             throw ThreadManagerError.cannotDeleteMainThread
         }
 
+        // Dirty-worktree guard. Archiving runs `git worktree remove --force`, which
+        // unconditionally deletes the worktree directory — any uncommitted, untracked,
+        // or ignored content would be abandoned silently. Refuse unless `force` is
+        // set, so the GUI can prompt for a destructive confirmation and the CLI can
+        // require an explicit `--force` flag.
+        //
+        // We list "notable" ignored files (e.g. `.agents/` notes, `.env` files) so
+        // the user knows data that isn't in git at all — not recoverable by restore —
+        // will also be deleted. Common build caches (DerivedData, node_modules, etc.)
+        // are filtered out so the warning stays useful.
+        if !force {
+            async let dirty = git.isDirty(worktreePath: thread.worktreePath)
+            async let ignored = git.notableIgnoredPaths(worktreePath: thread.worktreePath)
+            let (isDirty, notableIgnored) = await (dirty, ignored)
+            if isDirty {
+                throw ThreadManagerError.dirtyWorktree(
+                    worktreePath: thread.worktreePath,
+                    notableIgnoredFiles: notableIgnored
+                )
+            }
+            if !notableIgnored.isEmpty {
+                throw ThreadManagerError.notableIgnoredFilesWouldBeDeleted(
+                    worktreePath: thread.worktreePath,
+                    files: notableIgnored
+                )
+            }
+        }
+
         // If the archive fails before the thread is removed from the list, clear the archiving flag.
         var archiveCompleted = false
         defer {

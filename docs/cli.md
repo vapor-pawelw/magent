@@ -332,7 +332,20 @@ magent-cli unfavorite-thread --thread <name>
 
 Archive a thread (removes worktree, keeps git branch).
 
-When project `Local Sync Paths` are configured, archive performs merge-back from the thread's snapshotted path list to the repo root before worktree removal (unless `--skip-local-sync` is passed, or the app-wide archive local-sync setting is disabled). Files unchanged in the thread since creation are skipped. In non-interactive CLI mode, conflicting overwrite targets are skipped. Pass `--force` to continue archiving even if local sync fails for a non-conflict reason.
+When project `Local Sync Paths` are configured, archive performs merge-back from the thread's snapshotted path list to the repo root before worktree removal (unless `--skip-local-sync` is passed, or the app-wide archive local-sync setting is disabled). Files unchanged in the thread since creation are skipped. In non-interactive CLI mode, conflicting overwrite targets are skipped.
+
+**Destructive-archive safety.** Archive runs `git worktree remove --force`, which deletes the worktree directory unconditionally. To prevent silent data loss, `archive-thread` refuses to run when:
+
+- the worktree has uncommitted or untracked changes, or
+- the worktree is clean but contains notable ignored files that would also be deleted (for example notes, local config, secrets).
+
+The refusal names the worktree path and returns a non-zero exit.
+
+- Recommended: commit/stash or back up/move the affected files, then re-run.
+- To proceed anyway, pass `--force`. **This is destructive** — uncommitted work and ignored files in the worktree directory are abandoned/deleted and cannot be recovered from git (the git branch is kept, but on-disk working-tree-only files are not on any branch). `--force` also continues archiving when local sync fails for a non-conflict reason.
+- **Coding agents:** do not reflexively retry with `--force` after a refusal. Pass `--force` only when the user has explicitly confirmed they want to discard the flagged data in the named worktree.
+
+The GUI enforces the same guard: archive first refuses and then prompts a critical (destructive) confirmation alert describing what will be discarded; Cancel aborts the archive.
 
 ```bash
 magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]

@@ -9,6 +9,7 @@
 - Any archive warning is shown in yellow beneath the branch/worktree line.
 - The same banner appears whether archive was triggered from the UI or via `magent-cli archive-thread`.
 - The banner exposes a `Restore` action that recreates the archived worktree, returns the thread to the sidebar, and navigates back to it.
+- **Destructive-archive safety.** Archiving is refused by default when the worktree is dirty (uncommitted/untracked changes) or when clean-but-notable ignored files would be deleted (for example notes/secrets/local config). Archive runs `git worktree remove --force`, which deletes the worktree directory. The GUI surfaces critical destructive confirmation alerts; Cancel aborts. The CLI refuses with dedicated messages and requires `--force` to proceed. See `docs/cli.md#archive-thread`.
 - `Settings > Threads` also shows up to 10 recently archived threads with inline `Restore` buttons, so the same restore flow stays available after the archive banner expires.
 - A dedicated `archivebox` toolbar button in the top-right (next to the Settings gear) opens a compact popover listing up to 10 recently archived threads with one-click Restore actions — no need to open Settings for quick restores.
 - Recently archived popover rows show branch/worktree metadata (using the same branch/worktree mismatch rule as sidebar thread rows) plus project/archive-date context under the title.

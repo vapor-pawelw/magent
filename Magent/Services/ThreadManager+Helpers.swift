@@ -2214,6 +2214,16 @@ enum ThreadManagerError: LocalizedError {
     case worktreePathConflict([String])
     case noExpectedBranch
     case archiveCancelled
+    /// Refused to archive because the worktree has uncommitted/untracked changes.
+    /// Carries the worktree path plus any *notable* ignored files (e.g. `.agents/`,
+    /// `.env*`) that would also be deleted, so callers can warn the user about
+    /// data loss beyond tracked-dirty changes.
+    case dirtyWorktree(worktreePath: String, notableIgnoredFiles: [String])
+    /// Refused to archive because the worktree is clean-according-to-git but contains
+    /// notable ignored files (notes, secrets, local config) that would be deleted when
+    /// the worktree directory is removed. The tracked tree is clean; only ignored
+    /// content is at risk.
+    case notableIgnoredFilesWouldBeDeleted(worktreePath: String, files: [String])
     case localFileSyncFailed(String)
     /// Signal case thrown by the inner conflict handler; carries no data.
     /// The sync entry points catch this and rethrow `.agenticMergeReady` with full context.
@@ -2251,6 +2261,16 @@ enum ThreadManagerError: LocalizedError {
             return "No expected branch configured. Set the default branch in project settings."
         case .archiveCancelled:
             return "Archive cancelled."
+        case .dirtyWorktree(let worktreePath, let notableIgnoredFiles):
+            var message = "Worktree has uncommitted changes at \(worktreePath). Archiving will remove the worktree directory and abandon this work. Commit or stash first, or pass --force (CLI) / confirm the destructive archive prompt (GUI) to proceed anyway."
+            if !notableIgnoredFiles.isEmpty {
+                message += "\n\nThe following ignored files (not tracked by git, not recoverable after archive) will also be deleted:\n  "
+                    + notableIgnoredFiles.joined(separator: "\n  ")
+            }
+            return message
+        case .notableIgnoredFilesWouldBeDeleted(let worktreePath, let files):
+            return "Worktree \(worktreePath) is clean but contains ignored files that would be deleted with the directory. Ignored files are not stored on any branch, so they cannot be recovered by restore. Move or back them up first, or pass --force (CLI) / confirm the destructive archive prompt (GUI) to proceed anyway. Files:\n  "
+                + files.joined(separator: "\n  ")
         case .localFileSyncFailed(let message):
             return message
         case .agenticMergeSignal:

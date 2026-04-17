@@ -83,6 +83,7 @@ All notable changes to this project will be documented in this file.
 
 ### Thread
 #### Features
+- Added destructive-archive safety guards when archiving a thread. Archive now refuses by default when the worktree is dirty (uncommitted/untracked changes) or when notable ignored files would be deleted; the GUI shows critical destructive confirmation alerts and the CLI refuses unless `--force` is explicitly passed.
 - Moved the Pull Request and Jira buttons out of the thread top utility bar into the thread info bar's bottom-right corner, styled as compact capsules. The status indicators (state, keep-alive, favorite, pinned) now sit in the top-right corner of the info bar so the right side mirrors the two-line layout on the left. Pop-out windows show the same capsule action buttons in their info strip.
 - Added a per-thread "Sync description and priority from Jira" toggle under the Jira context submenu. When enabled, the thread's description and priority are automatically kept in sync with its detected Jira ticket on every detection refresh, the AI auto-description generator stays out of the way, and a small Jira badge appears in the thread row's top-right corner.
 - Added a top-bar pop-out button next to Archive in thread view (above terminal), with auto-hide when the thread is already in a separate window.
@@ -134,6 +135,7 @@ All notable changes to this project will be documented in this file.
 
 ### CLI
 #### Features
+- `magent-cli archive-thread` now refuses by default when the worktree has uncommitted/untracked changes or notable ignored files that would be deleted with the worktree directory. Refusal messages name the worktree path and require explicit `--force` to continue. Help text and agent-facing docs mark `--force` as destructive so coding agents do not silently retry with it.
 - Added `magent-cli list-archived [--project <name>] [--limit <n>]` to list recently archived threads (most recent first). Each result now includes the thread's branch name, full worktree path and directory name, created/archived timestamps, primary agent type, base branch, Jira ticket key, priority, icon, sign emoji, and favorite/pinned/hidden flags so past work can be fully identified after archive. `magent-cli thread-info` also now resolves archived threads by name or ID.
 
 #### Bug Fixes
