@@ -1354,7 +1354,7 @@ final class PromptTableOfContentsView: NSView {
         layer?.cornerRadius = 8
         layer?.masksToBounds = true
         alphaValue = Self.normalAlpha
-        layer?.borderWidth = 1
+        layer?.borderWidth = 0
 
         headerBackgroundView.translatesAutoresizingMaskIntoConstraints = false
         headerBackgroundView.wantsLayer = true
@@ -1518,6 +1518,20 @@ final class PromptTableOfContentsView: NSView {
             layer?.add(anim, forKey: "tocCornerRadius")
 
             if !collapsed {
+                // Start header background animation at the same time as frame expand (0.22s) + content delay (0.20s) + fade (0.14s) = 0.56s total
+                let targetColor = NSColor.separatorColor.withAlphaComponent(0.14)
+                let headerBgAnim = CABasicAnimation(keyPath: "backgroundColor")
+                headerBgAnim.fromValue = NSColor.clear.cgColor
+                headerBgAnim.toValue = targetColor.cgColor
+                headerBgAnim.duration = 0.56
+                headerBgAnim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                headerBgAnim.fillMode = .forwards
+                headerBgAnim.isRemovedOnCompletion = false
+                headerBackgroundView.layer?.add(headerBgAnim, forKey: "headerBgExpand")
+                headerBackgroundView.layer?.backgroundColor = targetColor.cgColor
+            }
+
+            if !collapsed {
                 // Expanding: swap constraints so scroll content is laid out inside the growing
                 // frame, then notify the controller to start the frame animation.
                 applyScrollConstraints(collapsed: false)
@@ -1532,6 +1546,7 @@ final class PromptTableOfContentsView: NSView {
                     self.headerBackgroundView.alphaValue = 0
                     self.headerBackgroundView.isHidden = false
                     self.cornerHandleViews.forEach { $0.alphaValue = 0; $0.isHidden = false }
+
                     NSAnimationContext.runAnimationGroup { ctx in
                         ctx.duration = 0.14
                         self.scrollView.animator().alphaValue = 1
@@ -1721,9 +1736,16 @@ final class PromptTableOfContentsView: NSView {
 
     private func updateAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = NSColor(resource: .surface).cgColor
-            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+            let backgroundColor: NSColor
+            if effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+                backgroundColor = NSColor(srgbRed: 0.10, green: 0.11, blue: 0.14, alpha: 0.94)
+            } else {
+                backgroundColor = NSColor.white.withAlphaComponent(0.94)
+            }
+            layer?.backgroundColor = backgroundColor.cgColor
+
             headerBackgroundView.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.14).cgColor
+
             headerIcon.contentTintColor = NSColor(resource: .textSecondary)
             resizeHandleIconView?.contentTintColor = NSColor(resource: .textSecondary).withAlphaComponent(0.8)
             countBadgeView.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.1).cgColor
