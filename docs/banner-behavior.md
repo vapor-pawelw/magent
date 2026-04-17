@@ -31,5 +31,6 @@
 ## Current Non-Dismissible Action-Required Examples
 
 - Pending prompt injection — info-style banner on a tab waiting for agent readiness, with "Inject Now" to bypass polling
+  It also includes "Restart Tab" to relaunch the current agent session and retry startup injection with the retained prompt.
   It should clear only after the prompt itself is pasted/submitted, or when the flow transitions into the initial-prompt failure banner.
 - Initial prompt injection failure — warning-style banner on the affected tab, with "Inject Prompt", "Copy Prompt", and "Already Injected" actions

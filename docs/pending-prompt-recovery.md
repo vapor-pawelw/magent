@@ -26,6 +26,7 @@ When `injectAfterStart` is called with an initial prompt, the session is registe
 > "Prompt will be injected once the agent is ready."
 
 - **Copy Prompt** — copies the retained prompt to the clipboard without clearing the pending state, so the user can launch another tab/thread with the same prompt if they want
+- **Restart Tab** — relaunches the configured agent in the same tmux session and re-runs startup injection with the retained prompt and original submit mode. This is the primary recovery path when an agent updater drops the tab to a plain shell before prompt readiness.
 - **Inject Now** — cancels the in-flight polling task (`pendingPromptInjectionTasks[sessionName]`), then directly sends the prompt to tmux via `injectPendingPromptNow(...)`, bypassing `waitForAgentPrompt`.
 - The banner auto-dismisses only when a prompt-bearing `magentAgentKeysInjected` fires (`includedInitialPrompt == true`) or when `magentInitialPromptInjectionFailed` fires (transitions to the failure banner below).
 - Scoped to the current tab only — switching tabs re-evaluates via `refreshPendingPromptBanner()`.

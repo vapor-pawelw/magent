@@ -1707,6 +1707,28 @@ final class ThreadDetailViewController: NSViewController {
         refreshInitialPromptFailureBanner()
     }
 
+    private func restartPendingPromptInjection(
+        sessionName: String,
+        pending: ThreadManager.InitialPromptInjectionFailureInfo
+    ) {
+        let injection = threadManager.effectiveInjection(for: thread.projectId)
+        let relaunched = threadManager.relaunchAgentInExistingSession(
+            sessionName: sessionName,
+            initialPrompt: pending.prompt,
+            shouldSubmitInitialPrompt: pending.shouldSubmitInitialPrompt,
+            agentContext: injection.agentContext,
+            agentType: pending.agentType
+        )
+        guard relaunched else {
+            BannerManager.shared.show(
+                message: "Could not restart this tab. Try Inject Now or open a new agent tab.",
+                style: .warning
+            )
+            return
+        }
+        refreshPendingPromptBanner()
+    }
+
     private func showInitialPromptFailureBanner(
         sessionName: String,
         failure: ThreadManager.InitialPromptInjectionFailureInfo
@@ -1790,6 +1812,11 @@ final class ThreadDetailViewController: NSViewController {
             actions: [
                 BannerAction(title: "Copy Prompt") { [weak self] in
                     self?.copyPromptToPasteboard(pending.prompt)
+                },
+                BannerAction(title: "Restart Tab") { [weak self] in
+                    guard let self else { return }
+                    self.dismissPendingPromptBanner()
+                    self.restartPendingPromptInjection(sessionName: sessionName, pending: pending)
                 },
                 BannerAction(title: "Inject Now") { [weak self] in
                     guard let self else { return }

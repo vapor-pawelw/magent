@@ -5,12 +5,14 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### General
+
 #### Features
 - Added a polished "What's New" changelog window on launch after upgrading. It reads from bundled `CHANGELOG.md`, shows only the current app version section, and appears once per version.
 - Refined the "What's New" / Changelog window layout. Each domain (for example `Tab`, `Terminal`, `Sidebar`) is now a single grouped section with a brand-tinted separator under its heading, and `Features` / `Bug Fixes` subsection labels are styled in the app's primary brand color. Duplicate domain headings within the same release are now merged automatically when rendering.
 - Added a curated highlight popup that appears once per release to spotlight a single new feature with a screenshot and short description. Re-openable any time via `mAgent → What's New…`.
 
 ### Sidebar
+
 #### Features
 - Added a sidebar hide/show toggle via the new `View > Hide Sidebar` menu item or the `Toggle Sidebar` keyboard shortcut (default `⌃⌘S`, configurable in `Settings > General > Keyboard Shortcuts`). Hiding the sidebar also hides the changes panel and lets the thread detail view fill the full window with an animated transition. The hidden state persists across launches.
 - The sidebar now automatically reveals itself whenever you focus a thread from outside it — selecting a thread from a status bar popover, clicking the thread info top bar above the terminal, opening a thread from a system notification, or restoring an archived thread. Closing pop-out windows does not reveal the sidebar.
@@ -35,6 +37,7 @@ All notable changes to this project will be documented in this file.
 - Fixed sidebar thread capsules visibly resizing when the vertical scroller appeared or disappeared (notably when switching focus to another window and back).
 
 ### Settings
+
 #### Features
 - Tab detaching is now disabled in release builds by default. Debug builds expose a new `Settings > Debug > Experimental` checkbox (`Enable tab detaching`) so developers can re-enable it when needed.
 
@@ -43,6 +46,10 @@ All notable changes to this project will be documented in this file.
 - Fixed `Settings > Projects > Hide in sidebar` behavior so hiding a project now closes all of that project's pop-out windows and automatically moves focus to the first remaining visible thread.
 
 ### Terminal
+
+#### Features
+- Pending prompt-injection banners on new agent tabs now include `Restart Tab`, which relaunches the same agent in the same tab and retries the original prompt with the same submit mode.
+
 #### Bug Fixes
 - Suppressed right-click context menus inside embedded terminal surfaces. Right-click is now swallowed so neither Ghostty's native menu nor AppKit fallback menus appear over terminal content.
 - Fixed oversized physical mouse-wheel jumps in embedded terminals. Each wheel notch now scrolls exactly 5 lines of tmux history (previously ~15-30), matching the scroll feel of standalone Ghostty. The fix combines a per-event ±5 line cap, a pinned `mouse-scroll-multiplier = 1` in the embedded Ghostty config, and an override of tmux's default `copy-mode`/`copy-mode-vi` wheel bindings which were silently multiplying every wheel event by 5.
@@ -50,12 +57,14 @@ All notable changes to this project will be documented in this file.
 - Made the scroll up/down/jump-to-bottom cluster easier to hit by routing clicks that land in its padding and inter-button gaps to the nearest button, without changing the overlay's visual size.
 
 ### Web Tab
+
 #### Bug Fixes
 - Fixed host:port URL parsing in the in-app web view address bar. Entries like `localhost:3000/docs#api` now open as HTTP(S) URLs and preserve query/fragment anchors.
 - Fixed repeated WebContent crashes when pages triggered non-web URL schemes. Web tabs now keep HTTP(S) in-app, open unsupported schemes in the default browser, and clean unsupported persisted web-tab URLs during restore.
 - Fixed creating a new web thread or web tab without entering a URL triggering a "there's no app to open about:blank" alert. Blank web tabs now open as an empty in-app browser with a focused address bar so you can type a URL directly.
 
 ### Tab
+
 #### Features
 - The tab bar now scrolls horizontally when tabs overflow the available space instead of compressing them. Navigate via the new chevron arrow buttons that appear on either side of the tab strip when overflow exists, by spinning the mouse scroll wheel over the tab bar, or with a trackpad horizontal swipe. The scroll bar itself stays hidden — overflow is communicated only by the arrows.
 - Added tab hover tooltips in the thread detail view. Hover now shows tab type, terminal tmux session name (for terminal tabs), and live tab status details (busy, waiting for input, keep-alive, dead session, and rate-limit state).
@@ -73,6 +82,7 @@ All notable changes to this project will be documented in this file.
 - Fixed tab-name deduplication when cloning/resuming/renaming tabs. Names now use a single monotonic suffix sequence per base name (`Codex`, `Codex-1`, `Codex-2`, ...), preventing chained names like `Codex-1-1` and avoiding suffix reuse after deletions.
 
 ### Status Bar
+
 #### Features
 - Added a `windows` status in the bottom bar for threads opened in separate windows. Clicking it lists those threads, uses the same centered sidebar navigation as Favorites, and includes actions to return individual windows or all windows to the main app.
 
@@ -82,6 +92,7 @@ All notable changes to this project will be documented in this file.
 - Fixed `favorites`/`done` popover navigation overriding the destination thread's selected tab. Opening a thread from those popovers now preserves that thread's last-selected tab.
 
 ### Thread
+
 #### Features
 - Moved the Pull Request and Jira buttons out of the thread top utility bar into the thread info bar's bottom-right corner, styled as compact capsules. The status indicators (state, keep-alive, favorite, pinned) now sit in the top-right corner of the info bar so the right side mirrors the two-line layout on the left. Pop-out windows show the same capsule action buttons in their info strip.
 - Added a per-thread "Sync description and priority from Jira" toggle under the Jira context submenu. When enabled, the thread's description and priority are automatically kept in sync with its detected Jira ticket on every detection refresh, the AI auto-description generator stays out of the way, and a small Jira badge appears in the thread row's top-right corner.
@@ -113,6 +124,7 @@ All notable changes to this project will be documented in this file.
 - Fixed main-window content replacement when popping out the currently visible thread by switching main focus to another non-popped-out thread instead of showing a detached placeholder.
 
 ### Changes Panel
+
 #### Features
 - Changes/commits panel context now follows the currently focused thread tab/session (including pop-out windows) instead of strictly following main sidebar selection.
 - Added a context badge above `COMMITS` / `ALL CHANGES` that appears only while at least one pop-out window exists, uses selection-accent styling, and labels context as `<thread> (Pop-out)` or `<thread> (Main)`.
@@ -122,17 +134,20 @@ All notable changes to this project will be documented in this file.
 - Fixed changes-panel context not returning to the selected main thread after repeated clicks/typing in the main Ghostty tab when responder state did not change.
 
 ### New Thread Sheet
+
 #### Bug Fixes
 - Fixed project-switch draft restore in the New Thread sheet: each project's in-progress prompt is now saved and restored per mode (`agent`, `terminal`, `web`) when switching between projects.
 - Switching projects with non-empty input now asks whether to move the current input to the selected project or save it in the current project; when the destination already has a saved draft, the dialog warns that it will be replaced and shows a quoted preview of the existing draft.
 
 ### Agents
+
 #### Bug Fixes
 - Fixed active global rate limits incorrectly marking idle shell tabs as limited. Per-tab rate-limit fan-out now applies only to sessions where that agent is currently detected as running.
 - Added a direct-source marker to thread rate-limit badges: a tiny red corner dot now appears when the limit was directly detected on that thread (not only propagated globally).
 - Fixed agent tabs staying busy after dropping back to a plain shell prompt. Stored agent-type fallback now requires active busy markers (not prompt glyphs alone), preventing terminal sessions from being misclassified as running Claude/Codex.
 
 ### CLI
+
 #### Features
 - Added `magent-cli list-archived [--project <name>] [--limit <n>]` to list recently archived threads (most recent first). Each result now includes the thread's branch name, full worktree path and directory name, created/archived timestamps, primary agent type, base branch, Jira ticket key, priority, icon, sign emoji, and favorite/pinned/hidden flags so past work can be fully identified after archive. `magent-cli thread-info` also now resolves archived threads by name or ID.
 
