@@ -102,25 +102,24 @@ final class SidebarOutlineView: NSOutlineView {
 }
 
 private final class SidebarBackgroundView: NSView {
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        updateBg()
-    }
     required init?(coder: NSCoder) { fatalError() }
+    override init(frame: NSRect) { super.init(frame: frame) }
+
+    override var isOpaque: Bool { false }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        updateBg()
+        needsDisplay = true
     }
 
-    private func updateBg() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            let isDark = self.effectiveAppearance.name == .darkAqua
-            self.layer?.backgroundColor = isDark
-                ? NSColor.windowBackgroundColor.cgColor
-                : NSColor(resource: .appBackground).cgColor
-        }
+    override func draw(_ dirtyRect: NSRect) {
+        let isDark = effectiveAppearance.name == .darkAqua
+        // In dark mode the window background is already correct; only paint in light mode
+        // to tint the sidebar away from pure white without touching the layer hierarchy
+        // (wantsLayer on a parent breaks NSOutlineView capsule drawing in subviews).
+        guard !isDark else { return }
+        NSColor(resource: .appBackground).setFill()
+        dirtyRect.fill()
     }
 }
 
