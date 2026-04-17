@@ -33,7 +33,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 ## Implementation Notes
 
 - Capsule geometry is defined in `AlwaysEmphasizedRowView`:
-  - `capsuleLeadingInset` / `capsuleTrailingInset` — inset from row edges to capsule border.
+  - `capsuleLeadingInset` / `capsuleTrailingInset` — inset from row edges to capsule border. The overlay vertical scroller floats over the trailing inset region, so the capsule itself is never visually clipped. To avoid capsule-width jitter when the scroller appears/disappears (e.g. on window deactivate/reactivate), `refitOutlineColumnIfNeeded` sizes the column from `scrollView.bounds.width` rather than `contentView.bounds.width`.
   - `capsuleVerticalInset` — vertical inset.
   - `capsuleBorderWidth` / `capsuleBorderInset` — border stroke width and half-width.
   - `capsuleContentHPadding` / `capsuleContentVPadding` — padding from capsule inner edge to content (12pt each).

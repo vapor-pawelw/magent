@@ -340,7 +340,13 @@ final class ThreadListViewController: NSViewController {
 
     private func refitOutlineColumnIfNeeded(force: Bool = false) {
         guard let outlineView, let scrollView else { return }
-        let targetWidth = scrollView.contentView.bounds.width
+        // Use the scroll view's outer width rather than `contentView.bounds.width`
+        // so column/row widths don't flicker when the overlay scroller fades in/out
+        // (notably on window deactivate/reactivate, where macOS can briefly promote
+        // the overlay scroller to a space-reserving state and shrink the clip view).
+        // The overlay scroller floats over the capsule's 12pt trailing inset region,
+        // so the capsule itself is never covered.
+        let targetWidth = scrollView.bounds.width
         guard targetWidth > 0 else { return }
 
         let needsOutlineWidthSync = abs(outlineView.frame.width - targetWidth) > 0.5
