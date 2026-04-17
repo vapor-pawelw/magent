@@ -15,7 +15,7 @@ All notable changes to this project will be documented in this file.
 ### Sidebar
 
 #### Bug Fixes
-- Fixed thread row pulse animation scaling from the top-left corner instead of the center. The animation now expands uniformly in all directions.
+- Fixed thread row pulse animation displacing the row. The animation now scales uniformly from the center without shifting position.
 
 ## 1.6.1 - 2026-04-18
 
