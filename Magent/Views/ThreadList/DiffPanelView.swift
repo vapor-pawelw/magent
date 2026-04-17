@@ -110,7 +110,9 @@ private final class CommitRowView: NSView {
     let commitHash: String
     var commitMessage: String = ""
     var onClick: ((String) -> Void)?
+    var onSecondaryClick: ((String) -> Void)?
     var onDoubleClick: ((String) -> Void)?
+    var onDiscardUncommittedChanges: (() -> Void)?
 
     var isSelected: Bool = false {
         didSet {
@@ -139,7 +141,22 @@ private final class CommitRowView: NSView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard commitHash != "__uncommitted__" else { return nil }
+        onSecondaryClick?(commitHash)
+
+        if commitHash == "__uncommitted__" {
+            guard onDiscardUncommittedChanges != nil else { return nil }
+            let menu = NSMenu()
+            let discardItem = NSMenuItem(
+                title: "Discard Changes",
+                action: #selector(discardUncommittedChangesFromMenu),
+                keyEquivalent: ""
+            )
+            discardItem.target = self
+            discardItem.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: "Discard changes")
+            menu.addItem(discardItem)
+            return menu
+        }
+
         let menu = NSMenu()
 
         let copyHash = NSMenuItem(title: "Copy Hash", action: #selector(copyHashToPasteboard), keyEquivalent: "")
@@ -161,6 +178,10 @@ private final class CommitRowView: NSView {
     @objc private func copyMessageToPasteboard() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(commitMessage, forType: .string)
+    }
+
+    @objc private func discardUncommittedChangesFromMenu() {
+        onDiscardUncommittedChanges?()
     }
 }
 
@@ -786,6 +807,69 @@ final class DiffPanelView: NSView {
         }
     }
 
+    private func discardAllUncommittedChanges() {
+        guard let worktreePath else { return }
+        guard !uncommittedEntries.isEmpty else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Discard All Uncommitted Changes?"
+        alert.informativeText = "This will permanently discard all uncommitted changes in this thread. This cannot be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let trackedPaths = Set(
+            uncommittedEntries
+                .filter { $0.workingStatus != .untracked }
+                .map(\.relativePath)
+        )
+        let untrackedPaths = Set(
+            uncommittedEntries
+                .filter { $0.workingStatus == .untracked }
+                .map(\.relativePath)
+        )
+        let allPaths = Array(trackedPaths.union(untrackedPaths))
+
+        Task {
+            var failedCount = 0
+            for path in trackedPaths {
+                let didDiscard = await GitService.shared.discardFile(
+                    worktreePath: worktreePath,
+                    relativePath: path,
+                    workingStatus: .unstaged
+                )
+                if !didDiscard {
+                    failedCount += 1
+                }
+            }
+            for path in untrackedPaths {
+                let didDiscard = await GitService.shared.discardFile(
+                    worktreePath: worktreePath,
+                    relativePath: path,
+                    workingStatus: .untracked
+                )
+                if !didDiscard {
+                    failedCount += 1
+                }
+            }
+
+            if failedCount == 0 {
+                for path in allPaths {
+                    optimisticallyRemoveFile(path: path)
+                }
+                onRefreshRequested?()
+            } else {
+                BannerManager.shared.show(
+                    message: "Could not discard \(failedCount) change\(failedCount == 1 ? "" : "s").",
+                    style: .warning
+                )
+                onRefreshRequested?()
+            }
+        }
+    }
+
     // MARK: - Commit Selection
 
     private func selectCommit(_ hash: String?) {
@@ -1281,8 +1365,14 @@ final class DiffPanelView: NSView {
         container.onClick = { [weak self] _ in
             self?.selectCommit(nil)
         }
+        container.onSecondaryClick = { [weak self] _ in
+            self?.selectCommit(nil)
+        }
         container.onDoubleClick = { [weak self] _ in
             self?.onCommitDoubleTapped?(nil, "Uncommitted changes")
+        }
+        container.onDiscardUncommittedChanges = { [weak self] in
+            self?.discardAllUncommittedChanges()
         }
 
         let label = NSTextField(labelWithString: "Uncommitted")

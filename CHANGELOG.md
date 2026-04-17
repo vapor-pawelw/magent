@@ -136,6 +136,7 @@ All notable changes to this project will be documented in this file.
 - Added a context badge above `COMMITS` / `ALL CHANGES` that appears only while at least one pop-out window exists, uses selection-accent styling, and labels context as `<thread> (Pop-out)` or `<thread> (Main)`.
 
 #### Bug Fixes
+- Fixed missing right-click actions on the `Uncommitted` row in `COMMITS`. It now shows a `Discard Changes` context-menu action with destructive confirmation, matching file-row discard behavior in `ALL CHANGES`.
 - Fixed refresh/load/commit-selection guards in the changes panel to use focused context thread state, preventing stale updates when main selection differs from focused pop-out thread.
 - Fixed changes-panel context not returning to the selected main thread after repeated clicks/typing in the main Ghostty tab when responder state did not change.
 - Fixed inline diff viewer rendering in every thread window at once. Diff open/close events from the changes panel now apply only to the main-window thread view, so pop-out windows no longer mirror the same diff panel.
