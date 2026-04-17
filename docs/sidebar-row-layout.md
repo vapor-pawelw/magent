@@ -70,7 +70,7 @@ Capsule-style sidebar with per-row rounded borders, dynamic heights, and badge o
 
 ## Thread Row Naming/Description Contract
 
-For non-main threads, render description on line 1 only when present; keep branch/worktree info on the branch-facing line with dot-separated segments (`branch · worktree · PR`). Keep dirty dot attached to the branch/worktree line, not the description line. Tooltip sections must skip missing fields/statuses. Generated task descriptions are short (2-8 words) and naturally cased (do not force Title Case).
+For non-main threads, render description on line 1 only when present; keep branch/worktree info on the branch-facing line with dot-separated segments (`branch · worktree · PR`). Keep dirty dot attached to the branch/worktree line, not the description line. Tooltip sections must skip missing fields/statuses. Generated task descriptions prefer 2-8 words and naturally cased text (do not force Title Case). Longer descriptions are allowed and should truncate with a trailing ellipsis when they exceed visible row lines.
 
 ## Auto Icon Assignment
 

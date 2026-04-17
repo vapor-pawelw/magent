@@ -190,6 +190,32 @@ final class IPCCommandHandler {
         return nil
     }
 
+    // MARK: - Description Length Warnings (CLI only)
+
+    private static let preferredTaskDescriptionMinWords = 2
+    private static let preferredTaskDescriptionMaxWords = 8
+
+    private func taskDescriptionWordCountForWarning(_ rawDescription: String) -> Int {
+        let trimmed = rawDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return 0 }
+
+        let effectiveDescription: String
+        if trimmed.hasPrefix(ThreadManager.draftDescriptionPrefix) {
+            effectiveDescription = String(trimmed.dropFirst(ThreadManager.draftDescriptionPrefix.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            effectiveDescription = trimmed
+        }
+
+        return effectiveDescription.split(whereSeparator: { $0.isWhitespace }).count
+    }
+
+    private func descriptionPreferenceWarning(_ description: String) -> String? {
+        let count = taskDescriptionWordCountForWarning(description)
+        guard count > Self.preferredTaskDescriptionMaxWords else { return nil }
+        return "Task description has \(count) words; preferred length is \(Self.preferredTaskDescriptionMinWords)-\(Self.preferredTaskDescriptionMaxWords) words."
+    }
+
     // MARK: - Commands
 
     private func createThread(_ request: IPCRequest) async -> IPCResponse {
@@ -1024,7 +1050,9 @@ final class IPCCommandHandler {
             return .success(id: request.id)
         }
         let info = IPCThreadInfo(thread: updated, projectName: projectName)
-        return IPCResponse(ok: true, id: request.id, thread: info)
+        // Warning applies only to agent-generated descriptions from this command.
+        let warning = updated.taskDescription.flatMap(descriptionPreferenceWarning)
+        return IPCResponse(ok: true, id: request.id, warning: warning, thread: info)
     }
 
     private func renameBranch(_ request: IPCRequest) async -> IPCResponse {

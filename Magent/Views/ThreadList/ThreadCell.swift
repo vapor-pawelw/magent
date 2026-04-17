@@ -455,8 +455,7 @@ final class ThreadCell: NSTableCellView {
 
         tf.wantsLayer = true
         tf.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        tf.lineBreakMode = .byTruncatingTail
-        tf.maximumNumberOfLines = 1
+        configurePrimaryTextFieldLayout(maxLines: 1, wraps: false)
 
         let primaryRow = NSStackView(views: [primaryDot, tf])
         primaryRow.orientation = .horizontal
@@ -700,13 +699,13 @@ final class ThreadCell: NSTableCellView {
         } else {
             textField?.textColor = deadSessions ? .secondaryLabelColor : .labelColor
         }
-        textField?.lineBreakMode = .byTruncatingTail
-
         if hasDescription, let description = trimmedDescription {
             // With description: primary = description, secondary = branch · worktree.
             textField?.stringValue = description
-            textField?.maximumNumberOfLines = clampedDescriptionLines
-            textField?.lineBreakMode = clampedDescriptionLines > 1 ? .byWordWrapping : .byTruncatingTail
+            configurePrimaryTextFieldLayout(
+                maxLines: clampedDescriptionLines,
+                wraps: clampedDescriptionLines > 1
+            )
             subtitleLabel?.stringValue = branchWorktreeLine
             subtitleLabel?.textColor = showsJiraState && thread.jiraUnassigned ? .tertiaryLabelColor : .secondaryLabelColor
             subtitleLabel?.isHidden = false
@@ -715,7 +714,7 @@ final class ThreadCell: NSTableCellView {
         } else {
             // Without description: primary = branch, secondary = worktree only (if different).
             textField?.stringValue = resolvedBranchName
-            textField?.maximumNumberOfLines = 1
+            configurePrimaryTextFieldLayout(maxLines: 1, wraps: false)
             if hasBranchWorktreeMismatch {
                 subtitleLabel?.stringValue = worktreeName
                 subtitleLabel?.textColor = .secondaryLabelColor
@@ -908,8 +907,7 @@ final class ThreadCell: NSTableCellView {
             weight: isUnreadCompletion ? .bold : .semibold
         )
         updateMainTextColorForSelection()
-        textField?.lineBreakMode = .byTruncatingTail
-        textField?.maximumNumberOfLines = 1
+        configurePrimaryTextFieldLayout(maxLines: 1, wraps: false)
 
         pinImageView?.isHidden = true
         popoutImageView?.isHidden = true
@@ -979,6 +977,18 @@ final class ThreadCell: NSTableCellView {
         let hasJira = !(jiraTicketLabel?.isHidden ?? true)
         let hasPR = !(prNumberLabel?.isHidden ?? true)
         prRowStack?.isHidden = !hasJira && !hasPR
+    }
+
+    private func configurePrimaryTextFieldLayout(maxLines: Int, wraps: Bool) {
+        guard let textField else { return }
+        textField.maximumNumberOfLines = max(1, maxLines)
+        textField.lineBreakMode = wraps ? .byWordWrapping : .byTruncatingTail
+
+        guard let cell = textField.cell as? NSTextFieldCell else { return }
+        cell.wraps = wraps
+        // Multi-line descriptions should wrap and show an ellipsis on overflow.
+        cell.truncatesLastVisibleLine = wraps
+        cell.usesSingleLineMode = !wraps
     }
 
     // MARK: - Rate limit badge (top border)

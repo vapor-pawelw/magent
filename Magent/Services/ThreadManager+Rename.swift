@@ -761,7 +761,6 @@ extension ThreadManager {
     private static let workTypePrefix = "TYPE:"
     private static let iconPrefix = "ICON:"
     private static let knownWorkTypeNames = Set(ThreadIcon.allCases.map(\.rawValue))
-    private static let maxTaskDescriptionWords = 8
 
     struct GeneratedTaskDescription {
         let description: String
@@ -782,8 +781,7 @@ extension ThreadManager {
             .map(String.init)
         guard !words.isEmpty else { return nil }
 
-        let limitedWords = Array(words.prefix(Self.maxTaskDescriptionWords))
-        let normalized = limitedWords.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = words.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalized.count >= 2 else { return nil }
         guard normalized.contains(where: { $0.isLetter }) else { return nil }
         return normalized

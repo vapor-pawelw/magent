@@ -215,13 +215,14 @@ Use `--prompt-file` for multi-line prompts or text with special characters (quot
 
 Rename a thread's git branch from a single prompt. This generates both:
 - branch slug (only the git branch is renamed; the thread/worktree name stays the same)
-- thread description (2-8 words)
+- thread description (prefers 2-8 words; longer descriptions are kept)
 
 ```bash
 magent-cli auto-rename-thread --thread <name> --prompt <text>
 ```
 
 `rename-thread` remains as a compatibility alias and accepts `--prompt` (or legacy `--description`).
+If the generated description exceeds the preferred 2-8 word range, the command succeeds and returns a `warning` so agents can immediately revise it.
 
 ### rename-branch
 

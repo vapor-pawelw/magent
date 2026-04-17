@@ -33,6 +33,7 @@ All notable changes to this project will be documented in this file.
 - Fixed sidebar scroll jumps when dropping a thread onto an existing pop-out window (or moving a thread between pop-outs). The fallback main-window selection no longer scrolls the sidebar away from where the user was browsing.
 - Removed the busy-row shimmer effect to reduce sidebar motion; busy threads now keep only border/separator animations.
 - Fixed sidebar thread capsules visibly resizing when the vertical scroller appeared or disappeared (notably when switching focus to another window and back).
+- Fixed long thread descriptions being hard-clipped in sidebar rows. Description overflow now ends with a trailing ellipsis (`...`) after the visible row line limit.
 
 ### Settings
 #### Features
@@ -112,6 +113,7 @@ All notable changes to this project will be documented in this file.
 - Separate thread and detached-tab windows now persist their latest size and position continuously, so app restart restores the same extracted windows in the same place.
 - Fixed separate-window quit/relaunch restore so popped-out thread windows stay popped out across normal app restart instead of collapsing back into the main window.
 - Fixed main-window content replacement when popping out the currently visible thread by switching main focus to another non-popped-out thread instead of showing a detached placeholder.
+- Fixed generated thread descriptions being truncated to 8 words. AI-generated descriptions now keep full text, with 2-8 words treated as guidance rather than a hard limit.
 
 ### Changes Panel
 #### Features
@@ -241,6 +243,7 @@ All notable changes to this project will be documented in this file.
 - Fixed `batch-create` failing with "Invalid JSON" when `specs.json` is pretty-printed. The CLI now compacts the array before sending so embedded newlines don't truncate the IPC message.
 - Improved IPC JSON parse error messages: errors now report the specific field or mismatch instead of the generic "couldn't be read" Foundation message; `dataCorrupted` errors include a hint about the newline-truncation pitfall.
 - Interactive CLI tab picker now shows real tab names (including custom titles) instead of generic `Tab #` labels.
+- `auto-rename-thread` now returns a CLI warning when the generated description exceeds the preferred 2-8 word range, so agents can immediately adjust it without blocking the rename.
 
 ### Agents
 #### Features

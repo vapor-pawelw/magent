@@ -188,7 +188,7 @@ For non-main threads, naming and labels in the sidebar follow these rules:
 - `thread.name` is the branch-facing thread identifier.
 - Worktree directory name is derived from `worktreePath` basename.
 - `taskDescription` is optional; it can be generated from the first agent prompt or set manually.
-- Generated description should be short (2-8 words) and naturally cased (not forced Title Case).
+- Generated description should prefer 2-8 words and natural casing (not forced Title Case). Longer descriptions are allowed; in agent-driven CLI/IPC rename flows, return a warning so the agent can shorten it.
 - Generated description should describe the same concrete task as the branch slug and read like a useful sidebar label; avoid vague abstractions such as "readiness" when the work is really a fix or feature.
 
 For the main thread, the sidebar uses these rules:
@@ -212,6 +212,7 @@ For the main thread, the sidebar uses these rules:
 
 - If `taskDescription` exists:
   - Line 1: description (up to 2 lines, or 1 line when `Narrow threads` is enabled)
+  - If the description overflows visible lines, truncate with a trailing ellipsis (do not hard-clip)
   - Line 2: `branch · worktree · PR` (PR segment shown only when present)
 - If no `taskDescription` and branch differs from worktree:
   - Line 1: `branch`
