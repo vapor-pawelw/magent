@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Updates
+
+#### Bug Fixes
+- Fixed the Homebrew update flow leaving the app on the old version after restart. The updater now refreshes the Homebrew tap before running `brew upgrade`, so a stale local tap cache no longer turns the upgrade into a no-op.
+
 ### Appearance
 
 #### Bug Fixes

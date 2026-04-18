@@ -879,6 +879,13 @@ final class UpdateService {
           exit 41
         fi
 
+        # Refresh the tap so `brew upgrade` sees the newest cask version.
+        # Without this, a stale local tap can make `brew upgrade` a no-op
+        # even when the release workflow has already pushed a new cask.
+        if ! brew update --quiet; then
+          echo "[magent-updater] brew update failed (continuing anyway)"
+        fi
+
         if ! brew upgrade --cask magent; then
           echo "[magent-updater] brew upgrade failed, trying reinstall"
           brew reinstall --cask magent
