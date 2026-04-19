@@ -249,6 +249,220 @@ final class ThreadManager {
         return svc
     }()
 
+    // MARK: - Extracted service containers (Phase 6)
+
+    lazy var renameService: RenameService = {
+        let svc = RenameService(store: store, persistence: persistence, tmux: tmux, git: git)
+        svc.onThreadsChanged = { [weak self] in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        svc.effectiveAgentType = { [weak self] projectId in
+            self?.effectiveAgentType(for: projectId)
+        }
+        svc.detectedAgentTypeInSession = { [weak self] sessionName in
+            await self?.detectedAgentTypeInSession(sessionName)
+        }
+        svc.verifyDetectedJiraTickets = { [weak self] threadIds in
+            await self?.verifyDetectedJiraTickets(forThreadIds: threadIds)
+        }
+        svc.ensureBranchSymlink = { [weak self] branchName, worktreePath, basePath in
+            self?.ensureBranchSymlink(
+                branchName: branchName,
+                worktreePath: worktreePath,
+                worktreesBasePath: basePath
+            )
+        }
+        svc.allocateUniqueTabDisplayNameCallback = { [weak self] requestedName, threadIndex, sessionName in
+            self?.allocateUniqueTabDisplayName(
+                requestedName: requestedName,
+                threadIndex: threadIndex,
+                excludingSessionName: sessionName
+            ) ?? requestedName
+        }
+        return svc
+    }()
+
+    lazy var threadLifecycleService: ThreadLifecycleService = {
+        let svc = ThreadLifecycleService(store: store, sessionTracker: sessionTracker, persistence: persistence, tmux: tmux, git: git)
+        svc.onThreadsChanged = { [weak self] in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        svc.onThreadCreated = { [weak self] thread in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didCreateThread: thread)
+        }
+        svc.onThreadArchived = { [weak self] thread in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didArchiveThread: thread)
+        }
+        svc.onThreadDeleted = { [weak self] thread in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didDeleteThread: thread)
+        }
+        // Agent setup
+        svc.resolveAgentType = { [weak self] projectId, requested, settings in
+            self?.resolveAgentType(for: projectId, requestedAgentType: requested, settings: settings)
+        }
+        svc.agentStartCommand = { [weak self] settings, projectId, agentType, envExports, workingDir, modelId, reasoningLevel in
+            self?.agentStartCommand(
+                settings: settings,
+                projectId: projectId,
+                agentType: agentType,
+                envExports: envExports,
+                workingDirectory: workingDir,
+                modelId: modelId,
+                reasoningLevel: reasoningLevel
+            ) ?? ""
+        }
+        svc.terminalStartCommand = { [weak self] envExports, workingDir in
+            self?.terminalStartCommand(envExports: envExports, workingDirectory: workingDir) ?? ""
+        }
+        svc.trustDirectoryIfNeeded = { [weak self] path, agentType in
+            self?.trustDirectoryIfNeeded(path, agentType: agentType)
+        }
+        svc.effectiveAgentType = { [weak self] projectId in
+            self?.effectiveAgentType(for: projectId)
+        }
+        svc.resolvedModelLabel = { [weak self] agentType, modelId in
+            self?.resolvedModelLabel(for: agentType, modelId: modelId)
+        }
+        svc.sessionEnvironmentVariables = { [weak self] threadId, worktreePath, projectPath, worktreeName, projectName, agentType in
+            self?.sessionEnvironmentVariables(
+                threadId: threadId,
+                worktreePath: worktreePath,
+                projectPath: projectPath,
+                worktreeName: worktreeName,
+                projectName: projectName,
+                agentType: agentType
+            ) ?? []
+        }
+        svc.shellExportCommand = { [weak self] env in
+            self?.shellExportCommand(for: env) ?? ""
+        }
+        svc.applySessionEnvironmentVariables = { [weak self] sessionName, env in
+            await self?.applySessionEnvironmentVariables(sessionName: sessionName, environmentVariables: env)
+        }
+        svc.markSessionContextKnownGood = { [weak self] sessionName, threadId, expectedPath, projectPath, isAgent in
+            self?.markSessionContextKnownGood(
+                sessionName: sessionName,
+                threadId: threadId,
+                expectedPath: expectedPath,
+                projectPath: projectPath,
+                isAgentSession: isAgent
+            )
+        }
+        svc.effectiveInjection = { [weak self] projectId in
+            self?.effectiveInjection(for: projectId) ?? (terminalCommand: "", agentContext: "")
+        }
+        svc.injectAfterStart = { [weak self] sessionName, terminalCmd, agentCtx, initialPrompt, submit, agentType in
+            self?.injectAfterStart(
+                sessionName: sessionName,
+                terminalCommand: terminalCmd,
+                agentContext: agentCtx,
+                initialPrompt: initialPrompt,
+                shouldSubmitInitialPrompt: submit,
+                agentType: agentType
+            )
+        }
+        svc.scheduleAgentConversationIDRefresh = { [weak self] threadId, sessionName in
+            self?.scheduleAgentConversationIDRefresh(threadId: threadId, sessionName: sessionName)
+        }
+        svc.registerPendingPromptCleanup = { [weak self] fileURL, sessionName in
+            self?.registerPendingPromptCleanup(fileURL: fileURL, sessionName: sessionName)
+        }
+        // Rename / auto-rename
+        svc.autoRenameThreadAfterFirstPromptIfNeeded = { [weak self] threadId, sessionName, prompt in
+            await self?.renameService.autoRenameThreadAfterFirstPromptIfNeeded(
+                threadId: threadId,
+                sessionName: sessionName,
+                prompt: prompt
+            ) ?? false
+        }
+        svc.cleanupRenameStateForThread = { [weak self] threadId in
+            self?.renameService.cleanupForThread(id: threadId)
+        }
+        // Agent setup cleanup
+        svc.cleanupAgentSetupForThread = { [weak self] threadId in
+            self?.agentSetupService.cleanupPendingPromptRecoveries(for: threadId)
+        }
+        svc.clearTrackedInitialPromptInjectionForSessions = { [weak self] sessions in
+            self?.clearTrackedInitialPromptInjection(forSessions: sessions)
+        }
+        // Sidebar ordering
+        svc.placeThreadAfterSibling = { [weak self] threadId, afterId in
+            self?.placeThreadAfterSibling(threadId: threadId, afterThreadId: afterId)
+        }
+        svc.bumpThreadToTopOfSection = { [weak self] threadId in
+            self?.bumpThreadToTopOfSection(threadId)
+        }
+        // Local file sync
+        svc.syncConfiguredLocalPathsIntoWorktree = { [weak self] project, worktreePath, entries, sourceOverride in
+            try await self?.syncConfiguredLocalPathsIntoWorktree(
+                project: project,
+                worktreePath: worktreePath,
+                syncEntries: entries,
+                sourceRootOverride: sourceOverride
+            ) ?? []
+        }
+        svc.effectiveLocalSyncEntries = { [weak self] thread, project in
+            self?.effectiveLocalSyncEntries(for: thread, project: project) ?? []
+        }
+        svc.resolveBaseBranchSyncTargetForThread = { [weak self] thread, project in
+            self?.resolveBaseBranchSyncTarget(for: thread, project: project) ?? (project.repoPath, "")
+        }
+        svc.resolveBaseBranchSyncTargetForBranch = { [weak self] baseBranch, threadId, projectId, project in
+            self?.resolveBaseBranchSyncTarget(
+                baseBranch: baseBranch,
+                excludingThreadId: threadId,
+                projectId: projectId,
+                project: project
+            ) ?? (project.repoPath, "")
+        }
+        svc.syncConfiguredLocalPathsFromWorktreeAsync = { [weak self] project, worktreePath, entries, promptConflicts, destOverride in
+            try await self?.syncConfiguredLocalPathsFromWorktree(
+                project: project,
+                worktreePath: worktreePath,
+                syncEntries: entries,
+                promptForConflicts: promptConflicts,
+                destinationRootOverride: destOverride
+            )
+        }
+        // Git state
+        svc.worktreeActiveNames = { [weak self] projectId in
+            self?.worktreeActiveNames(for: projectId) ?? []
+        }
+        svc.referencedMagentSessionNames = { [weak self] in
+            self?.referencedMagentSessionNames() ?? []
+        }
+        svc.pruneWorktreeCache = { [weak self] project in
+            self?.pruneWorktreeCache(for: project)
+        }
+        svc.ensureBranchSymlink = { [weak self] branchName, worktreePath, basePath in
+            self?.ensureBranchSymlink(
+                branchName: branchName,
+                worktreePath: worktreePath,
+                worktreesBasePath: basePath
+            )
+        }
+        // Jira
+        svc.excludeJiraTicket = { [weak self] key, projectId in
+            self?.excludeJiraTicket(key: key, projectId: projectId)
+        }
+        svc.verifyDetectedJiraTickets = { [weak self] threadIds in
+            await self?.verifyDetectedJiraTickets(forThreadIds: threadIds)
+        }
+        // Session state
+        svc.notifiedWaitingSessionsRemove = { [weak self] sessions in
+            self?.notifiedWaitingSessions.subtract(sessions)
+        }
+        svc.rateLimitLiftPendingResumeSessionsRemove = { [weak self] sessions in
+            self?.rateLimitLiftPendingResumeSessions.subtract(sessions)
+        }
+        return svc
+    }()
+
     // MARK: - ThreadStore forwarding
 
     var threads: [MagentThread] {
@@ -431,15 +645,23 @@ final class ThreadManager {
         set { agentSetupService.pendingPromptRecoveriesByThread = newValue }
     }
 
+    // MARK: - RenameService forwarding
+
+    var autoRenameInProgress: Set<UUID> {
+        get { renameService.autoRenameInProgress }
+        set { renameService.autoRenameInProgress = newValue }
+    }
+    var autoRenameFailedBannerShownThreadIds: Set<UUID> {
+        get { renameService.autoRenameFailedBannerShownThreadIds }
+        set { renameService.autoRenameFailedBannerShownThreadIds = newValue }
+    }
+    var promptRenameResultCache: [UUID: [String: CachedRenameResult]] {
+        get { renameService.promptRenameResultCache }
+        set { renameService.promptRenameResultCache = newValue }
+    }
+
     // MARK: - Remaining inline state
 
-    var autoRenameInProgress: Set<UUID> = []
-    /// Tracks threads for which an auto-rename failure banner has already been shown this session.
-    var autoRenameFailedBannerShownThreadIds: Set<UUID> = []
-    /// Per-thread cache of AI-generated rename payloads, keyed by normalized prompt.
-    /// Avoids repeat agent calls when the same prompt is re-used for rename on the same thread.
-    /// Cleared when a thread is archived or deleted.
-    var promptRenameResultCache: [UUID: [String: CachedRenameResult]] = [:]
     // baseBranchResets is forwarded to gitStateService — see forwarding computed property above.
     var sessionMonitorTimer: Timer?
     var isSessionMonitorTickRunning = false

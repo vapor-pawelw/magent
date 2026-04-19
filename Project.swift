@@ -36,6 +36,8 @@ let project = Project(
                 "Magent/Services/ThreadStore.swift",
                 "Magent/Services/SessionLifecycleService.swift",
                 "Magent/Services/AgentSetupService.swift",
+                "Magent/Services/RenameService.swift",
+                "Magent/Services/ThreadLifecycleService.swift",
                 "Magent/Services/JiraIntegrationService.swift",
                 "Magent/Services/PullRequestService.swift",
                 "Magent/Services/RateLimitService.swift",
