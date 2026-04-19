@@ -5,154 +5,10 @@ extension ThreadManager {
     private static let archivedPathRediscoverySuppressionWindow: TimeInterval = 15 * 60
     private static let archivedHistoryLimitPerProject = 100
 
-    // MARK: - Worktree Sync
+    // MARK: - Worktree Sync — forwarding to WorktreeService
 
     func syncThreadsWithWorktrees(for project: Project) async {
-        let basePath = project.resolvedWorktreesBasePath()
-        let fm = FileManager.default
-
-        // Discover directories in the worktrees base path
-        guard let contents = try? fm.contentsOfDirectory(atPath: basePath) else { return }
-
-        // Build a map of symlink target → latest symlink name.
-        // Rename creates symlinks from the new name pointing to the original worktree directory,
-        // so the latest symlink name represents the most recent thread name.
-        var latestSymlinkName: [String: (name: String, date: Date)] = [:]
-        for entry in contents {
-            let entryPath = (basePath as NSString).appendingPathComponent(entry)
-            guard let attrs = try? fm.attributesOfItem(atPath: entryPath),
-                  attrs[.type] as? FileAttributeType == .typeSymbolicLink else { continue }
-            guard let dest = try? fm.destinationOfSymbolicLink(atPath: entryPath) else { continue }
-            let resolved = dest.hasPrefix("/") ? dest : (basePath as NSString).appendingPathComponent(dest)
-            let created = attrs[.creationDate] as? Date ?? attrs[.modificationDate] as? Date ?? .distantPast
-            if let existing = latestSymlinkName[resolved], existing.date > created { continue }
-            latestSymlinkName[resolved] = (name: entry, date: created)
-        }
-
-        var changed = false
-        let existingPaths = Set(threads.filter { $0.projectId == project.id }.map(\.worktreePath))
-
-        // Load persisted threads once — used for archived-path exclusion and later merge/save.
-        var allPersistedThreads = persistence.loadThreads()
-
-        // Collect paths of recently archived threads so we don't immediately
-        // re-discover them while archive cleanup is still in flight.
-        // If a directory still exists long after archive, let sync re-discover it.
-        let now = Date()
-        let archivedPaths = Set(
-            allPersistedThreads
-                .filter { thread in
-                    guard thread.projectId == project.id, thread.isArchived else { return false }
-                    guard let archivedAt = thread.archivedAt else { return false }
-                    return now.timeIntervalSince(archivedAt) <= Self.archivedPathRediscoverySuppressionWindow
-                }
-                .map(\.worktreePath)
-        )
-
-        for dirName in contents {
-            let fullPath = (basePath as NSString).appendingPathComponent(dirName)
-
-            // Skip symlinks — these are rename aliases, not real worktrees
-            if let attrs = try? fm.attributesOfItem(atPath: fullPath),
-               attrs[.type] as? FileAttributeType == .typeSymbolicLink {
-                continue
-            }
-
-            var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: fullPath, isDirectory: &isDir), isDir.boolValue else { continue }
-
-            // Check if this is a git worktree (has a .git file, not directory)
-            let gitPath = (fullPath as NSString).appendingPathComponent(".git")
-            var gitIsDir: ObjCBool = false
-            let gitExists = fm.fileExists(atPath: gitPath, isDirectory: &gitIsDir)
-            guard gitExists && !gitIsDir.boolValue else { continue }
-
-            // Skip if we already have a thread for this path, or it was archived
-            guard !existingPaths.contains(fullPath),
-                  !archivedPaths.contains(fullPath) else { continue }
-
-            // If a symlink points here, the worktree was renamed — use the symlink name
-            // as the sidebar thread label, but seed branchName from the actual checkout.
-            let threadName = latestSymlinkName[fullPath]?.name ?? dirName
-            let currentBranch = await git.getCurrentBranch(workingDirectory: fullPath)
-            let branchName = currentBranch?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                ? currentBranch!
-                : threadName
-
-            let settings = persistence.loadSettings()
-            let thread = MagentThread(
-                projectId: project.id,
-                name: threadName,
-                worktreePath: fullPath,
-                branchName: branchName,
-                sectionId: settings.defaultSection?.id
-            )
-            threads.append(thread)
-            changed = true
-        }
-
-        // Archive threads whose worktree directories no longer exist on disk
-        // (skip main threads — those point at the repo itself)
-        for i in threads.indices {
-            guard threads[i].projectId == project.id,
-                  !threads[i].isMain,
-                  !threads[i].isArchived else { continue }
-
-            var isDir: ObjCBool = false
-            let exists = fm.fileExists(atPath: threads[i].worktreePath, isDirectory: &isDir) && isDir.boolValue
-            if !exists {
-                threads[i].isArchived = true
-                if threads[i].archivedAt == nil {
-                    threads[i].archivedAt = Date()
-                }
-                changed = true
-            }
-        }
-
-        // Keep archived history bounded per project so persistence doesn't grow
-        // unbounded. Preserve the most recently archived entries.
-        let archivedForProject = allPersistedThreads
-            .filter { $0.projectId == project.id && $0.isArchived && !$0.isMain }
-            .sorted { lhs, rhs in
-                let lhsDate = lhs.archivedAt ?? .distantPast
-                let rhsDate = rhs.archivedAt ?? .distantPast
-                if lhsDate != rhsDate { return lhsDate > rhsDate }
-                return lhs.createdAt > rhs.createdAt
-            }
-        if archivedForProject.count > Self.archivedHistoryLimitPerProject {
-            let archivedIdsToRemove = Set(
-                archivedForProject
-                    .dropFirst(Self.archivedHistoryLimitPerProject)
-                    .map(\.id)
-            )
-            allPersistedThreads.removeAll { archivedIdsToRemove.contains($0.id) }
-            changed = true
-        }
-
-        if changed {
-            // Remove archived from active list
-            threads = threads.filter { !$0.isArchived }
-
-            // Merge: update archived flags, add new threads
-            for thread in threads where !allPersistedThreads.contains(where: { $0.id == thread.id }) {
-                allPersistedThreads.append(thread)
-            }
-            // Update archived flags
-            for i in allPersistedThreads.indices {
-                if !threads.contains(where: { $0.id == allPersistedThreads[i].id }) && allPersistedThreads[i].projectId == project.id && !allPersistedThreads[i].isMain {
-                    allPersistedThreads[i].isArchived = true
-                    if allPersistedThreads[i].archivedAt == nil {
-                        allPersistedThreads[i].archivedAt = Date()
-                    }
-                }
-            }
-            try? persistence.saveThreads(allPersistedThreads)
-
-            await MainActor.run {
-                NotificationCenter.default.post(name: .magentArchivedThreadsDidChange, object: nil)
-                delegate?.threadManager(self, didUpdateThreads: threads)
-            }
-        }
+        await worktreeService.syncThreadsWithWorktrees(for: project)
     }
 
     // MARK: - Session Name Migration
@@ -256,23 +112,9 @@ extension ThreadManager {
         }
     }
 
-    // MARK: - Bell Pipes
+    // MARK: - Bell Pipes — forwarding to WorktreeService
 
-    /// Legacy tmux bell-pipe management. When the legacy path is disabled,
-    /// proactively detaches any old Magent pipes that may still be running on
-    /// upgraded sessions so tmux stops managing those helper children.
     func ensureBellPipes() async {
-        let pipedSessions = await tmux.sessionsWithActivePipe()
-        for thread in threads where !thread.isArchived {
-            for sessionName in thread.agentTmuxSessions {
-                guard await tmux.hasSession(name: sessionName) else { continue }
-                if TmuxService.legacyAgentBellPipeEnabled {
-                    guard !pipedSessions.contains(sessionName) else { continue }
-                    await tmux.setupBellPipe(for: sessionName)
-                } else if pipedSessions.contains(sessionName) {
-                    await tmux.clearBellPipe(for: sessionName)
-                }
-            }
-        }
+        await worktreeService.ensureBellPipes()
     }
 }

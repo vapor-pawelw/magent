@@ -116,6 +116,37 @@ final class ThreadManager {
         return svc
     }()
 
+    lazy var gitStateService: GitStateService = {
+        let svc = GitStateService(store: store, persistence: persistence, tmux: tmux, git: git)
+        svc.onThreadsChanged = { [weak self] in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        svc.onBranchesChanged = { [weak self] changedIds in
+            await self?.verifyDetectedJiraTickets(forThreadIds: changedIds)
+        }
+        svc.onBranchSymlinkNeeded = { [weak self] branchName, worktreePath, worktreesBasePath in
+            self?.ensureBranchSymlink(
+                branchName: branchName,
+                worktreePath: worktreePath,
+                worktreesBasePath: worktreesBasePath
+            )
+        }
+        svc.cachedRemoteResolver = { [weak self] projectId in
+            self?._cachedRemoteByProjectId[projectId]
+        }
+        return svc
+    }()
+
+    lazy var worktreeService: WorktreeService = {
+        let svc = WorktreeService(store: store, persistence: persistence, tmux: tmux, git: git)
+        svc.onThreadsChanged = { [weak self] in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        return svc
+    }()
+
     // MARK: - ThreadStore forwarding
 
     var threads: [MagentThread] {
@@ -236,6 +267,13 @@ final class ThreadManager {
         set { jiraIntegrationService._jiraProjectStatusesCacheLoaded = newValue }
     }
 
+    // MARK: - GitStateService forwarding
+
+    var baseBranchResets: [UUID: BaseBranchReset] {
+        get { gitStateService.baseBranchResets }
+        set { gitStateService.baseBranchResets = newValue }
+    }
+
     // MARK: - Remaining inline state (extracted in later phases)
 
     /// Dedupes completion attention events across legacy bell sources and the
@@ -266,9 +304,7 @@ final class ThreadManager {
     /// Protects those entries in waitingForInputSessions from being auto-cleared by
     /// checkForWaitingForInput (which normally clears on idle prompt, not interactive prompt).
     var rateLimitLiftPendingResumeSessions: Set<String> = []
-    /// Tracks threads whose base branch was missing and got reset to project default.
-    /// Keyed by thread ID, consumed when the user selects the thread (banner shown once).
-    var baseBranchResets: [UUID: BaseBranchReset] = [:]
+    // baseBranchResets is forwarded to gitStateService — see forwarding computed property below.
     var sessionMonitorTimer: Timer?
     var isSessionMonitorTickRunning = false
     var lastStaleSessionCleanupAt: Date = .distantPast

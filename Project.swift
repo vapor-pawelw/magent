@@ -38,6 +38,8 @@ let project = Project(
                 "Magent/Services/PullRequestService.swift",
                 "Magent/Services/RateLimitService.swift",
                 "Magent/Services/SidebarOrderingService.swift",
+                "Magent/Services/GitStateService.swift",
+                "Magent/Services/WorktreeService.swift",
                 "Magent/Services/ThreadManager.swift",
                 "Magent/Services/ThreadManager+*.swift",
                 "Magent/Services/UpdateService.swift",
