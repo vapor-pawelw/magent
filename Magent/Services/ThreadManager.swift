@@ -147,6 +147,84 @@ final class ThreadManager {
         return svc
     }()
 
+    // MARK: - Extracted service containers (Phase 4)
+
+    lazy var sessionLifecycleService: SessionLifecycleService = {
+        let svc = SessionLifecycleService(store: store, sessionTracker: sessionTracker, persistence: persistence, tmux: tmux)
+        svc.onThreadsChanged = { [weak self] in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        svc.recreateSession = { [weak self] sessionName, thread in
+            await self?.recreateSessionIfNeeded(sessionName: sessionName, thread: thread) ?? false
+        }
+        svc.agentType = { [weak self] thread, sessionName in
+            self?.agentType(for: thread, sessionName: sessionName)
+        }
+        // isSessionProtectedByRateLimit callback is intentionally nil — the service checks
+        // thread.rateLimitedSessions[sessionName] directly and never calls this callback.
+        svc.updateDockBadge = { [weak self] in
+            self?.updateDockBadge()
+        }
+        svc.requestDockBounce = { [weak self] in
+            self?.requestDockBounceForUnreadCompletionIfNeeded()
+        }
+        svc.bumpThreadToTop = { [weak self] threadId in
+            self?.bumpThreadToTopOfSection(threadId)
+        }
+        svc.scheduleConversationIDRefresh = { [weak self] threadId, sessionName in
+            self?.scheduleAgentConversationIDRefresh(threadId: threadId, sessionName: sessionName)
+        }
+        svc.triggerAutoRename = { [weak self] threadId, sessionName in
+            await self?.triggerAutoRenameFromBellIfNeeded(threadId: threadId, sessionName: sessionName)
+        }
+        svc.refreshDirtyState = { [weak self] threadId in
+            _ = await self?.refreshDirtyState(for: threadId)
+        }
+        svc.refreshDeliveredState = { [weak self] threadId in
+            _ = await self?.refreshDeliveredState(for: threadId)
+        }
+        svc.postBusySessionsChanged = { [weak self] thread in
+            self?.postBusySessionsChangedNotification(for: thread)
+        }
+        svc.clearRateLimitAfterRecovery = { [weak self] threadId, sessionName, paneContent in
+            await self?.clearRateLimitAfterRecovery(threadId: threadId, sessionName: sessionName, paneContent: paneContent) ?? []
+        }
+        svc.applyRateLimitMarker = { [weak self] info, agentType, runtimeSessions in
+            guard let self else { return (false, []) }
+            var ids = Set<UUID>()
+            let changed = self.applyRateLimitMarker(info, for: agentType, runtimeActiveSessionsByAgent: runtimeSessions, changedThreadIds: &ids)
+            return (changed, ids)
+        }
+        svc.clearPromptRateLimitMarkers = { [weak self] agentType in
+            guard let self else { return (false, []) }
+            var ids = Set<UUID>()
+            let changed = self.clearPromptRateLimitMarkers(for: agentType, changedThreadIds: &ids)
+            return (changed, ids)
+        }
+        svc.paneHasActiveNonIgnoredRateLimit = { [weak self] agentType, content, lastPrompt, sessionName in
+            self?.paneHasActiveNonIgnoredRateLimit(
+                for: agentType,
+                paneContent: content,
+                lastSubmittedPrompt: lastPrompt,
+                sessionName: sessionName
+            ) ?? false
+        }
+        svc.publishRateLimitSummary = { [weak self] in
+            await self?.publishRateLimitSummaryIfNeeded()
+        }
+        svc.detectedAgentType = { [weak self] command in
+            self?.detectedAgentType(from: command)
+        }
+        svc.detectedRunningAgentType = { [weak self] command, children in
+            self?.detectedRunningAgentType(paneCommand: command, childProcesses: children)
+        }
+        svc.detectedAgentTypeInSession = { [weak self] sessionName in
+            await self?.detectedAgentTypeInSession(sessionName)
+        }
+        return svc
+    }()
+
     // MARK: - ThreadStore forwarding
 
     var threads: [MagentThread] {
@@ -188,6 +266,34 @@ final class ThreadManager {
     var sessionsBeingRecreated: Set<String> {
         get { sessionTracker.sessionsBeingRecreated }
         set { sessionTracker.sessionsBeingRecreated = newValue }
+    }
+    var lastRuntimeDetectedAgentBySession: [String: (agent: AgentType, detectedAt: Date)] {
+        get { sessionTracker.lastRuntimeDetectedAgentBySession }
+        set { sessionTracker.lastRuntimeDetectedAgentBySession = newValue }
+    }
+    static let lastRuntimeDetectedAgentTTL: TimeInterval = SessionTracker.lastRuntimeDetectedAgentTTL
+
+    // MARK: - SessionLifecycleService forwarding
+
+    var recentBellBySession: [String: Date] {
+        get { sessionLifecycleService.recentBellBySession }
+        set { sessionLifecycleService.recentBellBySession = newValue }
+    }
+    var notifiedWaitingSessions: Set<String> {
+        get { sessionLifecycleService.notifiedWaitingSessions }
+        set { sessionLifecycleService.notifiedWaitingSessions = newValue }
+    }
+    var rateLimitLiftPendingResumeSessions: Set<String> {
+        get { sessionLifecycleService.rateLimitLiftPendingResumeSessions }
+        set { sessionLifecycleService.rateLimitLiftPendingResumeSessions = newValue }
+    }
+    var staleMagentSessionsFirstSeenAt: [String: Date] {
+        get { sessionLifecycleService.staleMagentSessionsFirstSeenAt }
+        set { sessionLifecycleService.staleMagentSessionsFirstSeenAt = newValue }
+    }
+    var lastStaleSessionCleanupAt: Date {
+        get { sessionLifecycleService.lastStaleSessionCleanupAt }
+        set { sessionLifecycleService.lastStaleSessionCleanupAt = newValue }
     }
 
     // MARK: - RateLimitService forwarding
@@ -276,9 +382,6 @@ final class ThreadManager {
 
     // MARK: - Remaining inline state (extracted in later phases)
 
-    /// Dedupes completion attention events across legacy bell sources and the
-    /// synthetic busy->idle completion path.
-    var recentBellBySession: [String: Date] = [:]
     var autoRenameInProgress: Set<UUID> = []
     /// Tracks threads for which an auto-rename failure banner has already been shown this session.
     var autoRenameFailedBannerShownThreadIds: Set<UUID> = []
@@ -298,17 +401,9 @@ final class ThreadManager {
     /// Avoids repeat agent calls when the same prompt is re-used for rename on the same thread.
     /// Cleared when a thread is archived or deleted.
     var promptRenameResultCache: [UUID: [String: CachedRenameResult]] = [:]
-    /// Dedup tracker — prevents repeated "waiting for input" notifications for the same session.
-    var notifiedWaitingSessions: Set<String> = []
-    /// Sessions that had a rate limit lifted and still need the user to visit and continue work.
-    /// Protects those entries in waitingForInputSessions from being auto-cleared by
-    /// checkForWaitingForInput (which normally clears on idle prompt, not interactive prompt).
-    var rateLimitLiftPendingResumeSessions: Set<String> = []
     // baseBranchResets is forwarded to gitStateService — see forwarding computed property below.
     var sessionMonitorTimer: Timer?
     var isSessionMonitorTickRunning = false
-    var lastStaleSessionCleanupAt: Date = .distantPast
-    var staleMagentSessionsFirstSeenAt: [String: Date] = [:]
     var lastTmuxZombieHealthCheckAt: Date = .distantPast
     var lastTmuxZombieSummary: TmuxService.ZombieParentSummary?
     var didShowTmuxZombieWarning = false
@@ -327,12 +422,6 @@ final class ThreadManager {
     /// Pending prompt recoveries for .newTab entries, keyed by thread ID.
     /// Stored at launch and shown as embedded banners when the thread is selected.
     var pendingPromptRecoveriesByThread: [UUID: [PendingPromptRecoveryInfo]] = [:]
-    /// Caches the last runtime-detected agent type per session. When `ps` child-process
-    /// detection transiently fails (e.g. Claude reports its version as `pane_current_command`
-    /// instead of "claude"), this prevents the session from flipping to `nil` and losing busy state.
-    /// Entries expire after `lastRuntimeDetectedAgentTTL` seconds of consecutive nil detections.
-    var lastRuntimeDetectedAgentBySession: [String: (agent: AgentType, detectedAt: Date)] = [:]
-    static let lastRuntimeDetectedAgentTTL: TimeInterval = 60
 
     // MARK: - Lifecycle
 

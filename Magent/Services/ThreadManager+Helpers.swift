@@ -1464,86 +1464,8 @@ extension ThreadManager {
     }
 
     // MARK: - Session-State Rekey/Prune
-
-    /// Rekeys transient, session-scoped state after tmux session renames.
-    /// Keeps only sessions that are still agent tabs for this thread.
-    @discardableResult
-    func remapTransientSessionState(threadIndex index: Int, sessionRenameMap: [String: String]) -> Bool {
-        guard threads.indices.contains(index) else { return false }
-        guard !sessionRenameMap.isEmpty else { return false }
-
-        var changed = false
-        let validAgentSessions = Set(threads[index].agentTmuxSessions)
-
-        let remappedBusy = Set(
-            threads[index].busySessions
-                .map { sessionRenameMap[$0] ?? $0 }
-                .filter { validAgentSessions.contains($0) }
-        )
-        if remappedBusy != threads[index].busySessions {
-            threads[index].busySessions = remappedBusy
-            changed = true
-        }
-
-        let remappedWaiting = Set(
-            threads[index].waitingForInputSessions
-                .map { sessionRenameMap[$0] ?? $0 }
-                .filter { validAgentSessions.contains($0) }
-        )
-        if remappedWaiting != threads[index].waitingForInputSessions {
-            threads[index].waitingForInputSessions = remappedWaiting
-            changed = true
-        }
-
-        // Re-key magentBusySessions — filter against all tmux sessions (not just agent ones)
-        // since magent busy applies to any session during injection/setup.
-        let validAllSessions = Set(threads[index].tmuxSessionNames)
-        let remappedMagentBusy = Set(
-            threads[index].magentBusySessions
-                .map { sessionRenameMap[$0] ?? $0 }
-                .filter { validAllSessions.contains($0) || $0 == MagentThread.threadSetupSentinel }
-        )
-        if remappedMagentBusy != threads[index].magentBusySessions {
-            threads[index].magentBusySessions = remappedMagentBusy
-            changed = true
-        }
-
-        let remappedUnsubmitted = Set(
-            threads[index].hasUnsubmittedInputSessions
-                .map { sessionRenameMap[$0] ?? $0 }
-                .filter { validAgentSessions.contains($0) }
-        )
-        if remappedUnsubmitted != threads[index].hasUnsubmittedInputSessions {
-            threads[index].hasUnsubmittedInputSessions = remappedUnsubmitted
-            changed = true
-        }
-
-        // Keep notification dedup state and rate-limit-resume state aligned with waiting sessions after rename.
-        let renamedTargets = Set(sessionRenameMap.values)
-        for (oldName, newName) in sessionRenameMap where notifiedWaitingSessions.remove(oldName) != nil {
-            if remappedWaiting.contains(newName) {
-                notifiedWaitingSessions.insert(newName)
-            }
-        }
-        for (oldName, newName) in sessionRenameMap where rateLimitLiftPendingResumeSessions.remove(oldName) != nil {
-            if remappedWaiting.contains(newName) {
-                rateLimitLiftPendingResumeSessions.insert(newName)
-            }
-        }
-        for target in renamedTargets where !remappedWaiting.contains(target) {
-            notifiedWaitingSessions.remove(target)
-            rateLimitLiftPendingResumeSessions.remove(target)
-        }
-
-        // Re-key runtime agent detection cache so renamed sessions keep their cached type.
-        for (oldName, newName) in sessionRenameMap {
-            if let cached = lastRuntimeDetectedAgentBySession.removeValue(forKey: oldName) {
-                lastRuntimeDetectedAgentBySession[newName] = cached
-            }
-        }
-
-        return changed
-    }
+    // remapTransientSessionState and pruneTransientSessionStateToKnownAgentSessions are
+    // now in SessionLifecycleService (Phase 4) and forwarded via ThreadManager+AgentState.
 
     @discardableResult
     func remapInitialPromptInjectionState(sessionRenameMap: [String: String]) -> Bool {
@@ -1587,51 +1509,6 @@ extension ThreadManager {
             initialPromptAutoRelaunchAttempts.map { sessionRenameMap[$0] ?? $0 }
         )
         if initialPromptAutoRelaunchAttempts != originalAutoRelaunchSessions {
-            changed = true
-        }
-
-        return changed
-    }
-
-    /// Removes stale transient session state that references non-agent sessions.
-    /// Returns true when any thread-visible state changed.
-    @discardableResult
-    func pruneTransientSessionStateToKnownAgentSessions(threadIndex index: Int) -> Bool {
-        guard threads.indices.contains(index) else { return false }
-
-        var changed = false
-        let validAgentSessions = Set(threads[index].agentTmuxSessions)
-
-        let prunedBusy = threads[index].busySessions.intersection(validAgentSessions)
-        if prunedBusy != threads[index].busySessions {
-            threads[index].busySessions = prunedBusy
-            changed = true
-        }
-
-        let oldWaiting = threads[index].waitingForInputSessions
-        let prunedWaiting = oldWaiting.intersection(validAgentSessions)
-        if prunedWaiting != oldWaiting {
-            let removed = oldWaiting.subtracting(prunedWaiting)
-            for session in removed {
-                notifiedWaitingSessions.remove(session)
-                rateLimitLiftPendingResumeSessions.remove(session)
-            }
-            threads[index].waitingForInputSessions = prunedWaiting
-            changed = true
-        }
-
-        // Prune magentBusySessions against all known tmux sessions + the setup sentinel.
-        let validMagentTargets = Set(threads[index].tmuxSessionNames)
-            .union([MagentThread.threadSetupSentinel])
-        let prunedMagentBusy = threads[index].magentBusySessions.intersection(validMagentTargets)
-        if prunedMagentBusy != threads[index].magentBusySessions {
-            threads[index].magentBusySessions = prunedMagentBusy
-            changed = true
-        }
-
-        let prunedUnsubmitted = threads[index].hasUnsubmittedInputSessions.intersection(validAgentSessions)
-        if prunedUnsubmitted != threads[index].hasUnsubmittedInputSessions {
-            threads[index].hasUnsubmittedInputSessions = prunedUnsubmitted
             changed = true
         }
 

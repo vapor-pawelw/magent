@@ -4,6 +4,8 @@ import MagentCore
 extension ThreadManager {
 
     // MARK: - Add Tab
+    // Complex session creation logic — stays on ThreadManager (coupled to agentStartCommand,
+    // terminalStartCommand, injectAfterStart, registerPendingPromptCleanup, etc.).
 
     func addTab(
         to thread: MagentThread,
@@ -203,7 +205,7 @@ extension ThreadManager {
         )
 
         threads[index].tmuxSessionNames.append(tmuxSessionName)
-        sessionLastVisitedAt[tmuxSessionName] = sessionCreatedAt
+        sessionLifecycleService.sessionTracker.sessionLastVisitedAt[tmuxSessionName] = sessionCreatedAt
         threads[index].customTabNames[tmuxSessionName] = tabDisplayName
         threads[index].sessionCreatedAts[tmuxSessionName] = sessionCreatedAt
         let shouldMarkAsAgentTab = (currentThread.isMain || useAgentCommand) && selectedAgentType != nil
@@ -338,75 +340,38 @@ extension ThreadManager {
     }
 
     // MARK: - Tab Ordering & Registration
+    // Forwarded to SessionLifecycleService.
 
     func reorderTabs(for threadId: UUID, newOrder: [String]) {
-        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
-        threads[index].tmuxSessionNames = newOrder
-        try? persistence.saveActiveThreads(threads)
+        sessionLifecycleService.reorderTabs(for: threadId, newOrder: newOrder)
     }
 
-    /// Registers a fallback session name for a thread that had no sessions.
-    /// This ensures the session is tracked in tmuxSessionNames (so close-tab works)
-    /// and in agentTmuxSessions (so recreateSessionIfNeeded creates an agent, not a terminal).
     func registerFallbackSession(_ sessionName: String, for threadId: UUID, agentType: AgentType?) {
-        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
-        guard !threads[index].tmuxSessionNames.contains(sessionName) else { return }
-        threads[index].tmuxSessionNames.append(sessionName)
-        sessionLastVisitedAt[sessionName] = Date()
-        if agentType != nil {
-            threads[index].agentTmuxSessions.append(sessionName)
-            if let agentType {
-                threads[index].sessionAgentTypes[sessionName] = agentType
-            }
-            threads[index].agentHasRun = true
-        }
-        threads[index].customTabNames[sessionName] = TmuxSessionNaming.defaultTabDisplayName(for: agentType)
-        threads[index].lastSelectedTabIdentifier = sessionName
-        try? persistence.saveActiveThreads(threads)
+        sessionLifecycleService.registerFallbackSession(sessionName, for: threadId, agentType: agentType)
     }
 
     // MARK: - Tab Pinning & Selection
+    // Forwarded to SessionLifecycleService.
 
     func updatePinnedTabs(for threadId: UUID, pinnedSessions: [String]) {
-        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
-        threads[index].pinnedTmuxSessions = pinnedSessions
-        try? persistence.saveActiveThreads(threads)
+        sessionLifecycleService.updatePinnedTabs(for: threadId, pinnedSessions: pinnedSessions)
     }
 
     func updatePersistedWebTabs(for threadId: UUID, webTabs: [PersistedWebTab]) {
-        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
-        threads[index].persistedWebTabs = webTabs
-        try? persistence.saveActiveThreads(threads)
+        sessionLifecycleService.updatePersistedWebTabs(for: threadId, webTabs: webTabs)
     }
 
     func updatePersistedDraftTabs(for threadId: UUID, draftTabs: [PersistedDraftTab]) {
-        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
-        threads[index].persistedDraftTabs = draftTabs
-        try? persistence.saveActiveThreads(threads)
+        sessionLifecycleService.updatePersistedDraftTabs(for: threadId, draftTabs: draftTabs)
     }
 
     func updateLastSelectedTab(for threadId: UUID, identifier: String?) {
-        guard let index = threads.firstIndex(where: { $0.id == threadId }) else { return }
-        if let identifier {
-            sessionLastVisitedAt[identifier] = Date()
-            evictedIdleSessions.remove(identifier)
-        }
-        if threads[index].lastSelectedTabIdentifier == identifier { return }
-        threads[index].lastSelectedTabIdentifier = identifier
-        try? persistence.saveActiveThreads(threads)
+        sessionLifecycleService.updateLastSelectedTab(for: threadId, identifier: identifier)
     }
 
     @MainActor
     func setActiveThread(_ threadId: UUID?) {
-        activeThreadId = threadId
-        if let threadId,
-           let thread = threads.first(where: { $0.id == threadId }) {
-            let now = Date()
-            for session in thread.tmuxSessionNames {
-                sessionLastVisitedAt[session] = now
-                evictedIdleSessions.remove(session)
-            }
-        }
+        sessionLifecycleService.setActiveThread(threadId)
     }
 
     // MARK: - Close Tab

@@ -464,7 +464,7 @@ extension ThreadDetailViewController {
     func ensureSessionPrepared(
         sessionName: String,
         forceRevalidate: Bool = false,
-        onAction: (@MainActor @Sendable (ThreadManager.SessionRecreationAction?) -> Void)? = nil
+        onAction: (@MainActor @Sendable (SessionRecreationAction?) -> Void)? = nil
     ) async -> Bool {
         if preparedSessions.contains(sessionName), !forceRevalidate { return false }
 

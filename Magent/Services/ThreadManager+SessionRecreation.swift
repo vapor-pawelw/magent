@@ -1,6 +1,8 @@
 import Foundation
 import MagentCore
 
+// SessionRecreationAction is now a top-level type defined in SessionLifecycleService.
+// Stale session cleanup and referencedMagentSessionNames are forwarded to SessionLifecycleService.
 extension ThreadManager {
 
     static let knownGoodSessionTTL: TimeInterval = 120
@@ -34,117 +36,23 @@ extension ThreadManager {
         return true
     }
 
-    enum SessionRecreationAction {
-        case recreateMissingAgentSession
-        case recreateMismatchedAgentSession
-        case recreateMissingTerminalSession
-        case recreateMismatchedTerminalSession
-
-        var loadingOverlayDetail: String {
-            switch self {
-            case .recreateMissingAgentSession:
-                return "Recovering a missing tmux session and restoring the saved agent conversation."
-            case .recreateMismatchedAgentSession:
-                return "Replacing a stale tmux session that points at the wrong worktree, then restoring the saved conversation."
-            case .recreateMissingTerminalSession:
-                return "Recovering a missing tmux session for this tab."
-            case .recreateMismatchedTerminalSession:
-                return "Replacing a stale tmux session that points at the wrong worktree."
-            }
-        }
-    }
-
     // MARK: - Stale Session Cleanup
+    // Forwarded to SessionLifecycleService (Phase 4).
 
-    /// Kills live tmux sessions prefixed with "ma-" that are not referenced by any non-archived thread/tab.
     @discardableResult
     func cleanupStaleMagentSessions(minimumStaleAge: TimeInterval = 0, now: Date = Date()) async -> [String] {
-        let referencedSessions = referencedMagentSessionNames()
-
-        let liveSessions: [String]
-        do {
-            liveSessions = try await tmux.listSessions()
-        } catch {
-            return []
-        }
-
-        let staleSessions = liveSessions.filter { sessionName in
-            sessionName.hasPrefix("ma-") && !referencedSessions.contains(sessionName)
-        }
-
-        guard !staleSessions.isEmpty else { return [] }
-
-        let staleSet = Set(staleSessions)
-        staleMagentSessionsFirstSeenAt = staleMagentSessionsFirstSeenAt.filter { staleSet.contains($0.key) }
-
-        let sessionsToKill: [String]
-        if minimumStaleAge > 0 {
-            var matured = [String]()
-            for sessionName in staleSessions {
-                let firstSeen = staleMagentSessionsFirstSeenAt[sessionName] ?? now
-                staleMagentSessionsFirstSeenAt[sessionName] = firstSeen
-                if now.timeIntervalSince(firstSeen) >= minimumStaleAge {
-                    matured.append(sessionName)
-                }
-            }
-            sessionsToKill = matured
-        } else {
-            sessionsToKill = staleSessions
-        }
-
-        guard !sessionsToKill.isEmpty else { return [] }
-
-        for sessionName in sessionsToKill {
-            try? await tmux.killSession(name: sessionName)
-            staleMagentSessionsFirstSeenAt.removeValue(forKey: sessionName)
-        }
-
-        return sessionsToKill
+        await sessionLifecycleService.cleanupStaleMagentSessions(minimumStaleAge: minimumStaleAge, now: now)
     }
 
-    /// Lightweight stale-session cleanup that runs entirely off the main thread.
-    /// Takes pre-captured referenced sessions and a tmux service reference so no main-actor
-    /// hop is needed. Skips `staleMagentSessionsFirstSeenAt` tracking (only relevant for the
-    /// 5-minute poller cadence, not post-archive one-shot cleanup).
     nonisolated static func cleanupStaleSessions(
         tmux: TmuxService,
         referencedSessions: Set<String>
     ) async {
-        let liveSessions: [String]
-        do {
-            liveSessions = try await tmux.listSessions()
-        } catch {
-            return
-        }
-        let staleSessions = liveSessions.filter { sessionName in
-            sessionName.hasPrefix("ma-") && !referencedSessions.contains(sessionName)
-        }
-        for sessionName in staleSessions {
-            try? await tmux.killSession(name: sessionName)
-        }
+        await SessionLifecycleService.cleanupStaleSessions(tmux: tmux, referencedSessions: referencedSessions)
     }
 
     func referencedMagentSessionNames() -> Set<String> {
-        var names = Set<String>()
-
-        // Include both in-memory and persisted threads so cleanup is safe during transitional states.
-        let allNonArchivedThreads = threads.filter { !$0.isArchived } + persistence.loadThreads().filter { !$0.isArchived }
-        for thread in allNonArchivedThreads {
-            for sessionName in thread.tmuxSessionNames where sessionName.hasPrefix("ma-") {
-                names.insert(sessionName)
-            }
-            for sessionName in thread.agentTmuxSessions where sessionName.hasPrefix("ma-") {
-                names.insert(sessionName)
-            }
-            for sessionName in thread.pinnedTmuxSessions where sessionName.hasPrefix("ma-") {
-                names.insert(sessionName)
-            }
-            if let selectedSession = thread.lastSelectedTabIdentifier, selectedSession.hasPrefix("ma-") {
-                names.insert(selectedSession)
-            }
-        }
-
-        return names
+        sessionLifecycleService.referencedMagentSessionNames()
     }
 
     // MARK: - Session Recreation

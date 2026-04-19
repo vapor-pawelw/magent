@@ -34,6 +34,7 @@ let project = Project(
                 "Magent/Services/IPCSocketServer.swift",
                 "Magent/Services/SessionTracker.swift",
                 "Magent/Services/ThreadStore.swift",
+                "Magent/Services/SessionLifecycleService.swift",
                 "Magent/Services/JiraIntegrationService.swift",
                 "Magent/Services/PullRequestService.swift",
                 "Magent/Services/RateLimitService.swift",

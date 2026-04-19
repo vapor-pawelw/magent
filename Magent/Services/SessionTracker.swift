@@ -1,5 +1,5 @@
 import Foundation
-import MagentCore
+import MagentCore  // AgentType for lastRuntimeDetectedAgentBySession
 
 /// Metadata cached after verifying a session belongs to its expected thread/path context.
 /// Avoids re-querying tmux on every `ensureSessionPrepared` call when nothing has changed.
@@ -15,11 +15,21 @@ struct KnownGoodSessionContext {
 /// Extracted from ThreadManager to decouple session tracking from thread management.
 final class SessionTracker {
 
+    /// How long a cached runtime-detected agent type is trusted when live detection
+    /// transiently returns nil (e.g. pane command becomes xcodebuild while Claude runs tools).
+    static let lastRuntimeDetectedAgentTTL: TimeInterval = 60
+
     var sessionLastVisitedAt: [String: Date] = [:]
     var sessionLastBusyAt: [String: Date] = [:]
     var evictedIdleSessions: Set<String> = []
     var sessionsBeingRecreated: Set<String> = []
     var knownGoodSessionContexts: [String: KnownGoodSessionContext] = [:]
+
+    /// Caches the last runtime-detected agent type per session. When `ps` child-process
+    /// detection transiently fails (e.g. Claude reports its version as `pane_current_command`
+    /// instead of "claude"), this prevents the session from flipping to `nil` and losing busy state.
+    /// Entries expire after `lastRuntimeDetectedAgentTTL` seconds of consecutive nil detections.
+    var lastRuntimeDetectedAgentBySession: [String: (agent: AgentType, detectedAt: Date)] = [:]
 
     // MARK: - Convenience
 
@@ -50,6 +60,7 @@ final class SessionTracker {
             evictedIdleSessions.remove(name)
             sessionsBeingRecreated.remove(name)
             knownGoodSessionContexts.removeValue(forKey: name)
+            lastRuntimeDetectedAgentBySession.removeValue(forKey: name)
         }
     }
 
