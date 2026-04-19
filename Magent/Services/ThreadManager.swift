@@ -59,6 +59,63 @@ final class ThreadManager {
     let store = ThreadStore()
     let sessionTracker = SessionTracker()
 
+    // MARK: - Extracted service containers (Phase 2)
+
+    lazy var rateLimitService: RateLimitService = {
+        let svc = RateLimitService(store: store, persistence: persistence, tmux: tmux)
+        svc.onThreadsChanged = { [weak self] in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        svc.resolveAgentType = { [weak self] thread, sessionName in
+            self?.agentType(for: thread, sessionName: sessionName)
+        }
+        // Wire the resume-needed callback so clearing a rate limit can inject
+        // per-session waiting markers and dedup state back into ThreadManager.
+        svc.onRateLimitLiftResumeNeeded = { [weak self] sessions in
+            guard let self else { return }
+            self.rateLimitLiftPendingResumeSessions.formUnion(sessions)
+            self.notifiedWaitingSessions.formUnion(sessions)
+        }
+        return svc
+    }()
+
+    lazy var pullRequestService: PullRequestService = {
+        let svc = PullRequestService(store: store, persistence: persistence, git: git)
+        svc.onThreadsChanged = { [weak self] in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        svc.resolveBaseBranch = { [weak self] thread in
+            self?.resolveBaseBranch(for: thread) ?? ""
+        }
+        svc.cachedRemoteResolver = { [weak self] projectId, repoPath in
+            await self?.cachedPullRequestRemote(for: projectId, repoPath: repoPath)
+        }
+        svc.formatFailureSummary = { [weak self] title, details, total in
+            self?.statusSyncFailureSummary(title: title, details: details, totalCount: total) ?? "\(title)."
+        }
+        return svc
+    }()
+
+    lazy var jiraIntegrationService: JiraIntegrationService = {
+        let svc = JiraIntegrationService(store: store, persistence: persistence)
+        svc.onThreadsChanged = { [weak self] in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        return svc
+    }()
+
+    lazy var sidebarOrderingService: SidebarOrderingService = {
+        let svc = SidebarOrderingService(store: store, persistence: persistence)
+        svc.onThreadsChanged = { [weak self] in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        return svc
+    }()
+
     // MARK: - ThreadStore forwarding
 
     var threads: [MagentThread] {
@@ -102,6 +159,83 @@ final class ThreadManager {
         set { sessionTracker.sessionsBeingRecreated = newValue }
     }
 
+    // MARK: - RateLimitService forwarding
+
+    var globalAgentRateLimits: [AgentType: AgentRateLimitInfo] {
+        get { rateLimitService.globalAgentRateLimits }
+        set { rateLimitService.globalAgentRateLimits = newValue }
+    }
+    var rateLimitFingerprintCache: [String: RateLimitCacheEntry] {
+        get { rateLimitService.rateLimitFingerprintCache }
+        set { rateLimitService.rateLimitFingerprintCache = newValue }
+    }
+    var ignoredRateLimitFingerprintsByAgent: [AgentType: Set<String>] {
+        get { rateLimitService.ignoredRateLimitFingerprintsByAgent }
+        set { rateLimitService.ignoredRateLimitFingerprintsByAgent = newValue }
+    }
+    var rateLimitCacheLoaded: Bool {
+        get { rateLimitService.rateLimitCacheLoaded }
+        set { rateLimitService.rateLimitCacheLoaded = newValue }
+    }
+    var rateLimitCacheDirty: Bool {
+        get { rateLimitService.rateLimitCacheDirty }
+        set { rateLimitService.rateLimitCacheDirty = newValue }
+    }
+    var ignoredRateLimitCacheLoaded: Bool {
+        get { rateLimitService.ignoredRateLimitCacheLoaded }
+        set { rateLimitService.ignoredRateLimitCacheLoaded = newValue }
+    }
+    var ignoredRateLimitCacheDirty: Bool {
+        get { rateLimitService.ignoredRateLimitCacheDirty }
+        set { rateLimitService.ignoredRateLimitCacheDirty = newValue }
+    }
+    var lastPublishedRateLimitSummary: String? {
+        get { rateLimitService.lastPublishedRateLimitSummary }
+        set { rateLimitService.lastPublishedRateLimitSummary = newValue }
+    }
+    var lastRateLimitScanBySession: [String: Date] {
+        get { rateLimitService.lastRateLimitScanBySession }
+        set { rateLimitService.lastRateLimitScanBySession = newValue }
+    }
+
+    // MARK: - PullRequestService forwarding
+
+    var isPRSyncRunning: Bool {
+        get { pullRequestService.isPRSyncRunning }
+        set { pullRequestService.isPRSyncRunning = newValue }
+    }
+    var prCache: [String: PullRequestCacheEntry] {
+        get { pullRequestService.prCache }
+        set { pullRequestService.prCache = newValue }
+    }
+    var prCacheLoaded: Bool {
+        get { pullRequestService.prCacheLoaded }
+        set { pullRequestService.prCacheLoaded = newValue }
+    }
+
+    // MARK: - JiraIntegrationService forwarding
+
+    var jiraTicketCache: [String: JiraTicketCacheEntry] {
+        get { jiraIntegrationService.jiraTicketCache }
+        set { jiraIntegrationService.jiraTicketCache = newValue }
+    }
+    var jiraTicketCacheLoaded: Bool {
+        get { jiraIntegrationService.jiraTicketCacheLoaded }
+        set { jiraIntegrationService.jiraTicketCacheLoaded = newValue }
+    }
+    var isJiraVerificationRunning: Bool {
+        get { jiraIntegrationService.isJiraVerificationRunning }
+        set { jiraIntegrationService.isJiraVerificationRunning = newValue }
+    }
+    var _jiraProjectStatusesCache: [String: [JiraProjectStatus]] {
+        get { jiraIntegrationService._jiraProjectStatusesCache }
+        set { jiraIntegrationService._jiraProjectStatusesCache = newValue }
+    }
+    var _jiraProjectStatusesCacheLoaded: Bool {
+        get { jiraIntegrationService._jiraProjectStatusesCacheLoaded }
+        set { jiraIntegrationService._jiraProjectStatusesCacheLoaded = newValue }
+    }
+
     // MARK: - Remaining inline state (extracted in later phases)
 
     /// Dedupes completion attention events across legacy bell sources and the
@@ -132,24 +266,9 @@ final class ThreadManager {
     /// Protects those entries in waitingForInputSessions from being auto-cleared by
     /// checkForWaitingForInput (which normally clears on idle prompt, not interactive prompt).
     var rateLimitLiftPendingResumeSessions: Set<String> = []
-    /// Global per-agent rate-limit cache (Claude/Codex), shared across all tabs/threads.
-    var globalAgentRateLimits: [AgentType: AgentRateLimitInfo] = [:]
-    /// Persisted cache of seen rate-limit fingerprints → concrete resetAt dates.
-    /// Prevents re-detecting stale messages after restart and anchors relative/bare-time
-    /// reset phrases to the concrete Date they were first computed at.
-    /// Time-only entries (no date anchor) are kept as tombstones after expiry to prevent
-    /// stale pane text like "resets 11am" from being re-anchored daily.
-    var rateLimitFingerprintCache: [String: RateLimitCacheEntry] = [:]
-    /// Persisted allowlist of fingerprints the user manually ignored per agent.
-    var ignoredRateLimitFingerprintsByAgent: [AgentType: Set<String>] = [:]
-    var rateLimitCacheLoaded = false
     /// Tracks threads whose base branch was missing and got reset to project default.
     /// Keyed by thread ID, consumed when the user selects the thread (banner shown once).
     var baseBranchResets: [UUID: BaseBranchReset] = [:]
-    var rateLimitCacheDirty = false
-    var ignoredRateLimitCacheLoaded = false
-    var ignoredRateLimitCacheDirty = false
-    var lastPublishedRateLimitSummary: String?
     var sessionMonitorTimer: Timer?
     var isSessionMonitorTickRunning = false
     var lastStaleSessionCleanupAt: Date = .distantPast
@@ -162,25 +281,13 @@ final class ThreadManager {
     var dirtyCheckTickCounter: Int = 0
     var _jiraSyncTickCounter: Int = 0
     var _prSyncTickCounter: Int = 0
-    var isPRSyncRunning = false
     /// Timestamp of the last completed PR + Jira background sync pass.
     var lastStatusSyncAt: Date?
     /// Whether the last sync pass encountered errors (network, auth, etc.).
     var lastStatusSyncFailed = false
     /// Human-readable summary of the most recent sync failure, used by the status bar.
     var lastStatusSyncFailureSummary: String?
-    /// Tracks when each tmux session was last scanned for rate-limit text.
-    /// Used to throttle non-active-session scans to once every 15 seconds.
-    var lastRateLimitScanBySession: [String: Date] = [:]
     var _cachedRemoteByProjectId: [UUID: GitRemote] = [:]
-    var _mismatchBannerShownProjectIds: Set<UUID> = []
-    var jiraTicketCache: [String: JiraTicketCacheEntry] = [:]
-    var jiraTicketCacheLoaded = false
-    var isJiraVerificationRunning = false
-    var _jiraProjectStatusesCache: [String: [JiraProjectStatus]] = [:]
-    var _jiraProjectStatusesCacheLoaded = false
-    var prCache: [String: PullRequestCacheEntry] = [:]
-    var prCacheLoaded = false
     /// Pending prompt recoveries for .newTab entries, keyed by thread ID.
     /// Stored at launch and shown as embedded banners when the thread is selected.
     var pendingPromptRecoveriesByThread: [UUID: [PendingPromptRecoveryInfo]] = [:]

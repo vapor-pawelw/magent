@@ -197,7 +197,7 @@ extension ThreadDetailViewController {
         }
     }
 
-    private func pullRequestWebTabTitle(for action: ThreadManager.PullRequestActionTarget) -> String {
+    private func pullRequestWebTabTitle(for action: PullRequestService.PullRequestActionTarget) -> String {
         if action.isCreation {
             return action.provider == .gitlab ? "Create MR" : "Create PR"
         }
