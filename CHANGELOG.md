@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### CLI
+
+#### Features
+- Added `magent-cli create-web-tab --thread <name> --url <http(s)-url> [--title <text>]` for opening an in-app web tab at a predefined URL in an existing thread (docs, Jira, PR links, dashboards).
+
 ### Updates
 
 #### Features

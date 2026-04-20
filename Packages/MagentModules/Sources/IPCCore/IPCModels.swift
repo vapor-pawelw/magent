@@ -11,6 +11,8 @@ public nonisolated struct IPCRequest: Codable, Sendable {
     public var reasoningLevel: String?
     public var prompt: String?
     public var title: String?
+    /// URL for commands that open a web destination in a tab (for example, `create-web-tab`).
+    public var url: String?
     public var threadId: String?
     public var threadName: String?
     public var tabIndex: Int?

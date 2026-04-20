@@ -390,6 +390,29 @@ magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--
 Use `--agent terminal` for a plain shell tab. Errors if the requested agent is disabled in Settings.
 When the user explicitly names an agent, pass that exact `--agent` value. Do not silently substitute Claude for Codex or vice versa.
 
+### create-web-tab
+
+Open an in-app web tab at a specific URL in an existing thread. Useful for pinning docs pages, Jira tickets, PR URLs, or internal dashboards next to an agent tab.
+
+```bash
+magent-cli create-web-tab --thread <name> --url <http(s)-url> [--title <text>]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--url <url>` | Fully qualified `http://` or `https://` URL to open. |
+| `--title <text>` | Optional tab title. Defaults to the URL host. |
+
+The tab always opens in-app (Magent), regardless of the user's external-link preference. The URL and title persist with the thread and survive app restarts.
+
+**Quoting:** always wrap the URL in single quotes so the shell doesn't expand `&`, `?`, `#`, or `$`:
+
+```bash
+magent-cli create-web-tab --thread kimchi --url 'https://example.com/search?q=foo&lang=en#top'
+```
+
+Spaces and other non-RFC characters must be percent-encoded (`%20`, etc.) — `URL(string:)` rejects unencoded input.
+
 ### list-tabs
 
 List all tabs in a thread.

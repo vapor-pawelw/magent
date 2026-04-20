@@ -31,6 +31,8 @@ final class IPCCommandHandler {
             return listTabs(request)
         case "create-tab":
             return await createTab(request)
+        case "create-web-tab":
+            return await createWebTab(request)
         case "close-tab":
             return await closeTab(request)
         case "auto-rename-thread", "rename-thread":
@@ -979,6 +981,47 @@ final class IPCCommandHandler {
         } catch {
             return .failure("Failed to create tab: \(error.localizedDescription)", id: request.id)
         }
+    }
+
+    private func createWebTab(_ request: IPCRequest) async -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        guard let rawURL = request.url?.trimmingCharacters(in: .whitespacesAndNewlines), !rawURL.isEmpty else {
+            return .failure("Missing required field: url", id: request.id)
+        }
+        guard let url = URL(string: rawURL),
+              let scheme = url.scheme?.lowercased(),
+              (scheme == "http" || scheme == "https") else {
+            return .failure("Invalid URL: \(rawURL). Must be a fully qualified http(s) URL.", id: request.id)
+        }
+
+        let title: String = {
+            if let t = request.title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+                return t
+            }
+            return url.host ?? "Web"
+        }()
+        let identifier = "web:\(UUID().uuidString)"
+
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: .magentOpenExternalLinkInApp,
+                object: nil,
+                userInfo: [
+                    "threadId": thread.id,
+                    "url": url,
+                    "identifier": identifier,
+                    "title": title,
+                    "iconType": WebTabIconType.web.rawValue,
+                ]
+            )
+        }
+
+        return .success(id: request.id)
     }
 
     private func autoRenameThread(_ request: IPCRequest) async -> IPCResponse {

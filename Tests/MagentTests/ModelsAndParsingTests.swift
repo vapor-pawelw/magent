@@ -657,3 +657,30 @@ struct ThreadSectionTests {
         #expect(NSColor(hex: "#1234567") == nil)
     }
 }
+
+// MARK: - IPCRequest
+
+@Suite("IPCRequest decoding")
+struct IPCRequestDecodingTests {
+
+    @Test("Decodes create-web-tab payload with url and title")
+    func decodesCreateWebTab() throws {
+        let json = """
+        {"command":"create-web-tab","threadName":"kimchi","url":"https://example.com/docs","title":"Docs"}
+        """.data(using: .utf8)!
+        let request = try JSONDecoder().decode(IPCRequest.self, from: json)
+        #expect(request.command == "create-web-tab")
+        #expect(request.threadName == "kimchi")
+        #expect(request.url == "https://example.com/docs")
+        #expect(request.title == "Docs")
+    }
+
+    @Test("url field is optional and absent on unrelated commands")
+    func urlOptional() throws {
+        let json = """
+        {"command":"list-threads"}
+        """.data(using: .utf8)!
+        let request = try JSONDecoder().decode(IPCRequest.self, from: json)
+        #expect(request.url == nil)
+    }
+}

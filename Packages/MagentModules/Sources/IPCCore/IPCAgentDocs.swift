@@ -15,6 +15,7 @@ public enum IPCAgentDocs {
     /tmp/magent-cli delete-thread --thread <name>
     /tmp/magent-cli list-tabs --thread <name>
     /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--title <text>] [--fresh|--no-resume] [--prompt <text>]
+    /tmp/magent-cli create-web-tab --thread <name> --url <http(s)-url> [--title <text>]
     /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
     /tmp/magent-cli current-thread
     /tmp/magent-cli auto-rename-thread --thread <name> --prompt <text>
@@ -50,6 +51,7 @@ public enum IPCAgentDocs {
     When called from inside a Magent session, create-thread and batch-create automatically inherit the current thread's branch and section (and position the new thread directly below it in the sidebar). This means you do NOT need to manually pass --base-branch or --section in the common case. Use --base-thread or --base-branch only when the user explicitly wants a different base. Use --section only when the user explicitly wants a different section. Use --from-thread none to suppress auto-detection. Use --from-thread main to inherit from the project's main worktree thread instead.
     When the user explicitly names an agent, pass that exact agent in --agent. Do not silently substitute Claude for Codex or vice versa.
     Use create-tab --title when the user asks you to name the tab. Use create-tab --fresh (or --no-resume) when the user wants an isolated review tab that must not adopt an older Claude/Codex conversation from the same worktree path.
+    Use create-web-tab to open an in-app web tab at a specific URL (docs pages, Jira links, PR URLs, etc.) in a thread. The URL must be http/https and should be wrapped in single quotes so the shell does not expand `&`, `?`, `#`, or `$` (for example: --url 'https://example.com/a?b=1&c=2'). Spaces and other non-RFC characters must be percent-encoded. Pass --title to override the default tab label (host name). This opens the tab in Magent even if the user's external-link preference is set to "browser".
     Section names are case-insensitive throughout — "TODO" and "todo" resolve to the same section.
     Use auto-rename-thread (or its rename-thread alias) by default; it generates a branch name and description from one prompt. The thread/worktree name is never changed.
     Use rename-branch ONLY when the user gives a literal branch name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about, use auto-rename-thread instead. Only the git branch is renamed; the thread/worktree name stays the same.

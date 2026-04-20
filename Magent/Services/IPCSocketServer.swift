@@ -1083,6 +1083,22 @@ actor IPCSocketServer {
             json="$json}"
             send_request "$json" 60
             ;;
+        create-web-tab)
+            thread=""; url=""; title=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) thread="$2"; shift 2 ;;
+                    --url)    url="$2"; shift 2 ;;
+                    --title)  title="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] && [ -n "$url" ] || die "Usage: magent-cli create-web-tab --thread <name> --url <http(s)-url> [--title <text>]"
+            json="{$(json_kv command create-web-tab),$(json_kv threadName "$thread"),$(json_kv url "$url")"
+            [ -n "$title" ] && json="$json,$(json_kv title "$title")"
+            json="$json}"
+            send_request "$json"
+            ;;
         close-tab)
             thread=""; tab_index=""; session=""
             while [ $# -gt 0 ]; do
@@ -1462,6 +1478,7 @@ actor IPCSocketServer {
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
             echo "  list-tabs            (--thread <name> | --thread-id <id>)"
             echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--title <text>] [--fresh|--no-resume] [--prompt <text>]"
+            echo "  create-web-tab       --thread <name> --url <http(s)-url> [--title <text>]    (opens an in-app web tab at the given URL)"
             echo "  close-tab            --thread <name> (--index <n> | --session <name>)"
             echo "  current-thread                                               (returns current thread info)"
             echo "  auto-rename-thread   --thread <name> --prompt <text>       (AI-generated branch + description)"
