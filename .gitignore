@@ -13,6 +13,7 @@ xcuserdata/
 
 # Swift Package Manager
 .build/
+Tests/.build/
 .swiftpm/
 Package.resolved
 
