@@ -109,5 +109,29 @@ let project = Project(
                 ]
             )
         ),
+        .target(
+            name: "MagentTests",
+            destinations: [.mac],
+            product: .unitTests,
+            bundleId: "com.magent.app.tests",
+            deploymentTargets: .macOS("14.0"),
+            sources: [
+                "Magent/Services/SessionTracker.swift",
+                "Magent/Services/ThreadStore.swift",
+                "Tests/MagentTests/**",
+            ],
+            dependencies: [
+                .external(name: "MagentCore"),
+            ],
+            settings: .settings(
+                base: [
+                    "SWIFT_VERSION": "6.2",
+                    "SWIFT_STRICT_CONCURRENCY": "complete",
+                    "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
+                    "TEST_HOST": "",
+                    "BUNDLE_LOADER": "",
+                ]
+            )
+        ),
     ]
 )
