@@ -118,6 +118,7 @@ let project = Project(
             sources: [
                 "Magent/Services/SessionTracker.swift",
                 "Magent/Services/ThreadStore.swift",
+                "Magent/Services/ThreadManager+Errors.swift",
                 "Tests/MagentTests/**",
             ],
             dependencies: [
