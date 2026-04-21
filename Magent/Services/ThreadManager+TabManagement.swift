@@ -272,71 +272,30 @@ extension ThreadManager {
         threadIndex: Int,
         excludingSessionName: String? = nil
     ) -> String {
-        let trimmed = requestedName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rawName = trimmed.isEmpty ? "Tab" : trimmed
-
-        guard threadIndex >= 0, threadIndex < threads.count else { return rawName }
+        guard threadIndex >= 0, threadIndex < threads.count else {
+            let trimmed = requestedName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "Tab" : trimmed
+        }
 
         let thread = threads[threadIndex]
-        let usedNames = Set(
-            thread.tmuxSessionNames.enumerated().compactMap { index, sessionName -> String? in
-                if let excludingSessionName, sessionName == excludingSessionName {
-                    return nil
-                }
-                return thread.displayName(for: sessionName, at: index).lowercased()
+        let usedNames = thread.tmuxSessionNames.enumerated().compactMap { index, sessionName -> String? in
+            if let excludingSessionName, sessionName == excludingSessionName {
+                return nil
             }
+            return thread.displayName(for: sessionName, at: index)
+        }
+
+        let result = TabNameAllocator.allocate(
+            requestedName: requestedName,
+            usedNames: usedNames,
+            counters: thread.tabNameSuffixCounters
         )
 
-        let (baseName, requestedSuffix) = splitTabNameSuffix(rawName)
-        let normalizedBase = normalizeTabNameBase(baseName)
-        let knownCounter = thread.tabNameSuffixCounters[normalizedBase] ?? 0
-        let maxExistingSuffix = maxObservedSuffix(for: normalizedBase, usedNames: usedNames)
-
-        if !usedNames.contains(rawName.lowercased()) {
-            let seededCounter = max(knownCounter, maxExistingSuffix, requestedSuffix ?? 0)
-            if seededCounter > knownCounter {
-                threads[threadIndex].tabNameSuffixCounters[normalizedBase] = seededCounter
-            }
-            return rawName
+        if let update = result.counterUpdate {
+            threads[threadIndex].tabNameSuffixCounters[update.normalizedBase] = update.suffix
         }
 
-        var suffix = max(knownCounter, maxExistingSuffix, requestedSuffix ?? 0) + 1
-        var candidate = "\(baseName)-\(suffix)"
-        while usedNames.contains(candidate.lowercased()) {
-            suffix += 1
-            candidate = "\(baseName)-\(suffix)"
-        }
-
-        threads[threadIndex].tabNameSuffixCounters[normalizedBase] = suffix
-        return candidate
-    }
-
-    private func splitTabNameSuffix(_ name: String) -> (base: String, suffix: Int?) {
-        let parts = name.split(separator: "-", omittingEmptySubsequences: false)
-        guard parts.count >= 2, let last = parts.last, let parsed = Int(last), parsed >= 0 else {
-            return (name, nil)
-        }
-        let base = parts.dropLast().joined(separator: "-")
-        guard !base.isEmpty else { return (name, nil) }
-        return (base, parsed)
-    }
-
-    private func normalizeTabNameBase(_ base: String) -> String {
-        base.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    private func maxObservedSuffix(for normalizedBase: String, usedNames: Set<String>) -> Int {
-        var maxSuffix = 0
-        for lowerName in usedNames {
-            let (base, suffix) = splitTabNameSuffix(lowerName)
-            if normalizeTabNameBase(base) != normalizedBase { continue }
-            if let suffix {
-                maxSuffix = max(maxSuffix, suffix)
-            } else {
-                maxSuffix = max(maxSuffix, 0)
-            }
-        }
-        return maxSuffix
+        return result.displayName
     }
 
     // MARK: - Tab Ordering & Registration
