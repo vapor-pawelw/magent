@@ -230,6 +230,67 @@ final class ThreadManager {
 
     // MARK: - Extracted service containers (Phase 5)
 
+    lazy var sessionRecreationService: SessionRecreationService = {
+        let svc = SessionRecreationService(store: store, sessionTracker: sessionTracker, persistence: persistence, tmux: tmux)
+        svc.onThreadsChanged = { [weak self] in
+            guard let self else { return }
+            self.delegate?.threadManager(self, didUpdateThreads: self.store.threads)
+        }
+        svc.agentType = { [weak self] thread, sessionName in
+            self?.agentType(for: thread, sessionName: sessionName)
+        }
+        svc.effectiveAgentType = { [weak self] projectId in
+            self?.effectiveAgentType(for: projectId)
+        }
+        svc.detectedAgentTypeInSession = { [weak self] sessionName in
+            await self?.detectedAgentTypeInSession(sessionName)
+        }
+        svc.sessionEnvironmentVariables = { [weak self] threadId, worktreePath, projectPath, worktreeName, projectName, agentType in
+            self?.sessionEnvironmentVariables(
+                threadId: threadId,
+                worktreePath: worktreePath,
+                projectPath: projectPath,
+                worktreeName: worktreeName,
+                projectName: projectName,
+                agentType: agentType
+            ) ?? []
+        }
+        svc.shellExportCommand = { [weak self] env in
+            self?.shellExportCommand(for: env) ?? ""
+        }
+        svc.applySessionEnvironmentVariables = { [weak self] sessionName, env in
+            await self?.applySessionEnvironmentVariables(sessionName: sessionName, environmentVariables: env)
+        }
+        svc.agentStartCommand = { [weak self] settings, projectId, agentType, envExports, workingDir, resumeID in
+            self?.agentStartCommand(
+                settings: settings,
+                projectId: projectId,
+                agentType: agentType,
+                envExports: envExports,
+                workingDirectory: workingDir,
+                resumeSessionID: resumeID
+            ) ?? ""
+        }
+        svc.terminalStartCommand = { [weak self] envExports, workingDir in
+            self?.terminalStartCommand(envExports: envExports, workingDirectory: workingDir) ?? ""
+        }
+        svc.effectiveInjection = { [weak self] projectId in
+            self?.effectiveInjection(for: projectId) ?? (terminalCommand: "", agentContext: "")
+        }
+        svc.injectAfterStart = { [weak self] sessionName, terminalCmd, agentCtx, agentType in
+            self?.injectAfterStart(
+                sessionName: sessionName,
+                terminalCommand: terminalCmd,
+                agentContext: agentCtx,
+                agentType: agentType
+            )
+        }
+        svc.refreshAgentConversationID = { [weak self] threadId, sessionName in
+            await self?.refreshAgentConversationID(threadId: threadId, sessionName: sessionName)
+        }
+        return svc
+    }()
+
     lazy var agentSetupService: AgentSetupService = {
         let svc = AgentSetupService(store: store, sessionTracker: sessionTracker, persistence: persistence, tmux: tmux, git: git)
         svc.onThreadsChanged = { [weak self] in

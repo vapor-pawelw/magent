@@ -35,6 +35,8 @@ let project = Project(
                 "Magent/Services/SessionTracker.swift",
                 "Magent/Services/ThreadStore.swift",
                 "Magent/Services/SessionLifecycleService.swift",
+                "Magent/Services/SessionRecreationAction.swift",
+                "Magent/Services/SessionRecreationService.swift",
                 "Magent/Services/AgentSetupService.swift",
                 "Magent/Services/RenameService.swift",
                 "Magent/Services/ThreadLifecycleService.swift",
@@ -119,6 +121,8 @@ let project = Project(
                 "Magent/Services/SessionTracker.swift",
                 "Magent/Services/ThreadStore.swift",
                 "Magent/Services/ThreadManager+Errors.swift",
+                "Magent/Services/SessionRecreationAction.swift",
+                "Magent/Services/SessionRecreationService.swift",
                 "Tests/MagentTests/**",
             ],
             dependencies: [
