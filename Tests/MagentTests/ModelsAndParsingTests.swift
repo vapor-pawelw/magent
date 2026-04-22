@@ -684,3 +684,129 @@ struct IPCRequestDecodingTests {
         #expect(request.url == nil)
     }
 }
+
+// MARK: - ExternalLinkOpenRouting
+
+@Suite("ExternalLinkOpenRouting")
+struct ExternalLinkOpenRoutingTests {
+
+    @Test("Prefers popped-out thread windows over main-window routes")
+    func prefersPoppedOutThread() {
+        let route = ExternalLinkOpenRouting.resolve(
+            isThreadPoppedOut: true,
+            isCurrentMainThread: true
+        )
+        #expect(route == .poppedOutThreadWindow)
+    }
+
+    @Test("Uses current main thread when the target thread is already visible")
+    func currentMainThreadRoute() {
+        let route = ExternalLinkOpenRouting.resolve(
+            isThreadPoppedOut: false,
+            isCurrentMainThread: true
+        )
+        #expect(route == .currentMainThread)
+    }
+
+    @Test("Selects the thread in the main window when not currently visible")
+    func selectMainThreadRoute() {
+        let route = ExternalLinkOpenRouting.resolve(
+            isThreadPoppedOut: false,
+            isCurrentMainThread: false
+        )
+        #expect(route == .selectThreadInMainWindow)
+    }
+}
+
+// MARK: - ThreadTabStructureFingerprint
+
+@Suite("ThreadTabStructureFingerprint")
+struct ThreadTabStructureFingerprintTests {
+
+    @Test("Ignores transient thread status fields")
+    func ignoresTransientStatus() throws {
+        let base = makeThread(
+            tmuxSessions: ["ma-repo-thread-claude"],
+            pinnedSessions: ["ma-repo-thread-claude"]
+        )
+        var updated = base
+        updated.isDirty = true
+        updated.isFullyDelivered = true
+        updated.busySessions.insert("ma-repo-thread-claude")
+        updated.waitingForInputSessions.insert("ma-repo-thread-claude")
+        updated.unreadCompletionSessions.insert("ma-repo-thread-claude")
+
+        #expect(ThreadTabStructureFingerprint(thread: base) == ThreadTabStructureFingerprint(thread: updated))
+    }
+
+    @Test("Changes when terminal sessions change")
+    func changesOnTerminalSessions() throws {
+        let base = makeThread(tmuxSessions: ["ma-repo-thread-claude"])
+        let updated = makeThread(tmuxSessions: ["ma-repo-thread-claude", "ma-repo-thread-codex"])
+
+        #expect(ThreadTabStructureFingerprint(thread: base) != ThreadTabStructureFingerprint(thread: updated))
+    }
+
+    @Test("Changes when web tabs or their pinning change")
+    func changesOnWebTabs() throws {
+        let webURL = try #require(URL(string: "https://example.com/docs"))
+        let base = makeThread(
+            webTabs: [
+                PersistedWebTab(
+                    identifier: "web:docs",
+                    url: webURL,
+                    title: "Docs",
+                    iconType: .web,
+                    isPinned: false
+                ),
+            ]
+        )
+        let updated = makeThread(
+            webTabs: [
+                PersistedWebTab(
+                    identifier: "web:docs",
+                    url: webURL,
+                    title: "Docs",
+                    iconType: .web,
+                    isPinned: true
+                ),
+            ]
+        )
+
+        #expect(ThreadTabStructureFingerprint(thread: base) != ThreadTabStructureFingerprint(thread: updated))
+    }
+
+    @Test("Changes when draft tab identifiers change")
+    func changesOnDraftTabs() {
+        let base = makeThread(
+            draftTabs: [
+                PersistedDraftTab(identifier: "draft:1", agentType: .codex, prompt: "A"),
+            ]
+        )
+        let updated = makeThread(
+            draftTabs: [
+                PersistedDraftTab(identifier: "draft:2", agentType: .codex, prompt: "A"),
+            ]
+        )
+
+        #expect(ThreadTabStructureFingerprint(thread: base) != ThreadTabStructureFingerprint(thread: updated))
+    }
+
+    private func makeThread(
+        tmuxSessions: [String] = [],
+        pinnedSessions: [String] = [],
+        webTabs: [PersistedWebTab] = [],
+        draftTabs: [PersistedDraftTab] = []
+    ) -> MagentThread {
+        MagentThread(
+            projectId: UUID(),
+            name: "thread",
+            worktreePath: "/tmp/thread",
+            branchName: "thread",
+            tmuxSessionNames: tmuxSessions,
+            pinnedTmuxSessions: pinnedSessions,
+            persistedWebTabs: webTabs,
+            persistedDraftTabs: draftTabs
+        )
+    }
+}

@@ -27,6 +27,7 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Thread actions use key-window context across main and pop-out windows. When a detached tab window is key, thread-level actions resolve to that tab's parent thread.
 - Keyboard shortcuts and Thread menu actions are parity-routed across window types (`New Thread`, `Fork Thread`, `AI Rename`, and contextual tab/thread actions).
 - Detached-tab shortcut behavior is explicit: `Cmd+W` returns the detached tab to its parent thread window, while `Cmd+Shift+O` is no-op with feedback.
+- CLI-created tabs (`create-tab`, `create-web-tab`) target popped-out thread windows when the thread is popped out, and the created tab is selected in that pop-out window.
 - Tab detaching is production-disabled. In debug builds it can be re-enabled via `Settings > Debug > Experimental > Enable tab detaching` (off by default); all detach UI and shortcut paths must honor `AppSettings.isTabDetachFeatureEnabled`.
 
 ## Implementation notes
@@ -38,6 +39,7 @@ This doc covers thread pop-out windows and detached terminal tabs.
 - Persist pop-out state on structural changes (`pop out`, `return`, `detach`, `reattach`) and on window frame changes. Saving only during app termination is not enough if the user restarts from a crash, force-quit, or any path that bypasses orderly shutdown.
 - During app termination, pop-out windows must not "return to main" as part of their normal close handlers before state is saved. That shutdown path can wipe `popout-windows.json` and make relaunch restore look broken even when launch-time restore is correct.
 - Do not focus pop-out windows on generic `.magentNavigateToThread` notifications. Those events are shared across multiple UI flows (status bar, sidebar jumps, etc.); pop-out windows should only come front when the user explicitly opens/reveals them.
+- Generic navigation can still include a tab/session identifier. `SplitViewController.handleNavigateToThread` must apply that identifier to both contexts: main thread detail and an existing popped-out thread detail (`displayIndex(forIdentifier:)`), with a deferred retry because tab creation may complete on the next run-loop tick.
 - "Reveal without focus" paths (restore/reopen/app-activation recovery) must not use focus-stealing APIs (`showWindow`, `orderFrontRegardless`, `makeKeyAndOrderFront`, `NSApp.activate`). Use non-focusing `orderFront` behavior and preserve the existing key window.
 - Returning one popped-out thread to main must not steal focus from another currently focused pop-out window. In `SplitViewController.handleThreadReturnedToMain`, only re-key the main window when the current key window is not a pop-out.
 - Main-window `activeThreadId` is for main content routing only. Popped-out threads should not become the main active thread through sidebar selection/navigation paths.

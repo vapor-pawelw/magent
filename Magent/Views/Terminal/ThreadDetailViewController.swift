@@ -988,6 +988,12 @@ final class ThreadDetailViewController: NSViewController {
         tabSlots.firstIndex(of: .web(identifier: id))
     }
 
+    /// Display index for any persisted tab identifier (terminal session name,
+    /// web identifier, or draft identifier), or nil.
+    func displayIndex(forIdentifier id: String) -> Int? {
+        slotIndex(forIdentifier: id)
+    }
+
     /// Resolve the last-selected tab slot index from persisted state.
     /// Checks UserDefaults (current app session) first, then the per-thread persisted identifier.
     func resolveLastSelectedSlotIndex() -> Int? {
@@ -1512,6 +1518,16 @@ final class ThreadDetailViewController: NSViewController {
     }
 
     @objc private func handleThreadsDidChange() {
+        guard let latest = threadManager.threads.first(where: { $0.id == thread.id }) else { return }
+        let didTabStructureChange =
+            ThreadTabStructureFingerprint(thread: thread)
+            != ThreadTabStructureFingerprint(thread: latest)
+        thread = latest
+
+        if didTabStructureChange {
+            Task { await setupTabs() }
+        }
+
         popOutThreadButton.isHidden = !shouldShowTopBarPopOutButton()
         refreshHeaderInfoStrip()
     }
