@@ -390,6 +390,8 @@ magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--
 Use `--agent terminal` for a plain shell tab. Errors if the requested agent is disabled in Settings.
 When the user explicitly names an agent, pass that exact `--agent` value. Do not silently substitute Claude for Codex or vice versa.
 
+If the target thread is popped out into a separate window, `create-tab` opens/selects the new tab in that pop-out window (rather than only updating the main window's hidden detail view).
+
 ### create-web-tab
 
 Open an in-app web tab at a specific URL in an existing thread. Useful for pinning docs pages, Jira tickets, PR URLs, or internal dashboards next to an agent tab.
@@ -404,6 +406,7 @@ magent-cli create-web-tab --thread <name> --url <http(s)-url> [--title <text>]
 | `--title <text>` | Optional tab title. Defaults to the URL host. |
 
 The tab always opens in-app (Magent), regardless of the user's external-link preference. The URL and title persist with the thread and survive app restarts.
+If the target thread is popped out, the web tab opens in that pop-out window and is selected there.
 
 **Quoting:** always wrap the URL in single quotes so the shell doesn't expand `&`, `?`, `#`, or `$`:
 

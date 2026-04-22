@@ -9,6 +9,9 @@ All notable changes to this project will be documented in this file.
 #### Features
 - Added `magent-cli create-web-tab --thread <name> --url <http(s)-url> [--title <text>]` for opening an in-app web tab at a predefined URL in an existing thread (docs, Jira, PR links, dashboards).
 
+#### Bug Fixes
+- Fixed CLI-created tabs not reliably opening in popped-out thread windows. `create-tab` and `create-web-tab` now target the popped-out thread view when present, select the created tab there, and keep main/pop-out tab bars synchronized for terminal, web, and draft tab types.
+
 ### Updates
 
 #### Features

@@ -623,15 +623,15 @@ final class SplitViewController: NSSplitViewController {
 
     @objc private func handleNavigateToThread(_ notification: Notification) {
         guard let threadId = notification.userInfo?["threadId"] as? UUID else { return }
-        let sessionName = notification.userInfo?["sessionName"] as? String
+        let tabIdentifier = notification.userInfo?["sessionName"] as? String
         let centerInSidebar = notification.userInfo?["centerInSidebar"] as? Bool ?? false
         let alreadyShowing = currentDetailVC?.thread.id == threadId
 
         // Pre-seed UserDefaults so a newly-created ThreadDetailViewController
         // opens on the correct tab during its async setup.
-        if let sessionName {
+        if let tabIdentifier {
             UserDefaults.standard.set(threadId.uuidString, forKey: "MagentLastOpenedThreadID")
-            UserDefaults.standard.set(sessionName, forKey: "MagentLastOpenedSessionName")
+            UserDefaults.standard.set(tabIdentifier, forKey: "MagentLastOpenedSessionName")
         }
 
         // User-driven navigation should reveal the sidebar so the focused row
@@ -650,9 +650,22 @@ final class SplitViewController: NSSplitViewController {
             threadListVC.centerAndPulseThreadRow(byId: threadId)
         }
 
+        if let tabIdentifier,
+           let popout = PopoutWindowManager.shared.threadWindows[threadId] {
+            let selectInPopout = {
+                if let tabIndex = popout.detailVC.displayIndex(forIdentifier: tabIdentifier) {
+                    popout.detailVC.selectTab(at: tabIndex)
+                }
+            }
+            selectInPopout()
+            DispatchQueue.main.async {
+                selectInPopout()
+            }
+        }
+
         // If the thread was already showing, tabs are set up — select directly
-        if alreadyShowing, let sessionName, let detailVC = currentDetailVC {
-            if let tabIndex = detailVC.displayIndex(forSession: sessionName) {
+        if alreadyShowing, let tabIdentifier, let detailVC = currentDetailVC {
+            if let tabIndex = detailVC.displayIndex(forIdentifier: tabIdentifier) {
                 detailVC.selectTab(at: tabIndex)
             }
         }
@@ -681,22 +694,36 @@ final class SplitViewController: NSSplitViewController {
               let iconRawValue = userInfo["iconType"] as? String,
               let iconType = WebTabIconType(rawValue: iconRawValue) else { return }
 
-        let openTab = { [weak self] in
+        let openTabInMainWindow = { [weak self] in
             guard let self,
                   let detailVC = self.currentDetailVC,
-                  detailVC.thread.id == threadId else { return }
+                  detailVC.thread.id == threadId else { return false }
             detailVC.loadViewIfNeeded()
             detailVC.openWebTab(url: url, identifier: identifier, title: title, iconType: iconType)
+            return true
         }
 
-        if currentDetailVC?.thread.id == threadId {
-            openTab()
-            return
-        }
+        switch ExternalLinkOpenRouting.resolve(
+            isThreadPoppedOut: PopoutWindowManager.shared.isThreadPoppedOut(threadId),
+            isCurrentMainThread: currentDetailVC?.thread.id == threadId
+        ) {
+        case .poppedOutThreadWindow:
+            guard let controller = PopoutWindowManager.shared.threadWindows[threadId] else { return }
+            controller.detailVC.loadViewIfNeeded()
+            controller.detailVC.openWebTab(url: url, identifier: identifier, title: title, iconType: iconType)
+            PopoutWindowManager.shared.bringToFront(threadId: threadId)
 
-        threadListVC.selectThread(byId: threadId)
-        DispatchQueue.main.async {
-            openTab()
+        case .currentMainThread:
+            _ = openTabInMainWindow()
+
+        case .selectThreadInMainWindow:
+            threadListVC.selectThread(byId: threadId)
+            if openTabInMainWindow() {
+                return
+            }
+            DispatchQueue.main.async {
+                _ = openTabInMainWindow()
+            }
         }
     }
 

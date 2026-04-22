@@ -970,6 +970,21 @@ final class IPCCommandHandler {
                 thread: latestThread
             )
 
+            // Keep navigation/restoration in sync for externally created tabs.
+            threadManager.updateLastSelectedTab(for: thread.id, identifier: tab.tmuxSessionName)
+            if PopoutWindowManager.shared.isThreadPoppedOut(thread.id) {
+                await MainActor.run {
+                    NotificationCenter.default.post(
+                        name: .magentNavigateToThread,
+                        object: nil,
+                        userInfo: [
+                            "threadId": thread.id,
+                            "sessionName": tab.tmuxSessionName,
+                        ]
+                    )
+                }
+            }
+
             let isAgent = useAgent
             let info = IPCTabInfo(
                 index: tab.index,
