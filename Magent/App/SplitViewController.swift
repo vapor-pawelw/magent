@@ -236,6 +236,10 @@ final class SplitViewController: NSSplitViewController {
             closeTabShortcut()
             return nil
         }
+        if matchesBinding(.reopenLastClosedTab, keyCode: event.keyCode, modifiers: eventModifiers) {
+            reopenLastClosedTabShortcut()
+            return nil
+        }
         if matchesBinding(.newThreadFromBranch, keyCode: event.keyCode, modifiers: eventModifiers) {
             requestNewThreadFromBranch()
             return nil
@@ -381,6 +385,10 @@ final class SplitViewController: NSSplitViewController {
         _ = performCloseTabShortcut(contextThreadId: nil)
     }
 
+    private func reopenLastClosedTabShortcut() {
+        _ = performReopenLastClosedTabShortcut(contextThreadId: nil)
+    }
+
     func selectedThreadForContextRouting() -> MagentThread? {
         currentDetailVC?.thread ?? threadListVC.selectedThreadFromState()
     }
@@ -428,6 +436,33 @@ final class SplitViewController: NSSplitViewController {
 
         guard let currentDetailVC else { return false }
         currentDetailVC.closeCurrentTab()
+        return true
+    }
+
+    @discardableResult
+    func performReopenLastClosedTabShortcut(contextThreadId: UUID?) -> Bool {
+        if let threadId = contextThreadId {
+            if let controller = PopoutWindowManager.shared.threadWindows[threadId] {
+                controller.detailVC.reopenLastClosedTab()
+                return true
+            }
+            if let currentDetailVC, currentDetailVC.thread.id == threadId {
+                currentDetailVC.reopenLastClosedTab()
+                return true
+            }
+            if !PopoutWindowManager.shared.isThreadPoppedOut(threadId),
+               ThreadManager.shared.threads.contains(where: { $0.id == threadId }) {
+                threadListVC.selectThread(byId: threadId)
+                if let currentDetailVC, currentDetailVC.thread.id == threadId {
+                    currentDetailVC.reopenLastClosedTab()
+                    return true
+                }
+            }
+            return false
+        }
+
+        guard let currentDetailVC else { return false }
+        currentDetailVC.reopenLastClosedTab()
         return true
     }
 

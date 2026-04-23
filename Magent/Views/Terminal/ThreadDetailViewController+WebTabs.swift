@@ -271,12 +271,70 @@ extension ThreadDetailViewController {
         applyPromptTOCVisibility()
     }
 
+    func restoreClosedWebTab(_ persisted: PersistedWebTab) {
+        guard supportsInAppWebTab(for: persisted.url) else {
+            NSSound.beep()
+            return
+        }
+
+        if let existingIndex = tabSlots.firstIndex(of: .web(identifier: persisted.identifier)) {
+            selectTab(at: existingIndex)
+            return
+        }
+
+        hideEmptyState()
+
+        let entry = WebTabEntry(
+            identifier: persisted.identifier,
+            url: persisted.url,
+            iconType: persisted.iconType,
+            view: nil
+        )
+        webTabs.append(entry)
+
+        let item = TabItemView(title: persisted.displayTitle)
+        item.showCloseButton = true
+        attachDragGesture(to: item)
+        applyWebTabIcon(to: item, iconType: persisted.iconType)
+
+        let insertIndex: Int
+        if persisted.isPinned {
+            insertIndex = pinnedCount
+            tabItems.insert(item, at: insertIndex)
+            tabSlots.insert(.web(identifier: persisted.identifier), at: insertIndex)
+            pinnedCount += 1
+        } else {
+            insertIndex = tabItems.count
+            tabItems.append(item)
+            tabSlots.append(.web(identifier: persisted.identifier))
+        }
+
+        thread.persistedWebTabs.removeAll { $0.identifier == persisted.identifier }
+        thread.persistedWebTabs.append(persisted)
+        persistWebTabs()
+
+        rebuildTabBar()
+        rebindAllTabActions()
+        selectTab(at: insertIndex)
+    }
+
     // MARK: - Close
 
     /// Close a web tab by its identifier.
     func closeWebTab(identifier: String) {
         guard let webIndex = webTabs.firstIndex(where: { $0.identifier == identifier }) else { return }
         guard let displayIndex = tabSlots.firstIndex(of: .web(identifier: identifier)) else { return }
+
+        let persistedSnapshot = thread.persistedWebTabs.first(where: { $0.identifier == identifier })
+            ?? PersistedWebTab(
+                identifier: identifier,
+                url: webTabs[webIndex].url,
+                title: tabItems[displayIndex].titleLabel.stringValue,
+                iconType: webTabs[webIndex].iconType,
+                isPinned: displayIndex < pinnedCount,
+                customTitle: nil
+            )
+        threadManager.pushClosedTabSnapshot(.web(persistedSnapshot), for: thread.id)
 
         webTabs[webIndex].view?.removeFromSuperview()
         webTabs.remove(at: webIndex)

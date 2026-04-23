@@ -144,6 +144,17 @@ final class TabPopoutWindowController: NSWindowController, NSWindowDelegate {
             return nil
         }
 
+        let reopenBinding = bindings.binding(for: .reopenLastClosedTab)
+        if event.keyCode == reopenBinding.keyCode
+            && flags == reopenBinding.modifiers.nsEventFlags {
+            if let appDelegate = NSApp.delegate as? AppDelegate,
+               appDelegate.handleReopenLastClosedTabShortcutFromActiveContext() {
+                return nil
+            }
+            NSSound.beep()
+            return nil
+        }
+
         let popOutBinding = bindings.binding(for: .popOutThread)
         if event.keyCode == popOutBinding.keyCode
             && flags == popOutBinding.modifiers.nsEventFlags {

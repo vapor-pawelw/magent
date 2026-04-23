@@ -744,6 +744,8 @@ final class ThreadManager {
     /// Human-readable summary of the most recent sync failure, used by the status bar.
     var lastStatusSyncFailureSummary: String?
     var _cachedRemoteByProjectId: [UUID: GitRemote] = [:]
+    /// Non-persisted per-thread stack of recently closed tabs used by Cmd+Shift+T.
+    var closedTabHistoryByThreadId: [UUID: ClosedTabHistoryBuffer] = [:]
 
     // MARK: - Lifecycle
 

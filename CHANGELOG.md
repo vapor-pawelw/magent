@@ -55,6 +55,13 @@ All notable changes to this project will be documented in this file.
 #### Bug Fixes
 - Initial prompt-injection failure banners now include `Restart Tab`, matching the pending-injection banner so tab relaunch recovery is available in both states.
 
+### Tab
+
+#### Features
+- Added `Restore Last Closed Tab` for tab recovery across all tab types (terminal, web, draft), backed by a per-thread in-memory history stack (max 10). Restore is available via `Cmd+Shift+T` and from the tab context menu when history is available.
+
+#### Bug Fixes
+- Refined tab context-menu grouping and availability rules: `Export as Markdown...` now sits directly under `Continue in...`, followed by a grouped session-actions block (`Resume Agent Session in New Tab`, `Restore Last Closed Tab`, `Session` submenu) separated from transfer actions. `Resume Agent Session in New Tab` is now shown only when the tab has a real resumable session ID, and `Restore Last Closed Tab` is shown only when restore history exists.
 ## 1.6.1 - 2026-04-18
 
 

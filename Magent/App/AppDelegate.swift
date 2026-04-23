@@ -431,6 +431,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         return split.performNewTabShortcut(contextThreadId: context.contextThreadId)
     }
 
+    func handleReopenLastClosedTabShortcutFromActiveContext() -> Bool {
+        guard let split = coordinator?.mainSplitViewController() else { return false }
+        let context = activeThreadActionContext()
+        return split.performReopenLastClosedTabShortcut(contextThreadId: context.contextThreadId)
+    }
+
     @objc private func showAboutPanel(_ sender: Any?) {
         var options: [NSApplication.AboutPanelOptionKey: Any] = [:]
 

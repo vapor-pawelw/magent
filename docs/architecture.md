@@ -280,7 +280,7 @@ Shell startup uses a managed `ZDOTDIR` wrapper so Magent can source the user's s
 Agent-backed terminal tabs may expose a `Resume Agent Session in New Tab` context-menu item that opens a fresh tmux session but resumes the same agent conversation.
 
 - Only show this action for agent types that support deterministic resume (`Claude` and `Codex`).
-- Gate enablement on a non-empty persisted `sessionConversationIDs[sessionName]`; if no resume ID has been captured yet, the menu item should stay disabled and the action must not launch a best-effort fresh session under the guise of resume.
+- Show this action only when a non-empty persisted `sessionConversationIDs[sessionName]` exists; if no resume ID has been captured yet, hide the menu item and do not offer best-effort fresh-session fallback under the guise of resume.
 - Route resumed-duplicate tabs through the normal `addTab(...)` flow with an explicit `resumeSessionID` so startup, trust handling, overlay behavior, and persisted session metadata stay consistent with every other agent tab.
 - Persist the copied resume ID onto the new tab's `sessionConversationIDs` entry immediately so later recreation/reopen flows preserve the resumed conversation even before a subsequent refresh discovers the same ID again.
 - Tabs inserted in a pending-create state (placeholder terminal slot before tmux session name is assigned) must be treated as non-interactive: no close/force-close, rename, resume, continue, detach, or kill actions. Selecting a pending tab should only show the "Creating tab..." loading state and must never trigger session preparation for an empty session name.
@@ -293,9 +293,15 @@ Tab display-name deduplication must use one shared allocator for create, resume-
 The tab context menu now opens a single `Continue in...` sheet instead of a nested agent submenu. That sheet is agent-only, so it keeps the model picker, title field, model/reasoning controls, and an optional "Extra context" prompt field. The draft checkbox is hidden. When the user provides extra context, it is appended to the transfer prompt as priority instructions for the receiving agent; when left empty, the transfer prompt is unchanged. Tabs created through that flow should persist an explicit forwarded-session marker so the tab bar can show the same forward icon as the header `Continue in...` button even after reload, rename, or session recreation.
 
 Tab context menu ordering should stay stable for muscle memory:
-- `Resume Agent Session in New Tab` appears directly below `Continue in...` (when available).
+- `Export as Markdown...` appears directly below `Continue in...` (when available).
+- A separator then groups session actions: `Resume Agent Session in New Tab` (when resumable), `Restore Last Closed Tab` (when a per-thread restore entry exists), and the `Session` submenu.
 - Session controls are grouped under a `Session` submenu (`Keep Alive`, `Kill All Sessions`) instead of top-level placement.
 - `Close Tabs to the Left/Right` sit directly above `Close This Tab`, and `Close This Tab` is always the final menu item.
+
+Closed-tab restore behavior is thread-local and intentionally ephemeral:
+- Maintain a per-thread in-memory LIFO history (max 10) of closed tab snapshots across terminal/web/draft tab types.
+- Expose restore via `Cmd+Shift+T` and the tab context-menu action `Restore Last Closed Tab`.
+- Do not persist closed-tab history across app restarts.
 
 ### 4.10 Persistence Backup + Restore Contract
 

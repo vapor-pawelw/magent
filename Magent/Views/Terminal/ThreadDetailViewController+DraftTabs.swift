@@ -193,9 +193,21 @@ extension ThreadDetailViewController {
     func removeDraftTab(identifier: String) {
         guard let slotIndex = tabSlots.firstIndex(of: .draft(identifier: identifier)) else { return }
 
+        var fallbackSnapshot: PersistedDraftTab?
         if let entryIndex = draftTabs.firstIndex(where: { $0.identifier == identifier }) {
+            let entry = draftTabs[entryIndex]
+            fallbackSnapshot = PersistedDraftTab(
+                identifier: entry.identifier,
+                agentType: entry.agentType,
+                prompt: entry.prompt,
+                modelId: entry.modelId,
+                reasoningLevel: entry.reasoningLevel
+            )
             draftTabs[entryIndex].viewController?.view.removeFromSuperview()
             draftTabs.remove(at: entryIndex)
+        }
+        if let persisted = thread.persistedDraftTabs.first(where: { $0.identifier == identifier }) ?? fallbackSnapshot {
+            threadManager.pushClosedTabSnapshot(.draft(persisted), for: thread.id)
         }
 
         if activeDraftTabId == identifier {

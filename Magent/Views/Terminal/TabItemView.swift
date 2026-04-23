@@ -127,7 +127,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     var onPin: (() -> Void)?
     var onKeepAlive: (() -> Void)?
     var onResumeAgentInNewTab: (() -> Void)?
-    var canResumeAgentInNewTab: Bool = false
+    var onRestoreLastClosedTab: (() -> Void)?
     var onContinueIn: (() -> Void)?
     var onExportContext: (() -> Void)?
     var onKillSession: (() -> Void)?
@@ -347,6 +347,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         onResumeAgentInNewTab?()
     }
 
+    @objc private func restoreLastClosedTabTapped() {
+        onRestoreLastClosedTab?()
+    }
+
     @objc private func exportContextTapped() {
         onExportContext?()
     }
@@ -467,29 +471,23 @@ final class TabItemView: NSView, NSMenuDelegate {
             menu.addItem(renameItem)
         }
 
+        let hasSessionMenu = onKeepAlive != nil || onKillAllSessions != nil || onCopyTmuxSessionName != nil
+        let hasContinueItem = !availableAgentsForContinue.isEmpty
+        let hasExportItem = onExportContext != nil
+        let hasGroupedSessionActions = onResumeAgentInNewTab != nil || onRestoreLastClosedTab != nil || hasSessionMenu
+
         // Context transfer items
-        if !availableAgentsForContinue.isEmpty || onResumeAgentInNewTab != nil || onExportContext != nil {
+        if hasContinueItem || hasExportItem || hasGroupedSessionActions {
             menu.addItem(.separator())
         }
 
-        if !availableAgentsForContinue.isEmpty {
+        if hasContinueItem {
             let continueItem = NSMenuItem(title: "Continue in...", action: #selector(continueInTapped), keyEquivalent: "")
             continueItem.target = self
             menu.addItem(continueItem)
         }
 
-        if onResumeAgentInNewTab != nil {
-            let resumeItem = NSMenuItem(
-                title: "Resume Agent Session in New Tab",
-                action: #selector(resumeAgentInNewTabTapped),
-                keyEquivalent: ""
-            )
-            resumeItem.target = self
-            resumeItem.isEnabled = canResumeAgentInNewTab
-            menu.addItem(resumeItem)
-        }
-
-        if onExportContext != nil {
+        if hasExportItem {
             let exportItem = NSMenuItem(
                 title: "Export as Markdown...",
                 action: #selector(exportContextTapped),
@@ -499,11 +497,35 @@ final class TabItemView: NSView, NSMenuDelegate {
             menu.addItem(exportItem)
         }
 
+        if (hasContinueItem || hasExportItem) && hasGroupedSessionActions {
+            menu.addItem(.separator())
+        }
+
+        if onResumeAgentInNewTab != nil {
+            let resumeItem = NSMenuItem(
+                title: "Resume Agent Session in New Tab",
+                action: #selector(resumeAgentInNewTabTapped),
+                keyEquivalent: ""
+            )
+            resumeItem.target = self
+            menu.addItem(resumeItem)
+        }
+
+        if onRestoreLastClosedTab != nil {
+            let restoreItem = NSMenuItem(
+                title: "Restore Last Closed Tab",
+                action: #selector(restoreLastClosedTabTapped),
+                keyEquivalent: ""
+            )
+            restoreItem.target = self
+            menu.addItem(restoreItem)
+        }
+
         // Close tabs section
         let hasTabsToRight = tabIndex < totalTabCount - 1
         let hasTabsToLeft = tabIndex > 0
 
-        if onKeepAlive != nil || onKillAllSessions != nil || onCopyTmuxSessionName != nil {
+        if hasSessionMenu {
             let sessionItem = NSMenuItem(title: "Session", action: nil, keyEquivalent: "")
             let sessionSubmenu = NSMenu()
 

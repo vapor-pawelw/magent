@@ -5,6 +5,7 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
     case newThreadFromBranch
     case newTab
     case closeTab
+    case reopenLastClosedTab
     case refreshWebTab
     case hardRefreshWebTab
     case popOutThread
@@ -17,6 +18,7 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
         case .newThreadFromBranch: "Fork Thread"
         case .newTab: "New Tab"
         case .closeTab: "Close Tab"
+        case .reopenLastClosedTab: "Reopen Closed Tab"
         case .refreshWebTab: "Refresh Web Tab"
         case .hardRefreshWebTab: "Hard Refresh Web Tab"
         case .popOutThread: "Pop Out Thread"
@@ -31,6 +33,7 @@ public enum KeyBindingAction: String, Codable, Sendable, CaseIterable {
         case .newThreadFromBranch: KeyBinding(keyCode: 45, modifiers: [.command, .shift]) // Cmd+Shift+N
         case .newTab: KeyBinding(keyCode: 17, modifiers: [.command]) // Cmd+T
         case .closeTab: KeyBinding(keyCode: 13, modifiers: [.command]) // Cmd+W
+        case .reopenLastClosedTab: KeyBinding(keyCode: 17, modifiers: [.command, .shift]) // Cmd+Shift+T
         case .refreshWebTab: KeyBinding(keyCode: 15, modifiers: [.command]) // Cmd+R
         case .hardRefreshWebTab: KeyBinding(keyCode: 15, modifiers: [.command, .shift]) // Cmd+Shift+R
         case .popOutThread: KeyBinding(keyCode: 31, modifiers: [.command, .shift]) // Cmd+Shift+O

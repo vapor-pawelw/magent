@@ -333,6 +333,37 @@ extension ThreadManager {
         sessionLifecycleService.updateLastSelectedTab(for: threadId, identifier: identifier)
     }
 
+    // MARK: - Closed Tab History
+
+    func pushClosedTabSnapshot(_ snapshot: ClosedTabSnapshot, for threadId: UUID) {
+        pruneClosedTabHistoryForMissingThreads()
+        var buffer = closedTabHistoryByThreadId[threadId] ?? ClosedTabHistoryBuffer()
+        buffer.push(snapshot)
+        closedTabHistoryByThreadId[threadId] = buffer
+    }
+
+    func popLastClosedTabSnapshot(for threadId: UUID) -> ClosedTabSnapshot? {
+        pruneClosedTabHistoryForMissingThreads()
+        guard var buffer = closedTabHistoryByThreadId[threadId] else { return nil }
+        let popped = buffer.popLast()
+        if buffer.isEmpty {
+            closedTabHistoryByThreadId.removeValue(forKey: threadId)
+        } else {
+            closedTabHistoryByThreadId[threadId] = buffer
+        }
+        return popped
+    }
+
+    func hasClosedTabSnapshot(for threadId: UUID) -> Bool {
+        pruneClosedTabHistoryForMissingThreads()
+        return !(closedTabHistoryByThreadId[threadId]?.isEmpty ?? true)
+    }
+
+    private func pruneClosedTabHistoryForMissingThreads() {
+        let liveThreadIds = Set(threads.map(\.id))
+        closedTabHistoryByThreadId = closedTabHistoryByThreadId.filter { liveThreadIds.contains($0.key) }
+    }
+
     @MainActor
     func setActiveThread(_ threadId: UUID?) {
         sessionLifecycleService.setActiveThread(threadId)
@@ -368,6 +399,19 @@ extension ThreadManager {
     @MainActor
     private func removeTabBySessionName(threadIndex index: Int, sessionName: String) async throws {
         NSLog("[TabClose] removeTabBySessionName start: index=\(index) session=\(sessionName)")
+
+        if let sessionIndex = threads[index].tmuxSessionNames.firstIndex(of: sessionName) {
+            let snapshot = ClosedTerminalTabSnapshot(
+                displayName: threads[index].displayName(for: sessionName, at: sessionIndex),
+                isAgentTab: threads[index].agentTmuxSessions.contains(sessionName),
+                agentType: threads[index].sessionAgentTypes[sessionName],
+                resumeSessionID: threads[index].sessionConversationIDs[sessionName],
+                startFresh: threads[index].freshAgentSessions.contains(sessionName),
+                isForwardedContinuation: threads[index].forwardedTmuxSessions.contains(sessionName),
+                isPinned: threads[index].pinnedTmuxSessions.contains(sessionName)
+            )
+            pushClosedTabSnapshot(.terminal(snapshot), for: threads[index].id)
+        }
 
         // Destroy the Ghostty surface BEFORE killing the tmux session.
         // killSession is async and suspends the MainActor; while suspended, the terminal

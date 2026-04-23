@@ -481,6 +481,7 @@ extension ThreadDetailViewController {
     func rebindAllTabActions() {
         let settings = PersistenceService.shared.loadSettings()
         let isTabDetachEnabled = settings.isTabDetachFeatureEnabled
+        let canRestoreLastClosedTab = threadManager.hasClosedTabSnapshot(for: thread.id)
         let count = tabItems.count
 
         for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
@@ -495,6 +496,9 @@ extension ThreadDetailViewController {
             item.totalTabCount = count
             item.showCloseButton = true
             item.showPinIcon = (i < pinnedCount)
+            item.onRestoreLastClosedTab = canRestoreLastClosedTab ? { [weak self] in
+                self?.reopenLastClosedTab()
+            } : nil
 
             switch slot {
             case .terminal(let sessionName):
@@ -508,7 +512,6 @@ extension ThreadDetailViewController {
                     item.onRename = nil
                     item.allowsDoubleClickRename = false
                     item.onResumeAgentInNewTab = nil
-                    item.canResumeAgentInNewTab = false
                     item.onContinueIn = nil
                     item.onExportContext = nil
                     item.onKeepAlive = nil
@@ -521,7 +524,10 @@ extension ThreadDetailViewController {
                     item.typeIcon.isHidden = true
                 } else {
                     let agentType = threadManager.agentType(for: thread, sessionName: sessionName)
-                    let resumeID = threadManager.conversationID(for: thread.id, sessionName: sessionName)
+                    let resumeID = threadManager.conversationID(for: thread.id, sessionName: sessionName)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    let canResumeInNewTab = agentType?.supportsResume == true
+                        && !(resumeID?.isEmpty ?? true)
                     let isForwardedContinuation = thread.forwardedTmuxSessions.contains(sessionName)
                     item.isDetached = PopoutWindowManager.shared.isTabDetached(sessionName: sessionName)
                     // Tab detaching is production-disabled and can be enabled only via
@@ -535,10 +541,9 @@ extension ThreadDetailViewController {
                     }
                     item.onRename = { [weak self] in self?.showTabRenameDialog(at: i) }
                     item.allowsDoubleClickRename = true
-                    item.onResumeAgentInNewTab = agentType?.supportsResume == true
+                    item.onResumeAgentInNewTab = canResumeInNewTab
                         ? { [weak self] in self?.resumeAgentSessionInNewTab(at: i) }
                         : nil
-                    item.canResumeAgentInNewTab = !(resumeID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
                     item.onContinueIn = { [weak self] in self?.presentContinueTabSheet(for: i) }
                     item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
                     // Hide per-tab Keep Alive controls when the thread itself is keep-alive.
@@ -564,7 +569,6 @@ extension ThreadDetailViewController {
                 item.onRename = { [weak self] in self?.showWebTabRenameDialog(at: i) }
                 item.allowsDoubleClickRename = false
                 item.onResumeAgentInNewTab = nil
-                item.canResumeAgentInNewTab = false
                 item.onContinueIn = nil
                 item.onExportContext = nil
                 item.onKeepAlive = nil
@@ -578,7 +582,6 @@ extension ThreadDetailViewController {
                 item.onRename = nil
                 item.allowsDoubleClickRename = false
                 item.onResumeAgentInNewTab = nil
-                item.canResumeAgentInNewTab = false
                 item.onContinueIn = nil
                 item.onExportContext = nil
                 item.onKeepAlive = nil

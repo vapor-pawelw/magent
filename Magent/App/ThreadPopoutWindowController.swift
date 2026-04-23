@@ -299,6 +299,13 @@ final class ThreadPopoutWindowController: NSWindowController, NSWindowDelegate {
             return nil
         }
 
+        let reopenBinding = bindings.binding(for: .reopenLastClosedTab)
+        if event.keyCode == reopenBinding.keyCode
+            && flags == reopenBinding.modifiers.nsEventFlags {
+            detailVC.reopenLastClosedTab()
+            return nil
+        }
+
         return event
     }
 

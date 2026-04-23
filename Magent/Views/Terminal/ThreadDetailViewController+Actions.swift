@@ -900,13 +900,15 @@ extension ThreadDetailViewController {
         initialPrompt: String? = nil,
         shouldSubmitInitialPrompt: Bool = true,
         resumeSessionID: String? = nil,
+        startFresh: Bool = false,
         isForwardedContinuation: Bool = false,
         customTitle: String? = nil,
         pendingPromptFileURL: URL? = nil,
         tabNameSuffix: String? = nil,
         modelId: String? = nil,
         reasoningLevel: String? = nil,
-        switchToTab: Bool = true
+        switchToTab: Bool = true,
+        pinAfterCreation: Bool = false
     ) {
         // Phase 1: Immediately add a tab item and show "Creating tab..." overlay so
         // the tab appears in the bar without waiting for tmux session creation.
@@ -946,6 +948,7 @@ extension ThreadDetailViewController {
                     initialPrompt: initialPrompt,
                     shouldSubmitInitialPrompt: shouldSubmitInitialPrompt,
                     resumeSessionID: resumeSessionID,
+                    startFresh: startFresh,
                     isForwardedContinuation: isForwardedContinuation,
                     customTitle: customTitle,
                     tabNameSuffix: tabNameSuffix,
@@ -1011,6 +1014,12 @@ extension ThreadDetailViewController {
                     }
                     self.rebindAllTabActions()
 
+                    if pinAfterCreation,
+                       let restoredIndex = self.tabSlots.firstIndex(of: .terminal(sessionName: tab.tmuxSessionName)),
+                       restoredIndex >= self.pinnedCount {
+                        self.togglePin(at: restoredIndex)
+                    }
+
                     if switchToTab {
                         // Dismiss the "Creating tab..." overlay before handing off to selectTab,
                         // which will show its own "Starting agent..." overlay if needed.
@@ -1057,6 +1066,39 @@ extension ThreadDetailViewController {
             addTab(using: nil, useAgentCommand: true, modelId: modelId, reasoningLevel: reasoning)
         } else {
             presentNewTabSheet()
+        }
+    }
+
+    func reopenLastClosedTab() {
+        guard let snapshot = threadManager.popLastClosedTabSnapshot(for: thread.id) else {
+            NSSound.beep()
+            return
+        }
+
+        switch snapshot {
+        case .terminal(let terminal):
+            let shouldUseAgent = terminal.isAgentTab
+            let restoredAgentType = shouldUseAgent ? terminal.agentType : nil
+            addTab(
+                using: restoredAgentType,
+                useAgentCommand: shouldUseAgent,
+                resumeSessionID: terminal.resumeSessionID,
+                startFresh: terminal.startFresh,
+                isForwardedContinuation: terminal.isForwardedContinuation,
+                customTitle: terminal.displayName,
+                switchToTab: true,
+                pinAfterCreation: terminal.isPinned
+            )
+        case .web(let web):
+            restoreClosedWebTab(web)
+        case .draft(let draft):
+            openDraftTab(
+                identifier: draft.identifier,
+                agentType: draft.agentType,
+                prompt: draft.prompt,
+                modelId: draft.modelId,
+                reasoningLevel: draft.reasoningLevel
+            )
         }
     }
 
