@@ -14,13 +14,13 @@ magent-cli
 magent-cli interactive [--project <name>]
 magent-cli ls [--project <name>]
 magent-cli attach --session <tmux-session>
-magent-cli attach (--thread <name> | --thread-id <id>) [--index <n>]
+magent-cli attach (--thread <name> | --thread-id <id>) [--index <terminal-tab-n>]
 magent-cli docs
 ```
 
 - `interactive`: picker flow `project -> thread (or create) -> tab -> tmux attach`, with ANSI colors when the terminal supports them. Tab rows use real tab names (not `Tab #`). Thread rows show branch/worktree info, PR/Jira details (when present), and live status badges (`done`, `busy`, `input`, `dirty`, `limited`, `delivered`, `♥`) each on their own line. Threads are grouped by section in sidebar order; if a thread has only one tab the tab step is skipped. The CLI remembers the last attached session context and, on the next interactive run (without `--project`), opens directly in that thread when possible; fallback is last project, then project picker. Uses a numbered list (`1) … 2) …`) without fzf for reliable SSH/phone use.
 - `ls`: table view (project/thread/branch/type/status/description/session), reusing the same live thread status data
-- `attach`: attach directly by session or by thread + tab index
+- `attach`: attach directly by tmux session or by thread + terminal-tab index
 - `docs`: full on-demand IPC command reference + usage guidance (for agent/tooling prompts)
 
 ## Thread Commands
@@ -375,7 +375,7 @@ magent-cli move-thread --thread <name> --section <name>
 Add a tab to an existing thread.
 
 ```bash
-magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--title <text>] [--fresh|--no-resume] [--prompt <text>]
+magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--name <text> | --title <text>] [--fresh|--no-resume] [--prompt <text>]
 ```
 
 | Option | Description |
@@ -383,7 +383,8 @@ magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--
 | `--agent <type>` | Agent type: `claude`, `codex`, `custom`, or `terminal`. Defaults to project/global setting. |
 | `--model <id>` | Model ID to launch with. Falls back to the agent's configured default when omitted. |
 | `--reasoning <level>` | Reasoning level: `low`, `medium`, `high`, `max` (Claude) or `low`, `medium`, `high`, `xhigh` (Codex). |
-| `--title <text>` | Optional tab title shown in the tab bar. |
+| `--name <text>` | Optional tab title shown in the tab bar. |
+| `--title <text>` | Legacy alias for `--name`. |
 | `--fresh`, `--no-resume` | Start an isolated Claude/Codex tab that should not adopt an older conversation from the same worktree path during later recovery. |
 | `--prompt <text>` | Initial prompt to inject after the agent starts. |
 
@@ -397,13 +398,14 @@ If the target thread is popped out into a separate window, `create-tab` opens/se
 Open an in-app web tab at a specific URL in an existing thread. Useful for pinning docs pages, Jira tickets, PR URLs, or internal dashboards next to an agent tab.
 
 ```bash
-magent-cli create-web-tab --thread <name> --url <http(s)-url> [--title <text>]
+magent-cli create-web-tab --thread <name> --url <http(s)-url> [--name <text> | --title <text>]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--url <url>` | Fully qualified `http://` or `https://` URL to open. |
-| `--title <text>` | Optional tab title. Defaults to the URL host. |
+| `--name <text>` | Optional tab title. Defaults to the URL host. |
+| `--title <text>` | Legacy alias for `--name`. |
 
 The tab always opens in-app (Magent), regardless of the user's external-link preference. The URL and title persist with the thread and survive app restarts.
 If the target thread is popped out, the web tab opens in that pop-out window and is selected there.
@@ -418,7 +420,8 @@ Spaces and other non-RFC characters must be percent-encoded (`%20`, etc.) — `U
 
 ### list-tabs
 
-List all tabs in a thread.
+List all tabs in a thread, in the same order as the GUI tab strip (terminal, web, draft).
+Each row includes `tabType` (`terminal`, `web`, `draft`) and `sessionName` (for web/draft this is the tab identifier).
 
 ```bash
 magent-cli list-tabs --thread <name>
@@ -427,11 +430,23 @@ magent-cli list-tabs --thread-id <id>
 
 ### close-tab
 
-Close a tab by index or session name. Cannot close the last tab — use `archive-thread` or `delete-thread` instead.
+Close a tab by index or session name. Works for terminal, web, and draft tabs.
+Cannot close the last tab — use `archive-thread` or `delete-thread` instead.
 
 ```bash
 magent-cli close-tab --thread <name> --index <n>
 magent-cli close-tab --thread <name> --session <session-name>
+```
+
+### rename-tab
+
+Rename an existing tab in a thread. For terminal/agent tabs, target by session name or index from `list-tabs`.
+For web tabs created via CLI, use the `tab.sessionName` identifier returned by `create-web-tab` with `--session`.
+Draft tabs cannot be renamed.
+
+```bash
+magent-cli rename-tab --thread <name> --index <n> --name <text>
+magent-cli rename-tab --thread <name> --session <session-or-web-id> --name <text>
 ```
 
 ## Section Commands

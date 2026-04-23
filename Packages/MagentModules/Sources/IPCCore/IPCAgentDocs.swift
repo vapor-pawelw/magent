@@ -14,9 +14,10 @@ public enum IPCAgentDocs {
     /tmp/magent-cli archive-thread --thread <name> [--force] [--skip-local-sync]
     /tmp/magent-cli delete-thread --thread <name>
     /tmp/magent-cli list-tabs --thread <name>
-    /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--title <text>] [--fresh|--no-resume] [--prompt <text>]
-    /tmp/magent-cli create-web-tab --thread <name> --url <http(s)-url> [--title <text>]
+    /tmp/magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--name <text>|--title <text>] [--fresh|--no-resume] [--prompt <text>]
+    /tmp/magent-cli create-web-tab --thread <name> --url <http(s)-url> [--name <text>|--title <text>]
     /tmp/magent-cli close-tab --thread <name> (--index <n> | --session <name>)
+    /tmp/magent-cli rename-tab --thread <name> (--index <n> | --session <name>) --name <text>
     /tmp/magent-cli current-thread
     /tmp/magent-cli auto-rename-thread --thread <name> --prompt <text>
     /tmp/magent-cli rename-thread --thread <name> --prompt <text>
@@ -50,8 +51,9 @@ public enum IPCAgentDocs {
     When creating threads, use --description to name them upfront (AI generates a slug respecting project naming rules). Only use --name when the user explicitly provides a literal name. Omit both for a random name.
     When called from inside a Magent session, create-thread and batch-create automatically inherit the current thread's branch and section (and position the new thread directly below it in the sidebar). This means you do NOT need to manually pass --base-branch or --section in the common case. Use --base-thread or --base-branch only when the user explicitly wants a different base. Use --section only when the user explicitly wants a different section. Use --from-thread none to suppress auto-detection. Use --from-thread main to inherit from the project's main worktree thread instead.
     When the user explicitly names an agent, pass that exact agent in --agent. Do not silently substitute Claude for Codex or vice versa.
-    Use create-tab --title when the user asks you to name the tab. Use create-tab --fresh (or --no-resume) when the user wants an isolated review tab that must not adopt an older Claude/Codex conversation from the same worktree path.
-    Use create-web-tab to open an in-app web tab at a specific URL (docs pages, Jira links, PR URLs, etc.) in a thread. The URL must be http/https and should be wrapped in single quotes so the shell does not expand `&`, `?`, `#`, or `$` (for example: --url 'https://example.com/a?b=1&c=2'). Spaces and other non-RFC characters must be percent-encoded. Pass --title to override the default tab label (host name). This opens the tab in Magent even if the user's external-link preference is set to "browser".
+    Use create-tab --name (or --title) when the user asks you to name the tab. Use create-tab --fresh (or --no-resume) when the user wants an isolated review tab that must not adopt an older Claude/Codex conversation from the same worktree path.
+    Use create-web-tab to open an in-app web tab at a specific URL (docs pages, Jira links, PR URLs, etc.) in a thread. The URL must be http/https and should be wrapped in single quotes so the shell does not expand `&`, `?`, `#`, or `$` (for example: --url 'https://example.com/a?b=1&c=2'). Spaces and other non-RFC characters must be percent-encoded. Pass --name (or --title) to override the default tab label (host name). This opens the tab in Magent even if the user's external-link preference is set to "browser".
+    list-tabs returns all tab types in GUI order (`terminal`, `web`, `draft`) with a `tabType` field. For non-terminal tabs, use `sessionName` as the tab identifier in close-tab / rename-tab. Draft tabs cannot be renamed.
     Section names are case-insensitive throughout — "TODO" and "todo" resolve to the same section.
     Use auto-rename-thread (or its rename-thread alias) by default; it generates a branch name and description from one prompt. The thread/worktree name is never changed.
     Use rename-branch ONLY when the user gives a literal branch name (e.g. "rename this to kimchi-ramen"). If the user describes what the thread is about, use auto-rename-thread instead. Only the git branch is renamed; the thread/worktree name stays the same.
@@ -69,8 +71,8 @@ public enum IPCAgentDocs {
     "review thread" / "review this thread" / "review magent thread":
     The user wants a code review of the current thread's changes. Create a new agent tab in the current thread to perform the review:
     1. Use `thread-info` to check which agents are enabled (activeAgents field) and which is the default.
-    2. Create a review tab: `/tmp/magent-cli create-tab --thread <name> --title "Review" --fresh --prompt "Review the changes on this branch compared to the base branch. Provide feedback on code quality, correctness, and potential issues."` — use the default agent (omit --agent) unless the user explicitly requests a specific agent.
-    3. After creating the tab, check its status via `thread-info`. If the new tab shows isBlockedByRateLimit, close it and retry with a different enabled agent: `/tmp/magent-cli close-tab --thread <name> --session <session> && /tmp/magent-cli create-tab --thread <name> --title "Review" --fresh --agent <fallback-agent> --prompt "..."`.
+    2. Create a review tab: `/tmp/magent-cli create-tab --thread <name> --name "Review" --fresh --prompt "Review the changes on this branch compared to the base branch. Provide feedback on code quality, correctness, and potential issues."` — use the default agent (omit --agent) unless the user explicitly requests a specific agent.
+    3. After creating the tab, check its status via `thread-info`. If the new tab shows isBlockedByRateLimit, close it and retry with a different enabled agent: `/tmp/magent-cli close-tab --thread <name> --session <session> && /tmp/magent-cli create-tab --thread <name> --name "Review" --fresh --agent <fallback-agent> --prompt "..."`.
     4. Try each enabled agent in activeAgents until one is not rate-limited, or inform the user if all agents are rate-limited.
 
     "archive thread" / "archive this thread" / "archive magent thread":

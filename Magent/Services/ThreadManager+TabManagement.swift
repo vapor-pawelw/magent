@@ -207,6 +207,11 @@ extension ThreadManager {
         threads[index].tmuxSessionNames.append(tmuxSessionName)
         sessionLifecycleService.sessionTracker.sessionLastVisitedAt[tmuxSessionName] = sessionCreatedAt
         threads[index].customTabNames[tmuxSessionName] = tabDisplayName
+        if let customTitle, !customTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // Treat explicit custom titles from creation as manual renames so
+            // model-detection sync does not replace them with generic defaults.
+            threads[index].manuallyRenamedTabs.insert(tmuxSessionName)
+        }
         threads[index].sessionCreatedAts[tmuxSessionName] = sessionCreatedAt
         let shouldMarkAsAgentTab = (currentThread.isMain || useAgentCommand) && selectedAgentType != nil
         if shouldMarkAsAgentTab {

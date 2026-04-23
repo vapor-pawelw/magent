@@ -102,6 +102,7 @@ extension ThreadDetailViewController {
         url: URL,
         identifier: String,
         title: String,
+        customTitle: String? = nil,
         icon: NSImage? = nil,
         iconType: WebTabIconType = .none,
         resetExistingTabToURL: Bool = false
@@ -132,7 +133,7 @@ extension ThreadDetailViewController {
         let entry = WebTabEntry(identifier: identifier, url: url, iconType: iconType, view: nil)
         webTabs.append(entry)
 
-        let item = TabItemView(title: title)
+        let item = TabItemView(title: customTitle ?? title)
         item.showCloseButton = true
         attachDragGesture(to: item)
 
@@ -147,7 +148,13 @@ extension ThreadDetailViewController {
         tabSlots.append(.web(identifier: identifier))
 
         // Persist
-        let persisted = PersistedWebTab(identifier: identifier, url: url, title: title, iconType: iconType)
+        let persisted = PersistedWebTab(
+            identifier: identifier,
+            url: url,
+            title: title,
+            iconType: iconType,
+            customTitle: customTitle
+        )
         thread.persistedWebTabs.append(persisted)
         persistWebTabs()
 

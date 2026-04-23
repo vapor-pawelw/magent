@@ -683,6 +683,63 @@ struct IPCRequestDecodingTests {
         let request = try JSONDecoder().decode(IPCRequest.self, from: json)
         #expect(request.url == nil)
     }
+
+    @Test("Decodes newName field for tab naming commands")
+    func decodesNewName() throws {
+        let json = """
+        {"command":"create-tab","threadName":"kimchi","newName":"Review"}
+        """.data(using: .utf8)!
+        let request = try JSONDecoder().decode(IPCRequest.self, from: json)
+        #expect(request.command == "create-tab")
+        #expect(request.newName == "Review")
+    }
+}
+
+// MARK: - PersistedWebTab
+
+@Suite("PersistedWebTab display title")
+struct PersistedWebTabDisplayTitleTests {
+
+    @Test("Uses customTitle when present")
+    func usesCustomTitle() throws {
+        let url = try #require(URL(string: "https://example.com/docs"))
+        let tab = PersistedWebTab(
+            identifier: "web:test",
+            url: url,
+            title: "example.com",
+            iconType: .web,
+            customTitle: "Docs"
+        )
+        #expect(tab.displayTitle == "Docs")
+    }
+
+    @Test("Falls back to title when customTitle is nil")
+    func fallsBackToTitle() throws {
+        let url = try #require(URL(string: "https://example.com/docs"))
+        let tab = PersistedWebTab(
+            identifier: "web:test",
+            url: url,
+            title: "example.com",
+            iconType: .web,
+            customTitle: nil
+        )
+        #expect(tab.displayTitle == "example.com")
+    }
+}
+
+// MARK: - IPCTabInfo
+
+@Suite("IPCTabInfo")
+struct IPCTabInfoTests {
+
+    @Test("Carries optional tabType and keeps default nil")
+    func tabTypeInitBehavior() {
+        let terminal = IPCTabInfo(index: 0, sessionName: "ma-repo-thread", isAgent: true, tabType: "terminal")
+        #expect(terminal.tabType == "terminal")
+
+        let legacy = IPCTabInfo(index: 1, sessionName: "ma-repo-thread-2", isAgent: false)
+        #expect(legacy.tabType == nil)
+    }
 }
 
 // MARK: - ExternalLinkOpenRouting

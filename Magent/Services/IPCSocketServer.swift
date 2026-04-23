@@ -6,7 +6,7 @@ actor IPCSocketServer {
 
     static let socketPath = "/tmp/magent.sock"
     private static let cliPath = "/tmp/magent-cli"
-    private static let cliVersion = "magent-cli-v28"
+    private static let cliVersion = "magent-cli-v30"
 
     private var serverFD: Int32 = -1
     private var isRunning = false
@@ -621,15 +621,18 @@ actor IPCSocketServer {
             tab_thread_id="$1"
             tab_req="{$(json_kv command list-tabs),$(json_kv threadId "$tab_thread_id")}"
             tab_resp=$(send_checked_request "$tab_req")
-            tab_count=$(printf '%s' "$tab_resp" | jq -r '.tabs | length')
-            [ "$tab_count" -gt 0 ] || die "Thread has no tabs."
+            tab_count=$(printf '%s' "$tab_resp" | jq -r '[.tabs[] | select((.tabType // "terminal") == "terminal")] | length')
+            [ "$tab_count" -gt 0 ] || die "Thread has no terminal tabs to attach."
 
             if [ "$tab_count" -eq 1 ]; then
-                printf '%s' "$tab_resp" | jq -r '.tabs[0].sessionName'
+                printf '%s' "$tab_resp" | jq -r '[.tabs[] | select((.tabType // "terminal") == "terminal")][0].sessionName // empty'
                 return 0
             fi
 
-            tab_raw=$(printf '%s' "$tab_resp" | jq -r '.tabs | sort_by(.index)[] | [
+            tab_raw=$(printf '%s' "$tab_resp" | jq -r '.tabs
+                | map(select((.tabType // "terminal") == "terminal"))
+                | sort_by(.index)[]
+                | [
                 .sessionName,
                 .index,
                 (.displayName // ("Tab " + (.index | tostring))),
@@ -972,7 +975,7 @@ actor IPCSocketServer {
             fi
 
             [ -z "$attach_thread" ] || [ -z "$attach_thread_id" ] || die "Use either --thread or --thread-id, not both"
-            [ -n "$attach_thread" ] || [ -n "$attach_thread_id" ] || die "Usage: magent-cli attach (--thread <name> | --thread-id <id>) [--index <n> | --session <name>]"
+            [ -n "$attach_thread" ] || [ -n "$attach_thread_id" ] || die "Usage: magent-cli attach (--thread <name> | --thread-id <id>) [--index <terminal-tab-n> | --session <tmux-session>]"
 
             attach_list_req="{$(json_kv command list-tabs),"
             if [ -n "$attach_thread_id" ]; then
@@ -987,12 +990,16 @@ actor IPCSocketServer {
                 case "$attach_tab_index" in
                     ''|*[!0-9]*) die "--index must be an integer" ;;
                 esac
-                attach_session=$(printf '%s' "$attach_list_resp" | jq -r --argjson idx "$attach_tab_index" '.tabs[] | select(.index == $idx) | .sessionName' | head -1)
+                attach_session=$(printf '%s' "$attach_list_resp" | jq -r --argjson idx "$attach_tab_index" '
+                    [.tabs[] | select((.tabType // "terminal") == "terminal")]
+                    | sort_by(.index)
+                    | .[$idx].sessionName // empty
+                ')
             else
-                attach_session=$(printf '%s' "$attach_list_resp" | jq -r '.tabs[0].sessionName // empty')
+                attach_session=$(printf '%s' "$attach_list_resp" | jq -r '[.tabs[] | select((.tabType // "terminal") == "terminal")][0].sessionName // empty')
             fi
 
-            [ -n "$attach_session" ] || die "No matching tab found."
+            [ -n "$attach_session" ] || die "No matching terminal tab found."
             attach_tmux_session "$attach_session"
             ;;
         send-prompt)
@@ -1059,7 +1066,7 @@ actor IPCSocketServer {
             fi
             ;;
         create-tab)
-            thread=""; agent=""; model=""; reasoning=""; prompt=""; title=""; fresh=0
+            thread=""; agent=""; model=""; reasoning=""; prompt=""; tab_name=""; fresh=0
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --thread)    thread="$2"; shift 2 ;;
@@ -1067,35 +1074,35 @@ actor IPCSocketServer {
                     --model)     model="$2"; shift 2 ;;
                     --reasoning) reasoning="$2"; shift 2 ;;
                     --prompt)    prompt="$2"; shift 2 ;;
-                    --title)     title="$2"; shift 2 ;;
+                    --title|--name) tab_name="$2"; shift 2 ;;
                     --fresh|--no-resume) fresh=1; shift ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] || die "Usage: magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--title <text>] [--fresh|--no-resume] [--prompt <text>]"
+            [ -n "$thread" ] || die "Usage: magent-cli create-tab --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--name <text> | --title <text>] [--fresh|--no-resume] [--prompt <text>]"
             json="{$(json_kv command create-tab),$(json_kv threadName "$thread")"
             [ -n "$agent" ] && json="$json,$(json_kv agentType "$agent")"
             [ -n "$model" ] && json="$json,$(json_kv modelId "$model")"
             [ -n "$reasoning" ] && json="$json,$(json_kv reasoningLevel "$reasoning")"
-            [ -n "$title" ] && json="$json,$(json_kv title "$title")"
+            [ -n "$tab_name" ] && json="$json,$(json_kv title "$tab_name")"
             [ "$fresh" = "1" ] && json="$json,\"fresh\":true"
             [ -n "$prompt" ] && json="$json,$(json_kv prompt "$prompt")"
             json="$json}"
             send_request "$json" 60
             ;;
         create-web-tab)
-            thread=""; url=""; title=""
+            thread=""; url=""; tab_name=""
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --thread) thread="$2"; shift 2 ;;
                     --url)    url="$2"; shift 2 ;;
-                    --title)  title="$2"; shift 2 ;;
+                    --title|--name) tab_name="$2"; shift 2 ;;
                     *) die "Unknown option: $1" ;;
                 esac
             done
-            [ -n "$thread" ] && [ -n "$url" ] || die "Usage: magent-cli create-web-tab --thread <name> --url <http(s)-url> [--title <text>]"
+            [ -n "$thread" ] && [ -n "$url" ] || die "Usage: magent-cli create-web-tab --thread <name> --url <http(s)-url> [--name <text> | --title <text>]"
             json="{$(json_kv command create-web-tab),$(json_kv threadName "$thread"),$(json_kv url "$url")"
-            [ -n "$title" ] && json="$json,$(json_kv title "$title")"
+            [ -n "$tab_name" ] && json="$json,$(json_kv title "$tab_name")"
             json="$json}"
             send_request "$json"
             ;;
@@ -1111,6 +1118,29 @@ actor IPCSocketServer {
             done
             [ -n "$thread" ] || die "Usage: magent-cli close-tab --thread <name> (--index <n> | --session <name>)"
             json="{$(json_kv command close-tab),$(json_kv threadName "$thread")"
+            if [ -n "$tab_index" ]; then
+                json="$json,\"tabIndex\":$tab_index"
+            elif [ -n "$session" ]; then
+                json="$json,$(json_kv sessionName "$session")"
+            else
+                die "Specify --index <n> or --session <name>"
+            fi
+            json="$json}"
+            send_request "$json"
+            ;;
+        rename-tab)
+            thread=""; tab_index=""; session=""; name=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread)  thread="$2"; shift 2 ;;
+                    --index)   tab_index="$2"; shift 2 ;;
+                    --session) session="$2"; shift 2 ;;
+                    --name)    name="$2"; shift 2 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$thread" ] && [ -n "$name" ] || die "Usage: magent-cli rename-tab --thread <name> (--index <n> | --session <name>) --name <text>"
+            json="{$(json_kv command rename-tab),$(json_kv threadName "$thread"),$(json_kv newName "$name")"
             if [ -n "$tab_index" ]; then
                 json="$json,\"tabIndex\":$tab_index"
             elif [ -n "$session" ]; then
@@ -1463,7 +1493,7 @@ actor IPCSocketServer {
             echo "  magent-cli                           (opens interactive picker in TTY)"
             echo "  magent-cli interactive [--project <name>]"
             echo "  magent-cli ls [--project <name>]"
-            echo "  magent-cli attach (--thread <name> | --thread-id <id>) [--index <n>]"
+            echo "  magent-cli attach (--thread <name> | --thread-id <id>) [--index <terminal-tab-n>]"
             echo "  magent-cli attach --session <tmux-session>"
             echo "  magent-cli docs                      (full IPC command reference + usage guidance)"
             echo ""
@@ -1477,9 +1507,10 @@ actor IPCSocketServer {
             echo "  archive-thread       --thread <name> [--force] [--skip-local-sync]  (removes worktree, keeps branch; dirty worktrees are always refused; --force only continues after non-conflict local-sync failures)"
             echo "  delete-thread        --thread <name>    (removes worktree and branch)"
             echo "  list-tabs            (--thread <name> | --thread-id <id>)"
-            echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--title <text>] [--fresh|--no-resume] [--prompt <text>]"
-            echo "  create-web-tab       --thread <name> --url <http(s)-url> [--title <text>]    (opens an in-app web tab at the given URL)"
+            echo "  create-tab           --thread <name> [--agent claude|codex|custom|terminal] [--model <id>] [--reasoning low|medium|high|max] [--name <text>|--title <text>] [--fresh|--no-resume] [--prompt <text>]"
+            echo "  create-web-tab       --thread <name> --url <http(s)-url> [--name <text>|--title <text>]    (opens an in-app web tab at the given URL)"
             echo "  close-tab            --thread <name> (--index <n> | --session <name>)"
+            echo "  rename-tab           --thread <name> (--index <n> | --session <name>) --name <text>"
             echo "  current-thread                                               (returns current thread info)"
             echo "  auto-rename-thread   --thread <name> --prompt <text>       (AI-generated branch + description)"
             echo "  rename-thread        --thread <name> --prompt <text>       (alias for auto-rename-thread)"

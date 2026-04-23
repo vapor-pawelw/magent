@@ -35,6 +35,8 @@ final class IPCCommandHandler {
             return await createWebTab(request)
         case "close-tab":
             return await closeTab(request)
+        case "rename-tab":
+            return await renameTab(request)
         case "auto-rename-thread", "rename-thread":
             return await autoRenameThread(request)
         case "rename-branch", "rename-thread-exact":
@@ -216,6 +218,16 @@ final class IPCCommandHandler {
         let count = taskDescriptionWordCountForWarning(description)
         guard count > Self.preferredTaskDescriptionMaxWords else { return nil }
         return "Task description has \(count) words; preferred length is \(Self.preferredTaskDescriptionMinWords)-\(Self.preferredTaskDescriptionMaxWords) words."
+    }
+
+    private func requestedTabName(from request: IPCRequest) -> String? {
+        if let name = request.newName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            return name
+        }
+        if let title = request.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            return title
+        }
+        return nil
     }
 
     // MARK: - Commands
@@ -894,6 +906,137 @@ final class IPCCommandHandler {
 
     // MARK: - Tab Commands
 
+    private enum ResolvedTabKind {
+        case terminal(sessionName: String, terminalDisplayIndex: Int)
+        case web(identifier: String)
+        case draft(identifier: String)
+    }
+
+    private struct ResolvedTab {
+        let index: Int
+        let kind: ResolvedTabKind
+    }
+
+    private enum TabSelectionResult {
+        case resolved(ResolvedTab)
+        case error(IPCResponse)
+    }
+
+    private func orderedTerminalSessions(for thread: MagentThread) -> [String] {
+        let existing = thread.tmuxSessionNames
+        let pinned = thread.pinnedTmuxSessions.filter(existing.contains)
+        let unpinned = existing.filter { !pinned.contains($0) }
+        return pinned + unpinned
+    }
+
+    /// Builds tab ordering to match the GUI tab strip:
+    /// terminal (pinned + unpinned), then pinned web inserts into pinned region,
+    /// then unpinned web, then draft tabs.
+    private func resolveTabs(for thread: MagentThread) -> [ResolvedTab] {
+        var slots: [ResolvedTabKind] = []
+        let orderedSessions = orderedTerminalSessions(for: thread)
+
+        for (terminalDisplayIndex, sessionName) in orderedSessions.enumerated() {
+            slots.append(.terminal(sessionName: sessionName, terminalDisplayIndex: terminalDisplayIndex))
+        }
+
+        var pinnedInsertIndex = thread.pinnedTmuxSessions.filter(orderedSessions.contains).count
+        for persisted in thread.persistedWebTabs {
+            let webKind: ResolvedTabKind = .web(identifier: persisted.identifier)
+            if persisted.isPinned {
+                let insertAt = min(pinnedInsertIndex, slots.count)
+                slots.insert(webKind, at: insertAt)
+                pinnedInsertIndex += 1
+            } else {
+                slots.append(webKind)
+            }
+        }
+
+        for persisted in thread.persistedDraftTabs {
+            slots.append(.draft(identifier: persisted.identifier))
+        }
+
+        return slots.enumerated().map { ResolvedTab(index: $0.offset, kind: $0.element) }
+    }
+
+    private func buildIPCTabs(for thread: MagentThread) -> [IPCTabInfo] {
+        let resolved = resolveTabs(for: thread)
+        return resolved.map { entry in
+            switch entry.kind {
+            case .terminal(let sessionName, let terminalDisplayIndex):
+                let isAgent = thread.agentTmuxSessions.contains(sessionName)
+                var tab = IPCTabInfo(
+                    index: entry.index,
+                    sessionName: sessionName,
+                    isAgent: isAgent,
+                    tabType: "terminal"
+                )
+                tab.displayName = thread.displayName(for: sessionName, at: terminalDisplayIndex)
+                if isAgent {
+                    tab.agentType = threadManager.agentType(for: thread, sessionName: sessionName)?.rawValue
+                    tab.isBusy = thread.busySessions.contains(sessionName) || thread.magentBusySessions.contains(sessionName)
+                    tab.isWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
+                    tab.hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
+                    tab.isBlockedByRateLimit = thread.rateLimitedSessions[sessionName] != nil
+                }
+                return tab
+            case .web(let identifier):
+                let persisted = thread.persistedWebTabs.first(where: { $0.identifier == identifier })
+                var tab = IPCTabInfo(
+                    index: entry.index,
+                    sessionName: identifier,
+                    isAgent: false,
+                    tabType: "web"
+                )
+                tab.displayName = persisted?.displayTitle ?? "Web"
+                return tab
+            case .draft(let identifier):
+                var tab = IPCTabInfo(
+                    index: entry.index,
+                    sessionName: identifier,
+                    isAgent: false,
+                    tabType: "draft"
+                )
+                tab.displayName = "Draft"
+                return tab
+            }
+        }
+    }
+
+    private func resolveTabSelection(_ request: IPCRequest, in thread: MagentThread) -> TabSelectionResult {
+        let resolvedTabs = resolveTabs(for: thread)
+
+        if let sessionName = request.sessionName?.trimmingCharacters(in: .whitespacesAndNewlines), !sessionName.isEmpty {
+            if let resolved = resolvedTabs.first(where: { tab in
+                switch tab.kind {
+                case .terminal(let s, _): return s == sessionName
+                case .web(let id): return id == sessionName
+                case .draft(let id): return id == sessionName
+                }
+            }) {
+                return .resolved(resolved)
+            }
+            return .error(.failure("Tab not found: \(sessionName)", id: request.id))
+        }
+
+        if let tabIndex = request.tabIndex {
+            guard let resolved = resolvedTabs.first(where: { $0.index == tabIndex }) else {
+                return .error(.failure("Invalid tab index: \(tabIndex)", id: request.id))
+            }
+            return .resolved(resolved)
+        }
+
+        return .error(.failure("Missing required field: tabIndex or sessionName", id: request.id))
+    }
+
+    private func tabIdentifier(from kind: ResolvedTabKind) -> String {
+        switch kind {
+        case .terminal(let sessionName, _): return sessionName
+        case .web(let identifier): return identifier
+        case .draft(let identifier): return identifier
+        }
+    }
+
     private func listTabs(_ request: IPCRequest) -> IPCResponse {
         let thread: MagentThread
         switch resolveThread(request) {
@@ -901,19 +1044,7 @@ final class IPCCommandHandler {
         case .error(let err): return err
         }
 
-        let tabs = thread.tmuxSessionNames.enumerated().map { index, sessionName in
-            let isAgent = thread.agentTmuxSessions.contains(sessionName)
-            var tab = IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent)
-            tab.displayName = thread.displayName(for: sessionName, at: index)
-            if isAgent {
-                tab.agentType = threadManager.agentType(for: thread, sessionName: sessionName)?.rawValue
-                tab.isBusy = thread.busySessions.contains(sessionName) || thread.magentBusySessions.contains(sessionName)
-                tab.isWaitingForInput = thread.waitingForInputSessions.contains(sessionName)
-                tab.hasUnreadCompletion = thread.unreadCompletionSessions.contains(sessionName)
-                tab.isBlockedByRateLimit = thread.rateLimitedSessions[sessionName] != nil
-            }
-            return tab
-        }
+        let tabs = buildIPCTabs(for: thread)
         return IPCResponse(ok: true, id: request.id, tabs: tabs)
     }
 
@@ -958,7 +1089,7 @@ final class IPCCommandHandler {
                 requestedAgentType: requestedAgent,
                 initialPrompt: initialPrompt,
                 startFresh: request.fresh == true,
-                customTitle: request.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+                customTitle: requestedTabName(from: request),
                 modelId: request.modelId,
                 reasoningLevel: request.reasoningLevel
             )
@@ -985,13 +1116,18 @@ final class IPCCommandHandler {
                 }
             }
 
+            let updatedForTab = threadManager.threads.first(where: { $0.id == thread.id }) ?? latestThread
+            if let info = buildIPCTabs(for: updatedForTab).first(where: { $0.sessionName == tab.tmuxSessionName }) {
+                return IPCResponse(ok: true, id: request.id, tab: info)
+            }
+
             let isAgent = useAgent
             let info = IPCTabInfo(
                 index: tab.index,
                 sessionName: tab.tmuxSessionName,
-                isAgent: isAgent
+                isAgent: isAgent,
+                tabType: "terminal"
             )
-
             return IPCResponse(ok: true, id: request.id, tab: info)
         } catch {
             return .failure("Failed to create tab: \(error.localizedDescription)", id: request.id)
@@ -1014,29 +1150,40 @@ final class IPCCommandHandler {
             return .failure("Invalid URL: \(rawURL). Must be a fully qualified http(s) URL.", id: request.id)
         }
 
-        let title: String = {
-            if let t = request.title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
-                return t
-            }
-            return url.host ?? "Web"
-        }()
+        let customTitle = requestedTabName(from: request)
+        let defaultTitle = url.host ?? "Web"
         let identifier = "web:\(UUID().uuidString)"
+
+        var userInfo: [String: Any] = [
+            "threadId": thread.id,
+            "url": url,
+            "identifier": identifier,
+            // Keep the default title separate from customTitle so URL-host auto-title
+            // behavior still has a fallback when a custom title is later cleared.
+            "title": defaultTitle,
+            "iconType": WebTabIconType.web.rawValue,
+        ]
+        if let customTitle {
+            userInfo["customTitle"] = customTitle
+        }
 
         await MainActor.run {
             NotificationCenter.default.post(
                 name: .magentOpenExternalLinkInApp,
                 object: nil,
-                userInfo: [
-                    "threadId": thread.id,
-                    "url": url,
-                    "identifier": identifier,
-                    "title": title,
-                    "iconType": WebTabIconType.web.rawValue,
-                ]
+                userInfo: userInfo
             )
         }
 
-        return .success(id: request.id)
+        let updatedForTab = threadManager.threads.first(where: { $0.id == thread.id }) ?? thread
+        if let info = buildIPCTabs(for: updatedForTab).first(where: { $0.sessionName == identifier }) {
+            return IPCResponse(ok: true, id: request.id, tab: info)
+        }
+
+        let approximateIndex = resolveTabs(for: thread).count
+        var info = IPCTabInfo(index: approximateIndex, sessionName: identifier, isAgent: false, tabType: "web")
+        info.displayName = customTitle ?? defaultTitle
+        return IPCResponse(ok: true, id: request.id, tab: info)
     }
 
     private func autoRenameThread(_ request: IPCRequest) async -> IPCResponse {
@@ -1418,13 +1565,8 @@ final class IPCCommandHandler {
         let projectName = settings.projects.first(where: { $0.id == thread.projectId })?.name ?? "unknown"
         let sectionName = resolveSectionName(for: thread, settings: settings)
 
-        // Build tab list
-        let tabs = thread.tmuxSessionNames.enumerated().map { index, sessionName in
-            let isAgent = thread.agentTmuxSessions.contains(sessionName)
-            var tab = IPCTabInfo(index: index, sessionName: sessionName, isAgent: isAgent)
-            tab.displayName = thread.displayName(for: sessionName, at: index)
-            return tab
-        }
+        // Build tab list across terminal/web/draft in GUI display order.
+        let tabs = buildIPCTabs(for: thread)
 
         let status = makeThreadStatus(for: thread)
 
@@ -1463,6 +1605,90 @@ final class IPCCommandHandler {
         )
     }
 
+    private func renameTab(_ request: IPCRequest) async -> IPCResponse {
+        let thread: MagentThread
+        switch resolveThread(request) {
+        case .found(let t): thread = t
+        case .error(let err): return err
+        }
+
+        guard let rawName = request.newName else {
+            return .failure("Missing required field: newName (pass via --name)", id: request.id)
+        }
+        let trimmedName = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let selected: ResolvedTab
+        switch resolveTabSelection(request, in: thread) {
+        case .resolved(let tab):
+            selected = tab
+        case .error(let err):
+            return err
+        }
+
+        switch selected.kind {
+        case .terminal(let sessionName, _):
+            guard !trimmedName.isEmpty else {
+                return .failure("Tab name must not be empty for terminal/agent tabs", id: request.id)
+            }
+
+            do {
+                try await threadManager.renameTab(
+                    threadId: thread.id,
+                    sessionName: sessionName,
+                    newDisplayName: trimmedName
+                )
+            } catch {
+                return .failure("Failed to rename tab: \(error.localizedDescription)", id: request.id)
+            }
+
+            guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+                return .success(id: request.id)
+            }
+
+            // Session name can change after tmux rename; locate by display index fallback.
+            let resolved = resolveTabs(for: updated)
+            let updatedEntry = resolved.first(where: { tab in
+                if case .terminal(let candidate, _) = tab.kind {
+                    return candidate == sessionName
+                }
+                return false
+            }) ?? resolved.first(where: { $0.index == selected.index })
+
+            guard let updatedEntry else { return .success(id: request.id) }
+            let tabInfo = buildIPCTabs(for: updated).first(where: { $0.index == updatedEntry.index })
+            if let tabInfo {
+                return IPCResponse(ok: true, id: request.id, tab: tabInfo)
+            }
+            return .success(id: request.id)
+        case .web(let identifier):
+            guard let threadIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
+                return .failure("Thread not found: \(thread.name)", id: request.id)
+            }
+            guard let webIndex = threadManager.threads[threadIndex].persistedWebTabs.firstIndex(where: {
+                $0.identifier == identifier
+            }) else {
+                return .failure("Tab not found: \(identifier)", id: request.id)
+            }
+
+            var webTabs = threadManager.threads[threadIndex].persistedWebTabs
+            webTabs[webIndex].customTitle = trimmedName.isEmpty ? nil : trimmedName
+            threadManager.updatePersistedWebTabs(for: thread.id, webTabs: webTabs)
+            await MainActor.run {
+                threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
+            }
+
+            guard let updated = threadManager.threads.first(where: { $0.id == thread.id }) else {
+                return .success(id: request.id)
+            }
+            if let tabInfo = buildIPCTabs(for: updated).first(where: { $0.sessionName == identifier }) {
+                return IPCResponse(ok: true, id: request.id, tab: tabInfo)
+            }
+            return .success(id: request.id)
+        case .draft:
+            return .failure("Rename is not supported for draft tabs", id: request.id)
+        }
+    }
+
     private func closeTab(_ request: IPCRequest) async -> IPCResponse {
         let thread: MagentThread
         switch resolveThread(request) {
@@ -1470,25 +1696,69 @@ final class IPCCommandHandler {
         case .error(let err): return err
         }
 
-        guard thread.tmuxSessionNames.count > 1 else {
+        let resolvedTabs = resolveTabs(for: thread)
+        guard resolvedTabs.count > 1 else {
             return .failure("Cannot close the last tab — use archive-thread or delete-thread instead", id: request.id)
         }
 
-        do {
-            if let sessionName = request.sessionName {
-                guard thread.tmuxSessionNames.contains(sessionName) else {
-                    return .failure("Session not found: \(sessionName)", id: request.id)
-                }
-                try await threadManager.removeTab(from: thread, sessionName: sessionName)
-            } else if let tabIndex = request.tabIndex {
-                try await threadManager.removeTab(from: thread, at: tabIndex)
-            } else {
-                return .failure("Missing required field: tabIndex or sessionName", id: request.id)
-            }
-        } catch {
-            return .failure("Failed to close tab: \(error.localizedDescription)", id: request.id)
+        let selected: ResolvedTab
+        switch resolveTabSelection(request, in: thread) {
+        case .resolved(let tab):
+            selected = tab
+        case .error(let err):
+            return err
         }
 
-        return .success(id: request.id)
+        switch selected.kind {
+        case .terminal(let sessionName, _):
+            do {
+                try await threadManager.removeTab(from: thread, sessionName: sessionName)
+            } catch {
+                return .failure("Failed to close tab: \(error.localizedDescription)", id: request.id)
+            }
+            return .success(id: request.id)
+        case .web(let identifier):
+            guard let threadIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
+                return .failure("Thread not found: \(thread.name)", id: request.id)
+            }
+            var webTabs = threadManager.threads[threadIndex].persistedWebTabs
+            guard webTabs.contains(where: { $0.identifier == identifier }) else {
+                return .failure("Tab not found: \(identifier)", id: request.id)
+            }
+            webTabs.removeAll { $0.identifier == identifier }
+            threadManager.updatePersistedWebTabs(for: thread.id, webTabs: webTabs)
+
+            if threadManager.threads[threadIndex].lastSelectedTabIdentifier == identifier {
+                let updated = threadManager.threads[threadIndex]
+                let fallbackIdentifier = resolveTabs(for: updated).first.map { tabIdentifier(from: $0.kind) }
+                threadManager.updateLastSelectedTab(for: thread.id, identifier: fallbackIdentifier)
+            }
+
+            await MainActor.run {
+                threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
+            }
+            return .success(id: request.id)
+        case .draft(let identifier):
+            guard let threadIndex = threadManager.threads.firstIndex(where: { $0.id == thread.id }) else {
+                return .failure("Thread not found: \(thread.name)", id: request.id)
+            }
+            var draftTabs = threadManager.threads[threadIndex].persistedDraftTabs
+            guard draftTabs.contains(where: { $0.identifier == identifier }) else {
+                return .failure("Tab not found: \(identifier)", id: request.id)
+            }
+            draftTabs.removeAll { $0.identifier == identifier }
+            threadManager.updatePersistedDraftTabs(for: thread.id, draftTabs: draftTabs)
+
+            if threadManager.threads[threadIndex].lastSelectedTabIdentifier == identifier {
+                let updated = threadManager.threads[threadIndex]
+                let fallbackIdentifier = resolveTabs(for: updated).first.map { tabIdentifier(from: $0.kind) }
+                threadManager.updateLastSelectedTab(for: thread.id, identifier: fallbackIdentifier)
+            }
+
+            await MainActor.run {
+                threadManager.delegate?.threadManager(threadManager, didUpdateThreads: threadManager.threads)
+            }
+            return .success(id: request.id)
+        }
     }
 }

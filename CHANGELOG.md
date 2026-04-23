@@ -7,10 +7,17 @@ All notable changes to this project will be documented in this file.
 ### CLI
 
 #### Features
-- Added `magent-cli create-web-tab --thread <name> --url <http(s)-url> [--title <text>]` for opening an in-app web tab at a predefined URL in an existing thread (docs, Jira, PR links, dashboards).
+- Added `magent-cli create-web-tab --thread <name> --url <http(s)-url> [--name <text>|--title <text>]` for opening an in-app web tab at a predefined URL in an existing thread (docs, Jira, PR links, dashboards).
+- Added `magent-cli rename-tab --thread <name> (--index <n> | --session <name>) --name <text>` for renaming existing terminal/web tabs from CLI.
+- Added `--name` as the preferred tab-title option for `magent-cli create-tab` and `magent-cli create-web-tab` (`--title` remains supported as a legacy alias).
+- `magent-cli list-tabs` / `thread-info` now return the full tab set in GUI order (terminal, web, draft) with `tabType` and stable tab identifiers for non-terminal tabs.
 
 #### Bug Fixes
 - Fixed CLI-created tabs not reliably opening in popped-out thread windows. `create-tab` and `create-web-tab` now target the popped-out thread view when present, select the created tab there, and keep main/pop-out tab bars synchronized for terminal, web, and draft tab types.
+- Fixed `create-web-tab --title` / `--name` being replaced by hostname auto-titling after navigation. CLI-provided names are now persisted as custom tab titles.
+- Fixed explicit custom names passed to `create-tab --title` / `--name` being overwritten by model-name auto-sync.
+- Fixed `magent-cli attach` and interactive tab picking misbehaving in mixed tab threads. Attach now targets terminal tabs only and resolves `--index` against terminal-tab order.
+- `magent-cli close-tab` now supports terminal, web, and draft tabs by index/session identifier; it still refuses to close the last remaining tab.
 
 ### Updates
 

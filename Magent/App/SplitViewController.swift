@@ -693,13 +693,20 @@ final class SplitViewController: NSSplitViewController {
               let title = userInfo["title"] as? String,
               let iconRawValue = userInfo["iconType"] as? String,
               let iconType = WebTabIconType(rawValue: iconRawValue) else { return }
+        let customTitle = userInfo["customTitle"] as? String
 
         let openTabInMainWindow = { [weak self] in
             guard let self,
                   let detailVC = self.currentDetailVC,
                   detailVC.thread.id == threadId else { return false }
             detailVC.loadViewIfNeeded()
-            detailVC.openWebTab(url: url, identifier: identifier, title: title, iconType: iconType)
+            detailVC.openWebTab(
+                url: url,
+                identifier: identifier,
+                title: title,
+                customTitle: customTitle,
+                iconType: iconType
+            )
             return true
         }
 
@@ -710,7 +717,13 @@ final class SplitViewController: NSSplitViewController {
         case .poppedOutThreadWindow:
             guard let controller = PopoutWindowManager.shared.threadWindows[threadId] else { return }
             controller.detailVC.loadViewIfNeeded()
-            controller.detailVC.openWebTab(url: url, identifier: identifier, title: title, iconType: iconType)
+            controller.detailVC.openWebTab(
+                url: url,
+                identifier: identifier,
+                title: title,
+                customTitle: customTitle,
+                iconType: iconType
+            )
             PopoutWindowManager.shared.bringToFront(threadId: threadId)
 
         case .currentMainThread:

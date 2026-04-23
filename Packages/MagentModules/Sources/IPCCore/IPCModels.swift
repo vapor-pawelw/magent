@@ -257,6 +257,8 @@ public nonisolated struct IPCTabInfo: Encodable, Sendable {
     public let index: Int
     public let sessionName: String
     public var displayName: String?
+    /// `terminal`, `web`, or `draft` when available.
+    public var tabType: String?
     public let isAgent: Bool
     public var agentType: String?
     public var isBusy: Bool?
@@ -264,10 +266,11 @@ public nonisolated struct IPCTabInfo: Encodable, Sendable {
     public var hasUnreadCompletion: Bool?
     public var isBlockedByRateLimit: Bool?
 
-    public init(index: Int, sessionName: String, isAgent: Bool) {
+    public init(index: Int, sessionName: String, isAgent: Bool, tabType: String? = nil) {
         self.index = index
         self.sessionName = sessionName
         self.displayName = nil
+        self.tabType = tabType
         self.isAgent = isAgent
     }
 }
