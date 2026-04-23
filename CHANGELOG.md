@@ -19,6 +19,11 @@ All notable changes to this project will be documented in this file.
 - Fixed `magent-cli attach` and interactive tab picking misbehaving in mixed tab threads. Attach now targets terminal tabs only and resolves `--index` against terminal-tab order.
 - `magent-cli close-tab` now supports terminal, web, and draft tabs by index/session identifier; it still refuses to close the last remaining tab.
 
+### Thread
+
+#### Bug Fixes
+- Fixed occasional duplicate tabs when creating a new tab while the thread view was concurrently rebuilding tab structure. New-tab completion now reconciles against the latest tab slots instead of appending blindly, and setup rebuilds fully reset tab UI state before repopulating.
+
 ### Updates
 
 #### Features

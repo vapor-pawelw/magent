@@ -962,20 +962,52 @@ extension ThreadDetailViewController {
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated
                     }
-                    let terminalView = self.makeTerminalView(for: tab.tmuxSessionName)
-                    self.terminalViews.append(terminalView)
-
-                    // Fix the placeholder slot with the real session name.
-                    if pendingIndex < self.tabSlots.count {
-                        self.tabSlots[pendingIndex] = .terminal(sessionName: tab.tmuxSessionName)
+                    let displayTerminalSlots: [String?] = self.tabSlots.map { slot in
+                        switch slot {
+                        case .terminal(let sessionName): sessionName
+                        case .web, .draft: nil
+                        }
                     }
+                    let placement = CreatedTerminalTabReconciler.resolvePlacement(
+                        createdSessionName: tab.tmuxSessionName,
+                        displaySlots: displayTerminalSlots,
+                        pendingIndex: pendingIndex
+                    )
+
+                    if self.terminalView(forSession: tab.tmuxSessionName) == nil {
+                        let terminalView = self.makeTerminalView(for: tab.tmuxSessionName)
+                        self.terminalViews.append(terminalView)
+                    }
+
+                    let selectedIndex: Int
+                    switch placement {
+                    case .alreadyPresent(let index):
+                        selectedIndex = index
+                    case .replacePending(let index):
+                        if index < self.tabSlots.count {
+                            self.tabSlots[index] = .terminal(sessionName: tab.tmuxSessionName)
+                        }
+                        selectedIndex = index
+                    case .append:
+                        let item = TabItemView(title: "New Tab")
+                        item.showCloseButton = true
+                        self.attachDragGesture(to: item)
+                        self.tabItems.append(item)
+                        self.tabSlots.append(.terminal(sessionName: tab.tmuxSessionName))
+                        self.rebuildTabBar()
+                        self.rebindAllTabActions()
+                        selectedIndex = max(0, self.tabItems.count - 1)
+                    }
+
                     self.requireStartupOverlay(for: tab.tmuxSessionName)
 
-                    // Update tab title and make it closable.
-                    let title = self.thread.displayName(for: tab.tmuxSessionName, at: pendingIndex)
-                    if pendingIndex < self.tabItems.count {
-                        self.tabItems[pendingIndex].titleLabel.stringValue = title
-                        self.tabItems[pendingIndex].showCloseButton = true
+                    // Recompute display index from session name after reconciliation to
+                    // avoid mutating/choosing stale indices when setupTabs ran concurrently.
+                    let resolvedIndex = self.displayIndex(forSession: tab.tmuxSessionName) ?? selectedIndex
+                    let title = self.thread.displayName(for: tab.tmuxSessionName, at: resolvedIndex)
+                    if resolvedIndex < self.tabItems.count {
+                        self.tabItems[resolvedIndex].titleLabel.stringValue = title
+                        self.tabItems[resolvedIndex].showCloseButton = true
                     }
                     self.rebindAllTabActions()
 
@@ -985,7 +1017,7 @@ extension ThreadDetailViewController {
                         self.dismissLoadingOverlay()
 
                         // Hand off to normal selectTab flow, which shows "Starting agent..." overlay.
-                        self.selectTab(at: pendingIndex)
+                        self.selectTab(at: resolvedIndex)
                     }
                 }
             } catch {

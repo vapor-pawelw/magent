@@ -800,6 +800,12 @@ final class ThreadDetailViewController: NSViewController {
             backgroundSessionPreparationTask?.cancel()
             backgroundSessionPreparationTask = nil
 
+            for terminalView in terminalViews {
+                terminalView.removeFromSuperview()
+            }
+            terminalViews.removeAll()
+            tabItems.removeAll()
+
             // Clear any existing web/draft tabs from a previous setupTabs call
             for wt in webTabs { wt.view?.removeFromSuperview() }
             webTabs.removeAll()

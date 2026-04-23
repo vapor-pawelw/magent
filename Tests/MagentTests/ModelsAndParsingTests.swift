@@ -867,3 +867,53 @@ struct ThreadTabStructureFingerprintTests {
         )
     }
 }
+
+// MARK: - CreatedTerminalTabReconciler
+
+@Suite("CreatedTerminalTabReconciler")
+struct CreatedTerminalTabReconcilerTests {
+
+    @Test("Prefers an existing created session over pending placeholder")
+    func prefersExistingSession() {
+        let placement = CreatedTerminalTabReconciler.resolvePlacement(
+            createdSessionName: "ma-repo-thread-codex",
+            displaySlots: ["ma-repo-thread-claude", "", "ma-repo-thread-codex"],
+            pendingIndex: 1
+        )
+
+        #expect(placement == .alreadyPresent(index: 2))
+    }
+
+    @Test("Replaces pending placeholder when created session is not yet in display slots")
+    func replacesPendingPlaceholder() {
+        let placement = CreatedTerminalTabReconciler.resolvePlacement(
+            createdSessionName: "ma-repo-thread-codex",
+            displaySlots: ["ma-repo-thread-claude", ""],
+            pendingIndex: 1
+        )
+
+        #expect(placement == .replacePending(index: 1))
+    }
+
+    @Test("Appends when pending index is no longer valid")
+    func appendsWhenPendingIndexInvalid() {
+        let placement = CreatedTerminalTabReconciler.resolvePlacement(
+            createdSessionName: "ma-repo-thread-codex",
+            displaySlots: ["ma-repo-thread-claude", "ma-repo-thread-web"],
+            pendingIndex: 5
+        )
+
+        #expect(placement == .append)
+    }
+
+    @Test("Appends when pending slot is a non-terminal tab")
+    func appendsWhenPendingSlotIsNonTerminal() {
+        let placement = CreatedTerminalTabReconciler.resolvePlacement(
+            createdSessionName: "ma-repo-thread-codex",
+            displaySlots: ["ma-repo-thread-claude", nil],
+            pendingIndex: 1
+        )
+
+        #expect(placement == .append)
+    }
+}
