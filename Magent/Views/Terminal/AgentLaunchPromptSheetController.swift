@@ -208,8 +208,11 @@ enum PendingInitialPromptStore {
     }
 
     /// Schedules deletion of `fileURL` once a prompt-bearing `magentAgentKeysInjected`
-    /// fires for `sessionName`. Falls back to deleting after 60 s in case injection
-    /// never fires (e.g. session dies).
+    /// fires for `sessionName`.
+    ///
+    /// Intentionally no timeout fallback: when injection fails or never reaches
+    /// prompt completion, the file must survive so recovery banners can restore
+    /// the prompt on a future launch.
     @MainActor
     static func clearAfterInjection(fileURL: URL, sessionName: String) {
         final class Once: @unchecked Sendable { var token: NSObjectProtocol? }
@@ -221,12 +224,6 @@ enum PendingInitialPromptStore {
             guard (notification.userInfo?["includedInitialPrompt"] as? Bool) == true else { return }
             try? FileManager.default.removeItem(at: fileURL)
             if let t = once.token { NotificationCenter.default.removeObserver(t) }
-            once.token = nil
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [once] in
-            guard let t = once.token else { return }
-            try? FileManager.default.removeItem(at: fileURL)
-            NotificationCenter.default.removeObserver(t)
             once.token = nil
         }
     }
