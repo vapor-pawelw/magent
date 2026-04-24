@@ -13,7 +13,7 @@ Tab types that don't go through tmux injection (web tabs, draft tabs) must set `
 1. **`acceptTapped`** in `AgentLaunchPromptSheetController` — writes `magent-pending-prompt-<UUID>.json` to `/tmp` via `PendingInitialPromptStore.save(...)`, then immediately clears the draft from persistent storage. Non-tmux tab types (web, draft) skip this step entirely.
 2. **`createThread` / `addTab`** in `ThreadManager` — immediately after tmux session creation, `markSessionContextKnownGood` is called so that the concurrent `setupTabs` → `recreateSessionIfNeeded` path short-circuits. Then, inside the `MainActor.run` block that runs **before** `injectAfterStart` is called, `registerPendingPromptCleanup(fileURL:sessionName:)` subscribes to `magentAgentKeysInjected` for the new session.
 3. **`injectAfterStart`** (background `Task`) — waits for the agent-specific prompt marker via `waitForAgentPrompt` (see `docs/agent-prompt-detection.md` for per-agent detection details), sends tmux keys, and posts `magentAgentKeysInjected` only after the full startup injection for that session is complete. The subscriber from step 2 deletes the temp file.
-4. **60-second fallback** — if injection never fires (e.g., session dies), `DispatchQueue.main.asyncAfter` deletes the file after 60 s.
+4. **No timeout fallback** — if injection never fires (for example prompt readiness fails or the session dies), the temp file is intentionally left in place so recovery banners can restore the prompt after relaunch.
 
 ## Critical Ordering Constraint
 

@@ -54,6 +54,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Initial prompt-injection failure banners now include `Restart Tab`, matching the pending-injection banner so tab relaunch recovery is available in both states.
+- Fixed pending prompt-injection recovery disappearing after relaunch when startup injection did not complete. Recovery files are now kept until prompt-bearing injection is confirmed, so recovery banners persist across launches.
 
 ## 1.6.1 - 2026-04-18
 
