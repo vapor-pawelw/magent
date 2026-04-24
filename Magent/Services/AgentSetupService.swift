@@ -2088,7 +2088,7 @@ final class AgentSetupService {
         includeMagentIPC: Bool
     ) -> String {
         let codexHomePath = ensureManagedCodexHome(includeMagentIPC: includeMagentIPC)
-        return "env CODEX_HOME=\(ShellExecutor.shellQuote(codexHomePath)) -u NO_COLOR \(command)"
+        return "env CODEX_HOME=\(ShellExecutor.shellQuote(codexHomePath)) \(command)"
     }
 
     private func codexSessionConfiguredCommand(

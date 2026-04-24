@@ -49,6 +49,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Codex sessions launched from Magent now use a shared Magent-managed `CODEX_HOME` that mirrors the user's `~/.codex` (skills, auth, config, docs, etc.) while keeping Magent IPC AGENTS hints scoped to Magent sessions only. Magent no longer writes its IPC block into the global `~/.codex/AGENTS.md`, and edits to global `~/.codex/AGENTS.md` or top-level `~/.codex` entries now resync into the managed home automatically (session monitor cadence).
+- Codex launch now respects user environment defaults for color handling. Magent no longer clears inherited `NO_COLOR`, so users who set `NO_COLOR=1` keep no-color output while default environments retain full color.
 
 ### Terminal
 
