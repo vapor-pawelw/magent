@@ -923,3 +923,121 @@ struct CreatedTerminalTabReconcilerTests {
         #expect(placement == .append)
     }
 }
+
+// MARK: - NewTabSelectionResolver
+
+@Suite("NewTabSelectionResolver")
+struct NewTabSelectionResolverTests {
+
+    @Test("Keeps current selection when switch-to-new-tab is disabled")
+    func keepsCurrentSelectionWhenSwitchDisabled() {
+        let selected = NewTabSelectionResolver.resolveLastSelectedIdentifier(
+            currentIdentifier: "ma-repo-thread-old",
+            createdSessionIdentifier: "ma-repo-thread-new",
+            shouldSwitchToCreatedTab: false
+        )
+
+        #expect(selected == "ma-repo-thread-old")
+    }
+
+    @Test("Selects created tab when switch-to-new-tab is enabled")
+    func selectsCreatedTabWhenSwitchEnabled() {
+        let selected = NewTabSelectionResolver.resolveLastSelectedIdentifier(
+            currentIdentifier: "ma-repo-thread-old",
+            createdSessionIdentifier: "ma-repo-thread-new",
+            shouldSwitchToCreatedTab: true
+        )
+
+        #expect(selected == "ma-repo-thread-new")
+    }
+
+    @Test("Ignores blank created session names and keeps current selection")
+    func ignoresBlankCreatedSessionName() {
+        let selected = NewTabSelectionResolver.resolveLastSelectedIdentifier(
+            currentIdentifier: "ma-repo-thread-old",
+            createdSessionIdentifier: "   ",
+            shouldSwitchToCreatedTab: true
+        )
+
+        #expect(selected == "ma-repo-thread-old")
+    }
+}
+
+// MARK: - TabRestoreSelectionResolver
+
+@Suite("TabRestoreSelectionResolver")
+struct TabRestoreSelectionResolverTests {
+
+    @Test("Prefers magent-busy last-selected tab over stale defaults")
+    func prefersBusyLastSelectedOverDefaults() {
+        let threadId = UUID()
+        let oldSession = "ma-repo-thread-old"
+        let newSession = "ma-repo-thread-new"
+        let index = TabRestoreSelectionResolver.resolveInitialTerminalIndex(
+            orderedSessions: [oldSession, newSession],
+            threadId: threadId,
+            defaultsThreadId: threadId,
+            defaultsIdentifier: oldSession,
+            lastSelectedIdentifier: newSession,
+            magentBusySessions: [newSession]
+        )
+
+        #expect(index == 1)
+    }
+
+    @Test("Uses defaults when last-selected tab is not magent-busy")
+    func usesDefaultsWhenLastSelectedNotBusy() {
+        let threadId = UUID()
+        let oldSession = "ma-repo-thread-old"
+        let newSession = "ma-repo-thread-new"
+        let index = TabRestoreSelectionResolver.resolveInitialTerminalIndex(
+            orderedSessions: [oldSession, newSession],
+            threadId: threadId,
+            defaultsThreadId: threadId,
+            defaultsIdentifier: oldSession,
+            lastSelectedIdentifier: newSession,
+            magentBusySessions: []
+        )
+
+        #expect(index == 0)
+    }
+
+    @Test("Falls back to last-selected when defaults are for another thread")
+    func fallsBackToLastSelectedWhenDefaultsThreadDiffers() {
+        let threadId = UUID()
+        let index = TabRestoreSelectionResolver.resolveInitialTerminalIndex(
+            orderedSessions: ["ma-repo-thread-1", "ma-repo-thread-2"],
+            threadId: threadId,
+            defaultsThreadId: UUID(),
+            defaultsIdentifier: "ma-repo-thread-1",
+            lastSelectedIdentifier: "ma-repo-thread-2",
+            magentBusySessions: []
+        )
+
+        #expect(index == 1)
+    }
+}
+
+// MARK: - TabStructureRebuildGate
+
+@Suite("TabStructureRebuildGate")
+struct TabStructureRebuildGateTests {
+
+    @Test("Allows setupTabs rebuild when no local auto-switch creation is running")
+    func allowsRebuildWhenNoLocalCreation() {
+        #expect(
+            TabStructureRebuildGate.shouldRunSetupTabsAfterStructureChange(
+                localAutoSwitchTabCreationsInFlight: 0
+            )
+        )
+    }
+
+    @Test("Suppresses setupTabs rebuild while local auto-switch creation is in flight")
+    func suppressesRebuildWhenLocalCreationInFlight() {
+        #expect(
+            !TabStructureRebuildGate.shouldRunSetupTabsAfterStructureChange(
+                localAutoSwitchTabCreationsInFlight: 1
+            )
+        )
+    }
+}

@@ -270,6 +270,8 @@ extension ThreadDetailViewController {
 
     /// Creates an actual agent tab from a draft, injecting the prompt.
     private func addTabFromDraft(agentType: AgentType, prompt: String, modelId: String?, reasoningLevel: String?) {
+        localAutoSwitchTabCreationsInFlight += 1
+
         // Phase 1: Immediately add a tab item and show "Creating tab..." overlay.
         hideEmptyState()
         let pendingIndex = tabItems.count
@@ -305,9 +307,11 @@ extension ThreadDetailViewController {
                     tabNameSuffix: nil,
                     pendingPromptFileURL: nil,
                     modelId: modelId,
-                    reasoningLevel: reasoningLevel
+                    reasoningLevel: reasoningLevel,
+                    shouldSwitchToCreatedTab: true
                 )
                 await MainActor.run {
+                    self.localAutoSwitchTabCreationsInFlight = max(0, self.localAutoSwitchTabCreationsInFlight - 1)
                     if let updated = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
                         self.thread = updated
                     }
@@ -330,6 +334,7 @@ extension ThreadDetailViewController {
                 }
             } catch {
                 await MainActor.run {
+                    self.localAutoSwitchTabCreationsInFlight = max(0, self.localAutoSwitchTabCreationsInFlight - 1)
                     if pendingIndex < self.tabItems.count {
                         self.tabItems.remove(at: pendingIndex)
                     }

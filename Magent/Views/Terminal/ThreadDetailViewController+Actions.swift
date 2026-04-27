@@ -910,6 +910,10 @@ extension ThreadDetailViewController {
         switchToTab: Bool = true,
         pinAfterCreation: Bool = false
     ) {
+        if switchToTab {
+            localAutoSwitchTabCreationsInFlight += 1
+        }
+
         // Phase 1: Immediately add a tab item and show "Creating tab..." overlay so
         // the tab appears in the bar without waiting for tmux session creation.
         hideEmptyState()
@@ -954,7 +958,8 @@ extension ThreadDetailViewController {
                     tabNameSuffix: tabNameSuffix,
                     pendingPromptFileURL: pendingPromptFileURL,
                     modelId: modelId,
-                    reasoningLevel: reasoningLevel
+                    reasoningLevel: reasoningLevel,
+                    shouldSwitchToCreatedTab: switchToTab
                 )
                 // Skip recreateSessionIfNeeded — the session was just created by addTab().
                 // Calling it here risks a race: the pane path check can fail during shell
@@ -1028,9 +1033,15 @@ extension ThreadDetailViewController {
                         // Hand off to normal selectTab flow, which shows "Starting agent..." overlay.
                         self.selectTab(at: resolvedIndex)
                     }
+                    if switchToTab {
+                        self.localAutoSwitchTabCreationsInFlight = max(0, self.localAutoSwitchTabCreationsInFlight - 1)
+                    }
                 }
             } catch {
                 await MainActor.run {
+                    if switchToTab {
+                        self.localAutoSwitchTabCreationsInFlight = max(0, self.localAutoSwitchTabCreationsInFlight - 1)
+                    }
                     // Remove the pending tab on error.
                     if pendingIndex < self.tabItems.count {
                         self.tabItems.remove(at: pendingIndex)

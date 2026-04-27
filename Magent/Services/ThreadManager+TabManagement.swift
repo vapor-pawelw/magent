@@ -20,7 +20,8 @@ extension ThreadManager {
         tabNameSuffix: String? = nil,
         pendingPromptFileURL: URL? = nil,
         modelId: String? = nil,
-        reasoningLevel: String? = nil
+        reasoningLevel: String? = nil,
+        shouldSwitchToCreatedTab: Bool = false
     ) async throws -> Tab {
         guard let index = threads.firstIndex(where: { $0.id == thread.id }) else {
             throw ThreadManagerError.threadNotFound
@@ -235,6 +236,11 @@ extension ThreadManager {
         }
         // Mark session as magent-busy until injection/readiness completes.
         threads[index].magentBusySessions.insert(tmuxSessionName)
+        threads[index].lastSelectedTabIdentifier = NewTabSelectionResolver.resolveLastSelectedIdentifier(
+            currentIdentifier: threads[index].lastSelectedTabIdentifier,
+            createdSessionIdentifier: tmuxSessionName,
+            shouldSwitchToCreatedTab: shouldSwitchToCreatedTab
+        )
         try persistence.saveActiveThreads(threads)
         let tab = Tab(
             threadId: currentThread.id,

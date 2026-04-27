@@ -225,6 +225,10 @@ final class ThreadDetailViewController: NSViewController {
     var showTerminalScrollOverlay = true
     var showPromptTOCOverlay = true
     var currentTerminalMouseWheelBehavior: TerminalMouseWheelBehavior?
+    /// Number of local terminal-tab creations currently in flight where this
+    /// controller should own selection/reconciliation and ignore external
+    /// structure-rebuild churn from `magentThreadsDidChange`.
+    var localAutoSwitchTabCreationsInFlight = 0
 
     // MARK: - Inline Diff Viewer
     var diffVC: InlineDiffViewController?
@@ -864,23 +868,19 @@ final class ThreadDetailViewController: NSViewController {
             }
         }
 
-        let initialIndex: Int
         let defaults = UserDefaults.standard
         let defaultsThreadId = defaults
             .string(forKey: Self.lastOpenedThreadDefaultsKey)
             .flatMap(UUID.init(uuidString:))
         let defaultsSession = defaults.string(forKey: Self.lastOpenedTabDefaultsKey)
-
-        if defaultsThreadId == thread.id,
-           let defaultsSession,
-           let savedIndex = orderedSessions.firstIndex(of: defaultsSession) {
-            initialIndex = savedIndex
-        } else if let lastSelected = thread.lastSelectedTabIdentifier,
-                  let savedIndex = orderedSessions.firstIndex(of: lastSelected) {
-            initialIndex = savedIndex
-        } else {
-            initialIndex = 0
-        }
+        let initialIndex = TabRestoreSelectionResolver.resolveInitialTerminalIndex(
+            orderedSessions: orderedSessions,
+            threadId: thread.id,
+            defaultsThreadId: defaultsThreadId,
+            defaultsIdentifier: defaultsSession,
+            lastSelectedIdentifier: thread.lastSelectedTabIdentifier,
+            magentBusySessions: thread.magentBusySessions
+        )
 
         let initialSessionName = orderedSessions[initialIndex]
         let initialAgentType = await threadManager.loadingOverlayAgentType(
@@ -1531,6 +1531,16 @@ final class ThreadDetailViewController: NSViewController {
         thread = latest
 
         if didTabStructureChange {
+            // Local Cmd+T / draft-to-agent flows run a two-phase placeholder→session
+            // reconciliation and explicitly own selection. Rebuilding via setupTabs()
+            // during that window can transiently jump between tabs.
+            if !TabStructureRebuildGate.shouldRunSetupTabsAfterStructureChange(
+                localAutoSwitchTabCreationsInFlight: localAutoSwitchTabCreationsInFlight
+            ) {
+                popOutThreadButton.isHidden = !shouldShowTopBarPopOutButton()
+                refreshHeaderInfoStrip()
+                return
+            }
             Task { await setupTabs() }
         }
 
