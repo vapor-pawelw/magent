@@ -59,6 +59,9 @@ extension Notification.Name {
     static let magentFavoritesChanged = Notification.Name("magentFavoritesChanged")
     /// Posted when tmux zombie summary or recovery state changes.
     static let magentTmuxHealthChanged = Notification.Name("magentTmuxHealthChanged")
+    /// Posted when transient terminal-corruption state changes for a tmux session.
+    /// Carries "threadId" (UUID), "sessionName" (String), and "isCorrupted" (Bool).
+    static let magentTerminalCorruptionChanged = Notification.Name("magentTerminalCorruptionChanged")
 
     // MARK: - Pop-out Windows
 

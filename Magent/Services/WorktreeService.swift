@@ -1125,7 +1125,7 @@ extension WorktreeService {
         guard oursCommit.exitCode == 0 else { return false }
 
         // Merge to create the conflict — we expect exit code 1 (conflict)
-        await ShellExecutor.execute(
+        _ = await ShellExecutor.execute(
             "git merge theirs --no-commit || true",
             workingDirectory: tempDir
         )
