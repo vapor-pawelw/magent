@@ -27,6 +27,12 @@ Automatic — when a user selects a thread whose worktree directory is missing, 
 - **Tab hover status hints must be refreshed from the same notification paths as tab indicators**: tooltip text is derived from live thread/session state (busy, waiting, rate-limit, dead, keep-alive, unread markers). Any code path that updates tab badges/indicator dots must also refresh tab tooltips to avoid stale hover details.
 - **New-tab completion must reconcile against current slots**: `addTab(...)` inserts a pending placeholder immediately, but `handleThreadsDidChange` can run `setupTabs(...)` before async session creation completes. Success handling must detect whether the created session is already present, should replace the pending placeholder, or should append, and then resolve selection/title by session name (not stale pending index).
 - **Manual session cleanup** (`SessionLifecycleService`) must use the same eviction model as idle eviction: mark in `SessionTracker.evictedIdleSessions`, evict from cache before killing, never touch tab metadata. Protected sessions (busy, waiting, rate-limited, magent-busy, visible) must never be killed.
+- **Terminal corruption detection + repair** is transient/session-scoped:
+  - Detection sources: Ghostty renderer health callbacks (`GHOSTTY_ACTION_RENDERER_HEALTH`) and periodic tmux pane replay-block checks (repeated tail-block fingerprint).
+  - Session state lives in `SessionTracker.rendererUnhealthySessions` and `SessionTracker.replayCorruptedSessions`, surfaced through `ThreadManager.isTerminalCorrupted(sessionName:)`.
+  - UI shows a warning indicator on affected tabs and a `Repair Terminal` action in the tab `Session` menu.
+  - Repair must refuse when the session is busy, waiting for input, has unsubmitted input, or is in tmux copy-mode. When allowed, it kills/recreates only that session and clears corruption markers.
+  - Corruption state must be re-keyed on session rename and pruned on tab/thread cleanup, same as other transient session-keyed state.
 - **Resume metadata boundaries**: Claude/Codex resume lookup is keyed by worktree path, so when an archived auto-generated worktree name is reused, only conversations newer than the current thread's `createdAt` may be adopted.
 - **tmux zombie overload recovery** is banner-driven: `ThreadManager.checkTmuxZombieHealth()` monitors zombie-heavy tmux parents and offers a one-click `restartTmuxAndRecoverSessions()` action.
 

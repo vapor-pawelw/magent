@@ -272,6 +272,8 @@ extension ThreadDetailViewController {
                 promptCharacters,
                 agentType: agentType
             )
+            let codexPromptStyleLooksLikeUserInput = marker != codexPromptMarker ||
+                codexPromptTextLooksLikeUserInput(promptCharacters)
             var promptLines = [firstPromptLine]
             var endLineIndex = lineIndex
             var continuationIndex = lineIndex + 1
@@ -318,6 +320,13 @@ extension ThreadDetailViewController {
             }
             // Skip agent-emitted system status lines (for example: "❯ Tool loaded.").
             if lowerPrompt == "tool loaded." || lowerPrompt == "tools loaded." {
+                lineIndex = continuationIndex
+                continue
+            }
+            // For Codex, keep only prompt rows whose text largely matches the
+            // starting ANSI style right after `›` (user-input style), and reject
+            // secondary-status style rows.
+            if !codexPromptStyleLooksLikeUserInput {
                 lineIndex = continuationIndex
                 continue
             }
@@ -659,6 +668,28 @@ extension ThreadDetailViewController {
         }
 
         return placeholderLikeCount * 100 >= visibleCharacters.count * 80
+    }
+
+    private func codexPromptTextLooksLikeUserInput(
+        _ characters: [PromptPaneStyledCharacter]
+    ) -> Bool {
+        let visibleCharacters = characters.filter { !$0.character.isWhitespace }
+        guard !visibleCharacters.isEmpty else { return false }
+
+        guard let anchorStyle = visibleCharacters.first?.style else { return false }
+        if anchorStyle.isDim || anchorStyle.foreground.isGrayLike {
+            return false
+        }
+
+        let anchorStyleCount = visibleCharacters.reduce(into: 0) { count, character in
+            if character.style == anchorStyle {
+                count += 1
+            }
+        }
+
+        // Keep only rows where the line is mostly rendered in the same style as the
+        // first prompt character after `›`.
+        return anchorStyleCount * 100 >= visibleCharacters.count * 80
     }
 
     private func isPromptFooterDividerLine(_ line: String) -> Bool {

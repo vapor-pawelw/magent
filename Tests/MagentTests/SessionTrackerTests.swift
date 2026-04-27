@@ -45,6 +45,8 @@ struct SessionTrackerTests {
             sessionB: (.claude, now),
             untouched: (.codex, now),
         ]
+        tracker.rendererUnhealthySessions = [sessionA, sessionB, untouched]
+        tracker.replayCorruptedSessions = [sessionA, sessionB, untouched]
 
         tracker.cleanupForThread(sessionNames: [sessionA, sessionB])
 
@@ -71,6 +73,14 @@ struct SessionTrackerTests {
         #expect(tracker.lastRuntimeDetectedAgentBySession[sessionA] == nil)
         #expect(tracker.lastRuntimeDetectedAgentBySession[sessionB] == nil)
         #expect(tracker.lastRuntimeDetectedAgentBySession[untouched] != nil)
+
+        #expect(!tracker.rendererUnhealthySessions.contains(sessionA))
+        #expect(!tracker.rendererUnhealthySessions.contains(sessionB))
+        #expect(tracker.rendererUnhealthySessions.contains(untouched))
+
+        #expect(!tracker.replayCorruptedSessions.contains(sessionA))
+        #expect(!tracker.replayCorruptedSessions.contains(sessionB))
+        #expect(tracker.replayCorruptedSessions.contains(untouched))
     }
 
     @Test
@@ -105,12 +115,16 @@ struct SessionTrackerTests {
         tracker.sessionLastVisitedAt["known"] = now
         tracker.sessionLastBusyAt["known"] = now
         tracker.evictedIdleSessions = ["known"]
+        tracker.rendererUnhealthySessions = ["known"]
+        tracker.replayCorruptedSessions = ["known"]
 
         tracker.cleanupForThread(sessionNames: ["missing"])
 
         #expect(tracker.sessionLastVisitedAt["known"] == now)
         #expect(tracker.sessionLastBusyAt["known"] == now)
         #expect(tracker.evictedIdleSessions.contains("known"))
+        #expect(tracker.rendererUnhealthySessions.contains("known"))
+        #expect(tracker.replayCorruptedSessions.contains("known"))
     }
 
     @Test

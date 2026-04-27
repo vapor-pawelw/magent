@@ -24,6 +24,8 @@ final class SessionTracker {
     var evictedIdleSessions: Set<String> = []
     var sessionsBeingRecreated: Set<String> = []
     var knownGoodSessionContexts: [String: KnownGoodSessionContext] = [:]
+    var rendererUnhealthySessions: Set<String> = []
+    var replayCorruptedSessions: Set<String> = []
 
     /// Caches the last runtime-detected agent type per session. When `ps` child-process
     /// detection transiently fails (e.g. Claude reports its version as `pane_current_command`
@@ -61,6 +63,8 @@ final class SessionTracker {
             sessionsBeingRecreated.remove(name)
             knownGoodSessionContexts.removeValue(forKey: name)
             lastRuntimeDetectedAgentBySession.removeValue(forKey: name)
+            rendererUnhealthySessions.remove(name)
+            replayCorruptedSessions.remove(name)
         }
     }
 

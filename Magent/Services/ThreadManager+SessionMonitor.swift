@@ -74,6 +74,7 @@ extension ThreadManager {
                     _ = await self.cleanupStaleMagentSessions(minimumStaleAge: 30)
                 }
                 await self.checkTmuxZombieHealth()
+                await self.checkForTerminalCorruptionSignals()
             }
 
             var didRunStatusSync = false

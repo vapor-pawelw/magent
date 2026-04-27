@@ -40,6 +40,14 @@ All notable changes to this project will be documented in this file.
 - Fixed priority capsule, busy-duration label, dirty dot, and keep-alive badge colors being illegible on light backgrounds (e.g. cyan and yellow replaced with darker readable hues at full opacity).
 - Fixed `systemCyan`/`systemYellow` duration and priority tints being too faint on white — replaced with `systemBlue`/`systemOrange` fallbacks in light mode.
 
+### Terminal
+
+#### Features
+- Added terminal-corruption detection for tmux tabs with a tab-level warning indicator and a one-click `Repair Terminal` action in the tab `Session` menu.
+
+#### Bug Fixes
+- Fixed Prompt TOC false positives in Codex tabs (for example, placeholder/composer rows being listed as submitted prompts). Codex TOC confirmation now anchors on the `›` line and requires matching text style/background for the prompt body.
+
 ### Sidebar
 
 #### Bug Fixes

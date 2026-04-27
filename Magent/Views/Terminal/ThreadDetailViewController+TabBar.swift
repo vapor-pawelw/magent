@@ -514,6 +514,8 @@ extension ThreadDetailViewController {
                     item.onResumeAgentInNewTab = nil
                     item.onContinueIn = nil
                     item.onExportContext = nil
+                    item.onRepairTerminal = nil
+                    item.canRepairTerminal = false
                     item.onKeepAlive = nil
                     item.onKillSession = nil
                     item.onKillAllSessions = nil
@@ -546,6 +548,11 @@ extension ThreadDetailViewController {
                         : nil
                     item.onContinueIn = { [weak self] in self?.presentContinueTabSheet(for: i) }
                     item.onExportContext = { [weak self] in self?.exportTabContext(at: i) }
+                    item.onRepairTerminal = { [weak self] in self?.repairTerminal(at: i) }
+                    item.canRepairTerminal = !thread.busySessions.contains(sessionName)
+                        && !thread.magentBusySessions.contains(sessionName)
+                        && !thread.waitingForInputSessions.contains(sessionName)
+                        && !thread.hasUnsubmittedInputSessions.contains(sessionName)
                     // Hide per-tab Keep Alive controls when the thread itself is keep-alive.
                     item.onKeepAlive = thread.isKeepAlive ? nil : { [weak self] in self?.toggleKeepAlive(at: i) }
                     item.onKillSession = { [weak self] in self?.killSession(at: i) }
@@ -571,6 +578,8 @@ extension ThreadDetailViewController {
                 item.onResumeAgentInNewTab = nil
                 item.onContinueIn = nil
                 item.onExportContext = nil
+                item.onRepairTerminal = nil
+                item.canRepairTerminal = false
                 item.onKeepAlive = nil
                 item.onKillSession = nil
                 item.onKillAllSessions = nil
@@ -584,6 +593,8 @@ extension ThreadDetailViewController {
                 item.onResumeAgentInNewTab = nil
                 item.onContinueIn = nil
                 item.onExportContext = nil
+                item.onRepairTerminal = nil
+                item.canRepairTerminal = false
                 item.onKeepAlive = nil
                 item.onKillSession = nil
                 item.onKillAllSessions = nil
@@ -617,6 +628,9 @@ extension ThreadDetailViewController {
             if thread.magentBusySessions.contains(sessionName) { statusBits.append("Magent busy") }
             if thread.waitingForInputSessions.contains(sessionName) { statusBits.append("waiting for input") }
             if thread.hasUnsubmittedInputSessions.contains(sessionName) { statusBits.append("input typed") }
+            if threadManager.isTerminalCorrupted(sessionName: sessionName) {
+                statusBits.append("terminal corruption detected")
+            }
             if let rateLimitInfo = thread.rateLimitedSessions[sessionName] {
                 var rateLimitText = "rate limited"
                 if rateLimitInfo.isPropagated {

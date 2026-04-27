@@ -312,6 +312,7 @@ public final class GhosttyAppManager {
 
     public static let ghosttySurfaceClosed = Notification.Name("ghosttySurfaceClosed")
     public static let ghosttyScrollbarUpdated = Notification.Name("ghosttyScrollbarUpdated")
+    public static let ghosttyRendererHealthUpdated = Notification.Name("ghosttyRendererHealthUpdated")
 
     private func buildConfig(
         for preferences: GhosttyEmbeddedPreferences,
@@ -469,6 +470,11 @@ public final class GhosttyAppManager {
         guard let userData = ghostty_surface_userdata(surface) else { return nil }
         return Unmanaged<TerminalSurfaceView>.fromOpaque(userData).takeUnretainedValue()
     }
+
+    public func tmuxSessionName(forSurfaceAddress surfaceAddress: Int) -> String? {
+        guard let surface = registeredSurfaces[surfaceAddress] else { return nil }
+        return terminalSurfaceView(for: surface)?.tmuxSessionName
+    }
 }
 
 // MARK: - C callbacks
@@ -519,11 +525,28 @@ private func ghosttyActionCallback(
     case GHOSTTY_ACTION_SET_TITLE,
          GHOSTTY_ACTION_SET_TAB_TITLE,
          GHOSTTY_ACTION_CELL_SIZE,
-         GHOSTTY_ACTION_RENDERER_HEALTH,
          GHOSTTY_ACTION_MOUSE_SHAPE,
          GHOSTTY_ACTION_MOUSE_VISIBILITY,
          GHOSTTY_ACTION_RING_BELL,
          GHOSTTY_ACTION_PWD:
+        return true
+    case GHOSTTY_ACTION_RENDERER_HEALTH:
+        guard target.tag == GHOSTTY_TARGET_SURFACE,
+              let surface = target.target.surface else { return true }
+        let surfaceAddr = Int(bitPattern: surface)
+        let isHealthy = action.action.renderer_health == GHOSTTY_RENDERER_HEALTH_HEALTHY
+        DispatchQueue.main.async {
+            let sessionName = GhosttyAppManager.shared.tmuxSessionName(forSurfaceAddress: surfaceAddr)
+            NotificationCenter.default.post(
+                name: GhosttyAppManager.ghosttyRendererHealthUpdated,
+                object: nil,
+                userInfo: [
+                    "surfaceAddr": surfaceAddr,
+                    "isHealthy": isHealthy,
+                    "sessionName": sessionName as Any,
+                ]
+            )
+        }
         return true
     case GHOSTTY_ACTION_MOUSE_OVER_LINK:
         guard target.tag == GHOSTTY_TARGET_SURFACE,

@@ -149,6 +149,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             name: .magentSettingsDidChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleGhosttyRendererHealthUpdated(_:)),
+            name: GhosttyAppManager.ghosttyRendererHealthUpdated,
+            object: nil
+        )
         systemAppearanceObserver = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
             object: nil,
@@ -185,6 +191,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         coordinator?.persistMainWindowFrame()
         UpdateService.shared.stopPeriodicUpdateChecks()
         NotificationCenter.default.removeObserver(self, name: .magentSettingsDidChange, object: nil)
+        NotificationCenter.default.removeObserver(self, name: GhosttyAppManager.ghosttyRendererHealthUpdated, object: nil)
         if let systemAppearanceObserver {
             DistributedNotificationCenter.default().removeObserver(systemAppearanceObserver)
             self.systemAppearanceObserver = nil
@@ -238,6 +245,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     @objc private func handleSettingsChanged(_ notification: Notification) {
         applyAppAppearanceAndTerminalPreferences()
+    }
+
+    @objc private func handleGhosttyRendererHealthUpdated(_ notification: Notification) {
+        guard let sessionName = notification.userInfo?["sessionName"] as? String,
+              !sessionName.isEmpty,
+              let isHealthy = notification.userInfo?["isHealthy"] as? Bool else {
+            return
+        }
+        ThreadManager.shared.setTerminalRendererHealth(sessionName: sessionName, isHealthy: isHealthy)
     }
 
     private func setupMainMenu() {

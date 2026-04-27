@@ -2092,6 +2092,16 @@ final class SessionLifecycleService {
             }
         }
 
+        // Rekey terminal-corruption markers so warnings follow renamed sessions.
+        for (oldName, newName) in sessionRenameMap {
+            if sessionTracker.rendererUnhealthySessions.remove(oldName) != nil {
+                sessionTracker.rendererUnhealthySessions.insert(newName)
+            }
+            if sessionTracker.replayCorruptedSessions.remove(oldName) != nil {
+                sessionTracker.replayCorruptedSessions.insert(newName)
+            }
+        }
+
         return changed
     }
 
@@ -2135,6 +2145,18 @@ final class SessionLifecycleService {
         if prunedUnsubmitted != store.threads[index].hasUnsubmittedInputSessions {
             store.threads[index].hasUnsubmittedInputSessions = prunedUnsubmitted
             changed = true
+        }
+
+        // Corruption markers apply to all tmux sessions (agent + plain terminal),
+        // so prune against all known sessions across every thread.
+        let allKnownSessionNames = Set(store.threads.flatMap(\.tmuxSessionNames))
+        let prunedRendererUnhealthy = sessionTracker.rendererUnhealthySessions.intersection(allKnownSessionNames)
+        if prunedRendererUnhealthy != sessionTracker.rendererUnhealthySessions {
+            sessionTracker.rendererUnhealthySessions = prunedRendererUnhealthy
+        }
+        let prunedReplayCorrupted = sessionTracker.replayCorruptedSessions.intersection(allKnownSessionNames)
+        if prunedReplayCorrupted != sessionTracker.replayCorruptedSessions {
+            sessionTracker.replayCorruptedSessions = prunedReplayCorrupted
         }
 
         return changed
