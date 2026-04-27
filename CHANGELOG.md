@@ -23,6 +23,7 @@ All notable changes to this project will be documented in this file.
 
 #### Bug Fixes
 - Fixed occasional duplicate tabs when creating a new tab while the thread view was concurrently rebuilding tab structure. New-tab completion now reconciles against the latest tab slots instead of appending blindly, and setup rebuilds fully reset tab UI state before repopulating.
+- Fixed `Cmd+T` tab-selection flicker when confirming New Tab immediately. Local tab creation now owns selection until placeholder-to-session reconciliation completes, so concurrent thread-update rebuilds no longer bounce between old and new tabs.
 
 ### Updates
 
