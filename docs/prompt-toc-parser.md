@@ -78,6 +78,7 @@ When a user submits a multi-line prompt (e.g. a context-setting block with separ
 - Claude prompt placeholder detection became agent-aware: Codex still uses dim/grey placeholder filtering, while Claude no longer treats dimness alone as placeholder evidence.
 - Claude prompt parsing now recognizes the dark prompt-row background as a positive submission signal.
 - Bottom-cluster exclusion now includes blank prompt rows and footer divider rows.
+- Codex prompt confirmation was simplified to a style-anchor rule: find `›`, take the first visible prompt character's style as anchor, reject dim/gray anchors, then require the prompt body to mostly match that exact style/background. This prevents placeholder/composer echoes from entering TOC while keeping real submitted prompts.
 - TOC jump behavior now uses `history-top` + `scroll-down lineIndex` chained via tmux's `\;` separator. All commands are sent to the tmux server in a single IPC message — the server processes them atomically before rendering, so the intermediate `history-top` position is never visible. `scroll-down` scrolls the viewport directly (not cursor-position-dependent), giving viewport top = `lineIndex` after `lineIndex` scroll-downs from `history-top`. This replaced approaches that depended on `history_size` (which races with agent output) and eliminated the visible double-jump flash.
 - Prompt TOC entries now keep both preview text and full submitted text so context-menu actions can copy or reuse the complete prompt even when the row UI is limited to a 3-line preview.
 

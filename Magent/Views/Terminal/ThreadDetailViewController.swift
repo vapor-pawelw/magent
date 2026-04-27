@@ -335,6 +335,12 @@ final class ThreadDetailViewController: NSViewController {
             name: .magentAgentRateLimitChanged,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTerminalCorruptionNotification(_:)),
+            name: .magentTerminalCorruptionChanged,
+            object: nil
+        )
 
         // Observe PR info changes for button title updates
         NotificationCenter.default.addObserver(
@@ -902,6 +908,7 @@ final class ThreadDetailViewController: NSViewController {
                     tabItems[i].isRateLimitPropagated = thread.rateLimitedSessions[sessionName]?.isPropagated ?? false
                     tabItems[i].rateLimitTooltip = rateLimitTooltip(for: sessionName)
                     tabItems[i].isSessionDead = thread.deadSessions.contains(sessionName)
+                    tabItems[i].hasTerminalCorruption = threadManager.isTerminalCorrupted(sessionName: sessionName)
                 }
             }
             refreshTabTooltips()
@@ -1454,6 +1461,20 @@ final class ThreadDetailViewController: NSViewController {
         }
         refreshTabTooltips()
         refreshHeaderInfoStrip()
+    }
+
+    @objc private func handleTerminalCorruptionNotification(_ notification: Notification) {
+        guard let threadId = notification.userInfo?["threadId"] as? UUID,
+              threadId == thread.id else { return }
+
+        for (i, slot) in tabSlots.enumerated() where i < tabItems.count {
+            if case .terminal(let sessionName) = slot {
+                tabItems[i].hasTerminalCorruption = threadManager.isTerminalCorrupted(sessionName: sessionName)
+            } else {
+                tabItems[i].hasTerminalCorruption = false
+            }
+        }
+        refreshTabTooltips()
     }
 
     @objc private func handleThreadCreationFinished(_ notification: Notification) {

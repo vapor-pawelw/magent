@@ -902,6 +902,19 @@ public final class TmuxService: Sendable {
         return UInt64(trimmed)
     }
 
+    /// Returns whether the active pane is currently in a tmux mode (typically copy-mode).
+    public func isPaneInMode(sessionName: String) async -> Bool? {
+        guard let output = try? await ShellExecutor.run(
+            "tmux display-message -p -t \(shellQuote(sessionName)) '#{pane_in_mode}'"
+        ) else {
+            return nil
+        }
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed == "1" { return true }
+        if trimmed == "0" { return false }
+        return nil
+    }
+
     /// Captures the last N lines of the active pane in a tmux session.
     public func capturePane(sessionName: String, lastLines: Int = 15) async -> String? {
         guard let output = try? await ShellExecutor.run(

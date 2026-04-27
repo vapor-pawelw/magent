@@ -453,6 +453,8 @@ extension ThreadManager {
         sessionLastVisitedAt.removeValue(forKey: sessionName)
         sessionLastBusyAt.removeValue(forKey: sessionName)
         lastRuntimeDetectedAgentBySession.removeValue(forKey: sessionName)
+        rendererUnhealthySessions.remove(sessionName)
+        replayCorruptedSessions.remove(sessionName)
         evictedIdleSessions.remove(sessionName)
         clearTrackedInitialPromptInjection(for: sessionName)
         threads[idx].customTabNames.removeValue(forKey: sessionName)

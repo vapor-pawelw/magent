@@ -589,6 +589,73 @@ extension ThreadDetailViewController {
         }
     }
 
+    // MARK: - Repair Terminal
+
+    func repairTerminal(at index: Int) {
+        guard index < tabSlots.count,
+              case .terminal(let sessionName) = tabSlots[index],
+              !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        let isBusy = thread.busySessions.contains(sessionName) || thread.magentBusySessions.contains(sessionName)
+        let isWaiting = thread.waitingForInputSessions.contains(sessionName)
+        if isBusy || isWaiting {
+            BannerManager.shared.show(
+                message: "Wait for the session to become idle before repairing the terminal.",
+                style: .warning
+            )
+            return
+        }
+        if thread.hasUnsubmittedInputSessions.contains(sessionName) {
+            BannerManager.shared.show(
+                message: "Submit or clear typed input before repairing the terminal.",
+                style: .warning
+            )
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            if await TmuxService.shared.isPaneInMode(sessionName: sessionName) == true {
+                BannerManager.shared.show(
+                    message: "Exit copy mode before repairing the terminal.",
+                    style: .warning
+                )
+                return
+            }
+
+            self.ensureLoadingOverlay()
+            self.loadingLabel?.stringValue = "Repairing terminal..."
+            self.loadingDetailLabel?.isHidden = true
+            self.revealLoadingOverlay(after: 0)
+
+            await self.threadManager.killSession(threadId: self.thread.id, sessionName: sessionName)
+            self.threadManager.evictedIdleSessions.remove(sessionName)
+            self.threadManager.clearTerminalCorruption(sessionName: sessionName)
+
+            if let freshThread = self.threadManager.threads.first(where: { $0.id == self.thread.id }) {
+                self.thread = freshThread
+            }
+
+            self.preparedSessions.remove(sessionName)
+            ReusableTerminalViewCache.shared.remove(sessionName: sessionName)
+            if let termIdx = self.thread.tmuxSessionNames.firstIndex(of: sessionName),
+               termIdx < self.terminalViews.count {
+                self.terminalViews[termIdx].removeFromSuperview()
+                self.terminalViews[termIdx] = self.makeTerminalView(for: sessionName)
+            }
+
+            self.refreshTabStatusIndicators()
+            if let displayIdx = self.displayIndex(forSession: sessionName) {
+                self.selectTab(at: displayIdx)
+            } else {
+                self.dismissLoadingOverlay()
+            }
+        }
+    }
+
     // MARK: - Keep Alive
 
     func toggleKeepAlive(at index: Int) {

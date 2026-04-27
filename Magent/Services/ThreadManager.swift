@@ -508,6 +508,14 @@ final class ThreadManager {
         get { sessionTracker.sessionsBeingRecreated }
         set { sessionTracker.sessionsBeingRecreated = newValue }
     }
+    var rendererUnhealthySessions: Set<String> {
+        get { sessionTracker.rendererUnhealthySessions }
+        set { sessionTracker.rendererUnhealthySessions = newValue }
+    }
+    var replayCorruptedSessions: Set<String> {
+        get { sessionTracker.replayCorruptedSessions }
+        set { sessionTracker.replayCorruptedSessions = newValue }
+    }
     var lastRuntimeDetectedAgentBySession: [String: (agent: AgentType, detectedAt: Date)] {
         get { sessionTracker.lastRuntimeDetectedAgentBySession }
         set { sessionTracker.lastRuntimeDetectedAgentBySession = newValue }

@@ -10,6 +10,7 @@ final class TabItemView: NSView, NSMenuDelegate {
     let busySpinner: NSProgressIndicator
     let completionDot: NSView
     let rateLimitIcon: NSImageView
+    let terminalCorruptionIcon: NSImageView
     let titleLabel: NSTextField
     let closeButton: NSButton
     var isDragging = false
@@ -66,6 +67,10 @@ final class TabItemView: NSView, NSMenuDelegate {
         didSet { updateAppearance() }
     }
 
+    var hasTerminalCorruption: Bool = false {
+        didSet { updateIndicator() }
+    }
+
     var isSessionDead: Bool = false {
         didSet { updateAppearance() }
     }
@@ -75,21 +80,31 @@ final class TabItemView: NSView, NSMenuDelegate {
     }
 
     private func updateIndicator() {
-        if hasWaitingForInput {
+        if hasTerminalCorruption {
             busySpinner.stopAnimation(nil)
             busySpinner.isHidden = true
             rateLimitIcon.isHidden = true
+            completionDot.isHidden = true
+            terminalCorruptionIcon.toolTip = "Terminal corruption detected. Repair terminal."
+            terminalCorruptionIcon.isHidden = false
+        } else if hasWaitingForInput {
+            busySpinner.stopAnimation(nil)
+            busySpinner.isHidden = true
+            rateLimitIcon.isHidden = true
+            terminalCorruptionIcon.isHidden = true
             completionDot.layer?.backgroundColor = NSColor.systemOrange.cgColor
             completionDot.isHidden = false
         } else if hasBusy {
             completionDot.isHidden = true
             rateLimitIcon.isHidden = true
+            terminalCorruptionIcon.isHidden = true
             busySpinner.isHidden = false
             busySpinner.startAnimation(nil)
         } else if hasRateLimit {
             busySpinner.stopAnimation(nil)
             busySpinner.isHidden = true
             completionDot.isHidden = true
+            terminalCorruptionIcon.isHidden = true
             let agentIcon: NSImage? = switch rateLimitAgentType {
             case .claude, .custom, nil: NSImage(resource: .claudeIcon)
             case .codex: NSImage(resource: .codexIcon)
@@ -102,6 +117,7 @@ final class TabItemView: NSView, NSMenuDelegate {
             busySpinner.stopAnimation(nil)
             busySpinner.isHidden = true
             rateLimitIcon.isHidden = true
+            terminalCorruptionIcon.isHidden = true
             completionDot.layer?.backgroundColor = NSColor.systemGreen.cgColor
             completionDot.isHidden = false
         } else {
@@ -109,6 +125,7 @@ final class TabItemView: NSView, NSMenuDelegate {
             busySpinner.isHidden = true
             completionDot.isHidden = true
             rateLimitIcon.isHidden = true
+            terminalCorruptionIcon.isHidden = true
         }
     }
 
@@ -130,6 +147,8 @@ final class TabItemView: NSView, NSMenuDelegate {
     var canResumeAgentInNewTab: Bool = false
     var onContinueIn: (() -> Void)?
     var onExportContext: (() -> Void)?
+    var onRepairTerminal: (() -> Void)?
+    var canRepairTerminal: Bool = false
     var onKillSession: (() -> Void)?
     var onKillAllSessions: (() -> Void)?
     var onCopyTmuxSessionName: (() -> Void)?
@@ -151,6 +170,7 @@ final class TabItemView: NSView, NSMenuDelegate {
         busySpinner = NSProgressIndicator()
         completionDot = NSView()
         rateLimitIcon = NSImageView()
+        terminalCorruptionIcon = NSImageView()
         titleLabel = NSTextField(labelWithString: title)
         closeButton = NSButton()
         contentStack = NSStackView()
@@ -219,6 +239,17 @@ final class TabItemView: NSView, NSMenuDelegate {
         rateLimitIcon.setContentHuggingPriority(.required, for: .horizontal)
         rateLimitIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
 
+        // Terminal-corruption icon
+        terminalCorruptionIcon.image = NSImage(
+            systemSymbolName: "exclamationmark.triangle.fill",
+            accessibilityDescription: "Terminal may need repair"
+        )
+        terminalCorruptionIcon.contentTintColor = .systemYellow
+        terminalCorruptionIcon.translatesAutoresizingMaskIntoConstraints = false
+        terminalCorruptionIcon.isHidden = true
+        terminalCorruptionIcon.setContentHuggingPriority(.required, for: .horizontal)
+        terminalCorruptionIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
+
         // Title
         titleLabel.font = .systemFont(ofSize: 12)
         titleLabel.isEditable = false
@@ -242,7 +273,18 @@ final class TabItemView: NSView, NSMenuDelegate {
         contentStack.alignment = .centerY
         contentStack.spacing = 5
         contentStack.translatesAutoresizingMaskIntoConstraints = false
-        for view in [pinIcon, keepAliveIcon, typeIcon, detachedIcon, completionDot, busySpinner, rateLimitIcon, titleLabel, closeButton] {
+        for view in [
+            pinIcon,
+            keepAliveIcon,
+            typeIcon,
+            detachedIcon,
+            completionDot,
+            busySpinner,
+            rateLimitIcon,
+            terminalCorruptionIcon,
+            titleLabel,
+            closeButton,
+        ] {
             contentStack.addArrangedSubview(view)
         }
         contentStack.orientation = .horizontal
@@ -267,6 +309,8 @@ final class TabItemView: NSView, NSMenuDelegate {
             busySpinner.heightAnchor.constraint(equalToConstant: 10),
             rateLimitIcon.widthAnchor.constraint(equalToConstant: 10),
             rateLimitIcon.heightAnchor.constraint(equalToConstant: 10),
+            terminalCorruptionIcon.widthAnchor.constraint(equalToConstant: 10),
+            terminalCorruptionIcon.heightAnchor.constraint(equalToConstant: 10),
             closeButton.widthAnchor.constraint(equalToConstant: 16),
             closeButton.heightAnchor.constraint(equalToConstant: 16),
         ])
@@ -349,6 +393,10 @@ final class TabItemView: NSView, NSMenuDelegate {
 
     @objc private func exportContextTapped() {
         onExportContext?()
+    }
+
+    @objc private func repairTerminalTapped() {
+        onRepairTerminal?()
     }
 
     @objc private func closeTabsToTheRightTapped() {
@@ -545,6 +593,13 @@ final class TabItemView: NSView, NSMenuDelegate {
                 let keepAliveItem = NSMenuItem(title: keepAliveTitle, action: #selector(keepAliveTapped), keyEquivalent: "")
                 keepAliveItem.target = self
                 sessionSubmenu.addItem(keepAliveItem)
+            }
+
+            if onRepairTerminal != nil {
+                let repairItem = NSMenuItem(title: "Repair Terminal", action: #selector(repairTerminalTapped), keyEquivalent: "")
+                repairItem.target = self
+                repairItem.isEnabled = canRepairTerminal
+                sessionSubmenu.addItem(repairItem)
             }
 
             if onKillAllSessions != nil {
